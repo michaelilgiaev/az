@@ -15,14 +15,20 @@ This is a year-old, neglected, poorly put-together project that is undergoing a 
 </table>
 
 
-## Documentation
+## 📚 Documentation
 
-Az'arch ships a generated technical specification of everything that goes into the distribution.
+General specifications of the distribution.
+- [documentation/SPECIFICATIONS_GENERAL.md](documentation/SPECIFICATIONS_GENERAL.md)
 
-[![Az'arch component dependency graph](documentation/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg)](documentation/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg)
+Brief overview of the components.
+- [documentation/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg](documentation/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg)
 
-- [Interactive component map](documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html) — a navigable graph of every package and its dependency edges (best opened in a browser or via GitHub Pages).
-- [General specification](documentation/SPECIFICATIONS_GENERAL.md) — the technical distribution specification, derived live from the resolved package set and build config.
+Easy-to-use interactive graph of every component.
+- [documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html](documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
+- [https://michaelilgiaev.github.io/azarch/documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html](https://michaelilgiaev.github.io/azarch/documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html) (online render hosted by GitHub Pages).
+
+Plain-text raw dump of every component.
+- [documentation/SPECIFICATIONS_COMPONENTS_FULL.txt](documentation/SPECIFICATIONS_COMPONENTS_FULL.txt)
 
 
 ## 💽 Install
