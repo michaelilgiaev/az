@@ -1,24 +1,13 @@
 name: Pull Specifications
 
-# On every push to master, regenerate the Az'arch specification docs (Markdown,
-# SVG, interactive HTML map, full listing) from the live Arch Linux package
-# databases and commit them back if anything changed.
-#
-# This does the pull FOR you: you never run the script by hand and you never get
-# a failure email. If the live package data moved, the freshly generated specs
-# are committed automatically; if nothing changed, the run is a quiet no-op.
-
 on:
   push:
     branches: [master]
   workflow_dispatch: {}
 
-# Needs write access so it can commit the regenerated specs back to the branch.
 permissions:
   contents: write
 
-# If a new push lands while a run is in flight, cancel the older run -- we only
-# ever care about regenerating from the newest state.
 concurrency:
   group: specifications-${{ github.ref }}
   cancel-in-progress: true
@@ -41,10 +30,7 @@ jobs:
       - name: Commit updated specifications if anything changed
         run: |
           set -euo pipefail
-          # Skip the loop: a commit made here carries [skip ci] so it does not
-          # trigger this same workflow again.
           if git diff --quiet -- documentation/; then
-            echo "Specifications already up to date. Nothing to commit."
             exit 0
           fi
           git config user.name  "michaelilgiaev"
