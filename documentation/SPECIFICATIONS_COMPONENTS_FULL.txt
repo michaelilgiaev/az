@@ -924,7 +924,7 @@ Search this section to jump; full entries follow below.
   gcr-4                             az'arch   Security & crypto           4.4.0.1-1
   lib32-libglvnd                    az'arch   Shared library              1.7.0-1
   lib32-mesa                        az'arch   Graphics & display          1:26.1.5-1
-  libnm                             az'arch   Shared library              1.56.1-2
+  libnm                             az'arch   Shared library              1.58.0-1
   pacman                            stock     Core system                 7.1.0.r9.g54d9411-2
   poppler                           az'arch   Graphics & display          26.07.0-1
   xmlsec                            stock     Shared library              1.3.12-1
@@ -974,7 +974,7 @@ Search this section to jump; full entries follow below.
   libimobiledevice                  stock     Shared library              1.4.0-2
   mkinitcpio                        stock     Boot & init                 41-4
   neon                              az'arch   System                      0.37.1-1
-  networkmanager                    az'arch   Networking                  1.56.1-2
+  networkmanager                    az'arch   Networking                  1.58.0-1
   nm-connection-editor              az'arch   Networking                  1.36.0-2
   oath-toolkit                      stock     Security & crypto           2.6.14-4
   pahole                            az'arch   Shared library              1:1.31-2
@@ -1637,7 +1637,7 @@ repo:     core    installed size: 844.6 KiB    license: LGPL-2.1-only OR BSD-2-C
 
 depth:    90 pkgs pulled in below it (transitively); 15 pkgs above rely on it
 requires: glibc, libelf, linux-api-headers, zlib
-required-by: iproute2, lib32-libbpf, v4l-utils
+required-by: iproute2, lib32-libbpf, networkmanager, v4l-utils
 
 ------------------------------------------------------------------------------
 
@@ -2022,7 +2022,7 @@ optional:
 
 ------------------------------------------------------------------------------
 
-### libnm  (1.56.1-2)
+### libnm  (1.58.0-1)
 
 purpose: NetworkManager client library
 upstream: https://networkmanager.dev/
@@ -2921,7 +2921,7 @@ required-by: libreoffice-fresh
 
 ------------------------------------------------------------------------------
 
-### networkmanager  (1.56.1-2)
+### networkmanager  (1.58.0-1)
 
 purpose: Network connection manager and user applications
 upstream: https://networkmanager.dev/
@@ -2929,13 +2929,13 @@ upstream: https://networkmanager.dev/
 edition:  az'arch  (Az'arch Component: in the set only because Az'arch added it on top of stock archiso)
 category: Networking
 layer:    5 of 6  (Depth 24-33 -- near the top; systemd, mesa, X, Qt, toolkits)
-repo:     extra    installed size: 15.7 MiB    license: LGPL-2.1-or-later GPL-2.0-or-later
+repo:     extra    installed size: 18.1 MiB    license: LGPL-2.1-or-later GPL-2.0-or-later
 
 depth:    171 pkgs pulled in below it (transitively); 1 pkgs above rely on it
-requires: audit, curl, glib2, glibc, iproute2, jansson, libgcc, libmm-glib,
-          libndp, libnewt, libnm, libpsl, libteam,
-          mobile-broadband-provider-info, nspr, nss, readline, systemd-libs,
-          wpa_supplicant
+requires: audit, bash, curl, glib2, glibc, iproute2, jansson, libbpf, libgcc,
+          libmm-glib, libndp, libnewt, libnm, libpsl, libteam,
+          mobile-broadband-provider-info, nspr, nss, readline, slang,
+          systemd-libs, wpa_supplicant
 required-by: network-manager-applet
 optional:
     bluez: Bluetooth support
@@ -9210,7 +9210,7 @@ repo:     extra    installed size: 3.4 MiB    license: GPL-2.0-or-later
 
 depth:    27 pkgs pulled in below it (transitively); 6 pkgs above rely on it
 requires: glibc, pcre, zlib
-required-by: libnewt, mc
+required-by: libnewt, mc, networkmanager
 
 ------------------------------------------------------------------------------
 
@@ -11810,12 +11810,13 @@ required-by: alsa-utils, arch-install-scripts, at-spi2-core, audit, autoconf,
              libmakepkg-dropins, libmbim, libpcap, libpng, libpulse, libqmi,
              libreoffice-fresh, libteam, libtool, libusb-compat, libxml2,
              libxslt, lm_sensors, lsb-release, lvm2, man-db, mc, mkinitcpio,
-             mkinitcpio-archiso, modemmanager, mtools, nfs-utils, npth, nspr,
-             nss, os-prober, pacman, pahole, pcre, qemu-guest-agent, rasqal,
-             redland, refind, rp-pppoe, sdparm, smartmontools,
-             source-highlight, spirv-tools, srt, systemd, taglib, texinfo,
-             unzip, vlc, vlc-cli, vlc-gui-qt, vpnc, which, wireless-regdb,
-             xdg-utils, xfsprogs, xmlsec, xorg-server, xorg-xinit, xz
+             mkinitcpio-archiso, modemmanager, mtools, networkmanager,
+             nfs-utils, npth, nspr, nss, os-prober, pacman, pahole, pcre,
+             qemu-guest-agent, rasqal, redland, refind, rp-pppoe, sdparm,
+             smartmontools, source-highlight, spirv-tools, srt, systemd,
+             taglib, texinfo, unzip, vlc, vlc-cli, vlc-gui-qt, vpnc, which,
+             wireless-regdb, xdg-utils, xfsprogs, xmlsec, xorg-server,
+             xorg-xinit, xz
 optional:
     bash-completion: for tab completion
 

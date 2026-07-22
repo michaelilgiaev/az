@@ -154,7 +154,7 @@ A broad connectivity and diagnostics stack. `networkmanager` is the connection m
 
 | Package | Version | Capability |
 |---|---|---|
-| `networkmanager` | 1.56.1-2 | Connection manager (nmcli/nmtui) |
+| `networkmanager` | 1.58.0-1 | Connection manager (nmcli/nmtui) |
 | `iwd` / `wpa_supplicant` | 3.12-1 / 2:2.11-5 | Wi-Fi daemons |
 | `iw` / `wireless_tools` | 6.17-1 / 30.pre9-5 | Wireless CLI configuration |
 | `openssh` | 10.4p1-3 | SSH client/server |
