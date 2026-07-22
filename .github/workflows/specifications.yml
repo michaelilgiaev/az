@@ -1,22 +1,21 @@
-name: Check specifications
+name: Pull Specifications
 
-# Verifies the committed Az'arch specification docs (Markdown, SVG, HTML map,
-# full listing) are up to date with the live Arch Linux package databases.
+# On every push to master, regenerate the Az'arch specification docs (Markdown,
+# SVG, interactive HTML map, full listing) from the live Arch Linux package
+# databases and commit them back if anything changed.
 #
-# This does NOT commit anything back. You regenerate specs locally with
-# scripts/pull_specifications.sh and commit the result yourself; CI just fails
-# the run if the committed artifacts are stale, so nothing races your pushes.
+# This does the pull FOR you: you never run the script by hand and you never get
+# a failure email. If the live package data moved, the freshly generated specs
+# are committed automatically; if nothing changed, the run is a quiet no-op.
 
 on:
   push:
     branches: [master]
-  pull_request:
-    branches: [master]
   workflow_dispatch: {}
 
-# Read-only: this workflow only checks, it never pushes.
+# Needs write access so it can commit the regenerated specs back to the branch.
 permissions:
-  contents: read
+  contents: write
 
 # If a new push lands while a run is in flight, cancel the older run -- we only
 # ever care about regenerating from the newest state.
@@ -25,7 +24,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
+  update:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -39,24 +38,17 @@ jobs:
       - name: Regenerate specification artifacts
         run: scripts/pull_specifications.sh
 
-      - name: Fail if committed specifications are stale
+      - name: Commit updated specifications if anything changed
         run: |
           set -euo pipefail
-          # CI does NOT commit. It regenerates into the working tree (the step
-          # above) and fails if the committed artifacts differ -- i.e. someone
-          # pushed without running scripts/pull_specifications.sh first. This
-          # keeps the committed specs honest without any bot pushing back to the
-          # branch (which used to race real pushes and cause rejections).
-          if git diff --quiet -- \
-              documentation/SPECIFICATIONS_GENERAL.md \
-              documentation/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg \
-              documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html \
-              documentation/SPECIFICATIONS_COMPONENTS_FULL.txt; then
-            echo "Specifications are up to date."
+          # Skip the loop: a commit made here carries [skip ci] so it does not
+          # trigger this same workflow again.
+          if git diff --quiet -- documentation/; then
+            echo "Specifications already up to date. Nothing to commit."
             exit 0
           fi
-
-          echo "::error::Committed specifications are stale. Run" \
-               "scripts/pull_specifications.sh locally and commit the result." >&2
-          git --no-pager diff --stat -- documentation/ >&2
-          exit 1
+          git config user.name  "michaelilgiaev"
+          git config user.email "michaelilgiaev@gmail.com"
+          git add documentation/
+          git commit -m "Regenerate specifications [skip ci]"
+          git push
