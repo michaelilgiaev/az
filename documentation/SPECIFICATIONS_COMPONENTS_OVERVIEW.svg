@@ -19,45 +19,53 @@
 <text x="800" y="148" font-size="13" fill="#9da7b3">Live-session RAM (cow_spacesize):</text>
 <text x="1060" y="148" font-size="13" font-weight="600" fill="#e6edf3">4G writable overlay held in RAM</text>
 <text x="32" y="168" font-size="13" fill="#9da7b3">Packages (full closure):</text>
-<text x="292" y="168" font-size="13" font-weight="600" fill="#e6edf3">916</text>
+<text x="292" y="168" font-size="13" font-weight="600" fill="#e6edf3">983</text>
 <text x="800" y="168" font-size="13" fill="#9da7b3">Az&#x27;arch Component / Stock Arch:</text>
-<text x="1060" y="168" font-size="13" font-weight="600" fill="#e6edf3">394 / 522</text>
+<text x="1060" y="168" font-size="13" font-weight="600" fill="#e6edf3">461 / 522</text>
 <text x="32" y="188" font-size="13" fill="#9da7b3">Deepest chain (leaf -&gt; base):</text>
 <text x="292" y="188" font-size="13" font-weight="600" fill="#e6edf3">37 hops</text>
 <text x="800" y="188" font-size="13" fill="#9da7b3">Installed size:</text>
-<text x="1060" y="188" font-size="13" font-weight="600" fill="#e6edf3">5.15 GiB</text>
+<text x="1060" y="188" font-size="13" font-weight="600" fill="#e6edf3">5.68 GiB</text>
 <rect x="32" y="210" width="1536" height="150" rx="10" fill="#161b22" stroke="#30363d"/>
 <line x1="274" y1="220" x2="274" y2="350" stroke="#30363d"/>
 <text x="48" y="242" font-size="18" font-weight="700" fill="#e6edf3">Leaves (34+)</text>
 <text x="48" y="262" font-size="11" fill="#9da7b3">top; the deepest chains -- nothing</text>
 <text x="48" y="276" font-size="11" fill="#9da7b3">depends on these</text>
-<text x="48" y="330" font-size="13" font-weight="700" fill="url(#brand)">8 pkgs</text>
+<text x="48" y="330" font-size="13" font-weight="700" fill="url(#brand)">11 pkgs</text>
 <text x="48" y="346" font-size="10" fill="#9da7b3">depends on layer(s) below ↓</text>
-<rect x="282" y="226" width="128" height="40" rx="6" fill="#3b82f6" fill-opacity="0.22" stroke="#3b82f6" stroke-width="1.4"/>
-<text x="290" y="243" font-size="11.5" font-weight="600" fill="#e6edf3">libreoffice-fresh</text>
-<text x="290" y="257" font-size="9" fill="#9da7b3">26.2.4</text>
+<rect x="282" y="226" width="128" height="40" rx="6" fill="#059669" fill-opacity="0.22" stroke="#059669" stroke-width="1.4"/>
+<text x="290" y="243" font-size="11.5" font-weight="600" fill="#e6edf3">network-manager-…</text>
+<text x="290" y="257" font-size="9" fill="#9da7b3">1.36.0</text>
 <text x="397" y="241" font-size="11" fill="#03a5fc">★</text>
-<rect x="418" y="226" width="128" height="40" rx="6" fill="#6b7280" fill-opacity="0.22" stroke="#6b7280" stroke-width="1.4"/>
-<text x="426" y="243" font-size="11.5" font-weight="600" fill="#e6edf3">base-devel</text>
-<text x="426" y="257" font-size="9" fill="#9da7b3">1</text>
+<rect x="418" y="226" width="128" height="40" rx="6" fill="#3b82f6" fill-opacity="0.22" stroke="#3b82f6" stroke-width="1.4"/>
+<text x="426" y="243" font-size="11.5" font-weight="600" fill="#e6edf3">libreoffice-fresh</text>
+<text x="426" y="257" font-size="9" fill="#9da7b3">26.2.4</text>
 <text x="533" y="241" font-size="11" fill="#03a5fc">★</text>
-<rect x="554" y="226" width="128" height="40" rx="6" fill="#65a30d" fill-opacity="0.22" stroke="#65a30d" stroke-width="1.4"/>
-<text x="562" y="243" font-size="11.5" font-weight="600" fill="#e6edf3">archinstall</text>
-<text x="562" y="257" font-size="9" fill="#9da7b3">4.4</text>
-<rect x="690" y="226" width="128" height="40" rx="6" fill="#6b7280" fill-opacity="0.22" stroke="#6b7280" stroke-width="1.4"/>
-<text x="698" y="243" font-size="11.5" font-weight="600" fill="#e6edf3">base</text>
-<text x="698" y="257" font-size="9" fill="#9da7b3">3</text>
-<rect x="826" y="226" width="128" height="40" rx="6" fill="#0d9488" fill-opacity="0.22" stroke="#0d9488" stroke-width="1.4"/>
-<text x="834" y="243" font-size="11.5" font-weight="600" fill="#e6edf3">cups</text>
-<text x="834" y="257" font-size="9" fill="#9da7b3">2:2.4.19</text>
-<text x="941" y="241" font-size="11" fill="#03a5fc">★</text>
-<text x="1556" y="348" font-size="11" text-anchor="end" fill="#9da7b3">+3 more in this layer</text>
+<rect x="554" y="226" width="128" height="40" rx="6" fill="#6b7280" fill-opacity="0.22" stroke="#6b7280" stroke-width="1.4"/>
+<text x="562" y="243" font-size="11.5" font-weight="600" fill="#e6edf3">base-devel</text>
+<text x="562" y="257" font-size="9" fill="#9da7b3">1</text>
+<text x="669" y="241" font-size="11" fill="#03a5fc">★</text>
+<rect x="690" y="226" width="128" height="40" rx="6" fill="#3b82f6" fill-opacity="0.22" stroke="#3b82f6" stroke-width="1.4"/>
+<text x="698" y="243" font-size="11.5" font-weight="600" fill="#e6edf3">gvfs</text>
+<text x="698" y="257" font-size="9" fill="#9da7b3">1.60.1</text>
+<text x="805" y="241" font-size="11" fill="#03a5fc">★</text>
+<rect x="826" y="226" width="128" height="40" rx="6" fill="#65a30d" fill-opacity="0.22" stroke="#65a30d" stroke-width="1.4"/>
+<text x="834" y="243" font-size="11.5" font-weight="600" fill="#e6edf3">archinstall</text>
+<text x="834" y="257" font-size="9" fill="#9da7b3">4.4</text>
+<rect x="962" y="226" width="128" height="40" rx="6" fill="#6b7280" fill-opacity="0.22" stroke="#6b7280" stroke-width="1.4"/>
+<text x="970" y="243" font-size="11.5" font-weight="600" fill="#e6edf3">base</text>
+<text x="970" y="257" font-size="9" fill="#9da7b3">3</text>
+<rect x="1098" y="226" width="128" height="40" rx="6" fill="#0d9488" fill-opacity="0.22" stroke="#0d9488" stroke-width="1.4"/>
+<text x="1106" y="243" font-size="11.5" font-weight="600" fill="#e6edf3">cups</text>
+<text x="1106" y="257" font-size="9" fill="#9da7b3">2:2.4.19</text>
+<text x="1213" y="241" font-size="11" fill="#03a5fc">★</text>
+<text x="1556" y="348" font-size="11" text-anchor="end" fill="#9da7b3">+4 more in this layer</text>
 <rect x="32" y="374" width="1536" height="150" rx="10" fill="#161b22" stroke="#30363d"/>
 <line x1="274" y1="384" x2="274" y2="514" stroke="#30363d"/>
 <text x="48" y="406" font-size="18" font-weight="700" fill="#e6edf3">Depth 24-33</text>
 <text x="48" y="426" font-size="11" fill="#9da7b3">near the top; systemd, mesa, X, Qt,</text>
 <text x="48" y="440" font-size="11" fill="#9da7b3">toolkits</text>
-<text x="48" y="494" font-size="13" font-weight="700" fill="url(#brand)">105 pkgs</text>
+<text x="48" y="494" font-size="13" font-weight="700" fill="url(#brand)">135 pkgs</text>
 <text x="48" y="510" font-size="10" fill="#9da7b3">depends on layer(s) below ↓</text>
 <rect x="282" y="390" width="128" height="40" rx="6" fill="#78716c" fill-opacity="0.22" stroke="#78716c" stroke-width="1.4"/>
 <text x="290" y="407" font-size="11.5" font-weight="600" fill="#e6edf3">ca-certificates-…</text>
@@ -79,21 +87,21 @@
 <text x="970" y="407" font-size="11.5" font-weight="600" fill="#e6edf3">mesa</text>
 <text x="970" y="421" font-size="9" fill="#9da7b3">1:26.1.5</text>
 <text x="1077" y="405" font-size="11" fill="#03a5fc">★</text>
-<rect x="1098" y="390" width="128" height="40" rx="6" fill="#8a6d3b" fill-opacity="0.22" stroke="#8a6d3b" stroke-width="1.4"/>
-<text x="1106" y="407" font-size="11.5" font-weight="600" fill="#e6edf3">systemd</text>
-<text x="1106" y="421" font-size="9" fill="#9da7b3">261.1</text>
-<rect x="1234" y="390" width="128" height="40" rx="6" fill="#dc2626" fill-opacity="0.22" stroke="#dc2626" stroke-width="1.4"/>
-<text x="1242" y="407" font-size="11.5" font-weight="600" fill="#e6edf3">tpm2-tss</text>
-<text x="1242" y="421" font-size="9" fill="#9da7b3">4.1.3</text>
-<rect x="1370" y="390" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
-<text x="1378" y="407" font-size="11.5" font-weight="600" fill="#e6edf3">lib32-curl</text>
-<text x="1378" y="421" font-size="9" fill="#9da7b3">8.21.0</text>
+<rect x="1098" y="390" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
+<text x="1106" y="407" font-size="11.5" font-weight="600" fill="#e6edf3">libproxy</text>
+<text x="1106" y="421" font-size="9" fill="#9da7b3">0.5.12</text>
+<rect x="1234" y="390" width="128" height="40" rx="6" fill="#8a6d3b" fill-opacity="0.22" stroke="#8a6d3b" stroke-width="1.4"/>
+<text x="1242" y="407" font-size="11.5" font-weight="600" fill="#e6edf3">systemd</text>
+<text x="1242" y="421" font-size="9" fill="#9da7b3">261.1</text>
+<rect x="1370" y="390" width="128" height="40" rx="6" fill="#dc2626" fill-opacity="0.22" stroke="#dc2626" stroke-width="1.4"/>
+<text x="1378" y="407" font-size="11.5" font-weight="600" fill="#e6edf3">tpm2-tss</text>
+<text x="1378" y="421" font-size="9" fill="#9da7b3">4.1.3</text>
 <rect x="282" y="438" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
-<text x="290" y="455" font-size="11.5" font-weight="600" fill="#e6edf3">lib32-libelf</text>
-<text x="290" y="469" font-size="9" fill="#9da7b3">0.195</text>
+<text x="290" y="455" font-size="11.5" font-weight="600" fill="#e6edf3">libsecret</text>
+<text x="290" y="469" font-size="9" fill="#9da7b3">0.21.7</text>
 <rect x="418" y="438" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
-<text x="426" y="455" font-size="11.5" font-weight="600" fill="#e6edf3">libsecret</text>
-<text x="426" y="469" font-size="9" fill="#9da7b3">0.21.7</text>
+<text x="426" y="455" font-size="11.5" font-weight="600" fill="#e6edf3">lib32-curl</text>
+<text x="426" y="469" font-size="9" fill="#9da7b3">8.21.0</text>
 <rect x="554" y="438" width="128" height="40" rx="6" fill="#78716c" fill-opacity="0.22" stroke="#78716c" stroke-width="1.4"/>
 <text x="562" y="455" font-size="11.5" font-weight="600" fill="#e6edf3">pinentry</text>
 <text x="562" y="469" font-size="9" fill="#9da7b3">1.3.3</text>
@@ -101,27 +109,28 @@
 <text x="698" y="455" font-size="11.5" font-weight="600" fill="#e6edf3">gnupg</text>
 <text x="698" y="469" font-size="9" fill="#9da7b3">2.4.9</text>
 <rect x="826" y="438" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
-<text x="834" y="455" font-size="11.5" font-weight="600" fill="#e6edf3">libbpf</text>
-<text x="834" y="469" font-size="9" fill="#9da7b3">1.7.0</text>
+<text x="834" y="455" font-size="11.5" font-weight="600" fill="#e6edf3">gpgme</text>
+<text x="834" y="469" font-size="9" fill="#9da7b3">2.1.2</text>
 <rect x="962" y="438" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
-<text x="970" y="455" font-size="11.5" font-weight="600" fill="#e6edf3">gpgme</text>
-<text x="970" y="469" font-size="9" fill="#9da7b3">2.1.2</text>
-<rect x="1098" y="438" width="128" height="40" rx="6" fill="#d97706" fill-opacity="0.22" stroke="#d97706" stroke-width="1.4"/>
-<text x="1106" y="455" font-size="11.5" font-weight="600" fill="#e6edf3">binutils</text>
-<text x="1106" y="469" font-size="9" fill="#9da7b3">2.46.1+r3+g04…</text>
-<rect x="1234" y="438" width="128" height="40" rx="6" fill="#6b7280" fill-opacity="0.22" stroke="#6b7280" stroke-width="1.4"/>
-<text x="1242" y="455" font-size="11.5" font-weight="600" fill="#e6edf3">polkit</text>
-<text x="1242" y="469" font-size="9" fill="#9da7b3">127</text>
-<rect x="1370" y="438" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
-<text x="1378" y="455" font-size="11.5" font-weight="600" fill="#e6edf3">lib32-libbpf</text>
-<text x="1378" y="469" font-size="9" fill="#9da7b3">1.7.0</text>
-<text x="1556" y="512" font-size="11" text-anchor="end" fill="#9da7b3">+87 more in this layer</text>
+<text x="970" y="455" font-size="11.5" font-weight="600" fill="#e6edf3">lib32-libelf</text>
+<text x="970" y="469" font-size="9" fill="#9da7b3">0.195</text>
+<rect x="1098" y="438" width="128" height="40" rx="6" fill="#6b7280" fill-opacity="0.22" stroke="#6b7280" stroke-width="1.4"/>
+<text x="1106" y="455" font-size="11.5" font-weight="600" fill="#e6edf3">polkit</text>
+<text x="1106" y="469" font-size="9" fill="#9da7b3">127</text>
+<rect x="1234" y="438" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
+<text x="1242" y="455" font-size="11.5" font-weight="600" fill="#e6edf3">libbpf</text>
+<text x="1242" y="469" font-size="9" fill="#9da7b3">1.7.0</text>
+<rect x="1370" y="438" width="128" height="40" rx="6" fill="#059669" fill-opacity="0.22" stroke="#059669" stroke-width="1.4"/>
+<text x="1378" y="455" font-size="11.5" font-weight="600" fill="#e6edf3">glib-networking</text>
+<text x="1378" y="469" font-size="9" fill="#9da7b3">1:2.80.1</text>
+<text x="1485" y="453" font-size="11" fill="#03a5fc">★</text>
+<text x="1556" y="512" font-size="11" text-anchor="end" fill="#9da7b3">+117 more in this layer</text>
 <rect x="32" y="538" width="1536" height="150" rx="10" fill="#161b22" stroke="#30363d"/>
 <line x1="274" y1="548" x2="274" y2="678" stroke="#30363d"/>
 <text x="48" y="570" font-size="18" font-weight="700" fill="#e6edf3">Depth 15-23</text>
 <text x="48" y="590" font-size="11" fill="#9da7b3">deep stack; kernel, coreutils, and</text>
 <text x="48" y="604" font-size="11" fill="#9da7b3">heavier subsystems</text>
-<text x="48" y="658" font-size="13" font-weight="700" fill="url(#brand)">174 pkgs</text>
+<text x="48" y="658" font-size="13" font-weight="700" fill="url(#brand)">181 pkgs</text>
 <text x="48" y="674" font-size="10" fill="#9da7b3">depends on layer(s) below ↓</text>
 <rect x="282" y="554" width="128" height="40" rx="6" fill="#059669" fill-opacity="0.22" stroke="#059669" stroke-width="1.4"/>
 <text x="290" y="571" font-size="11.5" font-weight="600" fill="#e6edf3">krb5</text>
@@ -171,20 +180,20 @@
 <rect x="1098" y="602" width="128" height="40" rx="6" fill="#78716c" fill-opacity="0.22" stroke="#78716c" stroke-width="1.4"/>
 <text x="1106" y="619" font-size="11.5" font-weight="600" fill="#e6edf3">util-linux</text>
 <text x="1106" y="633" font-size="9" fill="#9da7b3">2.42.2</text>
-<rect x="1234" y="602" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
-<text x="1242" y="619" font-size="11.5" font-weight="600" fill="#e6edf3">libvlc</text>
-<text x="1242" y="633" font-size="9" fill="#9da7b3">3.0.23_2</text>
+<rect x="1234" y="602" width="128" height="40" rx="6" fill="#059669" fill-opacity="0.22" stroke="#059669" stroke-width="1.4"/>
+<text x="1242" y="619" font-size="11.5" font-weight="600" fill="#e6edf3">avahi</text>
+<text x="1242" y="633" font-size="9" fill="#9da7b3">1:0.9rc5</text>
 <text x="1349" y="617" font-size="11" fill="#03a5fc">★</text>
 <rect x="1370" y="602" width="128" height="40" rx="6" fill="#78716c" fill-opacity="0.22" stroke="#78716c" stroke-width="1.4"/>
 <text x="1378" y="619" font-size="11.5" font-weight="600" fill="#e6edf3">gzip</text>
 <text x="1378" y="633" font-size="9" fill="#9da7b3">1.14</text>
-<text x="1556" y="676" font-size="11" text-anchor="end" fill="#9da7b3">+156 more in this layer</text>
+<text x="1556" y="676" font-size="11" text-anchor="end" fill="#9da7b3">+163 more in this layer</text>
 <rect x="32" y="702" width="1536" height="150" rx="10" fill="#161b22" stroke="#30363d"/>
 <line x1="274" y1="712" x2="274" y2="842" stroke="#30363d"/>
 <text x="48" y="734" font-size="18" font-weight="700" fill="#e6edf3">Depth 9-14</text>
 <text x="48" y="754" font-size="11" fill="#9da7b3">mid stack; libraries and services</text>
 <text x="48" y="768" font-size="11" fill="#9da7b3">with real chains below</text>
-<text x="48" y="822" font-size="13" font-weight="700" fill="url(#brand)">233 pkgs</text>
+<text x="48" y="822" font-size="13" font-weight="700" fill="url(#brand)">259 pkgs</text>
 <text x="48" y="838" font-size="10" fill="#9da7b3">depends on layer(s) below ↓</text>
 <rect x="282" y="718" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
 <text x="290" y="735" font-size="11.5" font-weight="600" fill="#e6edf3">xz</text>
@@ -231,22 +240,22 @@
 <rect x="962" y="766" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
 <text x="970" y="783" font-size="11.5" font-weight="600" fill="#e6edf3">libgcrypt</text>
 <text x="970" y="797" font-size="9" fill="#9da7b3">1.12.2</text>
-<rect x="1098" y="766" width="128" height="40" rx="6" fill="#8a6d3b" fill-opacity="0.22" stroke="#8a6d3b" stroke-width="1.4"/>
-<text x="1106" y="783" font-size="11.5" font-weight="600" fill="#e6edf3">systemd-libs</text>
-<text x="1106" y="797" font-size="9" fill="#9da7b3">261.1</text>
-<rect x="1234" y="766" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
-<text x="1242" y="783" font-size="11.5" font-weight="600" fill="#e6edf3">bzip2</text>
-<text x="1242" y="797" font-size="9" fill="#9da7b3">1.0.8</text>
+<rect x="1098" y="766" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
+<text x="1106" y="783" font-size="11.5" font-weight="600" fill="#e6edf3">bzip2</text>
+<text x="1106" y="797" font-size="9" fill="#9da7b3">1.0.8</text>
+<rect x="1234" y="766" width="128" height="40" rx="6" fill="#8a6d3b" fill-opacity="0.22" stroke="#8a6d3b" stroke-width="1.4"/>
+<text x="1242" y="783" font-size="11.5" font-weight="600" fill="#e6edf3">systemd-libs</text>
+<text x="1242" y="797" font-size="9" fill="#9da7b3">261.1</text>
 <rect x="1370" y="766" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
 <text x="1378" y="783" font-size="11.5" font-weight="600" fill="#e6edf3">lib32-zstd</text>
 <text x="1378" y="797" font-size="9" fill="#9da7b3">1.5.7</text>
-<text x="1556" y="840" font-size="11" text-anchor="end" fill="#9da7b3">+215 more in this layer</text>
+<text x="1556" y="840" font-size="11" text-anchor="end" fill="#9da7b3">+241 more in this layer</text>
 <rect x="32" y="866" width="1536" height="150" rx="10" fill="#161b22" stroke="#30363d"/>
 <line x1="274" y1="876" x2="274" y2="1006" stroke="#30363d"/>
 <text x="48" y="898" font-size="18" font-weight="700" fill="#e6edf3">Depth 4-8</text>
 <text x="48" y="918" font-size="11" fill="#9da7b3">a few layers deep; shared libraries</text>
 <text x="48" y="932" font-size="11" fill="#9da7b3">and base tools</text>
-<text x="48" y="986" font-size="13" font-weight="700" fill="url(#brand)">203 pkgs</text>
+<text x="48" y="986" font-size="13" font-weight="700" fill="url(#brand)">199 pkgs</text>
 <text x="48" y="1002" font-size="10" fill="#9da7b3">depends on layer(s) below ↓</text>
 <rect x="282" y="882" width="128" height="40" rx="6" fill="#db2777" fill-opacity="0.22" stroke="#db2777" stroke-width="1.4"/>
 <text x="290" y="899" font-size="11.5" font-weight="600" fill="#e6edf3">libstdc++</text>
@@ -288,21 +297,21 @@
 <text x="698" y="947" font-size="11.5" font-weight="600" fill="#e6edf3">libidn2</text>
 <text x="698" y="961" font-size="9" fill="#9da7b3">2.3.8</text>
 <rect x="826" y="930" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
-<text x="834" y="947" font-size="11.5" font-weight="600" fill="#e6edf3">nettle</text>
-<text x="834" y="961" font-size="9" fill="#9da7b3">4.0</text>
+<text x="834" y="947" font-size="11.5" font-weight="600" fill="#e6edf3">lib32-libunistri…</text>
+<text x="834" y="961" font-size="9" fill="#9da7b3">1.4.2</text>
 <rect x="962" y="930" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
-<text x="970" y="947" font-size="11.5" font-weight="600" fill="#e6edf3">lib32-libunistri…</text>
-<text x="970" y="961" font-size="9" fill="#9da7b3">1.4.2</text>
+<text x="970" y="947" font-size="11.5" font-weight="600" fill="#e6edf3">nettle</text>
+<text x="970" y="961" font-size="9" fill="#9da7b3">4.0</text>
 <rect x="1098" y="930" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
 <text x="1106" y="947" font-size="11.5" font-weight="600" fill="#e6edf3">lib32-libidn2</text>
 <text x="1106" y="961" font-size="9" fill="#9da7b3">2.3.8</text>
-<rect x="1234" y="930" width="128" height="40" rx="6" fill="#0891b2" fill-opacity="0.22" stroke="#0891b2" stroke-width="1.4"/>
-<text x="1242" y="947" font-size="11.5" font-weight="600" fill="#e6edf3">libxcb</text>
-<text x="1242" y="961" font-size="9" fill="#9da7b3">1.17.0</text>
+<rect x="1234" y="930" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
+<text x="1242" y="947" font-size="11.5" font-weight="600" fill="#e6edf3">lib32-libtasn1</text>
+<text x="1242" y="961" font-size="9" fill="#9da7b3">4.21.0</text>
 <rect x="1370" y="930" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
-<text x="1378" y="947" font-size="11.5" font-weight="600" fill="#e6edf3">lib32-libtasn1</text>
-<text x="1378" y="961" font-size="9" fill="#9da7b3">4.21.0</text>
-<text x="1556" y="1004" font-size="11" text-anchor="end" fill="#9da7b3">+185 more in this layer</text>
+<text x="1378" y="947" font-size="11.5" font-weight="600" fill="#e6edf3">lib32-p11-kit</text>
+<text x="1378" y="961" font-size="9" fill="#9da7b3">0.26.4</text>
+<text x="1556" y="1004" font-size="11" text-anchor="end" fill="#9da7b3">+181 more in this layer</text>
 <rect x="32" y="1030" width="1536" height="150" rx="10" fill="#161b22" stroke="#30363d"/>
 <line x1="274" y1="1040" x2="274" y2="1170" stroke="#30363d"/>
 <text x="48" y="1062" font-size="18" font-weight="700" fill="#e6edf3">Depth 1-3</text>
@@ -329,11 +338,11 @@
 <text x="970" y="1063" font-size="11.5" font-weight="600" fill="#e6edf3">lz4</text>
 <text x="970" y="1077" font-size="9" fill="#9da7b3">1:1.10.0</text>
 <rect x="1098" y="1046" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
-<text x="1106" y="1063" font-size="11.5" font-weight="600" fill="#e6edf3">brotli</text>
-<text x="1106" y="1077" font-size="9" fill="#9da7b3">1.2.0</text>
+<text x="1106" y="1063" font-size="11.5" font-weight="600" fill="#e6edf3">libxcrypt</text>
+<text x="1106" y="1077" font-size="9" fill="#9da7b3">4.5.2</text>
 <rect x="1234" y="1046" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
-<text x="1242" y="1063" font-size="11.5" font-weight="600" fill="#e6edf3">libxcrypt</text>
-<text x="1242" y="1077" font-size="9" fill="#9da7b3">4.5.2</text>
+<text x="1242" y="1063" font-size="11.5" font-weight="600" fill="#e6edf3">brotli</text>
+<text x="1242" y="1077" font-size="9" fill="#9da7b3">1.2.0</text>
 <rect x="1370" y="1046" width="128" height="40" rx="6" fill="#78716c" fill-opacity="0.22" stroke="#78716c" stroke-width="1.4"/>
 <text x="1378" y="1063" font-size="11.5" font-weight="600" fill="#e6edf3">lmdb</text>
 <text x="1378" y="1077" font-size="9" fill="#9da7b3">0.9.35</text>
@@ -370,7 +379,7 @@
 <text x="48" y="1226" font-size="18" font-weight="700" fill="#e6edf3">Foundation</text>
 <text x="48" y="1246" font-size="11" fill="#9da7b3">depth 0 -- nothing below them; true</text>
 <text x="48" y="1260" font-size="11" fill="#9da7b3">sinks of the graph</text>
-<text x="48" y="1314" font-size="13" font-weight="700" fill="url(#brand)">50 pkgs</text>
+<text x="48" y="1314" font-size="13" font-weight="700" fill="url(#brand)">55 pkgs</text>
 <rect x="282" y="1210" width="128" height="40" rx="6" fill="#78716c" fill-opacity="0.22" stroke="#78716c" stroke-width="1.4"/>
 <text x="290" y="1227" font-size="11.5" font-weight="600" fill="#e6edf3">iana-etc</text>
 <text x="290" y="1241" font-size="9" fill="#9da7b3">20260530</text>
@@ -383,25 +392,25 @@
 <rect x="690" y="1210" width="128" height="40" rx="6" fill="#6b7280" fill-opacity="0.22" stroke="#6b7280" stroke-width="1.4"/>
 <text x="698" y="1227" font-size="11.5" font-weight="600" fill="#e6edf3">pambase</text>
 <text x="698" y="1241" font-size="9" fill="#9da7b3">20260616</text>
-<rect x="826" y="1210" width="128" height="40" rx="6" fill="#0891b2" fill-opacity="0.22" stroke="#0891b2" stroke-width="1.4"/>
-<text x="834" y="1227" font-size="11.5" font-weight="600" fill="#e6edf3">xorgproto</text>
-<text x="834" y="1241" font-size="9" fill="#9da7b3">2025.1</text>
+<rect x="826" y="1210" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
+<text x="834" y="1227" font-size="11.5" font-weight="600" fill="#e6edf3">libsysprof-captu…</text>
+<text x="834" y="1241" font-size="9" fill="#9da7b3">50.0</text>
 <rect x="962" y="1210" width="128" height="40" rx="6" fill="#0891b2" fill-opacity="0.22" stroke="#0891b2" stroke-width="1.4"/>
-<text x="970" y="1227" font-size="11.5" font-weight="600" fill="#e6edf3">xcb-proto</text>
-<text x="970" y="1241" font-size="9" fill="#9da7b3">1.17.0</text>
-<rect x="1098" y="1210" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
-<text x="1106" y="1227" font-size="11.5" font-weight="600" fill="#e6edf3">libsysprof-captu…</text>
-<text x="1106" y="1241" font-size="9" fill="#9da7b3">50.0</text>
-<rect x="1234" y="1210" width="128" height="40" rx="6" fill="#7c3aed" fill-opacity="0.22" stroke="#7c3aed" stroke-width="1.4"/>
-<text x="1242" y="1227" font-size="11.5" font-weight="600" fill="#e6edf3">alsa-topology-co…</text>
-<text x="1242" y="1241" font-size="9" fill="#9da7b3">1.2.5.1</text>
+<text x="970" y="1227" font-size="11.5" font-weight="600" fill="#e6edf3">xorgproto</text>
+<text x="970" y="1241" font-size="9" fill="#9da7b3">2025.1</text>
+<rect x="1098" y="1210" width="128" height="40" rx="6" fill="#0891b2" fill-opacity="0.22" stroke="#0891b2" stroke-width="1.4"/>
+<text x="1106" y="1227" font-size="11.5" font-weight="600" fill="#e6edf3">xcb-proto</text>
+<text x="1106" y="1241" font-size="9" fill="#9da7b3">1.17.0</text>
+<rect x="1234" y="1210" width="128" height="40" rx="6" fill="#a16207" fill-opacity="0.22" stroke="#a16207" stroke-width="1.4"/>
+<text x="1242" y="1227" font-size="11.5" font-weight="600" fill="#e6edf3">default-cursors</text>
+<text x="1242" y="1241" font-size="9" fill="#9da7b3">3</text>
+<text x="1349" y="1225" font-size="11" fill="#03a5fc">★</text>
 <rect x="1370" y="1210" width="128" height="40" rx="6" fill="#7c3aed" fill-opacity="0.22" stroke="#7c3aed" stroke-width="1.4"/>
-<text x="1378" y="1227" font-size="11.5" font-weight="600" fill="#e6edf3">alsa-ucm-conf</text>
-<text x="1378" y="1241" font-size="9" fill="#9da7b3">1.2.16.1</text>
-<rect x="282" y="1258" width="128" height="40" rx="6" fill="#a16207" fill-opacity="0.22" stroke="#a16207" stroke-width="1.4"/>
-<text x="290" y="1275" font-size="11.5" font-weight="600" fill="#e6edf3">default-cursors</text>
-<text x="290" y="1289" font-size="9" fill="#9da7b3">3</text>
-<text x="397" y="1273" font-size="11" fill="#03a5fc">★</text>
+<text x="1378" y="1227" font-size="11.5" font-weight="600" fill="#e6edf3">alsa-topology-co…</text>
+<text x="1378" y="1241" font-size="9" fill="#9da7b3">1.2.5.1</text>
+<rect x="282" y="1258" width="128" height="40" rx="6" fill="#7c3aed" fill-opacity="0.22" stroke="#7c3aed" stroke-width="1.4"/>
+<text x="290" y="1275" font-size="11.5" font-weight="600" fill="#e6edf3">alsa-ucm-conf</text>
+<text x="290" y="1289" font-size="9" fill="#9da7b3">1.2.16.1</text>
 <rect x="418" y="1258" width="128" height="40" rx="6" fill="#78716c" fill-opacity="0.22" stroke="#78716c" stroke-width="1.4"/>
 <text x="426" y="1275" font-size="11.5" font-weight="600" fill="#e6edf3">hwdata</text>
 <text x="426" y="1289" font-size="9" fill="#9da7b3">0.409</text>
@@ -409,27 +418,28 @@
 <text x="562" y="1275" font-size="11.5" font-weight="600" fill="#e6edf3">xkeyboard-config</text>
 <text x="562" y="1289" font-size="9" fill="#9da7b3">2.48</text>
 <text x="669" y="1273" font-size="11" fill="#03a5fc">★</text>
-<rect x="690" y="1258" width="128" height="40" rx="6" fill="#b5651d" fill-opacity="0.22" stroke="#b5651d" stroke-width="1.4"/>
-<text x="698" y="1275" font-size="11.5" font-weight="600" fill="#e6edf3">linux-firmware-w…</text>
-<text x="698" y="1289" font-size="9" fill="#9da7b3">20260622</text>
-<rect x="826" y="1258" width="128" height="40" rx="6" fill="#78716c" fill-opacity="0.22" stroke="#78716c" stroke-width="1.4"/>
-<text x="834" y="1275" font-size="11.5" font-weight="600" fill="#e6edf3">gnulib-l10n</text>
-<text x="834" y="1289" font-size="9" fill="#9da7b3">20241231</text>
-<rect x="962" y="1258" width="128" height="40" rx="6" fill="#78716c" fill-opacity="0.22" stroke="#78716c" stroke-width="1.4"/>
-<text x="970" y="1275" font-size="11.5" font-weight="600" fill="#e6edf3">fuse-common</text>
-<text x="970" y="1289" font-size="9" fill="#9da7b3">3.18.2</text>
-<rect x="1098" y="1258" width="128" height="40" rx="6" fill="#a16207" fill-opacity="0.22" stroke="#a16207" stroke-width="1.4"/>
-<text x="1106" y="1275" font-size="11.5" font-weight="600" fill="#e6edf3">hicolor-icon-the…</text>
-<text x="1106" y="1289" font-size="9" fill="#9da7b3">0.18</text>
-<rect x="1234" y="1258" width="128" height="40" rx="6" fill="#a16207" fill-opacity="0.22" stroke="#a16207" stroke-width="1.4"/>
-<text x="1242" y="1275" font-size="11.5" font-weight="600" fill="#e6edf3">xorg-fonts-encod…</text>
-<text x="1242" y="1289" font-size="9" fill="#9da7b3">1.1.0</text>
+<rect x="690" y="1258" width="128" height="40" rx="6" fill="#a16207" fill-opacity="0.22" stroke="#a16207" stroke-width="1.4"/>
+<text x="698" y="1275" font-size="11.5" font-weight="600" fill="#e6edf3">hicolor-icon-the…</text>
+<text x="698" y="1289" font-size="9" fill="#9da7b3">0.18</text>
+<rect x="826" y="1258" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
+<text x="834" y="1275" font-size="11.5" font-weight="600" fill="#e6edf3">liburing</text>
+<text x="834" y="1289" font-size="9" fill="#9da7b3">2.15</text>
+<rect x="962" y="1258" width="128" height="40" rx="6" fill="#a16207" fill-opacity="0.22" stroke="#a16207" stroke-width="1.4"/>
+<text x="970" y="1275" font-size="11.5" font-weight="600" fill="#e6edf3">adwaita-fonts</text>
+<text x="970" y="1289" font-size="9" fill="#9da7b3">50.0</text>
+<rect x="1098" y="1258" width="128" height="40" rx="6" fill="#78716c" fill-opacity="0.22" stroke="#78716c" stroke-width="1.4"/>
+<text x="1106" y="1275" font-size="11.5" font-weight="600" fill="#e6edf3">iso-codes</text>
+<text x="1106" y="1289" font-size="9" fill="#9da7b3">4.20.1</text>
+<text x="1213" y="1273" font-size="11" fill="#03a5fc">★</text>
+<rect x="1234" y="1258" width="128" height="40" rx="6" fill="#0ea5e9" fill-opacity="0.22" stroke="#0ea5e9" stroke-width="1.4"/>
+<text x="1242" y="1275" font-size="11.5" font-weight="600" fill="#e6edf3">qt6-translations</text>
+<text x="1242" y="1289" font-size="9" fill="#9da7b3">6.11.1</text>
 <text x="1349" y="1273" font-size="11" fill="#03a5fc">★</text>
-<rect x="1370" y="1258" width="128" height="40" rx="6" fill="#0ea5e9" fill-opacity="0.22" stroke="#0ea5e9" stroke-width="1.4"/>
-<text x="1378" y="1275" font-size="11.5" font-weight="600" fill="#e6edf3">qt5-translations</text>
-<text x="1378" y="1289" font-size="9" fill="#9da7b3">5.15.19</text>
+<rect x="1370" y="1258" width="128" height="40" rx="6" fill="#a16207" fill-opacity="0.22" stroke="#a16207" stroke-width="1.4"/>
+<text x="1378" y="1275" font-size="11.5" font-weight="600" fill="#e6edf3">adwaita-cursors</text>
+<text x="1378" y="1289" font-size="9" fill="#9da7b3">50.0</text>
 <text x="1485" y="1273" font-size="11" fill="#03a5fc">★</text>
-<text x="1556" y="1332" font-size="11" text-anchor="end" fill="#9da7b3">+32 more in this layer</text>
+<text x="1556" y="1332" font-size="11" text-anchor="end" fill="#9da7b3">+37 more in this layer</text>
 <text x="32" y="1366" font-size="14" font-weight="700" fill="#e6edf3">Category</text>
 <rect x="32" y="1375" width="12" height="12" rx="3" fill="#b5651d" fill-opacity="0.35" stroke="#b5651d"/>
 <text x="50" y="1386" font-size="11" fill="#e6edf3">Kernel &amp; firmware</text>

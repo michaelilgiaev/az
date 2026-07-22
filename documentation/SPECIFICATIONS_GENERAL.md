@@ -17,15 +17,15 @@ General and developer-facing spec of the Az'arch distribution. The full base->to
 
 | Metric | Value |
 |---|---:|
-| Explicit manifest entries | 165 (165 non-comment lines) |
-| Explicit entries incl. group members (e.g. `xorg`) | 213 |
-| **Full package set (transitive closure)** | **916** |
-| &nbsp;&nbsp;from `core` / `extra` / `multilib` | 227 / 584 / 105 |
-| Edition: Az'arch Component / Stock Arch | 394 / 522 |
-| Top / leaf packages (nothing depends on them) | 165 |
-| Base / sink packages (depend on nothing else in the set) | 50 |
+| Explicit manifest entries | 209 (224 non-comment lines; 15 duplicate lines de-duped) |
+| Explicit entries incl. group members (e.g. `xorg`) | 207 |
+| **Full package set (transitive closure)** | **983** |
+| &nbsp;&nbsp;from `core` / `extra` / `multilib` | 227 / 651 / 105 |
+| Edition: Az'arch Component / Stock Arch | 461 / 522 |
+| Top / leaf packages (nothing depends on them) | 150 |
+| Base / sink packages (depend on nothing else in the set) | 55 |
 | Deepest dependency chain (leaf -> base) | 37 hops |
-| Total installed size of the package set | 5.15 GiB |
+| Total installed size of the package set | 5.68 GiB |
 
 **Edition tags** (used throughout, and marked on the SVG):
 
@@ -133,9 +133,9 @@ The X11 graphics stack. `mesa` supplies the open-source OpenGL/Vulkan drivers an
 | `mesa` | 1:26.1.5-1 | Open-source OpenGL/Vulkan drivers |
 | `libglvnd` | 1.7.0-3 | GL vendor-neutral dispatch |
 | `xorg-server` | 21.1.24-1 | X.Org X11 display server |
-| `xorg-xwayland` | 24.1.13-1 | Run X clients under Wayland |
-| `xorg-xrandr` / `xorg-xinput` | 1.5.4-1 / 1.6.4-2 | Display + input configuration |
-| `xf86-video-vesa` | 2.6.0-3 | Generic VESA fallback video driver |
+| `xorg-xwayland` | ? | Run X clients under Wayland |
+| `xorg-xrandr` / `xorg-xinput` | 1.5.4-1 / ? | Display + input configuration |
+| `xf86-video-vesa` | ? | Generic VESA fallback video driver |
 
 ### Audio (PipeWire)
 
