@@ -1,22 +1,22 @@
-name: Regenerate specifications
+name: Check specifications
 
-# Regenerates the Az'arch specification docs (Markdown, SVG, HTML map, full
-# listing) from the live Arch Linux package databases, then commits any changes
-# back. GitHub Pages auto-serves the updated HTML afterwards -- no deploy step
-# needed here.
+# Verifies the committed Az'arch specification docs (Markdown, SVG, HTML map,
+# full listing) are up to date with the live Arch Linux package databases.
 #
-# Regenerates on every push to master, so the published page always matches the
-# latest committed state. A manual "Run workflow" button is included too, for
-# on-demand refreshes without needing to push.
+# This does NOT commit anything back. You regenerate specs locally with
+# scripts/pull_specifications.sh and commit the result yourself; CI just fails
+# the run if the committed artifacts are stale, so nothing races your pushes.
 
 on:
   push:
     branches: [master]
+  pull_request:
+    branches: [master]
   workflow_dispatch: {}
 
-# Let this workflow push the regenerated docs back to the repo.
+# Read-only: this workflow only checks, it never pushes.
 permissions:
-  contents: write
+  contents: read
 
 # If a new push lands while a run is in flight, cancel the older run -- we only
 # ever care about regenerating from the newest state.
@@ -25,7 +25,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  regenerate:
+  check:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -39,26 +39,24 @@ jobs:
       - name: Regenerate specification artifacts
         run: scripts/pull_specifications.sh
 
-      - name: Commit updated specifications if changed
+      - name: Fail if committed specifications are stale
         run: |
           set -euo pipefail
-          # Commit as the repo owner (not the Actions bot) so the auto-commits
-          # are attributed to a real account and no bot shows in Contributors.
-          git config user.name  "michaelilgiaev"
-          git config user.email "114086553+michaelilgiaev@users.noreply.github.com"
-
-          # Stage only the generated artifacts.
-          git add documentation/SPECIFICATIONS_GENERAL.md \
-                  documentation/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg \
-                  documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html \
-                  documentation/SPECIFICATIONS_COMPONENTS_FULL.txt
-
-          if git diff --cached --quiet; then
-            echo "Specifications already up to date -- nothing to commit."
+          # CI does NOT commit. It regenerates into the working tree (the step
+          # above) and fails if the committed artifacts differ -- i.e. someone
+          # pushed without running scripts/pull_specifications.sh first. This
+          # keeps the committed specs honest without any bot pushing back to the
+          # branch (which used to race real pushes and cause rejections).
+          if git diff --quiet -- \
+              documentation/SPECIFICATIONS_GENERAL.md \
+              documentation/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg \
+              documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html \
+              documentation/SPECIFICATIONS_COMPONENTS_FULL.txt; then
+            echo "Specifications are up to date."
             exit 0
           fi
 
-          # [skip ci] stops this commit from re-triggering the push workflow
-          # (which would loop forever).
-          git commit -m "Regenerate specifications [skip ci]"
-          git push
+          echo "::error::Committed specifications are stale. Run" \
+               "scripts/pull_specifications.sh locally and commit the result." >&2
+          git --no-pager diff --stat -- documentation/ >&2
+          exit 1
