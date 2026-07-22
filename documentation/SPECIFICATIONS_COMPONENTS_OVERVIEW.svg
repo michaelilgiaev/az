@@ -9,7 +9,7 @@
 <text x="32" y="108" font-size="13" fill="#9da7b3">Base:</text>
 <text x="292" y="108" font-size="13" font-weight="600" fill="#e6edf3">Arch Linux (rolling), x86_64</text>
 <text x="800" y="108" font-size="13" fill="#9da7b3">Desktop:</text>
-<text x="1060" y="108" font-size="13" font-weight="600" fill="#e6edf3">None (bare console) -- a desktop is layered on later in the overhaul</text>
+<text x="1060" y="108" font-size="13" font-weight="600" fill="#e6edf3">Openbox live session; getty autologin -&gt; startx -&gt; openbox-session, auto-launches Calamares</text>
 <text x="32" y="128" font-size="13" fill="#9da7b3">Kernel:</text>
 <text x="292" y="128" font-size="13" font-weight="600" fill="#e6edf3">linux 7.1.4.arch1-1</text>
 <text x="800" y="128" font-size="13" fill="#9da7b3">Init:</text>

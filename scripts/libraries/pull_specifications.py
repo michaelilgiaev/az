@@ -169,12 +169,38 @@ def _build_glance(packages, resolved, tiers, tags):
     total_isize = sum(packages[p]["isize"] for p in closure)
     from collections import Counter
     ed_counts = Counter(t["edition"] for t in tags.values())
+
+    # Derive the desktop/display-manager facts from the resolved closure so they
+    # stay correct as components change. We detect a display manager by looking
+    # for any known DM package in the closure; the live session is Openbox when
+    # 'openbox' is present. NOTE: Calamares is built from a local/AUR source and
+    # is NOT in the Arch DBs, so it never appears in the closure -- do not detect
+    # the session from it. We still mention it unconditionally because the build
+    # always ships and auto-launches it.
+    known_dms = ("sddm", "gdm", "lightdm", "lxdm", "ly")
+    present_dm = next((dm for dm in known_dms if dm in closure), None)
+    if "openbox" in closure:
+        desktop = ("Openbox live session; getty autologin -> startx -> "
+                   "openbox-session, auto-launches Calamares")
+        if present_dm:
+            dm = f"{present_dm} display manager"
+        else:
+            dm = "None -- getty autologin to startx (no display manager)"
+    elif present_dm:
+        # Some other desktop paired with a display manager (future stripped/reworked build).
+        desktop = f"graphical session (via {present_dm})"
+        dm = f"{present_dm} display manager"
+    else:
+        # No Openbox, no display manager, no known desktop: a console-only build.
+        desktop = "None (console only)"
+        dm = "None -- getty autologin, no display manager"
+
     return {
         "base": "Arch Linux (rolling), x86_64",
-        "desktop": "None (bare console) -- a desktop is layered on later in the overhaul",
+        "desktop": desktop,
         "kernel": spec_render._pkg_version(packages, "linux"),
         "init": spec_render._pkg_version(packages, "systemd"),
-        "dm": "None -- autologin to a TTY (archiso getty), no display manager",
+        "dm": dm,
         "iso_version": "date-based, YYYY.MM.DD (no semver)",
         "ram": f"{read_cow_spacesize()} writable overlay held in RAM",
         "purpose": "live / rescue / installer medium (stripped-down Arch base)",

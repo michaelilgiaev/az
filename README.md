@@ -15,6 +15,16 @@ This is a year-old, neglected, poorly put-together project that is undergoing a 
 </table>
 
 
+## Documentation
+
+Az'arch ships a generated technical specification of everything that goes into the distribution.
+
+[![Az'arch component dependency graph](documentation/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg)](documentation/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg)
+
+- [Interactive component map](documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html) — a navigable graph of every package and its dependency edges (best opened in a browser or via GitHub Pages).
+- [General specification](documentation/SPECIFICATIONS_GENERAL.md) — the technical distribution specification, derived live from the resolved package set and build config.
+
+
 ## 💽 Install
 
 1. **Download the ISO (or [compile the ISO yourself](#-compile))**  

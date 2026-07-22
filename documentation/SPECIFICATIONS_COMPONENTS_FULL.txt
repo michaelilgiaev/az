@@ -20,7 +20,7 @@ this data, open SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html in a browser.
 AT A GLANCE
 ------------------------------------------------------------------------------
   Base                                       Arch Linux (rolling), x86_64
-  Desktop                                    None (bare console) -- a desktop is layered on later in the overhaul
+  Desktop                                    Openbox live session; getty autologin -> startx -> openbox-session, auto-launches Calamares
   Kernel                                     linux 7.1.4.arch1-1
   Init                                       systemd 261.1-1
   Live-session writable RAM                  4G writable overlay held in RAM

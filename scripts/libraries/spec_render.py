@@ -1,24 +1,86 @@
 """
 spec_render -- assemble the General spec (documentation/SPECIFICATIONS_GENERAL.md)
-from resolved data, the per-package tags (spec_classify) and the subsystem prose
-(spec_content).
+from resolved data, the per-package tags (spec_classify) and the config-derived
+at-a-glance facts (glance).
 
-This is the general / developer-facing document: at-a-glance facts, what Az'arch
-changes on top of stock Arch, and the subsystem-by-subsystem breakdown of what
-the software is. The full base->top dependency graph -- the base/leaf tiers, the
-per-package manifest table and the complete package appendix -- deliberately does
-NOT live here; that is the companion graph image (spec_svg). Keeping the two
-apart is the whole point: this file is prose + curated tables, the SVG is the
-graph.
+This is the technical, developer-facing document. It is prose plus a small set of
+DERIVED tables (at-a-glance metrics, edition tags, network endpoints, and a
+category-level capability surface). Every fact is computed live from the resolved
+package set, the classification, or the build config -- nothing about the component
+set (package names, versions, counts) is hardcoded in prose, so the document
+re-renders correctly when the manifest changes, with no hand edits.
+
+It deliberately does NOT enumerate components. The full component detail -- every
+package, its version, and the base->top dependency edges -- lives entirely in the
+three companion component artifacts:
+  * SPECIFICATIONS_COMPONENTS_OVERVIEW.svg       -- the tiered dependency graph image
+  * SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html -- the same graph, interactive
+  * SPECIFICATIONS_COMPONENTS_FULL.txt           -- the raw, fully-expanded listing
+The general spec points at those; it does not reproduce their tables. Because it
+carries no per-package tables, it cannot drift from the closure.
+
+Only spec_classify is imported (for CATEGORY_ORDER and AZARCH_CONFIGURED); the
+hand-authored subsystem prose (spec_content) is no longer used.
 """
 
-import sys
-
-import spec_content as C
 import spec_classify as K
 
-def _warn(msg):
-    print(f"[render] WARN: {msg}", file=sys.stderr)
+
+# --------------------------------------------------------------------------- #
+# Generic, role-level description for each category. Intentionally about the
+# ROLE a category plays on the medium, never about specific packages, so it
+# survives add/remove churn in the manifest. Keys are spec_classify categories;
+# any category not present here falls back to just its name (see _capability).
+# --------------------------------------------------------------------------- #
+CATEGORY_BLURB = {
+    "Kernel & firmware":
+        "the Linux kernel, CPU microcode, and device firmware blobs",
+    "Boot & init":
+        "boot loaders for both firmware types, the initramfs generator, and the "
+        "systemd init/service manager",
+    "Core system":
+        "the base userland -- C library, coreutils, package manager, PAM/polkit, "
+        "and privilege escalation",
+    "Shell & CLI tools":
+        "interactive shells, terminal editors, pagers, multiplexers, and everyday "
+        "command-line utilities",
+    "Desktop shell":
+        "the live-session desktop shell and its supporting session services",
+    "Window/compositor":
+        "the window manager / compositor that draws and manages windows",
+    "Desktop app":
+        "graphical end-user applications shipped on the medium",
+    "GUI toolkit/framework":
+        "the widget toolkits and UI frameworks graphical apps are built on",
+    "Graphics & display":
+        "the X11 display server, Mesa/Vulkan drivers, and display configuration",
+    "Audio":
+        "the audio server and mixer/control tooling",
+    "Networking":
+        "connection management, wireless, VPN, SSH, DNS, and network diagnostics",
+    "Storage & filesystems":
+        "partitioning, RAID/LVM, encryption setup, and filesystem/imaging tooling",
+    "Security & crypto":
+        "the host firewall, full-disk encryption, TPM/FIDO/smartcard, and OpenPGP",
+    "Developer tools":
+        "compilers, build tooling, version control, and developer editors",
+    "Language runtime":
+        "language interpreters and runtimes available out of the box",
+    "Multimedia codec/player":
+        "media players and the codec/plugin stack that decodes and encodes them",
+    "Fonts & icons":
+        "console and desktop fonts, cursors, and icon themes",
+    "Printing & scanning":
+        "the printing subsystem and its device support",
+    "Bluetooth & devices":
+        "Bluetooth, USB, accessibility, and other peripheral device support",
+    "Virtualization guest":
+        "guest integration agents for the major hypervisors",
+    "Shared library":
+        "shared libraries other components link against",
+    "System":
+        "supporting system components that back the above",
+}
 
 
 class Doc:
@@ -37,41 +99,58 @@ def _pkg_version(packages, name):
     return rec["version"] if rec else "?"
 
 
-def _versions_for_label(packages, label, closure):
-    """Render the version cell for a possibly-'a / b' label, warning on misses."""
-    names = [p.strip() for p in label.split("/")]
-    versions = []
-    for name in names:
-        if name in packages and name in closure:
-            versions.append(_pkg_version(packages, name))
-        else:
-            _warn(f"subsystem lists '{name}' which is not in the resolved closure")
-            versions.append("?")
-    if len(set(versions)) == 1:
-        return versions[0]
-    return " / ".join(versions)
+def _capability(category):
+    """Generic role-level one-liner for a category; never names packages."""
+    return CATEGORY_BLURB.get(category, category)
+
+
+def _category_summary(packages, closure, tags):
+    """Walk the classified closure and, for each category that has >=1 package in
+    it, return (category, count, total_install_size_bytes) in CATEGORY_ORDER.
+    Categories with no packages in the closure are omitted entirely -- there is no
+    assumption they exist. Anything classified into a category not in
+    CATEGORY_ORDER is ignored here (CATEGORY_ORDER is the canonical set)."""
+    counts = {c: 0 for c in K.CATEGORY_ORDER}
+    sizes = {c: 0 for c in K.CATEGORY_ORDER}
+    for p in closure:
+        c = tags[p]["category"]
+        if c in counts:
+            counts[c] += 1
+            sizes[c] += packages.get(p, {}).get("isize", 0)
+    return [(c, counts[c], sizes[c]) for c in K.CATEGORY_ORDER if counts[c] > 0]
+
+
+def _human_size(nbytes):
+    if nbytes >= 1024 ** 3:
+        return f"{nbytes / 1024 ** 3:.2f} GiB"
+    if nbytes >= 1024 ** 2:
+        return f"{nbytes / 1024 ** 2:.1f} MiB"
+    if nbytes >= 1024:
+        return f"{nbytes / 1024:.1f} KiB"
+    return f"{nbytes} B"
 
 
 def render(packages, resolved, tiers, tags, glance, svg_rel):
-    # This document is the general / components view: at-a-glance, what Az'arch
-    # changes, and the subsystem breakdown. The full dependency-graph tiers (base
-    # tier, leaves, manifest table, full package appendix) live in the companion
-    # graph image, so they are deliberately NOT rendered here.
+    """Assemble the general specification Markdown.
+
+    Signature is fixed (pull_specifications.py calls it positionally). Not every
+    argument is used directly, but all are kept.
+    """
     closure = resolved["closure"]
     roots = resolved["roots"]
-
-    def cat(p):
-        return tags[p]["category"]
 
     d = Doc()
     d.w("# Az'arch -- General Specification")
     d.w()
-    d.w(f"General and developer-facing spec of the Az'arch distribution. The full "
-        f"base->top dependency graph (kernel up to leaf apps, tiered), with every "
-        f"component, lives in the companion image [`{svg_rel}`]({svg_rel}); this "
-        f"document is the prose and tables a developer of the distro actually "
-        f"needs. Generated by `scripts/pull_specifications.sh` from the official "
-        f"Arch `core`/`extra`/`multilib` databases.")
+    d.w(f"Technical, developer-facing specification of the Az'arch Linux "
+        f"distribution. It is generated -- do not hand-edit; it is regenerated by "
+        f"`scripts/pull_specifications.sh` from the official Arch `core`/`extra`/"
+        f"`multilib` databases and the build config, and every fact below is "
+        f"derived live from the resolved package set. It describes what the medium "
+        f"*is* and how it behaves; it does not enumerate components. The full "
+        f"base->top dependency graph, with every package and version, lives in the "
+        f"companion image [`{svg_rel}`]({svg_rel}) and the two other component "
+        f"artifacts listed in the last section.")
     d.w()
     d.w("---")
     d.w()
@@ -80,7 +159,7 @@ def render(packages, resolved, tiers, tags, glance, svg_rel):
     d.w("## 1. At a glance")
     d.w()
     d.w(f"- **Base distribution:** {glance['base']}")
-    d.w(f"- **Desktop:** {glance['desktop']}")
+    d.w(f"- **Live session:** {glance['desktop']}")
     d.w(f"- **Kernel:** `linux` {glance['kernel']}")
     d.w(f"- **Init:** `systemd` {glance['init']}")
     d.w(f"- **Display manager / session:** {glance['dm']}")
@@ -107,15 +186,14 @@ def render(packages, resolved, tiers, tags, glance, svg_rel):
     d.w(f"| Deepest dependency chain (leaf -> base) | {tiers['max_height']} hops |")
     d.w(f"| Total installed size of the package set | {glance['size']} |")
     d.w()
-    d.w("**Edition tags** (used throughout, and marked on the SVG):")
+    d.w("**Edition tags** (used throughout, and marked on the component graph):")
     d.w()
     d.w("| Tag | Meaning |")
     d.w("|---|---|")
     d.w("| `az'arch` | **Az'arch Component** -- in the package set **only** "
         "because Az'arch added it on top of the stock archiso `releng` baseline "
         "(a chosen application, or a dependency that exists purely to support "
-        "one). The subset Az'arch also rebrands/themes/removes is called out in "
-        "section 3. |")
+        "one). |")
     d.w("| `stock` | **Stock Arch** -- already pulled in by the stock archiso "
         "`releng` install medium; Az'arch inherits it whether it adds anything "
         "or not. |")
@@ -123,8 +201,130 @@ def render(packages, resolved, tiers, tags, glance, svg_rel):
     d.w("---")
     d.w()
 
-    # 2. Network endpoints ---------------------------------------------------
-    d.w("## 2. Network endpoints -- what the distro contacts")
+    # 2. Base & identity -----------------------------------------------------
+    d.w("## 2. Base and identity")
+    d.w()
+    d.w(f"Az'arch is [Arch Linux](https://archlinux.org) -- rolling release, "
+        f"`x86_64` -- with a curated package set and Az'arch branding/config on "
+        f"top. Every package comes unmodified from the official Arch repositories; "
+        f"Arch's own documentation, the [ArchWiki](https://wiki.archlinux.org), "
+        f"applies directly. The kernel is `linux` {glance['kernel']} and the init "
+        f"system is `systemd` {glance['init']}. The medium is versioned "
+        f"{glance['iso_version']}.")
+    d.w()
+    d.w("Identity is set through `/usr/lib/os-release`: `NAME=\"Az'arch Linux\"` "
+        "with `ID=arch` and `ID_LIKE=arch` kept deliberately -- so tooling that "
+        "keys off `ID` still treats the system as Arch -- `BUILD_ID=rolling`, and "
+        "`HOME_URL` pointing at the project repository. The branding is "
+        "presentational; the system remains Arch underneath.")
+    d.w()
+    d.w("---")
+    d.w()
+
+    # 3. Medium and boot -----------------------------------------------------
+    d.w("## 3. Medium and boot")
+    d.w()
+    d.w(f"The artifact is a {glance['purpose']}: a single ISO that can run live, "
+        f"serve as a rescue environment, and install the system. The root "
+        f"filesystem ships as a zstd-compressed SquashFS image; at runtime it is "
+        f"read-only with a writable overlay ({glance['ram']}).")
+    d.w()
+    d.w("The medium boots on both firmware types:")
+    d.w()
+    d.w("- **BIOS:** `syslinux` (MBR and El Torito).")
+    d.w("- **UEFI:** `systemd-boot`, with both `ia32` and `x64` loaders (ESP and "
+        "El Torito).")
+    d.w()
+    d.w("---")
+    d.w()
+
+    # 4. Live session --------------------------------------------------------
+    d.w("## 4. Live session")
+    d.w()
+    d.w("The live session runs **Openbox** under X11 -- there is no display "
+        "manager. The boot path is: `getty@tty1` autologins the live user `main`, "
+        "whose `~/.bash_profile` execs `startx`, whose `~/.xinitrc` execs "
+        "`openbox-session`; Openbox autostart then brings up the compositor "
+        "(`picom`), the wallpaper (`feh`), notifications (`dunst`) and the "
+        "NetworkManager applet, and auto-launches the Calamares installer once via "
+        "`sudo -E`.")
+    d.w()
+    d.w("The live user `main` has passwordless `sudo` and a blank password and is "
+        "autologged in -- this is a live medium, not the installed posture. The "
+        "installed system is different (see below).")
+    d.w()
+    d.w("---")
+    d.w()
+
+    # 5. Installation --------------------------------------------------------
+    d.w("## 5. Installation")
+    d.w()
+    d.w("Installation is **offline**. The primary path is the Calamares installer, "
+        "whose `unpackfs` module rsyncs the live SquashFS root onto the target -- "
+        "there is no network `pacstrap`, so the install works with no connectivity "
+        "and installs exactly what shipped on the medium. A simpler shell installer "
+        "path also exists for the automated case.")
+    d.w()
+    d.w("- **Filesystem:** Btrfs by default, with `@` and `@home` subvolumes "
+        "mounted with zstd compression and `noatime`.")
+    d.w("- **Encryption:** LUKS2 full-disk encryption is offered at install time.")
+    d.w("- **Boot loader:** GRUB is installed on both UEFI and BIOS targets.")
+    d.w("- **Cleanup:** Calamares removes itself from the installed target after a "
+        "successful install.")
+    d.w()
+    d.w("On the installed system the posture tightens: privilege escalation is via "
+        "the `wheel` group (not passwordless), the hostname is chosen in the "
+        "installer UI, and there is no autologin.")
+    d.w()
+    d.w("---")
+    d.w()
+
+    # 6. Localization --------------------------------------------------------
+    d.w("## 6. Localization")
+    d.w()
+    d.w("Locale, keyboard layout and timezone are **auto-detected on first boot** "
+        "from a geo-IP lookup, mapped through a table of supported locales in the "
+        "build config. If the lookup host is unreachable (fully offline boot), the "
+        "defaults `en_US.UTF-8` / `us` keymap apply. The network hosts involved are "
+        "listed in the Network endpoints section.")
+    d.w()
+    d.w("---")
+    d.w()
+
+    # 7. Security posture ----------------------------------------------------
+    d.w("## 7. Security posture")
+    d.w()
+    d.w("- **Firewall:** `ufw` is enabled with a default **reject-incoming / "
+        "allow-outgoing** policy.")
+    d.w("- **Disk encryption:** LUKS2 full-disk encryption is available at install "
+        "time.")
+    d.w("- **Live vs installed:** the live user's passwordless sudo and blank "
+        "password are a live-medium convenience; the installed system uses "
+        "`wheel`-group sudo with no autologin.")
+    d.w()
+    d.w("---")
+    d.w()
+
+    # 8. Capability surface --------------------------------------------------
+    d.w("## 8. Capability surface")
+    d.w()
+    d.w("What the medium can do, grouped by the role each component plays. Counts "
+        "and sizes are computed live from the classified package closure, so they "
+        "track the manifest automatically. This is a role-level summary only -- for "
+        "the actual packages and versions in each category, use the component "
+        "artifacts in the next section.")
+    d.w()
+    d.w("| Category | Components | Installed size | Provides |")
+    d.w("|---|---:|---:|---|")
+    for category, count, size in _category_summary(packages, closure, tags):
+        d.w(f"| {category} | {count} | {_human_size(size)} | "
+            f"{_capability(category)} |")
+    d.w()
+    d.w("---")
+    d.w()
+
+    # 9. Network endpoints ---------------------------------------------------
+    d.w("## 9. Network endpoints -- what the distro contacts")
     d.w()
     d.w("Every external host and service the distribution talks to: where it "
         "downloads packages from, how it resolves the timezone and locale, and "
@@ -153,50 +353,31 @@ def render(packages, resolved, tiers, tags, glance, svg_rel):
     d.w("---")
     d.w()
 
-    # 3. Az'arch modifications ----------------------------------------------
-    d.w("## 3. What Az'arch changes on top of Arch")
+    # 10. Component detail ---------------------------------------------------
+    d.w("## 10. Where the component detail lives")
     d.w()
-    d.w("Every package comes unmodified from the official Arch repos; Az'arch's "
-        "identity is *curation* (which packages ship, chosen in `libraries/data/"
-        "packages.x86_64` on top of the stock archiso baseline) plus "
-        "*configuration and branding* on the packages below. Note this is a "
-        "narrower set than the **Az'arch Component** edition: a package can be an "
-        "Az'arch Component (added by Az'arch) without being reconfigured, and a "
-        "**Stock Arch** package (e.g. `pacman`, `systemd`) can still carry an "
-        "Az'arch config change. The table below lists only the packages that "
-        "carry Az'arch-specific changes -- grounded in the build's own config "
-        "modules (`libraries/azarch/config/*.py`).")
+    d.w("This document does not list packages. The complete component enumeration "
+        "-- every package, its version, and the dependency edges between them -- "
+        "lives in three companion artifacts, all in `documentation/`:")
     d.w()
-    d.w("| Package | Version | Category | What Az'arch does | Shipped? |")
-    d.w("|---|---|---|---|---|")
-    for p in sorted(K.AZARCH_CONFIGURED):
-        if p not in closure:
-            continue
-        shipped = "removed" if tags[p]["removed"] else "yes"
-        d.w(f"| `{p}` | {_pkg_version(packages, p)} | {cat(p)} | "
-            f"{tags[p]['azarch_note']} | {shipped} |")
+    d.w(f"- [`{svg_rel}`]({svg_rel}) -- **overview graph** (SVG): the base->top "
+        f"dependency graph as a tiered image, coloured by category and marked with "
+        f"the edition tags above.")
+    d.w("- `SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html` -- **interactive map**: "
+        "the same graph, navigable, with search and per-package detail.")
+    d.w("- `SPECIFICATIONS_COMPONENTS_FULL.txt` -- **raw full listing**: every "
+        "component, fully expanded, in plain text, for anyone who wants the "
+        "unadorned data.")
     d.w()
     d.w("---")
     d.w()
 
-    # 4. Subsystems ---------------------------------------------------------
-    d.w("## 4. Subsystems -- what the software actually is")
+    # 11. Status -------------------------------------------------------------
+    d.w("## 11. Status")
     d.w()
-    d.w("The key packages grouped by real function, with concrete technical "
-        "capabilities and real versions. (The full base->top dependency graph and "
-        "the complete package list are in the companion graph image, not here.)")
-    d.w()
-    for _key, title, prose, rows in C.SUBSYSTEMS:
-        d.w(f"### {title}")
-        d.w()
-        d.w(prose)
-        d.w()
-        d.w("| Package | Version | Capability |")
-        d.w("|---|---|---|")
-        for label, capability in rows:
-            version = _versions_for_label(packages, label, closure)
-            tick = " / ".join(f"`{x.strip()}`" for x in label.split("/"))
-            d.w(f"| {tick} | {version} | {capability} |")
-        d.w()
+    d.w("Under construction. Az'arch tracks Arch rolling, and the shipped component "
+        "set is subject to change as the distribution is reworked; the figures in "
+        "this document are regenerated from the current manifest on every change, "
+        "so they always reflect the present state rather than a fixed release.")
 
     return d.text()
