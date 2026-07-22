@@ -42,8 +42,10 @@ jobs:
       - name: Commit updated specifications if changed
         run: |
           set -euo pipefail
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Commit as the repo owner (not the Actions bot) so the auto-commits
+          # are attributed to a real account and no bot shows in Contributors.
+          git config user.name  "michaelilgiaev"
+          git config user.email "114086553+michaelilgiaev@users.noreply.github.com"
 
           # Stage only the generated artifacts.
           git add documentation/SPECIFICATIONS_GENERAL.md \
