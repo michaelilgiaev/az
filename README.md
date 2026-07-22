@@ -15,7 +15,7 @@ This is a year-old, neglected, poorly put-together project that is undergoing a 
 </table>
 
 
-## 📚 Documentation
+## Documentation
 
 General specifications of the distribution.
 - [documentation/SPECIFICATIONS_GENERAL.md](documentation/SPECIFICATIONS_GENERAL.md)
@@ -25,28 +25,43 @@ Brief overview of the components.
 
 Easy-to-use interactive graph of every component.
 - [documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html](documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
-- [https://michaelilgiaev.github.io/azarch/documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html](https://michaelilgiaev.github.io/azarch/documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html) (online render hosted by GitHub Pages).
+- [https://michaelilgiaev.github.io/azarch/documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html](https://michaelilgiaev.github.io/azarch/documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)  
+(online render hosted by GitHub Pages).
 
 Plain-text raw dump of every component.
 - [documentation/SPECIFICATIONS_COMPONENTS_FULL.txt](documentation/SPECIFICATIONS_COMPONENTS_FULL.txt)
 
 
-## 💽 Install
+## Install
 
 1. **Download the ISO (or [compile the ISO yourself](#-compile))**  
    The ISO is hosted on Google Drive (GitHub does not allow files larger than 2 GB).
    
-   **📥Link: [https://drive.google.com/file/d/18nclTLo05_KU7uOfYd_WTnI0LK--mGE6/view?usp=sharing](https://drive.google.com/file/d/18nclTLo05_KU7uOfYd_WTnI0LK--mGE6/view?usp=sharing)**
+   **Link: [https://drive.google.com/file/d/18nclTLo05_KU7uOfYd_WTnI0LK--mGE6/view?usp=sharing](https://drive.google.com/file/d/18nclTLo05_KU7uOfYd_WTnI0LK--mGE6/view?usp=sharing)**
 
 2. **Create a Bootable USB**  
    Use one of the following tools to write the ISO to a USB drive:
    - **[balenaEtcher](https://etcher.balena.io/)** (Windows/macOS/Linux)
    - **[Rufus](https://rufus.ie/en/)** (Windows only)
    - `dd` command (Linux/macOS):
+
+     <table width="100%">
+     <thead>
+     <tr><th align="left">ℹ️ NOTE</th></tr>
+     </thead>
+     <tbody>
+     <tr><td>
+
+     - Replace `<DEVICE>` with your USB device. This will erase the disk.
+     - Replace `<DATE>` with the date on your downloaded ISO.
+
+     </td></tr>
+     </tbody>
+     </table>
+
      ```bash
-     sudo dd if=azarch-2025.07.28-x86_64.iso of=/dev/sdX bs=4M status=progress && sync
+     sudo dd if=azarch-<DATE>-x86_64.iso of=/dev/<DEVICE> bs=4M status=progress && sync
      ```
-     ⚠️ Replace `/dev/sdX` with your actual USB device (this will erase the disk).
 
 3. **Boot from USB**  
    Reboot your machine and use your BIOS/UEFI boot menu to boot from the USB drive.
@@ -76,7 +91,7 @@ Plain-text raw dump of every component.
    - Perform machine rescue tasks.
    - Do general work.
 
-## 🧰 Compile
+## Compile
 
 You can clone this repository and compile the ISO yourself. The first build needs an internet connection to download every component that goes into the ISO, after that everything is cached and rebuilds run fully offline. Build with Docker. The ISO is assembled with `mkarchiso`, which resolves the ISO's package list against the build host's Arch Linux repositories. That means the build only works on a genuine Arch userland with the real Arch `core`, `extra`, and `multilib` repositories. On anything else those repositories are wrong or missing and the build fails with errors like `target not found: archinstall` or endless kernel-provider prompts. Docker sidesteps all of that, the image is `archlinux:latest`, so the build runs inside real Arch no matter what machine you are on.
 
@@ -84,7 +99,7 @@ The build runs in Docker, so the steps are the same on every operating system.
 
 1. **Install Docker and Git.**
 
-   <b>🐧 Linux</b>
+   <b>Linux</b>
 
    - Install both with your package manager:
      - Arch-based: `sudo pacman -S --needed docker git`
@@ -92,12 +107,12 @@ The build runs in Docker, so the steps are the same on every operating system.
      - Fedora: `sudo dnf install docker git`
    - Start Docker: `sudo systemctl enable --now docker`
 
-   <b>🍎 macOS</b>
+   <b>macOS</b>
 
    - Install [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/) and launch it (wait until the whale icon says Docker is running).
    - Git ships with the Xcode command line tools: `xcode-select --install`
 
-   <b>🪟 Windows</b>
+   <b>Windows</b>
 
    - In an Administrator PowerShell, install WSL2: `wsl --install` (you may be prompted to reboot).
    - Install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/) and enable **"Use the WSL 2 based engine"** in its settings.
