@@ -43,6 +43,23 @@ class _Tee:
             pass  # log closed/unwritable -> keep the terminal alive regardless
         return n
 
+    def write_split(self, term_text: str, log_text: str) -> int:
+        """Write DIFFERENT bytes to the terminal and the log in one call.
+
+        Used by the mkarchiso driver: the terminal copy is width-clipped so a long
+        pacstrap line does not wrap and desync the pinned progress bar's scroll
+        region, but the log must keep the FULL untruncated line. Writing the clipped
+        copy through plain write() (as a prior change did) silently cut the tail off
+        every wide mkarchiso line in full.log. This keeps them independent."""
+        n = self._term.write(term_text)
+        self._term.flush()
+        try:
+            self._log.write(log_text)
+            self._log.flush()
+        except (ValueError, OSError):
+            pass
+        return n
+
     def flush(self) -> None:
         self._term.flush()
         try:

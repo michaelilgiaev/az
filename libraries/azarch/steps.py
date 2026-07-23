@@ -193,7 +193,7 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: 
     # pacman -Sw builds/indexes the local repo (drives bar.sub sub-progress), then the
     # on-disk installer's package manifest + pacman confs + chroot-setup.sh are staged.
     bar.step("Warm pacman cache and stage installer payload")
-    packages.build_cache(W, paths.CACHEDIR, offline, bar.sub, bar.phase)
+    packages.build_cache(W, paths.CACHEDIR, offline, bar.sub, bar.phase, full_compile)
     bar.sub_done()
     bar._arm(); bar.draw()
     # stage the installer-side payload the on-disk installer needs
@@ -203,16 +203,19 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: 
     emit.write_exec(ea / "chroot-setup.sh", installer.chroot_setup_sh())
 
     # 13 -- Build Az'arch's OWN packages and fold them into the offline repo
-    # (GIANT-ish, weight 120; MUCH heavier under --full-compile). makepkg builds
-    # calamares (always from source) and librewolf (repackaged upstream by default,
-    # or from Firefox source under --full-compile), drops the *.pkg.tar.zst into
-    # cache/pkgs/repo/, then we RE-reconcile the index and RE-stage the repo into
-    # airootfs so mkarchiso's pacstrap (and the on-disk installer) can install them.
+    # (GIANT-ish, weight 120; MUCH heavier under --full-compile). The DEFAULT tier
+    # builds ONLY librewolf (it is in no Arch repo), repackaging the verified
+    # upstream binary tarball; calamares is a normal Arch package already fetched
+    # from extra/ in step 12. Under --full-compile makepkg ALSO compiles calamares
+    # from source (sha256-verified) and librewolf from Firefox source. Whatever is
+    # built is dropped into cache/pkgs/repo/, then we RE-reconcile the index and
+    # RE-stage the repo into airootfs so mkarchiso's pacstrap (and the on-disk
+    # installer) can install them.
     bar.step("Build Az'arch's own packages (calamares, librewolf)")
     makepkg.build_own_packages(offline, full_compile, bar.sub, bar.phase)
     bar.sub_done()
     bar._arm(); bar.draw()
-    _refold_own_packages_into_repo(W)
+    _refold_own_packages_into_repo(W, full_compile)
 
     # 14 -- Assemble ISO (GIANT, weight 270).
     # mkarchiso: pacstrap into airootfs, mksquashfs, checksum, build the .iso
@@ -261,10 +264,13 @@ def _emit_tty1_autologin(airootfs: Path) -> None:
     emit.write_text(dropin, system.GETTY_TTY1_AUTOLOGIN)
 
 
-def _refresh_own_in_pacstrap_cache() -> None:
-    """Refresh Az'arch's OWN packages IN the persistent pacstrap CacheDir
-    (cache/pacman-pkg) so mkarchiso's pacstrap always reads the freshly-rebuilt
-    bytes from cache -- never a stale copy, and never a file:// re-fetch.
+def _refresh_own_in_pacstrap_cache(full_compile: bool = False) -> None:
+    """Refresh the packages the makepkg stage BUILT (librewolf always; calamares
+    under --full-compile) IN the persistent pacstrap CacheDir (cache/pacman-pkg) so
+    mkarchiso's pacstrap always reads the freshly-rebuilt bytes from cache -- never
+    a stale copy, and never a file:// re-fetch. Arch-downloaded packages (including
+    extra/calamares in the default tier) are immutable per version and handled by
+    the normal cache path, so they are deliberately NOT touched here.
 
     Two failure modes this closes, both caused by makepkg NOT being reproducible
     bit-for-bit (a rebuild of calamares/librewolf yields a byte-different
@@ -290,7 +296,19 @@ def _refresh_own_in_pacstrap_cache() -> None:
     repo = paths.PKG_REPO
     if not cache.is_dir():
         return
-    from .makepkg import PRODUCED
+    from .makepkg import produced_names
+    PRODUCED = produced_names(full_compile)          # this tier: which to REFRESH (copy in)
+    # Every name the makepkg stage can EVER produce, across BOTH tiers. Cleanup must
+    # span this union, not just the current tier: calamares migrates from BUILT (under
+    # --full-compile) to DOWNLOADED (default tier, from extra/). A prior full-compile
+    # run left its SOURCE-built calamares in this CacheDir; a later default run gets a
+    # byte-different Arch-signed calamares under the SAME version-rel filename. Scoping
+    # cleanup to the current tier's PRODUCED would never look at calamares in a default
+    # run, so pacstrap reads the stale source bytes, their checksum mismatches the DB,
+    # and -- with stdin on /dev/null it cannot answer the delete prompt -- the ISO build
+    # aborts. (Filename equality means a name-only staleness check would MISS it; we
+    # compare CONTENT below.)
+    ALL_OWN = tuple(sorted(set(produced_names(True)) | set(produced_names(False))))
     import hashlib
 
     def _sha(p: Path) -> str:
@@ -301,36 +319,52 @@ def _refresh_own_in_pacstrap_cache() -> None:
         return h.hexdigest()
 
     sudo = _sudo()
-    # First drop any superseded-version cached copies of our packages (a version
-    # bump leaves the OLD file behind; pacstrap won't ask for it, but keep tidy).
-    current = {(repo / f.name).name for name in PRODUCED
-               for f in repo.glob(f"{name}-*.pkg.tar.zst")}
-    for name in PRODUCED:
+    # Cleanup pass (over the UNION of tiers). For every own-name, drop any cached copy
+    # that does not byte-match the copy currently in the repo -- whether it is a
+    # superseded VERSION (different filename) or a same-version file with different
+    # BYTES (the built-vs-downloaded calamares case). A repo copy with matching bytes
+    # is left for the refresh pass. A cached file whose name isn't in the repo at all
+    # (name fully retired) is dropped too. This gives pacstrap either a valid cache hit
+    # or a clean miss (it then reads the correct file from the file:// repo), never a
+    # checksum-mismatch abort.
+    for name in ALL_OWN:
+        repo_by_name = {p.name: p for p in repo.glob(f"{name}-*.pkg.tar.zst")}
         for cached in cache.glob(f"{name}-*.pkg.tar.zst"):
-            if cached.name not in current:
-                subprocess.run(sudo + ["rm", "-f", str(cached), str(cached) + ".sig"],
-                               check=False)
-    # Then mirror each current repo copy into the cache when it's absent or stale.
+            repo_copy = repo_by_name.get(cached.name)
+            if repo_copy is not None and _sha(cached) == _sha(repo_copy):
+                continue  # correct bytes already cached -> keep
+            subprocess.run(sudo + ["rm", "-f", str(cached), str(cached) + ".sig"],
+                           check=False)
+    # Refresh pass (this tier's built packages only): mirror each current repo copy of a
+    # TIER-BUILT package into the cache when absent (the cleanup above removed any stale
+    # one). Only makepkg-built packages need their bytes forced in place -- downloaded
+    # Arch packages (default-tier calamares) are re-fetched from the file:// repo on the
+    # clean miss the cleanup produced, so we do NOT copy them here (that would also hit
+    # the file:// max-file-size cap that motivated in-place refresh for big librewolf).
     for name in PRODUCED:
         for repo_copy in repo.glob(f"{name}-*.pkg.tar.zst"):
             cached = cache / repo_copy.name
-            if cached.is_file() and _sha(cached) == _sha(repo_copy):
-                continue  # already the right bytes -> valid cache hit, leave it
+            if cached.is_file():
+                continue  # cleanup kept it only if bytes already matched -> valid hit
             print(f"    [+] Refreshing {repo_copy.name} in pacstrap cache "
                   f"(rebuilt; syncing bytes so pacstrap gets a valid cache hit).")
             subprocess.run(sudo + ["cp", "-f", str(repo_copy), str(cached)], check=False)
-            # keep a matching .sig alongside if the repo has one (pacstrap checks it)
+            # keep a matching .sig alongside if the repo has one. The offline file://
+            # repo runs SigLevel = Never (config/pacman.py) so pacstrap does not verify
+            # it -- this copy is a harmless belt-and-braces, not load-bearing.
             sig = repo_copy.with_suffix(repo_copy.suffix + ".sig")
             if sig.is_file():
                 subprocess.run(sudo + ["cp", "-f", str(sig), str(cache / sig.name)], check=False)
 
 
-def _refold_own_packages_into_repo(W: Path) -> None:
-    """After makepkg drops calamares/librewolf into cache/pkgs/repo/, re-reconcile
+def _refold_own_packages_into_repo(W: Path, full_compile: bool = False) -> None:
+    """After makepkg drops our built package(s) into cache/pkgs/repo/, re-reconcile
     the local repo index so those packages are in pacstrap-azarch-repo.db, then
     RE-stage the repo + db into the airootfs payload dir. build_cache already
-    staged the Arch packages there; this overlays our two on top so mkarchiso's
-    pacstrap and the on-disk installer resolve them from the same offline repo."""
+    staged the Arch packages there; this overlays our built package(s) on top so
+    mkarchiso's pacstrap and the on-disk installer resolve them from the same
+    offline repo. full_compile decides which packages count as OUR built ones
+    (default: librewolf only; full: calamares + librewolf)."""
     pkg_repo = paths.PKG_REPO
     pkg_db = paths.PKG_DB
     # Re-run the incremental index reconcile (delta: only the 2 new packages added).
@@ -345,13 +379,13 @@ def _refold_own_packages_into_repo(W: Path) -> None:
     # "invalid or corrupted package (checksum)" (observed exactly this on librewolf).
     # repo-add (no -n) overwrites the same-version entry, refreshing SHA256+CSIZE to
     # match the file on disk. Idempotent and cheap (2 packages).
-    packages._readd_own_packages(pkg_repo)
-    # A prior build may have cached an OLDER byte-image of our own packages in the
+    packages._readd_own_packages(pkg_repo, full_compile)
+    # A prior build may have cached an OLDER byte-image of our built packages in the
     # persistent pacstrap CacheDir. Refresh them IN PLACE with the freshly-rebuilt
     # bytes so mkarchiso's pacstrap gets a valid cache hit -- avoiding both the
     # checksum-mismatch abort AND the file:// max-file-size abort a delete-and-
     # refetch would trigger on the 138 MB librewolf package.
-    _refresh_own_in_pacstrap_cache()
+    _refresh_own_in_pacstrap_cache(full_compile)
     # Re-stage into the airootfs payload the on-disk installer copies from.
     ea = W / "airootfs" / "root/azarch"
     final_db = ea / "pacstrap-azarch-db"
@@ -542,9 +576,15 @@ _PACMAN_BANDS = {
 def _drive_mkarchiso_progress(proc, bar: ProgressBar) -> None:
     """Parse mkarchiso/pacstrap live output and drive the bar. pacman redraws its
     progress with carriage returns (not newlines), so we split on BOTH \\r and \\n
-    to see each (N/M) frame live. Every line is echoed to stdout, which the build's
-    stdout tee mirrors into full.log -- so we do NOT write full.log directly here
-    (doing both previously wrote every mkarchiso line to the log twice)."""
+    to see each (N/M) frame live.
+
+    Each line goes out two ways in ONE call via the stdout tee's write_split: a
+    width-CLIPPED copy to the terminal (so a long line does not wrap and desync the
+    pinned bar's scroll region) and the FULL untruncated line to full.log. A prior
+    change wrote the clipped copy through plain stdout.write, which fed the SAME
+    truncated text to the log too -- silently cutting the tail off every wide
+    mkarchiso line in full.log. write_split keeps the two independent so the log is
+    complete while the terminal stays clip-safe."""
     import io
     import re
 
@@ -577,8 +617,15 @@ def _drive_mkarchiso_progress(proc, bar: ProgressBar) -> None:
         nonlocal inpac
         if not line:
             return
-        # One write: clipped echo to stdout -> terminal + full.log (via the tee).
-        sys.stdout.write(bar._clip(line) + "\n")
+        # Terminal gets the width-clipped line (no wrap -> the pinned bar stays put);
+        # full.log gets the FULL line. write_split does both in one write via the tee.
+        # If stdout is not the tee (e.g. logging not installed), fall back to a plain
+        # clipped write so the terminal still behaves.
+        writer = getattr(sys.stdout, "write_split", None)
+        if writer is not None:
+            writer(bar._clip(line) + "\n", line + "\n")
+        else:
+            sys.stdout.write(bar._clip(line) + "\n")
         if "Installing packages to" in line:
             inpac = True
             bar.sub(20)

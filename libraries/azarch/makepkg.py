@@ -10,9 +10,14 @@ step (packages._reconcile_index) folds them into pacstrap-azarch-repo.db next to
 the Arch packages. `calamares`/`librewolf` in packages.x86_64 then resolve from
 the local repo like anything else.
 
-Tiers: full_compile=False builds librewolf by repackaging the verified upstream
-tarball (fast); full_compile=True compiles it from Firefox source (hours). The
-flag is chosen by config.pkgbuild.recipe_dirs().
+Tiers: the DEFAULT tier builds as little as possible.
+  * librewolf is in NO Arch repo, so it is always built here (default =
+    repackage the verified upstream binary tarball; full = source build).
+  * calamares IS an official Arch package (extra/calamares). The default tier
+    does NOT build it -- pacman installs the Arch-signed binary. Only
+    --full-compile builds it from source (sha256-verified tarball).
+config.pkgbuild.recipe_dirs(full_compile) picks the recipe set; produced_names()
+below returns the matching set of package names built HERE for that tier.
 
 Offline policy: makepkg needs to FETCH sources (the calamares/firefox/librewolf
 tarballs + git). When the build is fully offline (BUILD_OFFLINE) we SKIP the
@@ -40,8 +45,21 @@ ProgressCb = Callable[[int], None]
 # just use the current user.
 BUILDER_USER = "azarchbuilder"
 
-# The two package NAMES this stage produces. Used to detect "already built".
-PRODUCED = ("calamares", "librewolf")
+# Package NAMES built by this stage. librewolf is built in EVERY tier (it is in no
+# Arch repo); calamares is built here ONLY under --full-compile (the default tier
+# installs the official extra/calamares binary via pacman instead). PRODUCED is the
+# default-tier set; produced_names(full_compile) returns the set for a given tier.
+# Both are used to (a) exclude own packages from the Arch `pacman -Sw` download and
+# (b) know which built packages to re-add/refresh in the offline repo + cache.
+PRODUCED = ("librewolf",)
+
+
+def produced_names(full_compile: bool) -> tuple[str, ...]:
+    """Names of packages the makepkg stage produces for the given tier.
+
+    Default: only librewolf (calamares comes from extra/ via pacman).
+    Full:     calamares (source) + librewolf (source)."""
+    return ("calamares", "librewolf") if full_compile else PRODUCED
 
 
 class MakepkgError(RuntimeError):
@@ -56,9 +74,9 @@ def _run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, **kw)
 
 
-def _repo_has_all(pkg_repo: Path) -> bool:
-    """True if a built package file exists for every PRODUCED name."""
-    for name in PRODUCED:
+def _repo_has_all(pkg_repo: Path, names: tuple[str, ...]) -> bool:
+    """True if a built package file exists for every name this tier produces."""
+    for name in names:
         if not any(pkg_repo.glob(f"{name}-*.pkg.tar.zst")):
             return False
     return True
@@ -156,6 +174,7 @@ def build_own_packages(offline: bool, full_compile: bool, progress: ProgressCb,
     sudo = _sudo()
     pkg_repo = paths.PKG_REPO
     pkg_repo.mkdir(parents=True, exist_ok=True)
+    names = produced_names(full_compile)
 
     tier = "full-compile (from source)" if full_compile else "default (repackage verified upstream)"
     print(f"[*] Building Az'arch's own packages -- tier: {tier}")
@@ -163,12 +182,12 @@ def build_own_packages(offline: bool, full_compile: bool, progress: ProgressCb,
     progress(20)
 
     if offline:
-        if _repo_has_all(pkg_repo):
+        if _repo_has_all(pkg_repo, names):
             print("    [+] Own packages already present in the offline repo -- skipping makepkg.")
             progress(1000)
             return
         raise MakepkgError(
-            "Offline build but calamares/librewolf are not in the cache.\n"
+            f"Offline build but the built package(s) {', '.join(names)} are not in the cache.\n"
             "    Rebuild once online (FORCE_ONLINE=1) or wipe cache/ so they get built."
         )
 

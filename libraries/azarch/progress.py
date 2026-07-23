@@ -60,6 +60,20 @@ class ProgressBar:
         except (ValueError, OSError):
             pass
 
+    def _emit(self, term_line: str, log_line: str, lead: str = "") -> None:
+        """Scroll a milestone/phase line: the width-CLIPPED copy to the terminal (so
+        a long label does not wrap and break the pinned bar's scroll region) and the
+        FULL copy to full.log. sys.stdout is the build's stdout tee, whose write_split
+        keeps the two independent -- writing the clipped copy through plain write (an
+        earlier bug) truncated these lines in the log too. Fall back to a plain
+        clipped write when stdout is not the tee (logging not installed)."""
+        writer = getattr(sys.stdout, "write_split", None)
+        if writer is not None:
+            writer(lead + term_line + "\n", lead + log_line + "\n")
+        else:
+            sys.stdout.write(lead + term_line + "\n")
+            sys.stdout.flush()
+
     # -- geometry ------------------------------------------------------------
     def _size(self) -> tuple[int, int]:
         try:
@@ -161,8 +175,7 @@ class ProgressBar:
         # stdout tee) so a long label does not wrap and break the scroll region.
         milestone = f"[ {self.current:2d}/{self.total_steps} ] {label}"
         self._log_step(milestone)
-        sys.stdout.write("\n" + self._clip(milestone) + "\n")
-        sys.stdout.flush()
+        self._emit(self._clip(milestone), milestone, lead="\n")
         self.draw()
 
     def sub(self, permille: int) -> None:
@@ -179,9 +192,9 @@ class ProgressBar:
         bar reports fine-grained progress instead of one static label for minutes."""
         text = f"{self._base_label} › {sublabel}" if getattr(self, "_base_label", "") else sublabel
         self.label = text
-        self._log_step(f"    -> {sublabel}")   # sub-checkpoint to steps.log, real time
-        sys.stdout.write(self._clip(f"    -> {sublabel}") + "\n")
-        sys.stdout.flush()
+        line = f"    -> {sublabel}"
+        self._log_step(line)   # sub-checkpoint to steps.log, real time
+        self._emit(self._clip(line), line)
         self.draw()
 
     def sub_done(self) -> None:
