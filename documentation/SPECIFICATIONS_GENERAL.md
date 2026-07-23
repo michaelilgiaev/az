@@ -17,8 +17,8 @@ Technical, developer-facing specification of the Az'arch Linux distribution. It 
 
 | Metric | Value |
 |---|---:|
-| Explicit manifest entries | 210 (225 non-comment lines; 15 duplicate lines de-duped) |
-| Explicit entries incl. group members (e.g. `xorg`) | 208 |
+| Explicit manifest entries | 211 (226 non-comment lines; 15 duplicate lines de-duped) |
+| Explicit entries incl. group members (e.g. `xorg`) | 209 |
 | **Full package set (transitive closure)** | **984** |
 | &nbsp;&nbsp;from `core` / `extra` / `multilib` | 227 / 652 / 105 |
 | Edition: Az'arch Component / Stock Arch | 462 / 522 |
