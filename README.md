@@ -34,7 +34,7 @@ Plain-text raw dump of every component.
 
 ## Install
 
-1. **Download the ISO (or [compile the ISO yourself](#-compile))**  
+1. **Download the ISO (or [compile the ISO yourself](#compile))**  
    The ISO is hosted on Google Drive (GitHub does not allow files larger than 2 GB).
    
    **Link: [https://drive.google.com/file/d/18nclTLo05_KU7uOfYd_WTnI0LK--mGE6/view?usp=sharing](https://drive.google.com/file/d/18nclTLo05_KU7uOfYd_WTnI0LK--mGE6/view?usp=sharing)**
