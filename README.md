@@ -93,6 +93,11 @@ Plain-text raw dump of every component.
 
 You can clone this repository and compile the ISO yourself. The first build needs an internet connection to download every component that goes into the ISO, after that everything is cached and rebuilds run fully offline. Build with Docker. The ISO is assembled with `mkarchiso`, which resolves the ISO's package list against the build host's Arch Linux repositories. That means the build only works on a genuine Arch userland with the real Arch `core`, `extra`, and `multilib` repositories. On anything else those repositories are wrong or missing and the build fails with errors like `target not found: archinstall` or endless kernel-provider prompts. Docker sidesteps all of that, the image is `archlinux:latest`, so the build runs inside real Arch no matter what machine you are on.
 
+There are two build methods:
+
+- **Default build** compiles only what is strictly necessary (the Calamares installer) and pulls everything else as trusted, verified prebuilt binaries. The first run downloads and builds; every run after that reuses the cache and finishes in minutes, skipping the compile entirely because the finished packages are already cached.
+- **Full build** (`--full-compile`) compiles everything from source, including a from-source LibreWolf/Firefox build that takes hours. Its first run is online (it downloads the source); reruns are fully offline but still **recompile** from the source already in the cache rather than skipping, so `--full-compile` always gives you a genuine from-source result.
+
 The build runs in Docker, so the steps are the same on every operating system.
 
 1. **Install Docker and Git.**
@@ -148,7 +153,23 @@ The build runs in Docker, so the steps are the same on every operating system.
    <tbody>
    <tr><td>
 
-   Estimate how long a full compile will take on your machine:
+   **Estimate a build before you run it.** These flags don't build or download
+   anything, they just measure your machine and connection and print how long a
+   build would take, then exit (no `sudo`, no privileged mounts needed). There are
+   six, picking the build tier (default vs `--full-compile`) and what to estimate:
+
+   | Flag | Tier | Estimates |
+   | --- | --- | --- |
+   | `--estimate` | default | compile time **and** download time |
+   | `--estimate-only-compute` | default | compile time only |
+   | `--estimate-only-network` | default | download time only |
+   | `--estimate-full-compile` | full | compile time **and** download time |
+   | `--estimate-full-compile-only-compute` | full | compile time only |
+   | `--estimate-full-compile-only-network` | full | download time only |
+
+   The compile estimate reads your CPU cores and RAM; the network estimate runs a
+   short bandwidth test against an Arch mirror and divides the tier's download size
+   by your measured speed. Example (estimate a full build, compute + network):
 
    ```
    sudo docker run --rm -it azarch --estimate-full-compile
@@ -164,7 +185,7 @@ The build runs in Docker, so the steps are the same on every operating system.
      -v "$PWD/cache:/build/cache" \
      -v "$PWD/output:/build/output" \
      -v "$PWD/logs:/build/logs" \
-     azarch --full-compile
+     azarch
    ```
 
 5. **Get the ISO.** It's in the `output/` folder. On **Windows (WSL)** that folder

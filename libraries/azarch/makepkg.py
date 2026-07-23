@@ -205,16 +205,39 @@ def build_own_packages(offline: bool, full_compile: bool, progress: ProgressCb,
     progress(20)
 
     if offline:
-        if _repo_has_all(pkg_repo, names):
-            print("    [+] Own packages already present in the offline repo -- skipping makepkg.")
-            progress(1000)
-            return
-        raise MakepkgError(
-            f"Offline build but the built package(s) {', '.join(names)} are not in the cache.\n"
-            "    Wipe cache/ (or `git clean -Xdf`) so the next run rebuilds them online.\n"
-            "    (An incomplete cache already forces an online run automatically; this\n"
-            "    fires only when the cache LOOKS complete but the own packages are absent.)"
-        )
+        if not full_compile:
+            # DEFAULT tier, offline: the own packages are deterministic cached
+            # artifacts (calamares from a pinned source, librewolf repackaged from a
+            # verified tarball). Present -> SKIP makepkg (the fast rerun the user
+            # wants). Absent -> fail loudly (unchanged).
+            if _repo_has_all(pkg_repo, names):
+                print("    [+] Own packages already present in the offline repo -- skipping makepkg.")
+                progress(1000)
+                return
+            raise MakepkgError(
+                f"Offline build but the built package(s) {', '.join(names)} are not in the cache.\n"
+                "    Wipe cache/ (or `git clean -Xdf`) so the next run rebuilds them online.\n"
+                "    (An incomplete cache already forces an online run automatically; this\n"
+                "    fires only when the cache LOOKS complete but the own packages are absent.)"
+            )
+        # FULL tier, offline: the user asked for a from-source rerun to actually
+        # RE-COMPILE, not trust the cached package. Rebuild librewolf (and calamares)
+        # from the sources the prior ONLINE run fetched into the makepkg scratch --
+        # entirely offline. Do NOT skip, do NOT wipe the scratch (the fetched Firefox
+        # tree lives there), do NOT re-fetch (the recipe's `make fetch` is gated off
+        # by AZARCH_OFFLINE and makepkg is told --noextract so it reuses the tree).
+        scratch = paths.CACHEDIR / "makepkg"
+        if not _scratch_has_sources(scratch, full_compile=True):
+            raise MakepkgError(
+                "Offline --full-compile rerun but the cached makepkg source tree is\n"
+                f"    missing or empty under {scratch}. The prior online run's fetched\n"
+                "    Firefox/bsys6 sources are gone (e.g. cache/ was cleared). Re-run once\n"
+                "    online (FORCE_ONLINE=1) to refetch, or wipe cache/ to rebuild fresh."
+            )
+        print("    [+] --full-compile offline: recompiling from cached sources (no network).")
+        phase("own packages: offline recompile")
+        _offline_full_recompile(scratch, pkg_repo, progress, phase)
+        return
 
     phase("own packages: preparing recipes")
     print("    [+] Preparing makepkg scratch tree and emitting recipes...")
@@ -243,12 +266,26 @@ def build_own_packages(offline: bool, full_compile: bool, progress: ProgressCb,
     if paths.is_root():
         _run(["chown", "-R", f"{builder}:{builder}", str(scratch)], check=True)
 
+    _build_recipe_dirs(builder, dirs, pkg_repo, progress, phase, offline=False)
+
+    progress(1000)
+    print("[✓] Az'arch's own packages built and staged into the offline repo.")
+
+
+def _build_recipe_dirs(builder: str, dirs: list[Path], pkg_repo: Path,
+                       progress: ProgressCb, phase: Callable[[str], None],
+                       offline: bool) -> None:
+    """Build each recipe dir with makepkg, copy the resulting *.pkg.tar.zst into
+    the offline repo, and hand the repo back to the invoking user. Shared by the
+    online build tail and the offline --full-compile recompile; only the makepkg
+    invocation differs (offline adds --noextract/--nocheck + AZARCH_OFFLINE so it
+    reuses the already-fetched scratch tree and never touches the network)."""
     total = len(dirs)
     for i, d in enumerate(dirs):
         name = d.name
         phase(f"makepkg: building {name}")
         print(f"[*] makepkg: building {name} ({i + 1}/{total})...")
-        _makepkg_one(builder, d)
+        _makepkg_one(builder, d, offline=offline)
         # copy the freshly built package(s) into the offline repo
         built = sorted(d.glob("*.pkg.tar.zst"))
         if not built:
@@ -261,20 +298,72 @@ def build_own_packages(offline: bool, full_compile: bool, progress: ProgressCb,
     # hand the repo back to the invoking user (parity with packages.build_cache).
     own_uid = os.environ.get("HOST_UID") or str(os.getuid())
     own_gid = os.environ.get("HOST_GID") or str(os.getgid())
-    _run(sudo + ["chown", "-R", f"{own_uid}:{own_gid}", str(pkg_repo)], check=False)
+    _run(_sudo() + ["chown", "-R", f"{own_uid}:{own_gid}", str(pkg_repo)], check=False)
+
+
+def _scratch_has_sources(scratch: Path, full_compile: bool) -> bool:
+    """True iff every recipe dir under scratch exists with a PKGBUILD AND a
+    NON-EMPTY .build tree. The .build tree (BUILDDIR in _makepkg_one) is where
+    makepkg extracts $srcdir and where the librewolf recipe's `make fetch` wrote
+    the Firefox source on the prior ONLINE run -- so its presence is the real
+    "sources are cached, an offline recompile can succeed" signal. .src (SRCDEST)
+    only ever holds the small git checkout, so it is NOT what we check. Missing or
+    empty -> False -> the offline-recompile caller fails loudly instead of silently
+    going online. Pure given the filesystem; unit-tested with tmp_path."""
+    for dirname, _files in pkgbuild_cfg.recipe_dirs(full_compile):
+        d = scratch / dirname
+        if not (d / "PKGBUILD").is_file():
+            return False
+        build_dir = d / ".build"
+        if not build_dir.is_dir() or not any(build_dir.iterdir()):
+            return False
+    return True
+
+
+def _offline_full_recompile(scratch: Path, pkg_repo: Path, progress: ProgressCb,
+                            phase: Callable[[str], None]) -> None:
+    """Rebuild each recipe from its already-populated scratch dir, entirely offline.
+    Unlike the online path it does NOT emit recipes, install host deps, import
+    signing keys, or wipe the scratch -- it reuses exactly what the prior online run
+    fetched. Only the per-dir makepkg/copy loop runs, with offline=True so makepkg
+    reuses the extracted tree (--noextract) and the recipe skips `make fetch`."""
+    pkg_repo.mkdir(parents=True, exist_ok=True)
+    dirs = [scratch / dirname for dirname, _files
+            in pkgbuild_cfg.recipe_dirs(full_compile=True)]
+    builder = _ensure_builder_user()
+    # The builder must own the scratch tree to write into it during makepkg.
+    if paths.is_root():
+        _run(["chown", "-R", f"{builder}:{builder}", str(scratch)], check=True)
+    progress(260)
+    _build_recipe_dirs(builder, dirs, pkg_repo, progress, phase, offline=True)
     progress(1000)
-    print("[✓] Az'arch's own packages built and staged into the offline repo.")
+    print("[✓] Az'arch's own packages recompiled offline and staged into the repo.")
 
 
-def _makepkg_one(builder: str, recipe_dir: Path) -> None:
+def _makepkg_one(builder: str, recipe_dir: Path, offline: bool = False) -> None:
     """Run makepkg in recipe_dir as the unprivileged builder. -f force rebuild,
     -c clean, --skippgpcheck NOT passed (sig checks must run for librewolf); -s
     would auto-install deps via sudo which the builder lacks, so deps were
     installed on the host already and we pass --nodeps=False by omitting -s and
-    relying on the host having them."""
+    relying on the host having them.
+
+    offline: an offline --full-compile RERUN. Then makepkg MUST NOT re-fetch or
+    re-extract: --noextract makes it reuse the ALREADY-extracted $srcdir tree
+    (the bsys6 checkout plus the Firefox source `make fetch` pulled into it last
+    run) and just re-run build()+package(). Without --noextract, `makepkg -f`
+    would re-extract the source=() array -- re-checking-out librewolf-bsys6 and
+    DESTROYING that fetched Firefox tree -- and then build() (whose `make fetch`
+    is gated off by AZARCH_OFFLINE) would have no source. --nocheck skips the
+    (absent) check() phase. AZARCH_OFFLINE=1 is read by the recipe's build() to
+    skip `make fetch`. On the default/online path (offline=False) none of this
+    applies and the invocation is byte-identical to before."""
     # --holdver: don't let makepkg bump pkgver from VCS. --noconfirm: unattended.
     cmd = ["makepkg", "-f", "--noconfirm", "--needed", "--noprogressbar"]
+    if offline:
+        cmd += ["--holdver", "--noextract", "--nocheck"]
     env = dict(os.environ)
+    if offline:
+        env["AZARCH_OFFLINE"] = "1"  # recipe build() skips `make fetch` when set
     # Keep makepkg's build/cache under the scratch dir, not the builder's $HOME,
     # so a root build doesn't scatter files and offline reruns are clean.
     env["PKGDEST"] = str(recipe_dir)
@@ -294,8 +383,13 @@ def _makepkg_one(builder: str, recipe_dir: Path) -> None:
         # built package there) to the builder before handing off.
         _run(["chown", "-R", f"{builder}:{builder}",
               str(recipe_dir), str(src_dir), str(build_dir)], check=True)
-        # Re-exec as the builder, preserving the makepkg env vars.
-        envargs = [f"{k}={env[k]}" for k in ("PKGDEST", "SRCDEST", "BUILDDIR")]
+        # Re-exec as the builder, preserving the makepkg env vars. AZARCH_OFFLINE is
+        # only present in env on the offline path, so the online envargs list is
+        # unchanged (the key is simply absent).
+        keys = ("PKGDEST", "SRCDEST", "BUILDDIR")
+        if offline:
+            keys += ("AZARCH_OFFLINE",)
+        envargs = [f"{k}={env[k]}" for k in keys]
         full = ["sudo", "-u", builder, "env", *envargs, *cmd]
         # run_teed pumps the compile's stdout/stderr through the _Tee so the
         # multi-hour gcc/rustc output lands in full.log in real time instead of

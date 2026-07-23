@@ -61,6 +61,12 @@ def cache_is_complete() -> bool:
     # full_compile=False is correct regardless of the eventual --full-compile flag.
     if not makepkg._repo_has_all(paths.PKG_REPO, makepkg.produced_names(full_compile=False)):
         return False
+    # NOTE: a COMPLETE cache makes the build go offline for BOTH tiers, but the two
+    # tiers then diverge inside makepkg.build_own_packages: the default tier trusts
+    # the cached own packages and SKIPS makepkg, while a --full-compile offline rerun
+    # RE-COMPILES librewolf from the source fetched into the makepkg scratch by the
+    # prior online run (no network). So "offline" here means "no server contact",
+    # not "no compile" -- the recompile stays entirely local.
     return True
 
 
@@ -107,12 +113,17 @@ def _stale_cache_notice(offline: bool) -> None:
 def main() -> int:
     paths.LOGDIR.mkdir(parents=True, exist_ok=True)
 
-    # --estimate-full-compile: predict how long a FULL from-source build would take
-    # on this machine and exit -- no workspace reset, no sudo, no network, no build,
-    # and no touching the build logs (it is a pure query, not a build). Prints to the
-    # terminal only. compile.sh routes it here without a PTY or sudo prime.
-    if "--estimate-full-compile" in sys.argv[1:]:
-        return estimate.run()
+    # --estimate* (six variants): predict how long a build would take on this
+    # machine -- COMPUTE (compiling on this CPU/RAM) and/or NETWORK (downloading
+    # the components over this connection) -- then exit. Pure query: no workspace
+    # reset, no sudo, no build, and NOT routed through the build-log tee (it is a
+    # query, not a build, so its output belongs on the terminal, not logs/full.log
+    # -- this branch returns before logstream.install() below). The network modes
+    # DO open a client socket for a few-second bandwidth probe, but that needs no
+    # privilege and writes no build file. compile.sh routes any --estimate* arg
+    # here without a PTY or sudo prime.
+    if estimate.parse_estimate_flag(sys.argv[1:]) is not None:
+        return estimate.run(sys.argv[1:])
 
     paths.CACHEDIR.mkdir(parents=True, exist_ok=True)
 

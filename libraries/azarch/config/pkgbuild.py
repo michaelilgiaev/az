@@ -366,7 +366,15 @@ build() {{
   cd "$srcdir/librewolf-bsys6"
   # bsys6's documented top-level targets: fetch Firefox source + LibreWolf
   # patches/settings, build, then produce the generic-linux package tree.
-  make fetch
+  #
+  # `make fetch` is the ONLY network step. On an OFFLINE --full-compile rerun the
+  # Az'arch build sets AZARCH_OFFLINE=1 and passes makepkg --noextract, so this
+  # same bsys6 tree (already populated by the prior online run's `make fetch`) is
+  # reused as-is: we skip the fetch and go straight to build. If the tree were
+  # gone (a wiped cache) `make build` fails loudly here -- we never silently go
+  # back online. On the normal online run AZARCH_OFFLINE is unset and `make fetch`
+  # populates the tree as before.
+  if [[ -z "${{AZARCH_OFFLINE:-}}" ]]; then make fetch; fi
   make build
   make package
 }}

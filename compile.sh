@@ -26,8 +26,17 @@
 #                            (incl. a multi-hour LibreWolf/Firefox compile) instead
 #                            of the default, which repackages LibreWolf's verified
 #                            upstream binary tarball (sha256 + PGP checked).
-#   --estimate-full-compile  don't build anything -- just estimate how long a full
-#                            source compile would take on THIS machine, and exit.
+#   --estimate*              don't build anything -- estimate how long a build would
+#                            take on THIS machine and exit. Six variants pick the
+#                            tier (default vs --full-compile) and what to estimate:
+#                              --estimate                            default: compute + network
+#                              --estimate-only-compute               default: compute only
+#                              --estimate-only-network               default: network only
+#                              --estimate-full-compile               full:    compute + network
+#                              --estimate-full-compile-only-compute  full:    compute only
+#                              --estimate-full-compile-only-network  full:    network only
+#                            The network variants run a short, timeout-bounded
+#                            bandwidth probe against an Arch mirror; still no sudo.
 # See azarch.build.
 
 set -o pipefail
@@ -38,14 +47,19 @@ FULL_LOG="$LOGDIR/full.log"
 STEPS_LOG="$LOGDIR/steps.log"
 mkdir -p "$LOGDIR"
 
-# --estimate-full-compile is a pure, read-only query (no build, no privileged
+# Any --estimate* variant is a pure, read-only query (no build, no privileged
 # steps, no live progress bar): hand straight to Python WITHOUT priming sudo or
-# re-execing on a PTY, so it runs instantly and never prompts for a password.
+# re-execing on a PTY, so it runs instantly and never prompts for a password. The
+# network-including variants DO open a client socket for a short bandwidth probe,
+# but still need no sudo and no PTY. The `--estimate*` glob matches all six flags
+# (and any future --estimate...).
 for _arg in "$@"; do
-    if [ "$_arg" = "--estimate-full-compile" ]; then
-        export PYTHONPATH="$REPODIR/libraries${PYTHONPATH:+:$PYTHONPATH}"
-        exec python3 -u -m azarch.build "$@"
-    fi
+    case "$_arg" in
+        --estimate*)
+            export PYTHONPATH="$REPODIR/libraries${PYTHONPATH:+:$PYTHONPATH}"
+            exec python3 -u -m azarch.build "$@"
+            ;;
+    esac
 done
 
 if [ -z "$_COMPILE_LOGGING" ]; then
