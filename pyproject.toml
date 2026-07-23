@@ -1,0 +1,13 @@
+# pytest configuration for the azarch test suite.
+#
+# The suite is driven by `bash tests.sh` (which builds the venv and sets
+# PYTHONPATH), but this config also makes a bare `pytest` invocation work from
+# inside an activated venv: pythonpath below adds both import roots so
+# `import azarch.*` and the flat `spec_*` modules resolve without any wrapper.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+pythonpath = ["libraries", "scripts/libraries"]
+addopts = "-ra -q --strict-markers --import-mode=importlib"
