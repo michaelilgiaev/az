@@ -4,7 +4,7 @@ fastfetch ships in the ISO's package list; this module provides the two files
 that make `fastfetch` render the azarch brand instead of the stock Arch logo:
 
   logo_txt()     the "Az'" ASCII art, read verbatim from the repo asset
-                 assets/azarch_fastfetch_ascii.ansi. That file is ALREADY
+                 assets/ascii/azarch_fastfetch.ansi. That file is ALREADY
                  colored with the azarch cyan->blue gradient (real ANSI truecolor
                  escapes baked in per row), so the config below uses
                  `type: "file-raw"`, which prints the file byte-for-byte with no
@@ -28,7 +28,7 @@ from .. import paths
 # 40 cols x 18 rows, pre-colored with the cyan->blue gradient sampled from
 # assets/azarch_logo.png. We read it verbatim rather than embedding a copy here so
 # the art has a single source of truth (the .ansi file you can open and eyeball).
-_LOGO_ASSET = paths.ASSETSDIR / "azarch_fastfetch_ascii.ansi"
+_LOGO_ASSET = paths.ASSETSDIR / "ascii" / "azarch_fastfetch.ansi"
 
 # The bare filename the art is written to inside ~/.config/fastfetch/. The config's
 # `source` is the absolute path to this; steps.py / the installer write the file
