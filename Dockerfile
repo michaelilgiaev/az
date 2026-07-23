@@ -104,4 +104,12 @@ COPY . /build
 # `--init` inserts tini as PID 1 to forward signals and reap orphans; the Python
 # build driver's SIGINT/SIGTERM handler additionally kills the whole process group
 # so pacman/mkarchiso die immediately. tini is TTY-transparent, so PTY logging works.
-CMD ["./compile.sh"]
+#
+# ENTRYPOINT, not CMD: trailing `docker run azarch <args>` (e.g. --estimate,
+# --full-compile) must be APPENDED to compile.sh, not REPLACE it. With a bare CMD
+# and no ENTRYPOINT, Docker discards the CMD and tries to exec the flag itself, so
+# `docker run azarch --estimate` fails with `exec: "--estimate": ... not found`.
+# ENTRYPOINT passes the flags straight through to compile.sh's `"$@"`. The no-arg
+# `docker run azarch` still runs a default full build (compile.sh treats no args as
+# the default tier). To get a debug shell now use `docker run --entrypoint bash azarch`.
+ENTRYPOINT ["./compile.sh"]
