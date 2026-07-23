@@ -243,4 +243,5 @@ dotnet-sdk
 dotnet-runtime
 dotnet-host
 calamares
+mailcap
 librewolf
