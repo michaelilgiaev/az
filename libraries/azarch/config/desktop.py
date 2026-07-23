@@ -5,8 +5,8 @@ manager, Manjaro-style:
 
     getty@tty1 autologins `main`  ->  ~/.bash_profile runs `exec startx` on
     tty1 only  ->  ~/.xinitrc execs openbox-session  ->  Openbox autostart
-    launches picom (compositor), feh (wallpaper), nm-applet (network), and the
-    Calamares installer once (the live "Install" window that auto-opens).
+    launches picom (compositor), xsetroot (solid wallpaper), nm-applet (network),
+    and the Calamares installer once (the live "Install" window that auto-opens).
 
 Everything here is a small builder function returning the CONTENT of one file.
 steps.py emits each to its airootfs destination via emit.write_text/write_exec
@@ -30,8 +30,8 @@ from __future__ import annotations
 
 # --- Branding ---------------------------------------------------------------
 # Az'arch accent color (matches os-release ANSI_COLOR 6,184,253 -> #06b8fd),
-# used as the solid feh wallpaper so no image asset needs shipping. If a logo
-# image is later added under /usr/share/azarch/, swap the feh line in
+# used as the solid xsetroot wallpaper so no image asset needs shipping. If a logo
+# image is later added under /usr/share/azarch/, swap the xsetroot line in
 # openbox_autostart() to `feh --bg-scale /usr/share/azarch/wallpaper.png`.
 ACCENT_HEX = "#06b8fd"
 
@@ -54,8 +54,8 @@ export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 
 # A neutral cursor and a sane DPI-agnostic setup; harmless if xsetroot/xrdb are
-# absent (they ship with xorg). `-solid` is overridden by feh in autostart, but
-# it avoids the default X stipple flashing before feh runs.
+# absent (they ship with xorg). This sets the solid background early to avoid the
+# default X stipple flashing; the autostart re-applies the same solid via xsetroot.
 [ -x /usr/bin/xsetroot ] && xsetroot -solid '""" + ACCENT_HEX + """' -cursor_name left_ptr
 
 # Replace this shell with the Openbox session; when Openbox exits, X exits and
@@ -334,10 +334,12 @@ if command -v picom >/dev/null 2>&1; then
     picom --config "$HOME/.config/picom.conf" &
 fi
 
-# Wallpaper: solid Az'arch accent color (no image asset shipped). Swap for
-# `feh --bg-scale /usr/share/azarch/wallpaper.png &` if a logo image is added.
-if command -v feh >/dev/null 2>&1; then
-    feh --no-fehbg --bg-color '""" + ACCENT_HEX + """' &
+# Wallpaper: solid Az'arch accent color (no image asset shipped). feh has NO
+# solid-color flag (its --bg-* options all require an IMAGE), so a solid fill is
+# set with xsetroot -solid (xorg-xsetroot ships; already used in ~/.xinitrc). If a
+# logo image is later added, swap this for `feh --bg-scale /usr/share/azarch/wallpaper.png &`.
+if command -v xsetroot >/dev/null 2>&1; then
+    xsetroot -solid '""" + ACCENT_HEX + """' &
 fi
 
 # Network tray applet (NetworkManager).

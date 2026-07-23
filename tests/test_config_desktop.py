@@ -180,11 +180,11 @@ def test_autostart_has_exec_bit_and_readable_fallback():
 
 
 def test_autostart_backgrounds_helpers():
-    # picom / feh / nm-applet must be backgrounded (&) so the autostart script
+    # picom / xsetroot / nm-applet must be backgrounded (&) so the autostart script
     # returns and the session comes up.
     out = desktop.openbox_autostart()
     assert "picom --config" in out and "picom" in out
-    assert "feh --no-fehbg --bg-color '" + desktop.ACCENT_HEX + "' &" in out
+    assert "xsetroot -solid '" + desktop.ACCENT_HEX + "' &" in out
     assert "nm-applet &" in out
 
 
@@ -240,7 +240,7 @@ def test_bash_profile_sources_bashrc():
 
 def test_accent_hex_value_and_length():
     # Matches os-release ANSI_COLOR (6,184,253); a 7-char #rrggbb string used as
-    # both the xsetroot solid and the feh --bg-color.
+    # the xsetroot solid background (in both ~/.xinitrc and the autostart).
     assert desktop.ACCENT_HEX == "#06b8fd"
     assert len(desktop.ACCENT_HEX) == 7
 

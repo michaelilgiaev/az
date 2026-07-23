@@ -416,17 +416,27 @@ units:
 
 # --- 6d2. modules/initcpiocfg.conf -----------------------------------------
 def initcpiocfg_conf() -> str:
-    """Write the target's /etc/mkinitcpio.conf HOOKS before `initcpio` runs
+    """Configure the target's /etc/mkinitcpio.conf before `initcpio` runs
     mkinitcpio -P. Calamares' initcpiocfg module INJECTS the encryption/btrfs/lvm
-    hooks it needs based on the chosen layout, but we provide a sane base HOOKS
-    line. This is what makes a LUKS-encrypted or btrfs root actually bootable --
-    without regenerating the initramfs with the `encrypt` hook, an encrypted root
-    cannot be unlocked at boot. (initcpio itself needs no config.)"""
+    hooks it needs based on the chosen layout, which is what makes a LUKS-encrypted
+    or btrfs root actually bootable -- without regenerating the initramfs with the
+    `encrypt` hook, an encrypted root cannot be unlocked at boot.
+
+    We set only `useSystemdHook: false` -- the VALID initcpiocfg key that keeps the
+    classic busybox-based HOOKS layout (the `encrypt` hook, not sd-encrypt), which
+    matches the archiso live initramfs and GRUB's cryptodisk unlock we configure in
+    grubcfg. The layout-driven hook injection happens regardless. NOTE: an earlier
+    version emitted `kernel: ""` here -- that is an `initcpio`-module key, NOT an
+    initcpiocfg key (whose schema is additionalProperties:false), so it was silently
+    ignored and would fail strict schema validation. It is removed. (initcpio itself
+    also needs no config.)"""
     return """\
-# Base /etc/mkinitcpio.conf HOOKS for the installed system. Calamares augments
-# these with encrypt/lvm2/btrfs as required by the selected partition layout.
+# initcpiocfg configuration for the installed system. Calamares injects the
+# encrypt/lvm2/btrfs hooks required by the selected partition layout; we only pin
+# the busybox (non-systemd) hook style so the `encrypt` hook + GRUB cryptodisk
+# unlock line up with the rest of the install.
 ---
-kernel: ""
+useSystemdHook: false
 """
 
 
