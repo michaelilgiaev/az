@@ -20,13 +20,13 @@ This is a year-old, neglected, poorly put-together project that is undergoing a 
 General specifications of the distribution.
 - [documentation/SPECIFICATIONS_GENERAL.md](documentation/SPECIFICATIONS_GENERAL.md)
 
-Brief overview of the components.
-- [documentation/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg](documentation/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg)
+Brief overview of the components (render is hosted by GitHub Pages).
+- [https://michaelilgiaev.github.io/azarch/documentation/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg](https://michaelilgiaev.github.io/azarch/documentation/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg)  
+  (documentation/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg)
 
-Easy-to-use interactive graph of every component.
-- [documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html](documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
+Easy-to-use interactive graph of every component (render is hosted by GitHub Pages).
 - [https://michaelilgiaev.github.io/azarch/documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html](https://michaelilgiaev.github.io/azarch/documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)  
-(online render hosted by GitHub Pages).
+  (documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
 
 Plain-text raw dump of every component.
 - [documentation/SPECIFICATIONS_COMPONENTS_FULL.txt](documentation/SPECIFICATIONS_COMPONENTS_FULL.txt)
