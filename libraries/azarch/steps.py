@@ -17,7 +17,7 @@ from pathlib import Path
 
 import signal
 
-from . import emit, makepkg, packages, paths
+from . import emit, logstream, makepkg, packages, paths
 from .config import calamares, desktop, fastfetch, installer, locale, pacman, profile, system
 from .progress import ProgressBar
 
@@ -424,7 +424,12 @@ def _check_host_deps(sudo, offline: bool) -> None:
         )
         raise SystemExit(1)
     print("    [+] Installing missing build-host dependencies...")
-    subprocess.run(sudo + ["pacman", "-Sy", "--noconfirm", "--needed", *host_pkgs], check=True)
+    # Teed so the install's output reaches full.log live. Preserve the old
+    # check=True raise-on-failure: run_teed returns the exit code, so raise here.
+    cmd = sudo + ["pacman", "-Sy", "--noconfirm", "--needed", *host_pkgs]
+    rc = logstream.run_teed(cmd)
+    if rc != 0:
+        raise subprocess.CalledProcessError(rc, cmd)
 
 
 def _copy_releng(W: Path) -> None:

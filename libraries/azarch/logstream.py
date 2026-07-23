@@ -18,6 +18,8 @@ progress.ProgressBar (self.term) and steps._drive_mkarchiso_progress.
 
 from __future__ import annotations
 
+import io
+import subprocess
 import sys
 from typing import TextIO
 
@@ -73,6 +75,52 @@ class _Tee:
 
     def fileno(self) -> int:
         return self._term.fileno()
+
+
+def run_teed(cmd: list[str], **kw) -> int:
+    """Run a child process and MIRROR its output into full.log in real time,
+    returning the exit code.
+
+    The problem this solves: install() swaps sys.stdout/sys.stderr to a _Tee at the
+    PYTHON-OBJECT layer -- it does NOT os.dup2() the real fds 1/2. So a child spawned
+    by subprocess.run without stdout=/stderr= inherits the numeric fds (under
+    compile.sh those are the slave PTY, whose `script` capture goes to /dev/null),
+    its bytes reach the terminal but NEVER traverse the _Tee, and so are permanently
+    absent from full.log -- the log looks frozen for the whole of a long child
+    (the makepkg compile, `pacman -Sw`'s download). mkarchiso already dodges this by
+    piping its output and re-emitting it through the tee; this is that pattern made
+    reusable for the other noisy children (makepkg, pacman -S/-Sy/-Sw).
+
+    We wrap the pipe in a TextIOWrapper with newline="" and split on BOTH \\r and \\n
+    (same as steps._drive_mkarchiso_progress): pacman/makepkg redraw progress with a
+    carriage return, not a newline, so a plain readline() would swallow every partial
+    frame into one giant line (or block until the phase ends). Each completed line is
+    written through sys.stdout -- the _Tee -- so it lands on the terminal AND in
+    full.log with the tee's per-line flush, i.e. tail-able in real time.
+
+    kwargs (cwd, env, ...) pass straight through to Popen. stdout/stderr/stdin are
+    fixed here (stdout=PIPE, stderr=STDOUT to fold both streams into the log, stdin
+    from DEVNULL so an unattended child hitting a prompt takes its default instead of
+    blocking on the closed PTY). The caller keeps its OWN returncode handling (raise /
+    branch); this only returns the int."""
+    proc = subprocess.Popen(
+        cmd, stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **kw,
+    )
+    reader = io.TextIOWrapper(proc.stdout, encoding="utf-8", errors="replace", newline="")
+    buf = ""
+    while True:
+        ch = reader.read(1)
+        if not ch:
+            break
+        if ch in ("\n", "\r"):
+            sys.stdout.write(buf + "\n")  # sys.stdout is the _Tee -> terminal + full.log
+            buf = ""
+        else:
+            buf += ch
+    if buf:
+        sys.stdout.write(buf + "\n")
+    return proc.wait()
 
 
 def install() -> TextIO:

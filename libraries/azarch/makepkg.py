@@ -36,7 +36,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from . import emit, paths
+from . import emit, logstream, paths
 from .config import pkgbuild as pkgbuild_cfg
 
 ProgressCb = Callable[[int], None]
@@ -139,8 +139,9 @@ def _install_host_build_deps(sudo: list[str], deps: list[str], offline: bool) ->
     if offline or not deps:
         return
     print(f"    [+] Installing {len(deps)} build-host dependencies for makepkg...")
-    r = _run(sudo + ["pacman", "-S", "--needed", "--noconfirm", *deps])
-    if r.returncode != 0:
+    # Teed so pacman's download/install lines reach full.log in real time.
+    rc = logstream.run_teed(sudo + ["pacman", "-S", "--needed", "--noconfirm", *deps])
+    if rc != 0:
         # Non-fatal: makepkg will still try and fail clearly if something's truly
         # missing. Some listed deps are runtime-only and may not be needed to build.
         print("    [!] Some build-host deps failed to install; continuing (makepkg will verify).")
@@ -272,9 +273,12 @@ def _makepkg_one(builder: str, recipe_dir: Path) -> None:
         # Re-exec as the builder, preserving the makepkg env vars.
         envargs = [f"{k}={env[k]}" for k in ("PKGDEST", "SRCDEST", "BUILDDIR")]
         full = ["sudo", "-u", builder, "env", *envargs, *cmd]
-        r = subprocess.run(full, cwd=str(recipe_dir))
+        # run_teed pumps the compile's stdout/stderr through the _Tee so the
+        # multi-hour gcc/rustc output lands in full.log in real time instead of
+        # vanishing into the inherited PTY (whose `script` capture goes to /dev/null).
+        rc = logstream.run_teed(full, cwd=str(recipe_dir))
     else:
-        r = subprocess.run(cmd, cwd=str(recipe_dir), env=env)
+        rc = logstream.run_teed(cmd, cwd=str(recipe_dir), env=env)
 
-    if r.returncode != 0:
-        raise MakepkgError(f"makepkg failed for {recipe_dir.name} (exit {r.returncode})")
+    if rc != 0:
+        raise MakepkgError(f"makepkg failed for {recipe_dir.name} (exit {rc})")

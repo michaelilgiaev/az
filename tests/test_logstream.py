@@ -245,3 +245,100 @@ def test_install_write_reaches_log_file(tmp_path, monkeypatch, restore_std_strea
         assert logpath.read_text() == "via-stderr\n"
     finally:
         logfile.close()
+
+
+# --- run_teed(): child output MUST reach full.log (the real-time bug fix) ----
+#
+# The bug: install() swaps sys.stdout/sys.stderr to a _Tee at the PYTHON-OBJECT
+# layer only -- it does NOT dup2 the real fds 1/2. So a child spawned by a bare
+# subprocess.run (no stdout=/stderr=) inherits the numeric fds and its output
+# NEVER traverses the _Tee -> permanently absent from full.log (the log looked
+# frozen for the whole makepkg compile / pacman -Sw download). run_teed pipes the
+# child and pumps its output through sys.stdout (the tee), so it lands in the log.
+# These run REAL short children (python3 -c ...) against a tmp full.log.
+
+def test_run_teed_child_stdout_reaches_log(tmp_path, monkeypatch, restore_std_streams):
+    # A child's stdout, which a bare subprocess.run would send to the inherited fd
+    # (bypassing the tee), must appear in full.log when run through run_teed.
+    logpath = tmp_path / "full.log"
+    monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
+    logfile = logstream.install()
+    try:
+        rc = logstream.run_teed(
+            [sys.executable, "-c", "print('child-line-one'); print('child-line-two')"]
+        )
+        logfile.flush()
+    finally:
+        logfile.close()
+    assert rc == 0
+    text = logpath.read_text()
+    assert "child-line-one" in text
+    assert "child-line-two" in text
+
+
+def test_run_teed_child_stderr_folded_into_log(tmp_path, monkeypatch, restore_std_streams):
+    # stderr=STDOUT folds the child's stderr into the same stream, so an error the
+    # child prints to stderr also reaches full.log (not just its stdout).
+    logpath = tmp_path / "full.log"
+    monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
+    logfile = logstream.install()
+    try:
+        logstream.run_teed(
+            [sys.executable, "-c", "import sys; sys.stderr.write('err-on-stderr\\n')"]
+        )
+        logfile.flush()
+    finally:
+        logfile.close()
+    assert "err-on-stderr" in logpath.read_text()
+
+
+def test_run_teed_returns_child_exit_code(tmp_path, monkeypatch, restore_std_streams):
+    # The caller keeps its own returncode handling (raise / branch), so run_teed
+    # must return the child's real exit code, not swallow it.
+    logpath = tmp_path / "full.log"
+    monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
+    logfile = logstream.install()
+    try:
+        rc = logstream.run_teed([sys.executable, "-c", "import sys; sys.exit(7)"])
+    finally:
+        logfile.close()
+    assert rc == 7
+
+
+def test_run_teed_splits_carriage_return_frames(tmp_path, monkeypatch, restore_std_streams):
+    # pacman/makepkg redraw progress with \r, not \n. run_teed splits on BOTH so
+    # the frames become separate log lines instead of collapsing into one giant
+    # line (or being swallowed until the phase ends). A child that writes "a\rb\rc"
+    # with no trailing newline must yield three lines in the log.
+    logpath = tmp_path / "full.log"
+    monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
+    logfile = logstream.install()
+    try:
+        logstream.run_teed(
+            [sys.executable, "-c", "import sys; sys.stdout.write('a\\rb\\rc')"]
+        )
+        logfile.flush()
+    finally:
+        logfile.close()
+    # Each \r ends a frame; the trailing "c" (no newline) is flushed on EOF.
+    assert logpath.read_text() == "a\nb\nc\n"
+
+
+def test_run_teed_passes_cwd_kwarg(tmp_path, monkeypatch, restore_std_streams):
+    # cwd/env/... pass straight through to Popen; verify the child actually runs in
+    # the given cwd (makepkg relies on cwd=recipe_dir).
+    logpath = tmp_path / "full.log"
+    monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
+    logfile = logstream.install()
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    try:
+        logstream.run_teed(
+            [sys.executable, "-c", "import os; print(os.getcwd())"], cwd=str(workdir)
+        )
+        logfile.flush()
+    finally:
+        logfile.close()
+    # realpath: macOS/tmp symlinks differ; compare resolved paths.
+    import os
+    assert os.path.realpath(str(workdir)) in logpath.read_text()

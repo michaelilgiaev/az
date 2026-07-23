@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from . import paths
+from . import logstream, paths
 from .config import pacman as pacman_cfg
 
 ProgressCb = Callable[[int], None]
@@ -137,12 +137,14 @@ def _sync_and_download(sudo, dlconf, gpgdir, pkg_db, pkg_repo, progress, phase=l
                        full_compile: bool = False) -> None:
     phase("syncing package databases")
     print("[*] Syncing package databases...")
-    r = subprocess.run(
+    # Teed (Popen+pipe pumped through the _Tee) so pacman's DB-sync lines land in
+    # full.log in real time; a bare subprocess.run would inherit the PTY and never
+    # reach the log.
+    rc = logstream.run_teed(
         sudo + ["pacman", "-Sy", "--config", str(dlconf), "--gpgdir", str(gpgdir),
                 "--dbpath", str(pkg_db), "--cachedir", str(pkg_repo), "--noconfirm"],
-        check=False,
     )
-    if r.returncode != 0:
+    if rc != 0:
         if any((pkg_db / "sync").iterdir()):
             print("    [+] DB sync failed but a cached DB exists -- continuing offline.")
         else:
@@ -171,13 +173,13 @@ def _sync_and_download(sudo, dlconf, gpgdir, pkg_db, pkg_repo, progress, phase=l
     print("[*] Downloading missing packages into the persistent cache (resumable)...")
     phase(f"downloading {len(pkgs)} packages into cache")
     progress(20)
-    r = subprocess.run(
+    # Teed so the minute-long download's per-package lines reach full.log live
+    # (run_teed already feeds stdin from /dev/null, as this call did explicitly).
+    rc = logstream.run_teed(
         sudo + ["pacman", "-Sw", "--config", str(dlconf), "--gpgdir", str(gpgdir),
                 "--noconfirm", "--cachedir", str(pkg_repo), "--dbpath", str(pkg_db)] + pkgs,
-        stdin=subprocess.DEVNULL,
-        check=False,
     )
-    if r.returncode != 0:
+    if rc != 0:
         raise PackageError("package download")
     progress(440)
 
