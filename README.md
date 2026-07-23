@@ -38,6 +38,20 @@ Plain-text raw dump of every component.
    **Link: [https://drive.google.com/file/d/18nclTLo05_KU7uOfYd_WTnI0LK--mGE6/view?usp=sharing](https://drive.google.com/file/d/18nclTLo05_KU7uOfYd_WTnI0LK--mGE6/view?usp=sharing)**
 
 2. **Create a Bootable USB**  
+
+     <table width="100%">
+     <thead>
+     <tr><th align="left">📢❗🚨 PLEASE BE CAREFUL</th></tr>
+     </thead>
+     <tbody>
+     <tr><td>
+
+     This will erase everything on the USB!
+
+     </td></tr>
+     </tbody>
+     </table>
+
    Use one of the following tools to write the ISO to a USB drive:
    - **[balenaEtcher](https://etcher.balena.io/)** (Windows/macOS/Linux)
    - **[Rufus](https://rufus.ie/en/)** (Windows only)
@@ -50,7 +64,7 @@ Plain-text raw dump of every component.
      <tbody>
      <tr><td>
 
-     - Replace `<DEVICE>` with your USB device. This will erase the disk.
+     - Replace `<DEVICE>` with your USB device. 
      - Replace `<DATE>` with the date on your downloaded ISO.
 
      </td></tr>
@@ -93,13 +107,6 @@ Plain-text raw dump of every component.
 
 You can clone this repository and compile the ISO yourself. The first build needs an internet connection to download every component that goes into the ISO, after that everything is cached and rebuilds run fully offline. Build with Docker. The ISO is assembled with `mkarchiso`, which resolves the ISO's package list against the build host's Arch Linux repositories. That means the build only works on a genuine Arch userland with the real Arch `core`, `extra`, and `multilib` repositories. On anything else those repositories are wrong or missing and the build fails with errors like `target not found: archinstall` or endless kernel-provider prompts. Docker sidesteps all of that, the image is `archlinux:latest`, so the build runs inside real Arch no matter what machine you are on.
 
-There are two build methods:
-
-- **Default build** compiles only what is strictly necessary (the Calamares installer) and pulls everything else as trusted, verified prebuilt binaries. The first run downloads and builds; every run after that reuses the cache and finishes in minutes, skipping the compile entirely because the finished packages are already cached.
-- **Full build** (`--full-compile`) compiles everything from source, including a from-source LibreWolf/Firefox build that takes hours. Its first run is online (it downloads the source); reruns are fully offline but still **recompile** from the source already in the cache rather than skipping, so `--full-compile` always gives you a genuine from-source result.
-
-The build runs in Docker, so the steps are the same on every operating system.
-
 1. **Install Docker and Git.**
 
    <b>Linux</b>
@@ -134,18 +141,6 @@ The build runs in Docker, so the steps are the same on every operating system.
 4. **Compile the ISO.** The finished ISO goes to `output/`, downloaded packages
    are cached in `cache/`, and build logs go to `logs/`.
 
-   **Default build** (recommended). Compiles only what's necessary. Everything else is downloaded as trusted, verified binaries.
-   ```
-   sudo docker run --rm -it --init --privileged \
-     -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
-     -v "$PWD/cache:/build/cache" \
-     -v "$PWD/output:/build/output" \
-     -v "$PWD/logs:/build/logs" \
-     azarch
-   ```
-
-   **Full build.** Compiles everything from source, which takes hours.
-
    <table width="100%">
    <thead>
    <tr><th align="left">ℹ️ NOTE</th></tr>
@@ -172,13 +167,14 @@ The build runs in Docker, so the steps are the same on every operating system.
    by your measured speed. Example (estimate a full build, compute + network):
 
    ```
-   sudo docker run --rm -it azarch --estimate-full-compile
+   sudo docker run --rm -it azarch --estimate
    ```
 
    </td></tr>
    </tbody>
    </table>
 
+   **Default build** (recommended). Compiles only what's necessary. Everything else is downloaded as trusted, verified binaries.
    ```
    sudo docker run --rm -it --init --privileged \
      -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
@@ -186,6 +182,17 @@ The build runs in Docker, so the steps are the same on every operating system.
      -v "$PWD/output:/build/output" \
      -v "$PWD/logs:/build/logs" \
      azarch
+   ```
+
+   **Full build.** Compiles everything from source, which takes hours.
+
+   ```
+   sudo docker run --rm -it --init --privileged \
+     -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+     -v "$PWD/cache:/build/cache" \
+     -v "$PWD/output:/build/output" \
+     -v "$PWD/logs:/build/logs" \
+     azarch --full-compile
    ```
 
 5. **Get the ISO.** It's in the `output/` folder. On **Windows (WSL)** that folder
@@ -202,11 +209,10 @@ The build runs in Docker, so the steps are the same on every operating system.
   <tr><td>
 
   If the compile was stopped mid-process, the ownership handback may not have run,
-  so some files in `cache/` can be left root-owned and a normal run can't remove
-  them. In that case wipe it with:
+  so some files in `cache/` can be left root-owned. In that case wipe it with:
 
   ```
-  sudo ./clear.sh
+  sudo bash clear.sh
   ```
 
   </td></tr>
@@ -214,5 +220,5 @@ The build runs in Docker, so the steps are the same on every operating system.
   </table>
 
   ```
-  ./clear.sh
+  bash clear.sh
   ```
