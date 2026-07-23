@@ -17,13 +17,13 @@ Technical, developer-facing specification of the Az'arch Linux distribution. It 
 
 | Metric | Value |
 |---|---:|
-| Explicit manifest entries | 209 (224 non-comment lines; 15 duplicate lines de-duped) |
-| Explicit entries incl. group members (e.g. `xorg`) | 207 |
-| **Full package set (transitive closure)** | **983** |
-| &nbsp;&nbsp;from `core` / `extra` / `multilib` | 227 / 651 / 105 |
-| Edition: Az'arch Component / Stock Arch | 461 / 522 |
-| Top / leaf packages (nothing depends on them) | 150 |
-| Base / sink packages (depend on nothing else in the set) | 55 |
+| Explicit manifest entries | 210 (225 non-comment lines; 15 duplicate lines de-duped) |
+| Explicit entries incl. group members (e.g. `xorg`) | 208 |
+| **Full package set (transitive closure)** | **984** |
+| &nbsp;&nbsp;from `core` / `extra` / `multilib` | 227 / 652 / 105 |
+| Edition: Az'arch Component / Stock Arch | 462 / 522 |
+| Top / leaf packages (nothing depends on them) | 151 |
+| Base / sink packages (depend on nothing else in the set) | 56 |
 | Deepest dependency chain (leaf -> base) | 37 hops |
 | Total installed size of the package set | 5.68 GiB |
 
@@ -115,7 +115,7 @@ What the medium can do, grouped by the role each component plays. Counts and siz
 | Bluetooth & devices | 12 | 16.8 MiB | Bluetooth, USB, accessibility, and other peripheral device support |
 | Virtualization guest | 4 | 7.9 MiB | guest integration agents for the major hypervisors |
 | Shared library | 320 | 608.6 MiB | shared libraries other components link against |
-| System | 123 | 353.5 MiB | supporting system components that back the above |
+| System | 124 | 353.7 MiB | supporting system components that back the above |
 
 ---
 

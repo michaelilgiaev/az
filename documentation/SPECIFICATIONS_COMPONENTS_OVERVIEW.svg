@@ -19,9 +19,9 @@
 <text x="800" y="148" font-size="13" fill="#9da7b3">Live-session RAM (cow_spacesize):</text>
 <text x="1060" y="148" font-size="13" font-weight="600" fill="#e6edf3">4G writable overlay held in RAM</text>
 <text x="32" y="168" font-size="13" fill="#9da7b3">Packages (full closure):</text>
-<text x="292" y="168" font-size="13" font-weight="600" fill="#e6edf3">983</text>
+<text x="292" y="168" font-size="13" font-weight="600" fill="#e6edf3">984</text>
 <text x="800" y="168" font-size="13" fill="#9da7b3">Az&#x27;arch Component / Stock Arch:</text>
-<text x="1060" y="168" font-size="13" font-weight="600" fill="#e6edf3">461 / 522</text>
+<text x="1060" y="168" font-size="13" font-weight="600" fill="#e6edf3">462 / 522</text>
 <text x="32" y="188" font-size="13" fill="#9da7b3">Deepest chain (leaf -&gt; base):</text>
 <text x="292" y="188" font-size="13" font-weight="600" fill="#e6edf3">37 hops</text>
 <text x="800" y="188" font-size="13" fill="#9da7b3">Installed size:</text>
@@ -379,7 +379,7 @@
 <text x="48" y="1226" font-size="18" font-weight="700" fill="#e6edf3">Foundation</text>
 <text x="48" y="1246" font-size="11" fill="#9da7b3">depth 0 -- nothing below them; true</text>
 <text x="48" y="1260" font-size="11" fill="#9da7b3">sinks of the graph</text>
-<text x="48" y="1314" font-size="13" font-weight="700" fill="url(#brand)">55 pkgs</text>
+<text x="48" y="1314" font-size="13" font-weight="700" fill="url(#brand)">56 pkgs</text>
 <rect x="282" y="1210" width="128" height="40" rx="6" fill="#78716c" fill-opacity="0.22" stroke="#78716c" stroke-width="1.4"/>
 <text x="290" y="1227" font-size="11.5" font-weight="600" fill="#e6edf3">iana-etc</text>
 <text x="290" y="1241" font-size="9" fill="#9da7b3">20260530</text>
@@ -439,7 +439,7 @@
 <text x="1378" y="1275" font-size="11.5" font-weight="600" fill="#e6edf3">adwaita-cursors</text>
 <text x="1378" y="1289" font-size="9" fill="#9da7b3">50.0</text>
 <text x="1485" y="1273" font-size="11" fill="#03a5fc">★</text>
-<text x="1556" y="1332" font-size="11" text-anchor="end" fill="#9da7b3">+37 more in this layer</text>
+<text x="1556" y="1332" font-size="11" text-anchor="end" fill="#9da7b3">+38 more in this layer</text>
 <text x="32" y="1366" font-size="14" font-weight="700" fill="#e6edf3">Category</text>
 <rect x="32" y="1375" width="12" height="12" rx="3" fill="#b5651d" fill-opacity="0.35" stroke="#b5651d"/>
 <text x="50" y="1386" font-size="11" fill="#e6edf3">Kernel &amp; firmware</text>

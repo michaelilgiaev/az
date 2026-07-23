@@ -24,9 +24,9 @@ AT A GLANCE
   Kernel                                     linux 7.1.4.arch1-1
   Init                                       systemd 261.1-1
   Live-session writable RAM                  4G writable overlay held in RAM
-  Packages (full closure)                    983
-    from core / extra / multilib             227 / 651 / 105
-  Az'arch Component / Stock Arch             461 / 522
+  Packages (full closure)                    984
+    from core / extra / multilib             227 / 652 / 105
+  Az'arch Component / Stock Arch             462 / 522
   Deepest dependency chain                   37 hops (leaf -> base)
   Total installed size                       5.68 GiB
 
@@ -94,6 +94,7 @@ Search this section to jump; full entries follow below.
   go                                az'arch   Language runtime            2:1.26.5-1
   intel-ucode                       stock     Kernel & firmware           20260512-1
   livecd-sounds                     stock     Audio                       1.0-3
+  mailcap                           az'arch   System                      2.1.54-2
   man-pages                         stock     Shell & CLI tools           6.18-1
   memtest86+                        stock     Boot & init                 7.20-2
   memtest86+-efi                    stock     Boot & init                 7.20-2
@@ -17618,7 +17619,7 @@ required-by: (none)
 
 ==============================================================================
 LAYER 0 -- Foundation -- depth 0 -- nothing below them; true sinks of the graph
-55 component(s)
+56 component(s)
 ==============================================================================
 
 ### iana-etc  (20260530-1)
@@ -18334,6 +18335,22 @@ edition:  stock    (Stock Arch: already on the stock archiso releng medium)
 category: Audio
 layer:    0 of 6  (Foundation -- depth 0 -- nothing below them; true sinks of the graph)
 repo:     extra    installed size: 306.3 KiB    license: custom:CCPL
+
+depth:    0 pkgs pulled in below it (transitively); 0 pkgs above rely on it
+requires: (none)
+required-by: (none)
+
+------------------------------------------------------------------------------
+
+### mailcap  (2.1.54-2)
+
+purpose: Helper application and MIME type associations for file types
+upstream: https://pagure.io/mailcap
+
+edition:  az'arch  (Az'arch Component: in the set only because Az'arch added it on top of stock archiso)
+category: System
+layer:    0 of 6  (Foundation -- depth 0 -- nothing below them; true sinks of the graph)
+repo:     extra    installed size: 115.8 KiB    license: MIT
 
 depth:    0 pkgs pulled in below it (transitively); 0 pkgs above rely on it
 requires: (none)
