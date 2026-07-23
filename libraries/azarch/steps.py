@@ -203,14 +203,15 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: 
     emit.write_exec(ea / "chroot-setup.sh", installer.chroot_setup_sh())
 
     # 13 -- Build Az'arch's OWN packages and fold them into the offline repo
-    # (GIANT-ish, weight 120; MUCH heavier under --full-compile). The DEFAULT tier
-    # builds ONLY librewolf (it is in no Arch repo), repackaging the verified
-    # upstream binary tarball; calamares is a normal Arch package already fetched
-    # from extra/ in step 12. Under --full-compile makepkg ALSO compiles calamares
-    # from source (sha256-verified) and librewolf from Firefox source. Whatever is
-    # built is dropped into cache/pkgs/repo/, then we RE-reconcile the index and
-    # RE-stage the repo into airootfs so mkarchiso's pacstrap (and the on-disk
-    # installer) can install them.
+    # (GIANT-ish, weight 120; MUCH heavier under --full-compile). BOTH calamares
+    # and librewolf are built here in EVERY tier -- neither is in an Arch repo
+    # (librewolf never was; calamares was dropped from extra/, now AUR-only, so
+    # step 12 can no longer fetch it). Default tier: calamares from source
+    # (sha256-verified) + librewolf by repackaging the verified upstream binary
+    # tarball. --full-compile: calamares from source + librewolf from Firefox
+    # source. Whatever is built is dropped into cache/pkgs/repo/, then we
+    # RE-reconcile the index and RE-stage the repo into airootfs so mkarchiso's
+    # pacstrap (and the on-disk installer) can install them.
     bar.step("Build Az'arch's own packages (calamares, librewolf)")
     makepkg.build_own_packages(offline, full_compile, bar.sub, bar.phase)
     bar.sub_done()
@@ -265,12 +266,12 @@ def _emit_tty1_autologin(airootfs: Path) -> None:
 
 
 def _refresh_own_in_pacstrap_cache(full_compile: bool = False) -> None:
-    """Refresh the packages the makepkg stage BUILT (librewolf always; calamares
-    under --full-compile) IN the persistent pacstrap CacheDir (cache/pacman-pkg) so
-    mkarchiso's pacstrap always reads the freshly-rebuilt bytes from cache -- never
-    a stale copy, and never a file:// re-fetch. Arch-downloaded packages (including
-    extra/calamares in the default tier) are immutable per version and handled by
-    the normal cache path, so they are deliberately NOT touched here.
+    """Refresh the packages the makepkg stage BUILT (calamares and librewolf, both
+    tiers) IN the persistent pacstrap CacheDir (cache/pacman-pkg) so mkarchiso's
+    pacstrap always reads the freshly-rebuilt bytes from cache -- never a stale
+    copy, and never a file:// re-fetch. The downloaded Arch packages are immutable
+    per version and handled by the normal cache path, so they are deliberately NOT
+    touched here.
 
     Two failure modes this closes, both caused by makepkg NOT being reproducible
     bit-for-bit (a rebuild of calamares/librewolf yields a byte-different
@@ -290,22 +291,21 @@ def _refresh_own_in_pacstrap_cache(full_compile: bool = False) -> None:
 
     Overwriting the cached copy in place with the current repo bytes gives pacstrap
     a VALID cache hit: the checksum matches (correct content) and no download
-    happens (so the size cap never applies). Arch packages are untouched -- they're
-    immutable for a given version, so their cached copy always matches."""
+    happens (so the size cap never applies). The downloaded Arch packages are
+    untouched -- they're immutable for a given version, so their cached copy always
+    matches."""
     cache = paths.PACSTRAP_CACHE
     repo = paths.PKG_REPO
     if not cache.is_dir():
         return
     from .makepkg import produced_names
     PRODUCED = produced_names(full_compile)          # this tier: which to REFRESH (copy in)
-    # Every name the makepkg stage can EVER produce, across BOTH tiers. Cleanup must
-    # span this union, not just the current tier: calamares migrates from BUILT (under
-    # --full-compile) to DOWNLOADED (default tier, from extra/). A prior full-compile
-    # run left its SOURCE-built calamares in this CacheDir; a later default run gets a
-    # byte-different Arch-signed calamares under the SAME version-rel filename. Scoping
-    # cleanup to the current tier's PRODUCED would never look at calamares in a default
-    # run, so pacstrap reads the stale source bytes, their checksum mismatches the DB,
-    # and -- with stdin on /dev/null it cannot answer the delete prompt -- the ISO build
+    # Every name the makepkg stage can EVER produce. Both tiers build the same set
+    # (calamares + librewolf) now, so this union equals PRODUCED -- it is kept as a
+    # union so that if the tiers ever diverge again, cleanup still spans BOTH sets.
+    # It must: a byte-different rebuild under the SAME version-rel filename left in
+    # this CacheDir by a prior run would fail pacstrap's checksum check, and with
+    # stdin on /dev/null pacstrap cannot answer the delete prompt -- the ISO build
     # aborts. (Filename equality means a name-only staleness check would MISS it; we
     # compare CONTENT below.)
     ALL_OWN = tuple(sorted(set(produced_names(True)) | set(produced_names(False))))
@@ -322,7 +322,8 @@ def _refresh_own_in_pacstrap_cache(full_compile: bool = False) -> None:
     # Cleanup pass (over the UNION of tiers). For every own-name, drop any cached copy
     # that does not byte-match the copy currently in the repo -- whether it is a
     # superseded VERSION (different filename) or a same-version file with different
-    # BYTES (the built-vs-downloaded calamares case). A repo copy with matching bytes
+    # BYTES (a non-reproducible makepkg rebuild yields new bytes under the same
+    # versioned filename). A repo copy with matching bytes
     # is left for the refresh pass. A cached file whose name isn't in the repo at all
     # (name fully retired) is dropped too. This gives pacstrap either a valid cache hit
     # or a clean miss (it then reads the correct file from the file:// repo), never a

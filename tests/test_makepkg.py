@@ -2,9 +2,11 @@
 
 The heavy lifting (makepkg, sudo, gpg) is io-heavy and not unit-tested here. The
 one pure, load-bearing branch is produced_names(): it decides which packages are
-EXCLUDED from the Arch `pacman -Sw` download. Get it wrong and the build either
-tries to download a package that is on no mirror (default breaks) or fails to
-download calamares (full breaks). _repo_has_all is pure given a dir.
+EXCLUDED from the Arch `pacman -Sw` download. Get it wrong and the build tries to
+download a package that is on no mirror (Arch dropped calamares from extra/, so a
+missing exclusion makes `pacman -Sw calamares` fail with "target not found" and
+aborts the whole download). Both tiers now build calamares + librewolf.
+_repo_has_all is pure given a dir.
 """
 
 from __future__ import annotations
@@ -12,16 +14,18 @@ from __future__ import annotations
 from azarch import makepkg
 
 
-def test_produced_names_default_tier_is_librewolf_only():
-    # Default: calamares comes from extra/ via pacman, so ONLY librewolf is built.
-    assert makepkg.produced_names(full_compile=False) == ("librewolf",)
+def test_produced_names_default_tier_builds_calamares_and_librewolf():
+    # Arch dropped calamares from extra/, so the default tier must build it too
+    # (it can no longer be pacman-downloaded). Both own packages are built here.
+    assert makepkg.produced_names(full_compile=False) == ("calamares", "librewolf")
 
 
-def test_produced_names_full_tier_adds_calamares():
-    assert makepkg.produced_names(full_compile=True) == ("calamares", "librewolf")
+def test_produced_names_is_tier_independent():
+    # --full-compile only changes the RECIPE, not the set of names built.
+    assert makepkg.produced_names(full_compile=True) == makepkg.produced_names(full_compile=False)
 
 
-def test_produced_constant_matches_default_tier():
+def test_produced_constant_matches_produced_names():
     assert makepkg.PRODUCED == makepkg.produced_names(full_compile=False)
 
 

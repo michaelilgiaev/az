@@ -73,11 +73,12 @@ def build_cache(workdir: Path, cachedir: Path, offline: bool, progress: Progress
     offline      : BUILD_OFFLINE -- skip all network when the cache is complete
     progress     : called with a permille (0..1000) as milestones are reached
     phase        : called with a short sub-phase label to narrate the bar (optional)
-    full_compile : the build tier -- decides which packages the makepkg stage
-                   produces itself and must therefore be EXCLUDED from the Arch
-                   `pacman -Sw` download (they exist on no mirror). In the default
-                   tier only librewolf is excluded; calamares is a normal Arch
-                   package downloaded from extra/. See makepkg.produced_names().
+    full_compile : the build tier. It NO LONGER changes which packages the
+                   makepkg stage produces -- calamares AND librewolf are built
+                   here in every tier (neither is in an Arch repo), so both are
+                   always EXCLUDED from the Arch `pacman -Sw` download (they exist
+                   on no mirror). The flag only changes librewolf's recipe.
+                   See makepkg.produced_names().
     """
     sudo = _sudo()
     pkg_repo = cachedir / "pkgs" / "repo"
@@ -155,13 +156,14 @@ def _sync_and_download(sudo, dlconf, gpgdir, pkg_db, pkg_repo, progress, phase=l
     # targets and fail the cache download. (Package names never contain '#'.)
     pkgs = [tok for line in paths.PACKAGES_FILE.read_text().splitlines()
             if (tok := line.split("#", 1)[0].strip())]
-    # EXCLUDE the packages the makepkg stage builds ITSELF for this tier: they exist
-    # on no Arch mirror, so `pacman -Sw` would abort with "target not found". They are
-    # built by the makepkg stage (steps.py step 13) and folded into the same offline
-    # repo right AFTER this download, then indexed alongside everything else.
-    #   default tier -> only librewolf is built here (calamares is downloaded from
-    #                   extra/ like any other Arch package, so it is NOT excluded).
-    #   --full-compile -> calamares AND librewolf are built here, so both are excluded.
+    # EXCLUDE the packages the makepkg stage builds ITSELF: they exist on no Arch
+    # mirror, so `pacman -Sw` would abort with "target not found". They are built by
+    # the makepkg stage (steps.py step 13) and folded into the same offline repo
+    # right AFTER this download, then indexed alongside everything else.
+    #   Both tiers -> calamares AND librewolf are built here, so both are excluded.
+    #                 (calamares was in extra/ once, but Arch dropped it -- if it is
+    #                 NOT excluded, `pacman -Sw calamares` fails with "target not
+    #                 found" and the whole download aborts. This is that bug's fix.)
     from .makepkg import produced_names
     own = set(produced_names(full_compile))
     pkgs = [p for p in pkgs if p not in own]
@@ -185,15 +187,15 @@ def _readd_own_packages(pkg_repo: Path, full_compile: bool = False) -> None:
     SHA256/CSIZE match the file currently on disk.
 
     _reconcile_index keys its delta by name-ver-rel and SKIPS a package whose key
-    is already indexed. A makepkg-built package (librewolf always; calamares under
-    --full-compile) keeps its version across rebuilds, but makepkg is not
-    reproducible bit-for-bit, so the rebuilt file's checksum changes while its key
-    does not -- the delta skips it and the DB keeps a stale checksum. pacstrap then
-    rejects the current file as corrupted. repo-add (WITHOUT -n) overwrites an
-    existing same-version entry, so this simply refreshes SHA256+CSIZE to the
-    on-disk bytes. Only OUR built packages need it; Arch packages (including
-    extra/calamares in the default tier) are immutable per version, so their DB
-    entry from the download is always correct and must NOT be forced here."""
+    is already indexed. A makepkg-built package (calamares and librewolf, both
+    tiers) keeps its version across rebuilds, but makepkg is not reproducible
+    bit-for-bit, so the rebuilt file's checksum changes while its key does not --
+    the delta skips it and the DB keeps a stale checksum. pacstrap then rejects
+    the current file as corrupted. repo-add (WITHOUT -n) overwrites an existing
+    same-version entry, so this simply refreshes SHA256+CSIZE to the on-disk
+    bytes. Only OUR built packages need it; the downloaded Arch packages are
+    immutable per version, so their DB entry from the download is always correct
+    and must NOT be forced here."""
     from .makepkg import produced_names
     db = pkg_repo / "pacstrap-azarch-repo.db.tar.gz"
     files: list[str] = []

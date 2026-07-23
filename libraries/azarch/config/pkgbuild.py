@@ -8,19 +8,17 @@ tree by steps.py; the emitted files are then consumed by `makepkg`, the official
 Arch build tool, which produces *.pkg.tar.zst dropped into the ISO's offline
 repo. No AUR helper (yay/paru/...) is used.
 
-Two packages CAN be built, but the DEFAULT tier builds as little as possible:
+Two packages are built. Neither is in an official Arch repo, so both are built
+in EVERY tier; --full-compile only changes the recipe librewolf uses:
 
-  calamares   -- the graphical system installer (Manjaro-style). It exists as an
-                 OFFICIAL Arch package (extra/calamares), signed by Arch and the
-                 SAME upstream version this recipe pins. So:
-                   * DEFAULT tier -> NOT built here; `pacman` installs the signed
-                     extra/calamares binary like every other Arch package in
-                     packages.x86_64 (no source compile).
-                   * FULL tier (`--full-compile`) -> compiled from source by the
-                     recipe below (a moderate C++/CMake build, minutes), with the
-                     release tarball verified by the pinned sha256 (makepkg aborts
-                     on mismatch; upstream ships no detached .sig for it).
-                 recipe_dirs(full_compile) decides whether to emit it.
+  calamares   -- the graphical system installer (Manjaro-style). It USED to be an
+                 official Arch package (extra/calamares), but Arch DROPPED it --
+                 it is now AUR-only, and this project never builds from the AUR.
+                 So it is compiled from OUR own recipe below in BOTH tiers: a
+                 moderate C++/CMake build (minutes), with the release tarball
+                 verified by the pinned sha256 (makepkg aborts on mismatch;
+                 upstream ships no detached .sig for it). recipe_dirs() emits it
+                 unconditionally now.
 
   librewolf   -- the privacy-hardened Firefox fork. A from-source Firefox build
                  takes 1.5-3+ hours and ~16 GB RAM, so there are TWO recipes:
@@ -92,10 +90,10 @@ def pkgbuild_calamares() -> str:
 # detached .sig for the release archive, so the sha256 is the anchor; makepkg
 # aborts the build on mismatch.
 #
-# FROM SOURCE ONLY UNDER --full-compile: a moderate C++/CMake build (minutes).
-# The DEFAULT tier does NOT build this -- it installs the official, Arch-signed
-# extra/calamares binary (same upstream version) via pacman instead. This recipe
-# is emitted only when recipe_dirs(full_compile=True) selects it.
+# FROM SOURCE IN EVERY TIER: a moderate C++/CMake build (minutes). Arch dropped
+# calamares from extra/ (it is now AUR-only), so there is no Arch-signed binary
+# to install anymore; recipe_dirs() emits this recipe for both the default and
+# the --full-compile tier.
 # =============================================================================
 
 pkgname=calamares
@@ -411,25 +409,28 @@ package() {{
 # makepkg stage builds each and drops the result into the offline repo.
 # ---------------------------------------------------------------------------
 def recipe_dirs(full_compile: bool) -> list[tuple[str, dict[str, str]]]:
-    """Which recipes to emit -- the DEFAULT tier compiles as little as possible.
+    """Which recipes to emit. BOTH calamares and librewolf are built in EVERY
+    tier now -- neither is in an official Arch repo (librewolf never was;
+    calamares was dropped from extra/ and is AUR-only). --full-compile only
+    changes the RECIPE, not the set:
 
-    librewolf is in NO Arch repo, so it is always built here (default = repackage
-    the verified upstream binary tarball; --full-compile = build from source).
-
-    calamares IS an official Arch package (extra/calamares). The default tier
-    therefore does NOT emit its recipe -- pacman installs the Arch-signed binary
-    instead. Only --full-compile emits the source recipe (sha256-verified)."""
+      calamares : always compiled from source (pinned-sha256 Codeberg tarball,
+                  a moderate C++/CMake build of minutes). There is no prebuilt
+                  Arch binary to fall back to anymore, so both tiers use the
+                  same source recipe.
+      librewolf : default = repackage the verified upstream binary tarball;
+                  --full-compile = compile from Firefox source (1.5-3+ hours)."""
     lw_common = {
         "librewolf.desktop": librewolf_desktop(),
         "librewolf.overrides.cfg": librewolf_overrides_cfg(),
     }
+    calamares = ("calamares", {"PKGBUILD": pkgbuild_calamares()})
     if full_compile:
         librewolf = ("librewolf", {"PKGBUILD": pkgbuild_librewolf_src(), **lw_common})
-        # Full tier: compile calamares from source too (verified by pinned sha256).
-        return [("calamares", {"PKGBUILD": pkgbuild_calamares()}), librewolf]
+        return [calamares, librewolf]
     librewolf = ("librewolf", {"PKGBUILD": pkgbuild_librewolf(), **lw_common})
-    # Default tier: only librewolf is built; calamares comes from extra/ via pacman.
-    return [librewolf]
+    # Default tier: repackage librewolf, but calamares is still built from source.
+    return [calamares, librewolf]
 
 
 # ---------------------------------------------------------------------------

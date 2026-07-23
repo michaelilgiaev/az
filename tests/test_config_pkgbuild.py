@@ -22,8 +22,9 @@ makepkg. Two failure modes here are silent and expensive:
      These tests assert no '{{'/'}}' survives into the emitted text.
 
   4. Tier dispatch. recipe_dirs(full_compile) decides which recipes are emitted:
-     the DEFAULT tier builds only librewolf (repackage), the FULL tier adds a
-     from-source calamares and swaps librewolf for its from-source recipe.
+     BOTH tiers build calamares (from source -- Arch dropped extra/calamares) and
+     librewolf. The DEFAULT tier repackages librewolf; --full-compile swaps in the
+     from-source librewolf recipe. The set of packages is the same in both tiers.
 
 Pure string logic -- no filesystem, no network, no makepkg invoked.
 """
@@ -201,12 +202,14 @@ def test_overrides_disables_sanitize_on_shutdown():
 # --- recipe_dirs tier dispatch ---------------------------------------------
 
 def test_recipe_dirs_default_tier():
-    # DEFAULT tier: only librewolf is emitted (calamares comes from extra/ via
-    # pacman). The librewolf dir carries PKGBUILD + two companion files, and its
-    # PKGBUILD is the repackage recipe (no bsys6 make targets).
+    # DEFAULT tier: calamares first (Arch dropped extra/calamares, so it must be
+    # built here now), then librewolf. calamares carries only its PKGBUILD; the
+    # librewolf dir carries PKGBUILD + two companion files, and its PKGBUILD is the
+    # repackage recipe (no bsys6 make targets).
     dirs = pkgbuild.recipe_dirs(False)
     names = [name for name, _ in dirs]
-    assert names == ["librewolf"]
+    assert names == ["calamares", "librewolf"]
+    assert set(dict(dirs)["calamares"]) == {"PKGBUILD"}
     files = dict(dirs)["librewolf"]
     assert set(files) == {"PKGBUILD", "librewolf.desktop", "librewolf.overrides.cfg"}
     assert "make fetch" not in files["PKGBUILD"]

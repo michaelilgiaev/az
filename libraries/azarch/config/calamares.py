@@ -18,8 +18,8 @@ every modules/*.conf). They are emitted verbatim as the strings below. The
 `emit_map()` at the bottom returns {relative path under /etc/calamares -> content}
 so steps.py can iterate and write the whole tree with emit.write_text.
 
-Calamares 3.4.x config-key notes (all VERIFIED against the shipped
-extra/calamares 3.4.2 module schemas -- these were bugs caught in review):
+Calamares 3.4.x config-key notes (all VERIFIED against the calamares 3.4.2
+module schemas we build from source -- these were bugs caught in review):
   - partition.conf: `defaultFileSystemType` (NOT defaultFileSystem) sets the
     default fs. LUKS is offered when `luksGeneration: luks2` is present with an
     encryption-capable install choice; the "Encrypt system" checkbox appears

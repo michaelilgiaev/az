@@ -10,14 +10,15 @@ step (packages._reconcile_index) folds them into pacstrap-azarch-repo.db next to
 the Arch packages. `calamares`/`librewolf` in packages.x86_64 then resolve from
 the local repo like anything else.
 
-Tiers: the DEFAULT tier builds as little as possible.
-  * librewolf is in NO Arch repo, so it is always built here (default =
-    repackage the verified upstream binary tarball; full = source build).
-  * calamares IS an official Arch package (extra/calamares). The default tier
-    does NOT build it -- pacman installs the Arch-signed binary. Only
-    --full-compile builds it from source (sha256-verified tarball).
+Tiers: BOTH calamares and librewolf are built here in every tier -- neither is
+in an official Arch repo (librewolf never was; calamares was dropped from extra/
+and is now AUR-only). --full-compile only changes the RECIPE, not the set:
+  * librewolf -> default = repackage the verified upstream binary tarball;
+                 full = build from Firefox source.
+  * calamares -> always compiled from the pinned-sha256 source tarball (there is
+                 no Arch binary to install anymore).
 config.pkgbuild.recipe_dirs(full_compile) picks the recipe set; produced_names()
-below returns the matching set of package names built HERE for that tier.
+below returns the (now tier-independent) set of names built HERE.
 
 Offline policy: makepkg needs to FETCH sources (the calamares/firefox/librewolf
 tarballs + git). When the build is fully offline (BUILD_OFFLINE) we SKIP the
@@ -45,21 +46,24 @@ ProgressCb = Callable[[int], None]
 # just use the current user.
 BUILDER_USER = "azarchbuilder"
 
-# Package NAMES built by this stage. librewolf is built in EVERY tier (it is in no
-# Arch repo); calamares is built here ONLY under --full-compile (the default tier
-# installs the official extra/calamares binary via pacman instead). PRODUCED is the
-# default-tier set; produced_names(full_compile) returns the set for a given tier.
-# Both are used to (a) exclude own packages from the Arch `pacman -Sw` download and
-# (b) know which built packages to re-add/refresh in the offline repo + cache.
-PRODUCED = ("librewolf",)
+# Package NAMES built by this stage. BOTH are built in EVERY tier because neither
+# is in an official Arch repo: librewolf never was; calamares USED to live in
+# extra/ but Arch dropped it (it is now AUR-only), so the default tier can no
+# longer `pacman -S calamares` and must build it from our own recipe like the
+# full tier already did. The only thing --full-compile still changes is HOW each
+# is built (see produced_names / recipe_dirs), not WHICH are built.
+# This set is used to (a) exclude own packages from the Arch `pacman -Sw` download
+# (they exist on no mirror) and (b) know which built packages to re-add/refresh in
+# the offline repo + cache.
+PRODUCED = ("calamares", "librewolf")
 
 
 def produced_names(full_compile: bool) -> tuple[str, ...]:
-    """Names of packages the makepkg stage produces for the given tier.
-
-    Default: only librewolf (calamares comes from extra/ via pacman).
-    Full:     calamares (source) + librewolf (source)."""
-    return ("calamares", "librewolf") if full_compile else PRODUCED
+    """Names of packages the makepkg stage produces. Tier-independent now:
+    calamares + librewolf are ALWAYS built here (both are AUR-only / in no Arch
+    repo). --full-compile only changes the RECIPE used (source vs repackage),
+    handled by recipe_dirs, not the set of names."""
+    return PRODUCED
 
 
 class MakepkgError(RuntimeError):
@@ -176,7 +180,10 @@ def build_own_packages(offline: bool, full_compile: bool, progress: ProgressCb,
     pkg_repo.mkdir(parents=True, exist_ok=True)
     names = produced_names(full_compile)
 
-    tier = "full-compile (from source)" if full_compile else "default (repackage verified upstream)"
+    # calamares is compiled from source in BOTH tiers; the tier only changes how
+    # librewolf is produced (from-source vs repackage the verified upstream tarball).
+    tier = ("full-compile (calamares + librewolf from source)" if full_compile
+            else "default (calamares from source, librewolf repackaged)")
     print(f"[*] Building Az'arch's own packages -- tier: {tier}")
     phase(f"own packages: {tier}")
     progress(20)
