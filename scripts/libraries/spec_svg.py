@@ -177,8 +177,14 @@ def render_svg(packages, resolved, tiers, tags, glance):
 
     s = []
     a = s.append
-    a(f'<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" '
-      f'viewBox="0 0 {W} {H}" preserveAspectRatio="xMidYMid meet" '
+    # Opened as a standalone .svg document on GitHub Pages the <svg> IS the page
+    # body. width:100%;height:auto makes it span the full browser width and take
+    # its height from the viewBox ratio, so it fills the width and scrolls down
+    # instead of being letterboxed with white side bars. A background rect below
+    # covers the page behind it.
+    a(f'<svg xmlns="http://www.w3.org/2000/svg" '
+      f'viewBox="0 0 {W} {H}" '
+      f'style="display:block;width:100%;height:auto;background:{INK}" '
       f'font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">')
 
     # defs: brand gradient
