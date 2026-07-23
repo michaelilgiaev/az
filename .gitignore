@@ -2,5 +2,6 @@ cache/
 output/
 logs/
 __pycache__/
-*.pyc
+*.pycshould
 venv/
+.pytest_cache/
