@@ -177,8 +177,9 @@ def render_svg(packages, resolved, tiers, tags, glance):
 
     s = []
     a = s.append
-    a(f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
-      f'viewBox="0 0 {W} {H}" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">')
+    a(f'<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" '
+      f'viewBox="0 0 {W} {H}" preserveAspectRatio="xMidYMid meet" '
+      f'font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">')
 
     # defs: brand gradient
     a('<defs>')

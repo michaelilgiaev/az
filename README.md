@@ -1,6 +1,5 @@
 # Az'arch
 
-
 <table width="100%">
 <thead>
 <tr><th align="left">🚧 UNDER CONSTRUCTION</th></tr>
@@ -13,7 +12,6 @@ This is a year-old, neglected, poorly put-together project that is undergoing a 
 </td></tr>
 </tbody>
 </table>
-
 
 ## Documentation
 
