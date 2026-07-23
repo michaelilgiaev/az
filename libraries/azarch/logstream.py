@@ -21,6 +21,8 @@ from __future__ import annotations
 import io
 import subprocess
 import sys
+import threading
+import time
 from typing import TextIO
 
 from . import paths
@@ -98,28 +100,65 @@ def run_teed(cmd: list[str], **kw) -> int:
     written through sys.stdout -- the _Tee -- so it lands on the terminal AND in
     full.log with the tee's per-line flush, i.e. tail-able in real time.
 
-    kwargs (cwd, env, ...) pass straight through to Popen. stdout/stderr/stdin are
-    fixed here (stdout=PIPE, stderr=STDOUT to fold both streams into the log, stdin
-    from DEVNULL so an unattended child hitting a prompt takes its default instead of
-    blocking on the closed PTY). The caller keeps its OWN returncode handling (raise /
-    branch); this only returns the int."""
+    kwargs (cwd, env, ...) pass straight through to Popen -- EXCEPT ``heartbeat``,
+    which is popped off here (see below). stdout/stderr/stdin are fixed here
+    (stdout=PIPE, stderr=STDOUT to fold both streams into the log, stdin from
+    DEVNULL so an unattended child hitting a prompt takes its default instead of
+    blocking on the closed PTY). The caller keeps its OWN returncode handling (raise
+    / branch); this only returns the int.
+
+    Heartbeat: a long child can go SILENT for minutes (rustc/gcc linking, a stalled
+    keyserver fetch, a big `pacman -Sw` between packages). With no output the log and
+    terminal look frozen and the user can't tell "working" from "hung". A daemon
+    thread here watches the wall-clock gap since the last emitted line and, once it
+    exceeds ``heartbeat`` seconds, prints a '... still running (Ns elapsed)' line
+    through the same tee so BOTH the terminal and full.log keep ticking. Pass
+    ``heartbeat=0`` to disable (e.g. for a child that is expected to be brief and
+    whose own progress redraws already prove liveness). Default is 20s."""
+    heartbeat = kw.pop("heartbeat", 20)
     proc = subprocess.Popen(
         cmd, stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **kw,
     )
+
+    # last_line[0] = monotonic seconds of the most recent emitted line. The reader
+    # loop stamps it on every completed line; the heartbeat thread reads it. A single
+    # element list is the shared cell (no lock needed: one writer, one reader, and a
+    # torn read at worst prints one spurious/early heartbeat, which is harmless).
+    last_line = [time.monotonic()]
+    stop = threading.Event()
+
+    def beat() -> None:
+        if heartbeat <= 0:
+            return
+        start = time.monotonic()
+        while not stop.wait(heartbeat):
+            quiet = time.monotonic() - last_line[0]
+            if quiet >= heartbeat:
+                elapsed = int(time.monotonic() - start)
+                # Through sys.stdout (the _Tee) -> terminal AND full.log.
+                sys.stdout.write(f"    ... still running ({elapsed}s elapsed, quiet {int(quiet)}s)\n")
+
+    hb = threading.Thread(target=beat, name="run-teed-heartbeat", daemon=True)
+    hb.start()
+
     reader = io.TextIOWrapper(proc.stdout, encoding="utf-8", errors="replace", newline="")
     buf = ""
-    while True:
-        ch = reader.read(1)
-        if not ch:
-            break
-        if ch in ("\n", "\r"):
-            sys.stdout.write(buf + "\n")  # sys.stdout is the _Tee -> terminal + full.log
-            buf = ""
-        else:
-            buf += ch
-    if buf:
-        sys.stdout.write(buf + "\n")
+    try:
+        while True:
+            ch = reader.read(1)
+            if not ch:
+                break
+            if ch in ("\n", "\r"):
+                sys.stdout.write(buf + "\n")  # sys.stdout is the _Tee -> terminal + full.log
+                last_line[0] = time.monotonic()
+                buf = ""
+            else:
+                buf += ch
+        if buf:
+            sys.stdout.write(buf + "\n")
+    finally:
+        stop.set()
     return proc.wait()
 
 

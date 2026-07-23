@@ -324,6 +324,72 @@ def test_run_teed_splits_carriage_return_frames(tmp_path, monkeypatch, restore_s
     assert logpath.read_text() == "a\nb\nc\n"
 
 
+# --- run_teed(): heartbeat keeps the log ticking during a SILENT child --------
+#
+# The bug this guards: a long child (rustc/gcc link, a stalled keyserver, a big
+# `pacman -Sw` gap) emits NOTHING for minutes, so full.log and the terminal look
+# frozen -- the user can't tell "working" from "hung". A daemon thread prints a
+# '... still running' line once the gap since the last output exceeds `heartbeat`
+# seconds. These use a tiny interval and a child that sleeps to force the gap.
+
+def test_run_teed_heartbeat_fires_during_silence(tmp_path, monkeypatch, restore_std_streams):
+    # A child that sleeps ~0.6s with NO output, heartbeat=0.2s -> at least one
+    # '... still running' line must appear in the log even though the child was silent.
+    logpath = tmp_path / "full.log"
+    monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
+    logfile = logstream.install()
+    try:
+        rc = logstream.run_teed(
+            [sys.executable, "-c", "import time; time.sleep(0.6)"], heartbeat=0.2
+        )
+        logfile.flush()
+    finally:
+        logfile.close()
+    assert rc == 0
+    assert "still running" in logpath.read_text()
+
+
+def test_run_teed_heartbeat_disabled_with_zero(tmp_path, monkeypatch, restore_std_streams):
+    # heartbeat=0 turns the thread into a no-op: a silent child produces NO
+    # heartbeat line. (Also proves heartbeat is popped, not forwarded to Popen --
+    # Popen would raise TypeError on an unknown kwarg.)
+    logpath = tmp_path / "full.log"
+    monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
+    logfile = logstream.install()
+    try:
+        rc = logstream.run_teed(
+            [sys.executable, "-c", "import time; time.sleep(0.4)"], heartbeat=0
+        )
+        logfile.flush()
+    finally:
+        logfile.close()
+    assert rc == 0
+    assert "still running" not in logpath.read_text()
+
+
+def test_run_teed_heartbeat_quiet_when_child_is_chatty(tmp_path, monkeypatch, restore_std_streams):
+    # A child that prints steadily (gap always < heartbeat) must NOT trigger a
+    # heartbeat -- the liveness line is only for genuine silence.
+    logpath = tmp_path / "full.log"
+    monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
+    logfile = logstream.install()
+    try:
+        logstream.run_teed(
+            [sys.executable, "-c",
+             "import time\n"
+             "for i in range(6):\n"
+             "    print('tick', i, flush=True)\n"
+             "    time.sleep(0.05)"],
+            heartbeat=0.5,
+        )
+        logfile.flush()
+    finally:
+        logfile.close()
+    text = logpath.read_text()
+    assert "tick 5" in text
+    assert "still running" not in text
+
+
 def test_run_teed_passes_cwd_kwarg(tmp_path, monkeypatch, restore_std_streams):
     # cwd/env/... pass straight through to Popen; verify the child actually runs in
     # the given cwd (makepkg relies on cwd=recipe_dir).

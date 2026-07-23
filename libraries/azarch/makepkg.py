@@ -121,11 +121,18 @@ def _collect_makedepends(dirs: list[Path]) -> list[str]:
     for d in dirs:
         pb = d / "PKGBUILD"
         # Source the PKGBUILD in bash and print its dep arrays -- authoritative,
-        # avoids reparsing bash arrays in Python.
-        out = subprocess.run(
-            ["bash", "-c", f'source "{pb}"; printf "%s\\n" "${{makedepends[@]}}" "${{depends[@]}}"'],
-            capture_output=True, text=True,
-        ).stdout
+        # avoids reparsing bash arrays in Python. Bounded: a recipe should read its
+        # own arrays in well under a second; a hang here (e.g. a PKGBUILD that
+        # accidentally runs a network/blocking command at source time) would freeze
+        # the whole stage with no output, so we cap it and move on.
+        try:
+            out = subprocess.run(
+                ["bash", "-c", f'source "{pb}"; printf "%s\\n" "${{makedepends[@]}}" "${{depends[@]}}"'],
+                capture_output=True, text=True, timeout=30,
+            ).stdout
+        except subprocess.TimeoutExpired:
+            print(f"    [!] Reading deps from {d.name}/PKGBUILD timed out; continuing without them.")
+            continue
         for tok in out.split():
             tok = tok.strip()
             if tok:
@@ -154,15 +161,23 @@ def _import_librewolf_key(builder: str, sudo: list[str], offline: bool) -> None:
     if offline:
         return
     key = pkgbuild_cfg.LIBREWOLF_PGP_KEY
-    # Run gpg AS the builder (its keyring is what makepkg checks).
-    def as_builder(args: list[str]) -> subprocess.CompletedProcess:
-        if paths.is_root():
-            return _run(["sudo", "-u", builder, *args])
-        return _run(args)
+    print(f"    [+] Importing LibreWolf signing key {key[-8:]} from a keyserver...")
+    # Run gpg AS the builder (its keyring is what makepkg checks). Bounded per
+    # keyserver: gpg --recv-keys over hkps can hang for minutes on an unreachable
+    # or slow keyserver with ZERO output -- that was a prime cause of the stage
+    # sitting silent at "own packages". A timeout turns an unreachable keyserver
+    # into a fast failover to the next one instead of an invisible stall.
+    def as_builder(args: list[str]) -> int:
+        full = ["sudo", "-u", builder, *args] if paths.is_root() else args
+        try:
+            return subprocess.run(full, timeout=90).returncode
+        except subprocess.TimeoutExpired:
+            print(f"    [!] gpg timed out after 90s; trying the next keyserver.")
+            return 1
 
     for ks in ("hkps://keyserver.ubuntu.com", "hkps://keys.openpgp.org"):
-        r = as_builder(["gpg", "--keyserver", ks, "--recv-keys", key])
-        if r.returncode == 0:
+        print(f"    [+]   contacting {ks} ...")
+        if as_builder(["gpg", "--keyserver", ks, "--recv-keys", key]) == 0:
             print(f"    [+] Imported LibreWolf signing key {key[-8:]} from {ks}.")
             return
     raise MakepkgError(
@@ -196,22 +211,31 @@ def build_own_packages(offline: bool, full_compile: bool, progress: ProgressCb,
             return
         raise MakepkgError(
             f"Offline build but the built package(s) {', '.join(names)} are not in the cache.\n"
-            "    Rebuild once online (FORCE_ONLINE=1) or wipe cache/ so they get built."
+            "    Wipe cache/ (or `git clean -Xdf`) so the next run rebuilds them online.\n"
+            "    (An incomplete cache already forces an online run automatically; this\n"
+            "    fires only when the cache LOOKS complete but the own packages are absent.)"
         )
 
+    phase("own packages: preparing recipes")
+    print("    [+] Preparing makepkg scratch tree and emitting recipes...")
     scratch = paths.CACHEDIR / "makepkg"
     if scratch.exists():
         _run(sudo + ["rm", "-rf", str(scratch)], check=False)
     scratch.mkdir(parents=True, exist_ok=True)
 
     dirs = _emit_recipes(scratch, full_compile)
+    print(f"    [+] Emitted {len(dirs)} recipe(s): {', '.join(d.name for d in dirs)}.")
     progress(80)
 
     builder = _ensure_builder_user()
+    phase("own packages: collecting build deps")
+    print("    [+] Reading makedepends/depends from the recipes...")
     deps = _collect_makedepends(dirs)
+    phase("own packages: installing build deps")
     _install_host_build_deps(sudo, deps, offline)
     progress(200)
 
+    phase("own packages: importing signing key")
     _import_librewolf_key(builder, sudo, offline)
     progress(260)
 

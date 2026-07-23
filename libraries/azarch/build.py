@@ -24,7 +24,7 @@ import subprocess
 import sys
 import threading
 
-from . import estimate, logstream, paths, steps
+from . import estimate, logstream, makepkg, paths, steps
 from .ownership import Ownership
 from .progress import ProgressBar
 
@@ -35,8 +35,20 @@ def _sudo() -> list[str]:
 
 def cache_is_complete() -> bool:
     """The cache-first verdict: a COMPLETE cache => build with zero server contact.
-    Complete = local repo index symlink + at least one indexed pkg + synced DBs.
-    FORCE_ONLINE=1 overrides (re-fetch without wiping)."""
+    Complete = local repo index symlink + at least one indexed pkg + synced DBs +
+    OUR OWN built packages (calamares, librewolf) actually present.
+    FORCE_ONLINE=1 overrides (re-fetch without wiping).
+
+    The own-packages clause is load-bearing: a cache can hold all 800+ downloaded
+    Arch packages, a valid index, and synced DBs yet still LACK calamares/librewolf
+    (they are compiled by the makepkg stage, not downloaded -- so a fresh cache, or
+    one warmed by an earlier run that died before step 14, never has them). Without
+    this clause cache_is_complete() returned True, the build took the OFFLINE path,
+    and makepkg.build_own_packages then refused offline because the packages it was
+    supposed to produce were absent -- a permanent deadlock (offline can't build
+    them; nothing ever downgrades to online to build them). Treating their absence
+    as an incomplete cache makes the build go ONLINE, compile them, drop them into
+    cache/pkgs/repo/, and be genuinely offline-complete on the next run."""
     if os.environ.get("FORCE_ONLINE", "0") == "1":
         return False
     if not paths.LOCALREPO_INDEX.exists():
@@ -44,6 +56,10 @@ def cache_is_complete() -> bool:
     if not any(paths.PKG_REPO.glob("*.pkg.tar.zst")):
         return False
     if not paths.PKG_SYNC_DB.is_dir() or not any(paths.PKG_SYNC_DB.glob("*.db")):
+        return False
+    # produced_names is tier-independent (both own packages are always built), so
+    # full_compile=False is correct regardless of the eventual --full-compile flag.
+    if not makepkg._repo_has_all(paths.PKG_REPO, makepkg.produced_names(full_compile=False)):
         return False
     return True
 

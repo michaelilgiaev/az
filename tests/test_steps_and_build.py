@@ -57,12 +57,60 @@ def test_cache_complete_true_when_all_present(monkeypatch, tmp_path):
     idx = repo / "pacstrap-azarch-repo.db"
     idx.write_text("")
     (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
+    # OUR OWN built packages must be present too, else the cache is not complete
+    # (they are compiled by the makepkg stage, not downloaded).
+    (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
+    (repo / "librewolf-1.0-1-x86_64.pkg.tar.zst").write_text("")
     (sync / "core.db").write_text("")
 
     monkeypatch.setattr(build.paths, "LOCALREPO_INDEX", idx)
     monkeypatch.setattr(build.paths, "PKG_REPO", repo)
     monkeypatch.setattr(build.paths, "PKG_SYNC_DB", sync)
     assert build.cache_is_complete() is True
+
+
+def test_cache_complete_false_when_own_packages_absent(monkeypatch, tmp_path):
+    # The deadlock guard: 800+ Arch packages, a valid index, and synced DBs are all
+    # present, but calamares/librewolf (compiled, never downloaded) are NOT. This
+    # MUST read as an incomplete cache so the build goes ONLINE and compiles them --
+    # otherwise the offline path is chosen and makepkg refuses offline, hanging the
+    # build forever with nothing to downgrade it to online.
+    monkeypatch.setenv("FORCE_ONLINE", "0")
+    repo = tmp_path / "repo"
+    sync = tmp_path / "db" / "sync"
+    repo.mkdir(parents=True)
+    sync.mkdir(parents=True)
+    idx = repo / "pacstrap-azarch-repo.db"
+    idx.write_text("")
+    (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
+    (sync / "core.db").write_text("")
+    # calamares/librewolf deliberately absent.
+
+    monkeypatch.setattr(build.paths, "LOCALREPO_INDEX", idx)
+    monkeypatch.setattr(build.paths, "PKG_REPO", repo)
+    monkeypatch.setattr(build.paths, "PKG_SYNC_DB", sync)
+    assert build.cache_is_complete() is False
+
+
+def test_cache_complete_false_when_only_one_own_package_present(monkeypatch, tmp_path):
+    # Half-built (calamares present, librewolf missing) is still incomplete: both
+    # own packages are required, so a run that died mid-step-14 re-triggers online.
+    monkeypatch.setenv("FORCE_ONLINE", "0")
+    repo = tmp_path / "repo"
+    sync = tmp_path / "db" / "sync"
+    repo.mkdir(parents=True)
+    sync.mkdir(parents=True)
+    idx = repo / "pacstrap-azarch-repo.db"
+    idx.write_text("")
+    (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
+    (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
+    (sync / "core.db").write_text("")
+    # librewolf missing.
+
+    monkeypatch.setattr(build.paths, "LOCALREPO_INDEX", idx)
+    monkeypatch.setattr(build.paths, "PKG_REPO", repo)
+    monkeypatch.setattr(build.paths, "PKG_SYNC_DB", sync)
+    assert build.cache_is_complete() is False
 
 
 def test_cache_complete_false_when_no_synced_db(monkeypatch, tmp_path):
