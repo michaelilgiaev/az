@@ -170,7 +170,8 @@ The build runs in Docker, so the steps are the same on every operating system.
 5. **Get the ISO.** It's in the `output/` folder. On **Windows (WSL)** that folder
    opens in File Explorer at `\\wsl$\<distro>\home\<your-username>\azarch\output`.
 
-- **Wipe the cache** to force a fresh, fully-online rebuild. This deletes the git-ignored `cache/`, `output/`, and `logs/` directories:
+- **Wipe the cache** to force a fresh, fully-online rebuild. Run `clear.sh`,
+  which deletes the `cache/`, `output/`, and `logs/` directories:
 
   <table width="100%">
   <thead>
@@ -180,11 +181,11 @@ The build runs in Docker, so the steps are the same on every operating system.
   <tr><td>
 
   If the compile was stopped mid-process, the ownership handback may not have run,
-  so some files in `cache/` can be left root-owned and `git clean` won't remove
+  so some files in `cache/` can be left root-owned and a normal run can't remove
   them. In that case wipe it with:
 
   ```
-  sudo rm -rf cache/
+  sudo ./clear.sh
   ```
 
   </td></tr>
@@ -192,5 +193,5 @@ The build runs in Docker, so the steps are the same on every operating system.
   </table>
 
   ```
-  git clean -Xdf
+  ./clear.sh
   ```
