@@ -1,0 +1,42 @@
+name: Run Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      # Run the whole suite once per Python version. If one version breaks and
+      # another passes, both results are reported instead of the run stopping at
+      # the first failure. '3.12' matches the specifications workflow; '3.14'
+      # matches the version on the maintainer's machine.
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.14']
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # tests.sh is the single entry point. On a fresh runner there is no venv,
+      # so it creates one, installs requirements.txt into it, exports PYTHONPATH
+      # for the two import roots, and execs pytest. Nothing here duplicates that
+      # logic -- the CI runs the exact same command a developer runs locally.
+      - name: Run the test suite
+        run: bash tests.sh
