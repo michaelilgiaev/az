@@ -33,8 +33,15 @@ jobs:
           if git diff --quiet -- documentation/; then
             exit 0
           fi
-          git config user.name  "michaelilgiaev"
-          git config user.email "michaelilgiaev@gmail.com"
           git add documentation/
+          # Force BOTH author and committer to a human so the commit is never
+          # attributed to github-actions[bot] on the contributor graph. Setting
+          # only git config user.* is not enough: the runner stamps the committer
+          # from the token identity, so the bot reappears. These env vars write
+          # the author AND committer fields into the object itself before push.
+          GIT_AUTHOR_NAME="michaelilgiaev" \
+          GIT_AUTHOR_EMAIL="michaelilgiaev@gmail.com" \
+          GIT_COMMITTER_NAME="michaelilgiaev" \
+          GIT_COMMITTER_EMAIL="michaelilgiaev@gmail.com" \
           git commit -m "Regenerate specifications [skip ci]"
           git push
