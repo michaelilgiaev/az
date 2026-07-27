@@ -105,7 +105,7 @@ Plain-text raw dump of every component.
 
 ## Compile
 
-You can clone this repository and compile the ISO yourself. The first build needs an internet connection to download every component that goes into the ISO, after that everything is cached and rebuilds run fully offline. Build with Docker. The ISO is assembled with `mkarchiso`, which resolves the ISO's package list against the build host's Arch Linux repositories. That means the build only works on a genuine Arch userland with the real Arch `core`, `extra`, and `multilib` repositories. On anything else those repositories are wrong or missing and the build fails with errors like `target not found: archinstall` or endless kernel-provider prompts. Docker sidesteps all of that, the image is `archlinux:latest`, so the build runs inside real Arch no matter what machine you are on.
+You can clone this repository and compile the ISO yourself. The first compile needs an internet connection to download every component that goes into the ISO, after that everything is cached and recompiles run fully offline. Compile with Docker. The ISO is assembled with `mkarchiso`, which resolves the ISO's package list against the compile host's Arch Linux repositories. That means the compile only works on a genuine Arch userland with the real Arch `core`, `extra`, and `multilib` repositories. On anything else those repositories are wrong or missing and the compile fails with errors like `target not found: archinstall` or endless kernel-provider prompts. Docker sidesteps all of that, the image is `archlinux:latest`, so the compile runs inside real Arch no matter what machine you are on.
 
 1. **Install Docker and Git.**
 
@@ -133,13 +133,13 @@ You can clone this repository and compile the ISO yourself. The first build need
    git clone https://github.com/michaelilgiaev/azarch.git && cd azarch
    ```
 
-3. **Build the Docker image** (creates the Arch build environment)
+3. **Compile the Docker image** (creates the Arch compile environment)
    ```
    sudo docker build -t azarch .
    ```
 
 4. **Compile the ISO.** The finished ISO goes to `output/`, downloaded packages
-   are cached in `cache/`, and build logs go to `logs/`.
+   are cached in `cache/`, and compile logs go to `logs/`.
 
    <table width="100%">
    <thead>
@@ -148,10 +148,10 @@ You can clone this repository and compile the ISO yourself. The first build need
    <tbody>
    <tr><td>
 
-   **Estimate a build before you run it.** These flags don't build or download
+   **Estimate compile time.** These flags don't compile or download
    anything, they just measure your machine and connection and print how long a
-   build would take, then exit (no `sudo`, no privileged mounts needed). There are
-   six, picking the build tier (default vs `--full-compile`) and what to estimate:
+   compile would take, then exit (no `sudo`, no privileged mounts needed). There are
+   six, picking the compile tier (default vs `--full-compile`) and what to estimate:
 
    | Flag | Tier | Estimates |
    | --- | --- | --- |
@@ -164,7 +164,7 @@ You can clone this repository and compile the ISO yourself. The first build need
 
    The compile estimate reads your CPU cores and RAM; the network estimate runs a
    short bandwidth test against an Arch mirror and divides the tier's download size
-   by your measured speed. Example (estimate a full build, compute + network):
+   by your measured speed. Example (estimate a full compile, compute + network):
 
    ```
    sudo docker run --rm -it azarch --estimate
@@ -174,7 +174,7 @@ You can clone this repository and compile the ISO yourself. The first build need
    </tbody>
    </table>
 
-   **Default build** (recommended). Compiles only what's necessary. Everything else is downloaded as trusted, verified binaries.
+   **Default compile** (recommended). Compiles only what's necessary. Everything else is downloaded as trusted, verified binaries.
    ```
    sudo docker run --rm -it --init --privileged \
      -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
@@ -184,7 +184,7 @@ You can clone this repository and compile the ISO yourself. The first build need
      azarch
    ```
 
-   **Full build.** Compiles everything from source, which takes hours.
+   **Full compile.** Compiles everything from source, which takes hours.
 
    ```
    sudo docker run --rm -it --init --privileged \
@@ -198,7 +198,7 @@ You can clone this repository and compile the ISO yourself. The first build need
 5. **Get the ISO.** It's in the `output/` folder. On **Windows (WSL)** that folder
    opens in File Explorer at `\\wsl$\<distro>\home\<your-username>\azarch\output`.
 
-- **Wipe the cache** to force a fresh, fully-online rebuild. Run `clear.sh`,
+- **Wipe the cache** to force a fresh, fully-online recompile. Run `clear.sh`,
   which deletes the `cache/`, `output/`, and `logs/` directories:
 
   <table width="100%">
