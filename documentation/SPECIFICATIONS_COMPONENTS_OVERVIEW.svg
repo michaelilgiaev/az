@@ -11,9 +11,9 @@
 <text x="800" y="108" font-size="13" fill="#9da7b3">Desktop:</text>
 <text x="1060" y="108" font-size="13" font-weight="600" fill="#e6edf3">Openbox live session; getty autologin -&gt; startx -&gt; openbox-session, auto-launches Calamares</text>
 <text x="32" y="128" font-size="13" fill="#9da7b3">Kernel:</text>
-<text x="292" y="128" font-size="13" font-weight="600" fill="#e6edf3">linux 7.1.4.arch1-1</text>
+<text x="292" y="128" font-size="13" font-weight="600" fill="#e6edf3">linux 7.1.5.arch1-1</text>
 <text x="800" y="128" font-size="13" fill="#9da7b3">Init:</text>
-<text x="1060" y="128" font-size="13" font-weight="600" fill="#e6edf3">systemd 261.1-1</text>
+<text x="1060" y="128" font-size="13" font-weight="600" fill="#e6edf3">systemd 261.2-1</text>
 <text x="32" y="148" font-size="13" fill="#9da7b3">ISO version scheme:</text>
 <text x="292" y="148" font-size="13" font-weight="600" fill="#e6edf3">date-based, YYYY.MM.DD (no semver)</text>
 <text x="800" y="148" font-size="13" fill="#9da7b3">Live-session RAM (cow_spacesize):</text>
@@ -39,7 +39,7 @@
 <text x="397" y="241" font-size="11" fill="#03a5fc">★</text>
 <rect x="418" y="226" width="128" height="40" rx="6" fill="#3b82f6" fill-opacity="0.22" stroke="#3b82f6" stroke-width="1.4"/>
 <text x="426" y="243" font-size="11.5" font-weight="600" fill="#e6edf3">libreoffice-fresh</text>
-<text x="426" y="257" font-size="9" fill="#9da7b3">26.2.4</text>
+<text x="426" y="257" font-size="9" fill="#9da7b3">26.2.5</text>
 <text x="533" y="241" font-size="11" fill="#03a5fc">★</text>
 <rect x="554" y="226" width="128" height="40" rx="6" fill="#6b7280" fill-opacity="0.22" stroke="#6b7280" stroke-width="1.4"/>
 <text x="562" y="243" font-size="11.5" font-weight="600" fill="#e6edf3">base-devel</text>
@@ -92,7 +92,7 @@
 <text x="1106" y="421" font-size="9" fill="#9da7b3">0.5.12</text>
 <rect x="1234" y="390" width="128" height="40" rx="6" fill="#8a6d3b" fill-opacity="0.22" stroke="#8a6d3b" stroke-width="1.4"/>
 <text x="1242" y="407" font-size="11.5" font-weight="600" fill="#e6edf3">systemd</text>
-<text x="1242" y="421" font-size="9" fill="#9da7b3">261.1</text>
+<text x="1242" y="421" font-size="9" fill="#9da7b3">261.2</text>
 <rect x="1370" y="390" width="128" height="40" rx="6" fill="#dc2626" fill-opacity="0.22" stroke="#dc2626" stroke-width="1.4"/>
 <text x="1378" y="407" font-size="11.5" font-weight="600" fill="#e6edf3">tpm2-tss</text>
 <text x="1378" y="421" font-size="9" fill="#9da7b3">4.1.3</text>
@@ -245,7 +245,7 @@
 <text x="1106" y="797" font-size="9" fill="#9da7b3">1.0.8</text>
 <rect x="1234" y="766" width="128" height="40" rx="6" fill="#8a6d3b" fill-opacity="0.22" stroke="#8a6d3b" stroke-width="1.4"/>
 <text x="1242" y="783" font-size="11.5" font-weight="600" fill="#e6edf3">systemd-libs</text>
-<text x="1242" y="797" font-size="9" fill="#9da7b3">261.1</text>
+<text x="1242" y="797" font-size="9" fill="#9da7b3">261.2</text>
 <rect x="1370" y="766" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
 <text x="1378" y="783" font-size="11.5" font-weight="600" fill="#e6edf3">lib32-zstd</text>
 <text x="1378" y="797" font-size="9" fill="#9da7b3">1.5.7</text>
@@ -259,10 +259,10 @@
 <text x="48" y="1002" font-size="10" fill="#9da7b3">depends on layer(s) below ↓</text>
 <rect x="282" y="882" width="128" height="40" rx="6" fill="#db2777" fill-opacity="0.22" stroke="#db2777" stroke-width="1.4"/>
 <text x="290" y="899" font-size="11.5" font-weight="600" fill="#e6edf3">libstdc++</text>
-<text x="290" y="913" font-size="9" fill="#9da7b3">16.1.1+r346+g…</text>
+<text x="290" y="913" font-size="9" fill="#9da7b3">16.1.1+r581+g…</text>
 <rect x="418" y="882" width="128" height="40" rx="6" fill="#db2777" fill-opacity="0.22" stroke="#db2777" stroke-width="1.4"/>
 <text x="426" y="899" font-size="11.5" font-weight="600" fill="#e6edf3">lib32-gcc-libs</text>
-<text x="426" y="913" font-size="9" fill="#9da7b3">16.1.1+r346+g…</text>
+<text x="426" y="913" font-size="9" fill="#9da7b3">16.1.1+r581+g…</text>
 <rect x="554" y="882" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
 <text x="562" y="899" font-size="11.5" font-weight="600" fill="#e6edf3">ncurses</text>
 <text x="562" y="913" font-size="9" fill="#9da7b3">6.6</text>
@@ -277,7 +277,7 @@
 <text x="970" y="913" font-size="9" fill="#9da7b3">5.3.15</text>
 <rect x="1098" y="882" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
 <text x="1106" y="899" font-size="11.5" font-weight="600" fill="#e6edf3">sqlite</text>
-<text x="1106" y="913" font-size="9" fill="#9da7b3">3.53.3</text>
+<text x="1106" y="913" font-size="9" fill="#9da7b3">3.53.4</text>
 <rect x="1234" y="882" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
 <text x="1242" y="899" font-size="11.5" font-weight="600" fill="#e6edf3">lib32-libxcrypt</text>
 <text x="1242" y="913" font-size="9" fill="#9da7b3">4.5.2</text>
@@ -324,13 +324,13 @@
 <text x="290" y="1077" font-size="9" fill="#9da7b3">2025.10.12</text>
 <rect x="418" y="1046" width="128" height="40" rx="6" fill="#6b7280" fill-opacity="0.22" stroke="#6b7280" stroke-width="1.4"/>
 <text x="426" y="1063" font-size="11.5" font-weight="600" fill="#e6edf3">glibc</text>
-<text x="426" y="1077" font-size="9" fill="#9da7b3">2.43+r37+gfdf…</text>
+<text x="426" y="1077" font-size="9" fill="#9da7b3">2.44+r3+g0b05…</text>
 <rect x="554" y="1046" width="128" height="40" rx="6" fill="#db2777" fill-opacity="0.22" stroke="#db2777" stroke-width="1.4"/>
 <text x="562" y="1063" font-size="11.5" font-weight="600" fill="#e6edf3">libgcc</text>
-<text x="562" y="1077" font-size="9" fill="#9da7b3">16.1.1+r346+g…</text>
+<text x="562" y="1077" font-size="9" fill="#9da7b3">16.1.1+r581+g…</text>
 <rect x="690" y="1046" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
 <text x="698" y="1063" font-size="11.5" font-weight="600" fill="#e6edf3">lib32-glibc</text>
-<text x="698" y="1077" font-size="9" fill="#9da7b3">2.43+r37+gfdf…</text>
+<text x="698" y="1077" font-size="9" fill="#9da7b3">2.44+r3+g0b05…</text>
 <rect x="826" y="1046" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
 <text x="834" y="1063" font-size="11.5" font-weight="600" fill="#e6edf3">zlib</text>
 <text x="834" y="1077" font-size="9" fill="#9da7b3">1:1.3.2</text>
@@ -372,7 +372,7 @@
 <text x="1242" y="1125" font-size="9" fill="#9da7b3">1.8.0</text>
 <rect x="1370" y="1094" width="128" height="40" rx="6" fill="#94a3b8" fill-opacity="0.22" stroke="#94a3b8" stroke-width="1.4"/>
 <text x="1378" y="1111" font-size="11.5" font-weight="600" fill="#e6edf3">libgomp</text>
-<text x="1378" y="1125" font-size="9" fill="#9da7b3">16.1.1+r346+g…</text>
+<text x="1378" y="1125" font-size="9" fill="#9da7b3">16.1.1+r581+g…</text>
 <text x="1556" y="1168" font-size="11" text-anchor="end" fill="#9da7b3">+125 more in this layer</text>
 <rect x="32" y="1194" width="1536" height="150" rx="10" fill="#161b22" stroke="#30363d"/>
 <line x1="274" y1="1204" x2="274" y2="1334" stroke="#30363d"/>

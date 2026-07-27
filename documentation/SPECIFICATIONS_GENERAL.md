@@ -8,8 +8,8 @@ Technical, developer-facing specification of the Az'arch Linux distribution. It 
 
 - **Base distribution:** Arch Linux (rolling), x86_64
 - **Live session:** Openbox live session; getty autologin -> startx -> openbox-session, auto-launches Calamares
-- **Kernel:** `linux` 7.1.4.arch1-1
-- **Init:** `systemd` 261.1-1
+- **Kernel:** `linux` 7.1.5.arch1-1
+- **Init:** `systemd` 261.2-1
 - **Display manager / session:** None -- getty autologin to startx (no display manager)
 - **ISO versioning:** date-based, YYYY.MM.DD (no semver)
 - **Live-session writable RAM (`cow_spacesize`):** 4G writable overlay held in RAM
@@ -38,7 +38,7 @@ Technical, developer-facing specification of the Az'arch Linux distribution. It 
 
 ## 2. Base and identity
 
-Az'arch is [Arch Linux](https://archlinux.org) -- rolling release, `x86_64` -- with a curated package set and Az'arch branding/config on top. Every package comes unmodified from the official Arch repositories; Arch's own documentation, the [ArchWiki](https://wiki.archlinux.org), applies directly. The kernel is `linux` 7.1.4.arch1-1 and the init system is `systemd` 261.1-1. The medium is versioned date-based, YYYY.MM.DD (no semver).
+Az'arch is [Arch Linux](https://archlinux.org) -- rolling release, `x86_64` -- with a curated package set and Az'arch branding/config on top. Every package comes unmodified from the official Arch repositories; Arch's own documentation, the [ArchWiki](https://wiki.archlinux.org), applies directly. The kernel is `linux` 7.1.5.arch1-1 and the init system is `systemd` 261.2-1. The medium is versioned date-based, YYYY.MM.DD (no semver).
 
 Identity is set through `/usr/lib/os-release`: `NAME="Az'arch Linux"` with `ID=arch` and `ID_LIKE=arch` kept deliberately -- so tooling that keys off `ID` still treats the system as Arch -- `BUILD_ID=rolling`, and `HOME_URL` pointing at the project repository. The branding is presentational; the system remains Arch underneath.
 
@@ -97,24 +97,24 @@ What the medium can do, grouped by the role each component plays. Counts and siz
 | Category | Components | Installed size | Provides |
 |---|---:|---:|---|
 | Kernel & firmware | 21 | 987.7 MiB | the Linux kernel, CPU microcode, and device firmware blobs |
-| Boot & init | 14 | 123.6 MiB | boot loaders for both firmware types, the initramfs generator, and the systemd init/service manager |
-| Core system | 13 | 71.2 MiB | the base userland -- C library, coreutils, package manager, PAM/polkit, and privilege escalation |
-| Shell & CLI tools | 30 | 74.9 MiB | interactive shells, terminal editors, pagers, multiplexers, and everyday command-line utilities |
+| Boot & init | 14 | 123.7 MiB | boot loaders for both firmware types, the initramfs generator, and the systemd init/service manager |
+| Core system | 13 | 71.5 MiB | the base userland -- C library, coreutils, package manager, PAM/polkit, and privilege escalation |
+| Shell & CLI tools | 30 | 75.0 MiB | interactive shells, terminal editors, pagers, multiplexers, and everyday command-line utilities |
 | Desktop app | 2 | 426.7 MiB | graphical end-user applications shipped on the medium |
 | GUI toolkit/framework | 22 | 417.0 MiB | the widget toolkits and UI frameworks graphical apps are built on |
-| Graphics & display | 83 | 265.9 MiB | the X11 display server, Mesa/Vulkan drivers, and display configuration |
+| Graphics & display | 83 | 266.0 MiB | the X11 display server, Mesa/Vulkan drivers, and display configuration |
 | Audio | 36 | 47.9 MiB | the audio server and mixer/control tooling |
 | Networking | 39 | 134.6 MiB | connection management, wireless, VPN, SSH, DNS, and network diagnostics |
 | Storage & filesystems | 44 | 68.1 MiB | partitioning, RAID/LVM, encryption setup, and filesystem/imaging tooling |
-| Security & crypto | 18 | 71.5 MiB | the host firewall, full-disk encryption, TPM/FIDO/smartcard, and OpenPGP |
-| Developer tools | 92 | 884.7 MiB | compilers, build tooling, version control, and developer editors |
-| Language runtime | 22 | 895.4 MiB | language interpreters and runtimes available out of the box |
+| Security & crypto | 18 | 71.0 MiB | the host firewall, full-disk encryption, TPM/FIDO/smartcard, and OpenPGP |
+| Developer tools | 92 | 885.3 MiB | compilers, build tooling, version control, and developer editors |
+| Language runtime | 22 | 895.5 MiB | language interpreters and runtimes available out of the box |
 | Multimedia codec/player | 64 | 188.3 MiB | media players and the codec/plugin stack that decodes and encodes them |
 | Fonts & icons | 20 | 155.6 MiB | console and desktop fonts, cursors, and icon themes |
 | Printing & scanning | 4 | 16.4 MiB | the printing subsystem and its device support |
 | Bluetooth & devices | 12 | 16.8 MiB | Bluetooth, USB, accessibility, and other peripheral device support |
 | Virtualization guest | 4 | 7.9 MiB | guest integration agents for the major hypervisors |
-| Shared library | 320 | 608.6 MiB | shared libraries other components link against |
+| Shared library | 320 | 608.8 MiB | shared libraries other components link against |
 | System | 124 | 353.7 MiB | supporting system components that back the above |
 
 ---

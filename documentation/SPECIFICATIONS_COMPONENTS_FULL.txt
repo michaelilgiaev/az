@@ -21,8 +21,8 @@ AT A GLANCE
 ------------------------------------------------------------------------------
   Base                                       Arch Linux (rolling), x86_64
   Desktop                                    Openbox live session; getty autologin -> startx -> openbox-session, auto-launches Calamares
-  Kernel                                     linux 7.1.4.arch1-1
-  Init                                       systemd 261.1-1
+  Kernel                                     linux 7.1.5.arch1-1
+  Init                                       systemd 261.2-1
   Live-session writable RAM                  4G writable overlay held in RAM
   Packages (full closure)                    984
     from core / extra / multilib             227 / 652 / 105
@@ -55,7 +55,7 @@ Search this section to jump; full entries follow below.
   linux-api-headers                 stock     System                      7.1-1
   tzdata                            stock     System                      2026c-1
   pambase                           stock     Core system                 20260616-1
-  libsysprof-capture                stock     Shared library              50.0-2
+  libsysprof-capture                stock     Shared library              50.0-3
   xorgproto                         stock     Graphics & display          2025.1-1
   xcb-proto                         stock     Graphics & display          1.17.0-4
   default-cursors                   az'arch   Fonts & icons               3-1
@@ -87,7 +87,7 @@ Search this section to jump; full entries follow below.
   linux-firmware-other              stock     Kernel & firmware           20260622-1
   lxmenu-data                       az'arch   System                      0.1.7-1
   uriparser                         stock     System                      1.0.2-1
-  vim-runtime                       stock     Language runtime            9.2.0804-1
+  vim-runtime                       stock     Language runtime            9.2.0849-1
   amd-ucode                         stock     Kernel & firmware           20260622-1
   edk2-shell                        stock     Boot & init                 202605-1
   gnome-themes-extra                az'arch   Fonts & icons               1:3.28-1
@@ -108,9 +108,9 @@ Search this section to jump; full entries follow below.
   wireless_tools                    stock     Networking                  30.pre9-5
   xcursor-themes                    az'arch   System                      1.0.7-2
   filesystem                        stock     Core system                 2025.10.12-1
-  glibc                             stock     Core system                 2.43+r37+gfdf10644d6ee-1
-  libgcc                            stock     Language runtime            16.1.1+r346+g4e03491b401d-4
-  lib32-glibc                       stock     Shared library              2.43+r37+gfdf10644d6ee-1
+  glibc                             stock     Core system                 2.44+r3+g0b05bc142249-1
+  libgcc                            stock     Language runtime            16.1.1+r581+gb73ad535acaa-1
+  lib32-glibc                       stock     Shared library              2.44+r3+g0b05bc142249-1
   zlib                              stock     Shared library              1:1.3.2-3
   lz4                               stock     Shared library              1:1.10.0-2
   libxcrypt                         stock     Shared library              4.5.2-1
@@ -124,8 +124,8 @@ Search this section to jump; full entries follow below.
   libunistring                      stock     Shared library              1.4.2-1
   attr                              stock     Shared library              2.6.0-1
   leancrypto                        stock     System                      1.8.0-1
-  libgomp                           stock     Shared library              16.1.1+r346+g4e03491b401d-4
-  libatomic                         stock     Shared library              16.1.1+r346+g4e03491b401d-4
+  libgomp                           stock     Shared library              16.1.1+r581+gb73ad535acaa-1
+  libatomic                         stock     Shared library              16.1.1+r581+gb73ad535acaa-1
   findutils                         stock     System                      4.11.0-1
   libnghttp2                        stock     Shared library              1.69.0-1
   libnghttp3                        stock     Shared library              1.17.0-1
@@ -231,7 +231,7 @@ Search this section to jump; full entries follow below.
   lpsolve                           az'arch   System                      5.5.2.14-1
   net-tools                         stock     System                      2.10-3
   numactl                           stock     Shared library              2.0.19-1
-  pkgconf                           az'arch   Developer tools             3.0.3-1
+  pkgconf                           az'arch   Developer tools             3.0.4-1
   sysfsutils                        stock     System                      2.1.1-2
   yyjson                            az'arch   Shared library              0.12.0-1
   zlib-ng                           az'arch   Shared library              2.3.3-1
@@ -241,7 +241,7 @@ Search this section to jump; full entries follow below.
   exfatprogs                        stock     Storage & filesystems       1.4.2-1
   gpart                             stock     Storage & filesystems       0.3-6
   hdparm                            stock     Storage & filesystems       9.65-3
-  hyperv                            stock     Virtualization guest        7.1.4-1
+  hyperv                            stock     Virtualization guest        7.1.5-1
   linux-atm                         stock     System                      2.5.2-9
   linux-firmware                    stock     Kernel & firmware           20260622-1
   linux-firmware-marvell            stock     Kernel & firmware           20260622-1
@@ -250,13 +250,13 @@ Search this section to jump; full entries follow below.
   pv                                stock     Shell & CLI tools           1.11.0-1
   sg3_utils                         stock     Storage & filesystems       1.48-1
   xdg-user-dirs                     az'arch   System                      0.20-1
-  libstdc++                         stock     Language runtime            16.1.1+r346+g4e03491b401d-4
-  lib32-gcc-libs                    stock     Language runtime            16.1.1+r346+g4e03491b401d-4
+  libstdc++                         stock     Language runtime            16.1.1+r581+gb73ad535acaa-1
+  lib32-gcc-libs                    stock     Language runtime            16.1.1+r581+gb73ad535acaa-1
   ncurses                           stock     Shared library              6.6-2
   lib32-ncurses                     stock     Shared library              6.6-2
   readline                          stock     Shared library              8.3.003-1
   bash                              stock     Shell & CLI tools           5.3.15-1
-  sqlite                            stock     Shared library              3.53.3-1
+  sqlite                            stock     Shared library              3.53.4-1
   lib32-libxcrypt                   stock     Shared library              4.5.2-1
   lib32-libffi                      stock     Shared library              3.7.1-1
   gmp                               stock     System                      6.3.0-3
@@ -268,15 +268,15 @@ Search this section to jump; full entries follow below.
   lib32-libidn2                     stock     Shared library              2.3.8-1
   lib32-libtasn1                    stock     Shared library              4.21.0-1
   lib32-p11-kit                     stock     Shared library              0.26.4-1
-  libquadmath                       stock     Shared library              16.1.1+r346+g4e03491b401d-4
-  libasan                           stock     Language runtime            16.1.1+r346+g4e03491b401d-4
-  libhwasan                         stock     Language runtime            16.1.1+r346+g4e03491b401d-4
-  liblsan                           stock     Language runtime            16.1.1+r346+g4e03491b401d-4
-  libtsan                           stock     Language runtime            16.1.1+r346+g4e03491b401d-4
-  libubsan                          stock     Language runtime            16.1.1+r346+g4e03491b401d-4
-  libgfortran                       stock     Language runtime            16.1.1+r346+g4e03491b401d-4
-  libobjc                           stock     Language runtime            16.1.1+r346+g4e03491b401d-4
-  gcc-libs                          stock     Developer tools             16.1.1+r346+g4e03491b401d-4
+  libquadmath                       stock     Shared library              16.1.1+r581+gb73ad535acaa-1
+  libasan                           stock     Language runtime            16.1.1+r581+gb73ad535acaa-1
+  libhwasan                         stock     Language runtime            16.1.1+r581+gb73ad535acaa-1
+  liblsan                           stock     Language runtime            16.1.1+r581+gb73ad535acaa-1
+  libtsan                           stock     Language runtime            16.1.1+r581+gb73ad535acaa-1
+  libubsan                          stock     Language runtime            16.1.1+r581+gb73ad535acaa-1
+  libgfortran                       stock     Language runtime            16.1.1+r581+gb73ad535acaa-1
+  libobjc                           stock     Language runtime            16.1.1+r581+gb73ad535acaa-1
+  gcc-libs                          stock     Developer tools             16.1.1+r581+gb73ad535acaa-1
   lib32-brotli                      stock     Shared library              1.2.0-2
   lib32-gmp                         stock     Shared library              6.3.0-2
   lib32-nettle                      stock     Shared library              4.0-2
@@ -419,7 +419,7 @@ Search this section to jump; full entries follow below.
   ell                               stock     System                      0.83-1
   iw                                stock     Networking                  6.17-1
   jemalloc                          stock     Shared library              1:5.3.1-2
-  kitty-terminfo                    stock     Shell & CLI tools           0.48.0-1
+  kitty-terminfo                    stock     Shell & CLI tools           0.48.1-1
   lib32-libsodium                   stock     Security & crypto           1.0.22-1
   libcdio-paranoia                  az'arch   Audio                       10.2+2.0.2-2
   libconfig                         az'arch   Shared library              1.8.2-2
@@ -465,12 +465,12 @@ Search this section to jump; full entries follow below.
   libgpg-error                      stock     Shared library              1.61-1
   libgcrypt                         stock     Shared library              1.12.2-1
   bzip2                             stock     Shared library              1.0.8-6
-  systemd-libs                      stock     Boot & init                 261.1-1
+  systemd-libs                      stock     Boot & init                 261.2-1
   lib32-zstd                        stock     Shared library              1.5.7-2
   lib32-xz                          stock     Shared library              5.8.3-1
   lib32-libgpg-error                stock     Shared library              1.61-1
   lib32-libgcrypt                   stock     Shared library              1.12.2-1
-  lib32-systemd                     stock     Shared library              261.1-1
+  lib32-systemd                     stock     Shared library              261.2-1
   pcre2                             stock     Shared library              10.47-1
   lib32-util-linux                  stock     Shared library              2.42.2-1
   gnutls                            stock     System                      3.8.13-2
@@ -544,7 +544,7 @@ Search this section to jump; full entries follow below.
   libxt                             stock     Graphics & display          1.3.1-1
   perl-http-date                    az'arch   Developer tools             6.08-1
   perl-mime-base32                  az'arch   Developer tools             1.303-13
-  libtool                           stock     Developer tools             2.6.2-1
+  libtool                           stock     Developer tools             2.6.2-2
   perl-uri                          az'arch   Developer tools             5.35-1
   gpm                               stock     Developer tools             1.20.7.r38.ge82d1a6-6
   lib32-freetype2                   az'arch   Fonts & icons               2.14.3-1
@@ -560,7 +560,7 @@ Search this section to jump; full entries follow below.
   lib32-libsndfile                  az'arch   Audio                       1.2.2-3
   parted                            stock     Storage & filesystems       3.7-1
   pcre                              stock     Shared library              8.45-4
-  perl-http-message                 az'arch   Developer tools             7.03-1
+  perl-http-message                 az'arch   Developer tools             7.04-1
   hidapi                            stock     Bluetooth & devices         0.15.0-1
   lib32-fontconfig                  az'arch   Fonts & icons               2:2.18.2-1
   slang                             stock     System                      2.3.3-4
@@ -701,7 +701,7 @@ Search this section to jump; full entries follow below.
   tmux                              stock     Shell & CLI tools           3.7_b-1
   unzip                             az'arch   Shell & CLI tools           6.0-23
   usb_modeswitch                    stock     Bluetooth & devices         2.6.2.20251207-1
-  vim                               stock     Shell & CLI tools           9.2.0804-1
+  vim                               stock     Shell & CLI tools           9.2.0849-1
   wireless-regdb                    stock     Kernel & firmware           2026.05.30-1
   xclip                             az'arch   Shell & CLI tools           0.13-6
   xorg-xinit                        az'arch   Graphics & display          1.4.4-1
@@ -802,12 +802,12 @@ Search this section to jump; full entries follow below.
   libblockdev-nvme                  az'arch   Shared library              3.5.0-2
   libixion                          az'arch   Language runtime            0.20.0-7
   libopenmpt                        az'arch   Audio                       0.8.7-1
-  linux                             stock     Kernel & firmware           7.1.4.arch1-1
+  linux                             stock     Kernel & firmware           7.1.5.arch1-1
   nilfs-utils                       stock     Storage & filesystems       2.3.0-1
   perl-libwww                       az'arch   Developer tools             6.83-1
   pipewire-audio                    az'arch   Audio                       1:1.6.8-1
   pipewire-session-manager          az'arch   Audio                       1:1.6.8-1
-  python-annotated-types            stock     Developer tools             0.7.0-3
+  python-annotated-types            stock     Developer tools             0.8.0-1
   python-charset-normalizer         stock     Developer tools             3.4.7-1
   python-cryptography               stock     Developer tools             49.0.0-1
   python-idna                       stock     Developer tools             3.18-1
@@ -831,7 +831,7 @@ Search this section to jump; full entries follow below.
   fakeroot                          az'arch   Developer tools             1:1.37.2-2
   gssproxy                          stock     System                      0.9.2-3
   iputils                           stock     Networking                  20250605-1
-  kitty-shell-integration           az'arch   Graphics & display          0.48.0-1
+  kitty-shell-integration           az'arch   Graphics & display          0.48.1-1
   lib32-libpcap                     stock     Shared library              1.10.6-1
   liborcus                          az'arch   Shared library              0.21.0-6
   libuv                             stock     Shared library              1.52.1-1
@@ -852,7 +852,7 @@ Search this section to jump; full entries follow below.
   python-wheel                      az'arch   Developer tools             0.47.0-1
   python-yaml                       stock     Developer tools             6.0.3-2
   rpcbind                           stock     System                      1.2.9-1
-  screen                            stock     Shell & CLI tools           5.0.1-3
+  screen                            stock     Shell & CLI tools           5.0.2-1
   sshfs                             stock     System                      3.7.6-1
   texinfo                           az'arch   Developer tools             7.3-1
   wvstreams                         stock     Networking                  4.6.1-21
@@ -861,7 +861,7 @@ Search this section to jump; full entries follow below.
   bind                              stock     Networking                  9.20.26-1
   bluez                             az'arch   Bluetooth & devices         5.87-2
   bluez-utils                       az'arch   Bluetooth & devices         5.87-2
-  broadcom-wl                       stock     Kernel & firmware           6.30.223.271-713
+  broadcom-wl                       stock     Kernel & firmware           6.30.223.271-715
   dnsmasq                           stock     Networking                  2.93-1
   dotnet-sdk                        az'arch   Developer tools             10.0.10.sdk110-1
   espeakup                          stock     Bluetooth & devices         0.90-4
@@ -896,7 +896,7 @@ Search this section to jump; full entries follow below.
   libglvnd                          az'arch   Graphics & display          1.7.0-3
   mesa                              az'arch   Graphics & display          1:26.1.5-1
   libproxy                          stock     Shared library              0.5.12-1
-  systemd                           stock     Boot & init                 261.1-1
+  systemd                           stock     Boot & init                 261.2-1
   tpm2-tss                          stock     Security & crypto           4.1.3-1
   libsecret                         stock     Shared library              0.21.7-1
   lib32-curl                        stock     Shared library              8.21.0-1
@@ -910,7 +910,7 @@ Search this section to jump; full entries follow below.
   libepoxy                          az'arch   Graphics & display          1.5.10-3
   qt6-base                          az'arch   GUI toolkit/framework       6.11.1-1
   libsoup3                          az'arch   Shared library              3.6.6-2
-  binutils                          stock     Developer tools             2.46.1+r3+g046eeeef4721-1
+  binutils                          stock     Developer tools             2.46.1+r3+g046eeeef4721-2
   lib32-libbpf                      stock     Shared library              1.7.0-1
   iproute2                          stock     System                      7.1.0-1
   lib32-polkit                      stock     Shared library              127-1
@@ -965,7 +965,7 @@ Search this section to jump; full entries follow below.
   dhclient                          stock     System                      4.4.3.P1-4
   ecryptfs-utils                    stock     Storage & filesystems       111-9
   ffmpeg                            az'arch   Multimedia codec/player     2:8.1.2-10
-  gcc                               az'arch   Developer tools             16.1.1+r346+g4e03491b401d-4
+  gcc                               az'arch   Developer tools             16.1.1+r581+gb73ad535acaa-1
   karchive                          az'arch   GUI toolkit/framework       6.28.0-1
   kwidgetsaddons                    az'arch   GUI toolkit/framework       6.28.0-1
   lib32-libproxy                    stock     Shared library              0.5.12-1
@@ -986,7 +986,7 @@ Search this section to jump; full entries follow below.
   qt6-declarative                   az'arch   GUI toolkit/framework       6.11.1-3
   qt6-shadertools                   az'arch   GUI toolkit/framework       6.11.1-1
   redland                           az'arch   System                      1:1.0.17-10
-  systemd-sysvcompat                stock     System                      261.1-1
+  systemd-sysvcompat                stock     System                      261.2-1
   vlc-gui-qt                        az'arch   System                      3.0.23_2-9
   vpnc                              stock     Networking                  1:0.5.3.r557.r241-1
   bcachefs-tools                    stock     Storage & filesystems       3:1.38.8-2
@@ -1000,16 +1000,16 @@ Search this section to jump; full entries follow below.
   grub                              stock     Boot & init                 2:2.14-1
   kconfig                           az'arch   GUI toolkit/framework       6.28.0-1
   kcrash                            az'arch   GUI toolkit/framework       6.28.0-1
-  kitty                             az'arch   Graphics & display          0.48.0-1
+  kitty                             az'arch   Graphics & display          0.48.1-1
   kpackage                          az'arch   GUI toolkit/framework       6.28.0-1
   kpmcore                           az'arch   System                      26.04.3-1
-  linux-headers                     az'arch   Kernel & firmware           7.1.4.arch1-1
+  linux-headers                     az'arch   Kernel & firmware           7.1.5.arch1-1
   lxappearance                      az'arch   System                      0.6.4-3
   mkinitcpio-archiso                stock     Boot & init                 73-1
   modemmanager                      stock     Networking                  1.24.2-1
   open-vm-tools                     stock     Virtualization guest        6:13.1.0-2
   openconnect                       stock     Networking                  1:9.21-1
-  openpgp-card-tools                stock     Security & crypto           0.11.12-1
+  openpgp-card-tools                stock     Security & crypto           0.11.13-1
   openvpn                           stock     Networking                  2.7.5-1
   pcmanfm                           az'arch   System                      1.4.0-2
   picom                             az'arch   Graphics & display          13-2
@@ -1018,7 +1018,7 @@ Search this section to jump; full entries follow below.
   qt6-5compat                       az'arch   GUI toolkit/framework       6.11.1-1
   qt6-svg                           az'arch   GUI toolkit/framework       6.11.1-1
   rp-pppoe                          az'arch   Networking                  4.0-6
-  systemd-resolvconf                stock     Core system                 261.1-1
+  systemd-resolvconf                stock     Core system                 261.2-1
   tpm2-tools                        stock     Security & crypto           5.7-1
   usbmuxd                           stock     Bluetooth & devices         1.1.1-4
   vlc                               az'arch   Multimedia codec/player     3.0.23_2-9
@@ -1033,7 +1033,7 @@ Search this section to jump; full entries follow below.
   base-devel                        az'arch   Core system                 1-2
   cups                              az'arch   Printing & scanning         2:2.4.19-1
   gvfs                              az'arch   Desktop app                 1.60.1-1
-  libreoffice-fresh                 az'arch   Desktop app                 26.2.4-4
+  libreoffice-fresh                 az'arch   Desktop app                 26.2.5-1
   network-manager-applet            az'arch   Networking                  1.36.0-2
 
 ==============================================================================
@@ -1245,7 +1245,7 @@ optional:
 
 ------------------------------------------------------------------------------
 
-### libreoffice-fresh  (26.2.4-4)
+### libreoffice-fresh  (26.2.5-1)
 
 purpose: LibreOffice branch which contains new features and program
          enhancements
@@ -1254,7 +1254,7 @@ upstream: https://www.libreoffice.org/
 edition:  az'arch  (Az'arch Component: in the set only because Az'arch added it on top of stock archiso)
 category: Desktop app
 layer:    6 of 6  (Leaves (34+) -- top; the deepest chains -- nothing depends on these)
-repo:     extra    installed size: 421.4 MiB    license: MPL-2.0 LGPL-3.0-or-later
+repo:     extra    installed size: 421.5 MiB    license: MPL-2.0 LGPL-3.0-or-later
 
 depth:    225 pkgs pulled in below it (transitively); 0 pkgs above rely on it
 requires: argon2, bash, boost-libs, cairo, clucene, curl, dbus, expat,
@@ -1438,7 +1438,7 @@ required-by: glib-networking, lib32-libproxy, openconnect, qt5-base, qt6-base
 
 ------------------------------------------------------------------------------
 
-### systemd  (261.1-1)
+### systemd  (261.2-1)
 
 purpose: system and service manager
 upstream: https://www.github.com/systemd/systemd
@@ -1446,7 +1446,7 @@ upstream: https://www.github.com/systemd/systemd
 edition:  stock    (Stock Arch: already on the stock archiso releng medium)
 category: Boot & init
 layer:    5 of 6  (Depth 24-33 -- near the top; systemd, mesa, X, Qt, toolkits)
-repo:     core    installed size: 39.4 MiB    license: LGPL-2.1-or-later CC0-1.0 GPL-2.0-or-later MIT-0
+repo:     core    installed size: 39.5 MiB    license: LGPL-2.1-or-later CC0-1.0 GPL-2.0-or-later MIT-0
 az'arch: Rebranded systemd-boot UEFI loader entries + two live-ISO oneshot
          service units  [shipped, with Az'arch changes]
 
@@ -1458,21 +1458,22 @@ required-by: archinstall, base, bcachefs-tools, bolt, cloud-init, cups, dunst,
              gvfs, mdadm, mkinitcpio, pacman, polkit, systemd-resolvconf,
              systemd-sysvcompat
 optional:
-    libmicrohttpd: systemd-journal-gatewayd and systemd-journal-remote
     apparmor: additional security features
-    quota-tools: kernel-level quota management
-    systemd-sysvcompat: symlink package to provide sysvinit binaries
-    systemd-ukify: combine kernel and initrd into a signed Unified Kernel Image
-    polkit: allow administration as unprivileged user
     curl: systemd-journal-upload, machinectl pull-tar and pull-raw
     gnutls: systemd-journal-gatewayd and systemd-journal-remote
-    qrencode: show QR codes
     iptables: firewall features
     libarchive: convert DDIs to tarballs
     libbpf: support BPF programs
-    libpwquality: check password quality
     libfido2: unlocking LUKS2 volumes with FIDO2 token
+    libmicrohttpd: systemd-journal-gatewayd and systemd-journal-remote
     libp11-kit: support PKCS#11
+    libpwquality: check password quality
+    polkit: allow administration as unprivileged user
+    qemu-base: systemd-vmspawn
+    qrencode: show QR codes
+    quota-tools: kernel-level quota management
+    systemd-sysvcompat: symlink package to provide sysvinit binaries
+    systemd-ukify: combine kernel and initrd into a signed Unified Kernel Image
     tpm2-tss: unlocking LUKS2 volumes with TPM2
 
 ------------------------------------------------------------------------------
@@ -1728,7 +1729,7 @@ optional:
 
 ------------------------------------------------------------------------------
 
-### binutils  (2.46.1+r3+g046eeeef4721-1)
+### binutils  (2.46.1+r3+g046eeeef4721-2)
 
 purpose: A set of programs to assemble and manipulate binary and object files
 upstream: https://www.gnu.org/software/binutils/
@@ -2741,7 +2742,7 @@ optional:
 
 ------------------------------------------------------------------------------
 
-### gcc  (16.1.1+r346+g4e03491b401d-4)
+### gcc  (16.1.1+r581+gb73ad535acaa-1)
 
 purpose: The GNU Compiler Collection - C and C++ frontends
 upstream: https://gcc.gnu.org
@@ -2749,7 +2750,7 @@ upstream: https://gcc.gnu.org
 edition:  az'arch  (Az'arch Component: in the set only because Az'arch added it on top of stock archiso)
 category: Developer tools
 layer:    5 of 6  (Depth 24-33 -- near the top; systemd, mesa, X, Qt, toolkits)
-repo:     core    installed size: 220.2 MiB    license: GPL-3.0-or-later WITH GCC-exception-3.1 GFDL-1.3-or-later
+repo:     core    installed size: 220.8 MiB    license: GPL-3.0-or-later WITH GCC-exception-3.1 GFDL-1.3-or-later
 
 depth:    100 pkgs pulled in below it (transitively); 1 pkgs above rely on it
 requires: binutils, glibc, gmp, libasan, libgcc, libhwasan, libisl, liblsan,
@@ -3127,7 +3128,7 @@ required-by: libreoffice-fresh
 
 ------------------------------------------------------------------------------
 
-### systemd-sysvcompat  (261.1-1)
+### systemd-sysvcompat  (261.2-1)
 
 purpose: sysvinit compat for systemd
 upstream: https://www.github.com/systemd/systemd
@@ -3135,7 +3136,7 @@ upstream: https://www.github.com/systemd/systemd
 edition:  stock    (Stock Arch: already on the stock archiso releng medium)
 category: System
 layer:    5 of 6  (Depth 24-33 -- near the top; systemd, mesa, X, Qt, toolkits)
-repo:     core    installed size: 2.6 KiB    license: LGPL-2.1-or-later
+repo:     core    installed size: 2.8 KiB    license: LGPL-2.1-or-later
 
 depth:    114 pkgs pulled in below it (transitively); 1 pkgs above rely on it
 requires: systemd
@@ -3426,7 +3427,7 @@ optional:
 
 ------------------------------------------------------------------------------
 
-### kitty  (0.48.0-1)
+### kitty  (0.48.1-1)
 
 purpose: A modern, hackable, featureful, OpenGL-based terminal emulator
 upstream: https://github.com/kovidgoyal/kitty
@@ -3496,7 +3497,7 @@ optional:
 
 ------------------------------------------------------------------------------
 
-### linux-headers  (7.1.4.arch1-1)
+### linux-headers  (7.1.5.arch1-1)
 
 purpose: Headers and scripts for building modules for the Linux kernel
 upstream: https://github.com/archlinux/linux
@@ -3614,7 +3615,7 @@ optional:
 
 ------------------------------------------------------------------------------
 
-### openpgp-card-tools  (0.11.12-1)
+### openpgp-card-tools  (0.11.13-1)
 
 purpose: CLI tool to inspect, manage and use OpenPGP cards
 upstream: https://codeberg.org/openpgp-card/openpgp-card-tools
@@ -3622,7 +3623,7 @@ upstream: https://codeberg.org/openpgp-card/openpgp-card-tools
 edition:  stock    (Stock Arch: already on the stock archiso releng medium)
 category: Security & crypto
 layer:    5 of 6  (Depth 24-33 -- near the top; systemd, mesa, X, Qt, toolkits)
-repo:     extra    installed size: 7.5 MiB    license: Apache-2.0 OR MIT
+repo:     extra    installed size: 7.1 MiB    license: Apache-2.0 OR MIT
 
 depth:    127 pkgs pulled in below it (transitively); 0 pkgs above rely on it
 requires: ccid, glibc, lib32-pcsclite, libgcc, pcsclite
@@ -3777,7 +3778,7 @@ required-by: (none)
 
 ------------------------------------------------------------------------------
 
-### systemd-resolvconf  (261.1-1)
+### systemd-resolvconf  (261.2-1)
 
 purpose: systemd resolvconf replacement (for use with systemd-resolved)
 upstream: https://www.github.com/systemd/systemd
@@ -5633,7 +5634,7 @@ required-by: ffmpeg
 
 ------------------------------------------------------------------------------
 
-### linux  (7.1.4.arch1-1)
+### linux  (7.1.5.arch1-1)
 
 purpose: The Linux kernel and modules
 upstream: https://github.com/archlinux/linux
@@ -5641,7 +5642,7 @@ upstream: https://github.com/archlinux/linux
 edition:  stock    (Stock Arch: already on the stock archiso releng medium)
 category: Kernel & firmware
 layer:    4 of 6  (Depth 15-23 -- deep stack; kernel, coreutils, and heavier subsystems)
-repo:     core    installed size: 147.7 MiB    license: GPL-2.0-only
+repo:     core    installed size: 147.6 MiB    license: GPL-2.0-only
 
 depth:    53 pkgs pulled in below it (transitively); 2 pkgs above rely on it
 requires: booster, coreutils, kmod
@@ -5728,7 +5729,7 @@ required-by: pipewire-alsa, pipewire-pulse
 
 ------------------------------------------------------------------------------
 
-### python-annotated-types  (0.7.0-3)
+### python-annotated-types  (0.8.0-1)
 
 purpose: Reusable constraint types to use with typing.Annotated
 upstream: https://github.com/annotated-types/annotated-types
@@ -5736,7 +5737,7 @@ upstream: https://github.com/annotated-types/annotated-types
 edition:  stock    (Stock Arch: already on the stock archiso releng medium)
 category: Developer tools
 layer:    4 of 6  (Depth 15-23 -- deep stack; kernel, coreutils, and heavier subsystems)
-repo:     extra    installed size: 124.8 KiB    license: MIT
+repo:     extra    installed size: 121.9 KiB    license: MIT
 
 depth:    44 pkgs pulled in below it (transitively); 2 pkgs above rely on it
 requires: python
@@ -6134,7 +6135,7 @@ required-by: base
 
 ------------------------------------------------------------------------------
 
-### kitty-shell-integration  (0.48.0-1)
+### kitty-shell-integration  (0.48.1-1)
 
 purpose: Shell integration scripts for kitty, an OpenGL-based terminal
          emulator
@@ -6505,7 +6506,7 @@ required-by: nfs-utils
 
 ------------------------------------------------------------------------------
 
-### screen  (5.0.1-3)
+### screen  (5.0.2-1)
 
 purpose: Full-screen window manager that multiplexes a physical terminal
 upstream: https://www.gnu.org/software/screen/
@@ -6513,7 +6514,7 @@ upstream: https://www.gnu.org/software/screen/
 edition:  stock    (Stock Arch: already on the stock archiso releng medium)
 category: Shell & CLI tools
 layer:    4 of 6  (Depth 15-23 -- deep stack; kernel, coreutils, and heavier subsystems)
-repo:     extra    installed size: 780.6 KiB    license: GPL-3.0-or-later
+repo:     extra    installed size: 865.9 KiB    license: GPL-3.0-or-later
 
 depth:    47 pkgs pulled in below it (transitively); 1 pkgs above rely on it
 requires: lib32-ncurses, libutempter, libxcrypt, pam
@@ -6665,7 +6666,7 @@ optional:
 
 ------------------------------------------------------------------------------
 
-### broadcom-wl  (6.30.223.271-713)
+### broadcom-wl  (6.30.223.271-715)
 
 purpose: Broadcom 802.11 Linux STA wireless driver
 upstream: https://www.broadcom.com/support/download-search/?pf=Wireless+LAN+Infrastructure
@@ -7450,7 +7451,7 @@ required-by: base, boost-libs, clonezilla, ffmpeg, file, freetype2,
 
 ------------------------------------------------------------------------------
 
-### systemd-libs  (261.1-1)
+### systemd-libs  (261.2-1)
 
 purpose: systemd client libraries
 upstream: https://www.github.com/systemd/systemd
@@ -7545,7 +7546,7 @@ required-by: lib32-systemd
 
 ------------------------------------------------------------------------------
 
-### lib32-systemd  (261.1-1)
+### lib32-systemd  (261.2-1)
 
 purpose: system and service manager (32-bit)
 upstream: https://www.github.com/systemd/systemd
@@ -8877,7 +8878,7 @@ required-by: perl-uri
 
 ------------------------------------------------------------------------------
 
-### libtool  (2.6.2-1)
+### libtool  (2.6.2-2)
 
 purpose: A generic library support script
 upstream: https://www.gnu.org/software/libtool
@@ -9146,7 +9147,7 @@ required-by: slang
 
 ------------------------------------------------------------------------------
 
-### perl-http-message  (7.03-1)
+### perl-http-message  (7.04-1)
 
 purpose: HTTP style messages
 upstream: https://search.cpan.org/dist/HTTP-Message
@@ -9154,7 +9155,7 @@ upstream: https://search.cpan.org/dist/HTTP-Message
 edition:  az'arch  (Az'arch Component: in the set only because Az'arch added it on top of stock archiso)
 category: Developer tools
 layer:    3 of 6  (Depth 9-14 -- mid stack; libraries and services with real chains below)
-repo:     extra    installed size: 162.4 KiB    license: Artistic-1.0-Perl OR GPL-1.0-or-later
+repo:     extra    installed size: 163.5 KiB    license: Artistic-1.0-Perl OR GPL-1.0-or-later
 
 depth:    25 pkgs pulled in below it (transitively); 7 pkgs above rely on it
 requires: perl, perl-clone, perl-encode-locale, perl-http-date, perl-io-html,
@@ -11541,7 +11542,7 @@ required-by: (none)
 
 ------------------------------------------------------------------------------
 
-### vim  (9.2.0804-1)
+### vim  (9.2.0849-1)
 
 purpose: Vi Improved, a highly configurable, improved version of the vi text
          editor
@@ -11673,7 +11674,7 @@ LAYER 2 -- Depth 4-8 -- a few layers deep; shared libraries and base tools
 199 component(s)
 ==============================================================================
 
-### libstdc++  (16.1.1+r346+g4e03491b401d-4)
+### libstdc++  (16.1.1+r581+gb73ad535acaa-1)
 
 purpose: C++ runtime libraries shipped by GCC
 upstream: https://gcc.gnu.org
@@ -11707,7 +11708,7 @@ required-by: abseil-cpp, aom, binutils, boost-libs, clucene, cups, db5.3,
 
 ------------------------------------------------------------------------------
 
-### lib32-gcc-libs  (16.1.1+r346+g4e03491b401d-4)
+### lib32-gcc-libs  (16.1.1+r581+gb73ad535acaa-1)
 
 purpose: 32-bit runtime libraries shipped by GCC
 upstream: https://gcc.gnu.org
@@ -11823,7 +11824,7 @@ optional:
 
 ------------------------------------------------------------------------------
 
-### sqlite  (3.53.3-1)
+### sqlite  (3.53.4-1)
 
 purpose: A C library that implements an SQL database engine
 upstream: https://www.sqlite.org/
@@ -12026,7 +12027,7 @@ required-by: lib32-gnutls, openconnect, p11-kit
 
 ------------------------------------------------------------------------------
 
-### libquadmath  (16.1.1+r346+g4e03491b401d-4)
+### libquadmath  (16.1.1+r581+gb73ad535acaa-1)
 
 purpose: GCC __float128 library
 upstream: https://gcc.gnu.org
@@ -12042,7 +12043,7 @@ required-by: fftw, gcc-libs
 
 ------------------------------------------------------------------------------
 
-### libasan  (16.1.1+r346+g4e03491b401d-4)
+### libasan  (16.1.1+r581+gb73ad535acaa-1)
 
 purpose: Address Sanitizer runtime library shipped by GCC
 upstream: https://gcc.gnu.org
@@ -12058,7 +12059,7 @@ required-by: gcc, gcc-libs
 
 ------------------------------------------------------------------------------
 
-### libhwasan  (16.1.1+r346+g4e03491b401d-4)
+### libhwasan  (16.1.1+r581+gb73ad535acaa-1)
 
 purpose: Hardware-assisted Address Sanitizer runtime library shipped by GCC
 upstream: https://gcc.gnu.org
@@ -12074,7 +12075,7 @@ required-by: gcc, gcc-libs
 
 ------------------------------------------------------------------------------
 
-### liblsan  (16.1.1+r346+g4e03491b401d-4)
+### liblsan  (16.1.1+r581+gb73ad535acaa-1)
 
 purpose: Leak Sanitizer runtime library shipped by GCC
 upstream: https://gcc.gnu.org
@@ -12090,7 +12091,7 @@ required-by: gcc, gcc-libs
 
 ------------------------------------------------------------------------------
 
-### libtsan  (16.1.1+r346+g4e03491b401d-4)
+### libtsan  (16.1.1+r581+gb73ad535acaa-1)
 
 purpose: Thread Sanitizer runtime library shipped by GCC
 upstream: https://gcc.gnu.org
@@ -12106,7 +12107,7 @@ required-by: gcc, gcc-libs
 
 ------------------------------------------------------------------------------
 
-### libubsan  (16.1.1+r346+g4e03491b401d-4)
+### libubsan  (16.1.1+r581+gb73ad535acaa-1)
 
 purpose: Undefined Behavior Sanitizer runtime library shipped by GCC
 upstream: https://gcc.gnu.org
@@ -12122,7 +12123,7 @@ required-by: gcc, gcc-libs
 
 ------------------------------------------------------------------------------
 
-### libgfortran  (16.1.1+r346+g4e03491b401d-4)
+### libgfortran  (16.1.1+r581+gb73ad535acaa-1)
 
 purpose: Runtime libraries shipped by GCC
 upstream: https://gcc.gnu.org
@@ -12138,7 +12139,7 @@ required-by: gcc-libs
 
 ------------------------------------------------------------------------------
 
-### libobjc  (16.1.1+r346+g4e03491b401d-4)
+### libobjc  (16.1.1+r581+gb73ad535acaa-1)
 
 purpose: Ojective-C runtime libraries shipped by GCC
 upstream: https://gcc.gnu.org
@@ -12154,7 +12155,7 @@ required-by: gcc-libs
 
 ------------------------------------------------------------------------------
 
-### gcc-libs  (16.1.1+r346+g4e03491b401d-4)
+### gcc-libs  (16.1.1+r581+gb73ad535acaa-1)
 
 purpose: Runtime libraries shipped by GCC
 upstream: https://gcc.gnu.org
@@ -14553,7 +14554,7 @@ optional:
 
 ------------------------------------------------------------------------------
 
-### kitty-terminfo  (0.48.0-1)
+### kitty-terminfo  (0.48.1-1)
 
 purpose: Terminfo for kitty, an OpenGL-based terminal emulator
 upstream: https://github.com/kovidgoyal/kitty
@@ -15093,7 +15094,7 @@ required-by: base, fakeroot, glibc, mkinitcpio
 
 ------------------------------------------------------------------------------
 
-### glibc  (2.43+r37+gfdf10644d6ee-1)
+### glibc  (2.44+r3+g0b05bc142249-1)
 
 purpose: GNU C Library
 upstream: https://www.gnu.org/software/libc
@@ -15101,7 +15102,7 @@ upstream: https://www.gnu.org/software/libc
 edition:  stock    (Stock Arch: already on the stock archiso releng medium)
 category: Core system
 layer:    1 of 6  (Depth 1-3 -- rest on the foundation only; libc, filesystem, early libs)
-repo:     core    installed size: 50.3 MiB    license: GPL-2.0-or-later LGPL-2.1-or-later
+repo:     core    installed size: 50.6 MiB    license: GPL-2.0-or-later LGPL-2.1-or-later
 
 depth:    4 pkgs pulled in below it (transitively); 913 pkgs above rely on it
 requires: filesystem, linux-api-headers, tzdata
@@ -15220,7 +15221,7 @@ optional:
 
 ------------------------------------------------------------------------------
 
-### libgcc  (16.1.1+r346+g4e03491b401d-4)
+### libgcc  (16.1.1+r581+gb73ad535acaa-1)
 
 purpose: Low-level runtime library shipped by GCC
 upstream: https://gcc.gnu.org
@@ -15265,7 +15266,7 @@ required-by: abseil-cpp, alsa-utils, aom, at-spi2-core, bcachefs-tools,
 
 ------------------------------------------------------------------------------
 
-### lib32-glibc  (2.43+r37+gfdf10644d6ee-1)
+### lib32-glibc  (2.44+r3+g0b05bc142249-1)
 
 purpose: GNU C Library (32-bit)
 upstream: https://www.gnu.org/software/libc
@@ -15273,7 +15274,7 @@ upstream: https://www.gnu.org/software/libc
 edition:  stock    (Stock Arch: already on the stock archiso releng medium)
 category: Shared library
 layer:    1 of 6  (Depth 1-3 -- rest on the foundation only; libc, filesystem, early libs)
-repo:     core    installed size: 18.8 MiB    license: GPL-2.0-or-later LGPL-2.1-or-later
+repo:     core    installed size: 18.9 MiB    license: GPL-2.0-or-later LGPL-2.1-or-later
 
 depth:    5 pkgs pulled in below it (transitively); 646 pkgs above rely on it
 requires: glibc
@@ -15536,7 +15537,7 @@ required-by: gnutls
 
 ------------------------------------------------------------------------------
 
-### libgomp  (16.1.1+r346+g4e03491b401d-4)
+### libgomp  (16.1.1+r581+gb73ad535acaa-1)
 
 purpose: OpenMP library shipped by GCC
 upstream: https://gcc.gnu.org
@@ -15552,7 +15553,7 @@ required-by: fftw, gcc-libs, gettext, libsoxr, vid.stab
 
 ------------------------------------------------------------------------------
 
-### libatomic  (16.1.1+r346+g4e03491b401d-4)
+### libatomic  (16.1.1+r581+gb73ad535acaa-1)
 
 purpose: GNU Atomic library shipped by GCC
 upstream: https://gcc.gnu.org
@@ -17298,7 +17299,7 @@ required-by: qemu-guest-agent
 
 ------------------------------------------------------------------------------
 
-### pkgconf  (3.0.3-1)
+### pkgconf  (3.0.4-1)
 
 purpose: Package compiler and linker metadata toolkit
 upstream: https://github.com/pkgconf/pkgconf
@@ -17306,7 +17307,7 @@ upstream: https://github.com/pkgconf/pkgconf
 edition:  az'arch  (Az'arch Component: in the set only because Az'arch added it on top of stock archiso)
 category: Developer tools
 layer:    1 of 6  (Depth 1-3 -- rest on the foundation only; libc, filesystem, early libs)
-repo:     core    installed size: 337.7 KiB    license: ISC
+repo:     core    installed size: 337.8 KiB    license: ISC
 
 depth:    5 pkgs pulled in below it (transitively); 1 pkgs above rely on it
 requires: glibc
@@ -17459,7 +17460,7 @@ required-by: (none)
 
 ------------------------------------------------------------------------------
 
-### hyperv  (7.1.4-1)
+### hyperv  (7.1.5-1)
 
 purpose: Hyper-V tools
 upstream: https://www.kernel.org
@@ -17689,7 +17690,7 @@ required-by: pam
 
 ------------------------------------------------------------------------------
 
-### libsysprof-capture  (50.0-2)
+### libsysprof-capture  (50.0-3)
 
 purpose: Kernel based performance profiler - capture library
 upstream: https://apps.gnome.org/Sysprof/
@@ -17697,7 +17698,7 @@ upstream: https://apps.gnome.org/Sysprof/
 edition:  stock    (Stock Arch: already on the stock archiso releng medium)
 category: Shared library
 layer:    0 of 6  (Foundation -- depth 0 -- nothing below them; true sinks of the graph)
-repo:     extra    installed size: 274.1 KiB    license: BSD-2-Clause-Patent
+repo:     extra    installed size: 274.0 KiB    license: BSD-2-Clause-Patent
 
 depth:    0 pkgs pulled in below it (transitively); 153 pkgs above rely on it
 requires: (none)
@@ -18224,7 +18225,7 @@ required-by: open-vm-tools
 
 ------------------------------------------------------------------------------
 
-### vim-runtime  (9.2.0804-1)
+### vim-runtime  (9.2.0849-1)
 
 purpose: Vi Improved, a highly configurable, improved version of the vi text
          editor (shared runtime)
