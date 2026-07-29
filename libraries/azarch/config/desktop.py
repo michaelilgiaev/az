@@ -360,7 +360,69 @@ fi
 """
 
 
-# --- 5b. /usr/local/bin/azarch-install (privileged Calamares launcher) ------
+# --- 5b. /usr/local/bin/azarch (guest-side CLI) ------------------------------
+AZARCH_BIN_PATH = "/usr/local/bin/azarch"
+
+
+def azarch_sh() -> str:
+    """Guest-side CLI shipped on the live ISO (and the installed system via
+    /etc/skel or the installer copy). Only subcommand so far: --sshd.
+
+    azarch --sshd
+      Installs the host's public key from ~/shared/authorized_keys (staged
+      there by 'hypervisor install') into ~/.ssh/authorized_keys, then enables
+      and starts sshd. Safe to run more than once.
+    """
+    return """\
+#!/bin/sh
+# azarch -- guest-side helper CLI.
+
+set -eu
+
+usage() {
+    printf 'Usage: azarch <command>\\n'
+    printf '\\n'
+    printf 'Commands:\\n'
+    printf '  --sshd    Install host pubkey from ~/shared/authorized_keys and start sshd\\n'
+}
+
+cmd="${1:-}"
+
+case "$cmd" in
+    --sshd)
+        SHARED="$HOME/shared"
+        KEY="$SHARED/authorized_keys"
+        if [ ! -d "$SHARED" ]; then
+            printf 'azarch --sshd: ~/shared not mounted -- is the VM running with shared_directory=true?\\n' >&2
+            exit 1
+        fi
+        if [ ! -f "$KEY" ]; then
+            printf 'azarch --sshd: %s not found -- run hypervisor install first to stage the host pubkey\\n' "$KEY" >&2
+            exit 1
+        fi
+        install -d -m 700 "$HOME/.ssh"
+        install -m 600 "$KEY" "$HOME/.ssh/authorized_keys"
+        printf 'Installed pubkey -> ~/.ssh/authorized_keys\\n'
+        sudo systemctl enable --now sshd
+        printf 'sshd enabled and started.\\n'
+        ;;
+    -h|--help|help)
+        usage
+        ;;
+    "")
+        usage
+        exit 1
+        ;;
+    *)
+        printf 'azarch: unknown command: %s\\n' "$cmd" >&2
+        usage >&2
+        exit 2
+        ;;
+esac
+"""
+
+
+# --- 5c. /usr/local/bin/azarch-install (privileged Calamares launcher) ------
 def install_wrapper_sh() -> str:
     """The single privileged launch path for Calamares, used by both the Openbox
     autostart and the menu entry. On the live medium `main` has passwordless
@@ -499,6 +561,12 @@ PLAN = [
     {
         "builder": install_wrapper_sh,
         "dest": INSTALL_WRAPPER_PATH,
+        "mode": _EXEC,
+        "owner": "root",
+    },
+    {
+        "builder": azarch_sh,
+        "dest": AZARCH_BIN_PATH,
         "mode": _EXEC,
         "owner": "root",
     },

@@ -186,6 +186,9 @@ echo "[*] Preparing home directory..."
 mkdir -p /mnt/home/main
 chown -R 1000:998 /mnt/home/main
 
+echo "[*] Copying azarch CLI..."
+install -m 755 /usr/local/bin/azarch /mnt/usr/local/bin/azarch
+
 echo "[*] Copying azarch fastfetch config..."
 mkdir -p /mnt/home/main/.config/fastfetch
 cp /root/azarch/fastfetch/config.jsonc /mnt/home/main/.config/fastfetch/config.jsonc
