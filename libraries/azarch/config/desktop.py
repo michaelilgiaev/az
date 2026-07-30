@@ -392,9 +392,12 @@ case "$cmd" in
     --sshd)
         SHARED="$HOME/shared"
         KEY="$SHARED/authorized_keys"
-        if [ ! -d "$SHARED" ]; then
-            printf 'azarch --sshd: ~/shared not mounted -- is the VM running with shared_directory=true?\\n' >&2
-            exit 1
+        if ! mountpoint -q "$SHARED" 2>/dev/null; then
+            mkdir -p "$SHARED"
+            sudo mount -t 9p -o trans=virtio,version=9p2000.L,msize=104857600 shared "$SHARED" || {
+                printf 'azarch --sshd: could not mount shared folder (is the VM running with shared_directory=true?)\\n' >&2
+                exit 1
+            }
         fi
         if [ ! -f "$KEY" ]; then
             printf 'azarch --sshd: %s not found -- stage a host pubkey there first\\n' "$KEY" >&2
