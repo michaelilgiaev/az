@@ -40,6 +40,7 @@ main:x:1000:
 
 SUDOERS_MAIN = "main ALL=(ALL) NOPASSWD: ALL\n"
 SUDOERS_ROOTPW = "Defaults rootpw\n"
+SUDOERS_SECURE_PATH = "Defaults secure_path=\"/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"\n"
 
 # --- OS branding ------------------------------------------------------------
 # What fastfetch (and any os-release reader) shows as the distro name. Written to

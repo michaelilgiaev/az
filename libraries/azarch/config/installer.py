@@ -179,8 +179,10 @@ cp /etc/gshadow /mnt/etc/gshadow
 cp /etc/group /mnt/etc/group
 cp /etc/sudoers.d/00-rootpw /mnt/etc/sudoers.d/00-rootpw
 cp /etc/sudoers.d/00-main /mnt/etc/sudoers.d/00-main
+cp /etc/sudoers.d/00-secure-path /mnt/etc/sudoers.d/00-secure-path
 chmod 440 /mnt/etc/sudoers.d/00-rootpw
 chmod 440 /mnt/etc/sudoers.d/00-main
+chmod 440 /mnt/etc/sudoers.d/00-secure-path
 
 echo "[*] Preparing home directory..."
 mkdir -p /mnt/home/main

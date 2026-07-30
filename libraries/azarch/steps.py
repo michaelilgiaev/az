@@ -169,6 +169,7 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: 
     _link_services(airootfs)
     emit.write_text(airootfs / "etc/sudoers.d/00-rootpw", system.SUDOERS_ROOTPW, mode=0o440)
     emit.write_text(airootfs / "etc/sudoers.d/00-main", system.SUDOERS_MAIN, mode=0o440)
+    emit.write_text(airootfs / "etc/sudoers.d/00-secure-path", system.SUDOERS_SECURE_PATH, mode=0o440)
 
     # 10 -- Emit profiledef and installer payload.
     # profiledef.sh (archiso metadata at the PROFILE ROOT, not airootfs) plus the

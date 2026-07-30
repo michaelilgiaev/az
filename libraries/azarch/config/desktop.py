@@ -397,7 +397,7 @@ case "$cmd" in
             exit 1
         fi
         if [ ! -f "$KEY" ]; then
-            printf 'azarch --sshd: %s not found -- run hypervisor install first to stage the host pubkey\\n' "$KEY" >&2
+            printf 'azarch --sshd: %s not found -- stage a host pubkey there first\\n' "$KEY" >&2
             exit 1
         fi
         install -d -m 700 "$HOME/.ssh"
