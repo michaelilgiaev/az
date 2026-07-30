@@ -196,13 +196,29 @@ def test_install_wrapper_unsets_runtime_dir_before_exec():
     # come strictly before the exec that elevates.
     out = desktop.install_wrapper_sh()
     unset_idx = out.index("unset XDG_RUNTIME_DIR")
-    exec_idx = out.index("exec sudo -E calamares -c /etc/calamares")
+    exec_idx = out.index("exec sudo -E calamares")
     assert unset_idx < exec_idx
 
 
 def test_install_wrapper_exec_line_present():
-    # The exact privileged launch: sudo -E (preserve X env) + explicit config tree.
-    assert "exec sudo -E calamares -c /etc/calamares" in desktop.install_wrapper_sh()
+    # The exact privileged launch: sudo -E (preserve X env). NO `-c /etc/calamares`:
+    # that overrides the app-data dir and makes Calamares look for qml/ under
+    # /etc/calamares (absent) -> fatal startup error. Calamares reads
+    # /etc/calamares/settings.conf and branding by default without it.
+    assert "exec sudo -E calamares\n" in desktop.install_wrapper_sh()
+
+
+def test_install_wrapper_does_not_override_appdata_dir():
+    # Regression: `-c /etc/calamares` is a testing-only app-data override that
+    # broke QML resolution (no /etc/calamares/qml) and crashed the installer.
+    # Check the actual command line (the `exec` line), not the explanatory
+    # comments, which mention the flag on purpose.
+    exec_line = next(
+        ln for ln in desktop.install_wrapper_sh().splitlines()
+        if ln.startswith("exec ")
+    )
+    assert "-c" not in exec_line
+    assert exec_line == "exec sudo -E calamares"
 
 
 def test_install_wrapper_is_sh_script():

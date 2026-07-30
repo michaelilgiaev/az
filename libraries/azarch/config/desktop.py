@@ -459,9 +459,18 @@ def install_wrapper_sh() -> str:
     which this minimal Openbox session intentionally does not run).
 
     -E preserves the X env (DISPLAY, XAUTHORITY, XDG_*) so the root-owned
-    Calamares Qt process can connect to `main`'s X server. -c points Calamares at
-    its config tree (default /etc/calamares); passing it explicitly is harmless
-    and future-proofs a custom branding dir."""
+    Calamares Qt process can connect to `main`'s X server.
+
+    We deliberately do NOT pass `-c /etc/calamares`. Despite its name, `-c` is a
+    testing-only flag that overrides Calamares' *application data* directory, not
+    just the config tree: once set, Calamares looks for qml/, branding/ and
+    settings.conf ONLY under that dir and skips the normal /usr/share/calamares
+    fallback. Our QML ships at /usr/share/calamares/qml (there is no
+    /etc/calamares/qml), so `-c /etc/calamares` made Calamares die at startup with
+    "FATAL: explicitly configured application data directory is missing qml/".
+    With no `-c`, Calamares reads /etc/calamares/settings.conf and branding by
+    default (that IS the sysconfdir it checks first) and finds QML under
+    /usr/share, so the installer launches correctly."""
     return """\
 #!/bin/sh
 # azarch-install -- privileged Calamares launcher for the live session.
@@ -472,8 +481,12 @@ def install_wrapper_sh() -> str:
 # "runtime directory is owned by uid 1000, not 0" warning. DISPLAY/XAUTHORITY
 # (the load-bearing X vars) are still preserved by -E, and root can read main's
 # ~/.Xauthority, so Calamares connects to the running X server fine.
+#
+# No `-c /etc/calamares`: that flag overrides the app-data dir and makes Calamares
+# look for qml/ under /etc/calamares (which does not exist), a fatal startup error.
+# Calamares already reads /etc/calamares/settings.conf and branding by default.
 unset XDG_RUNTIME_DIR
-exec sudo -E calamares -c /etc/calamares
+exec sudo -E calamares
 """
 
 
