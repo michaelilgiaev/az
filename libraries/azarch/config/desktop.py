@@ -366,12 +366,15 @@ AZARCH_BIN_PATH = "/usr/local/bin/azarch"
 
 def azarch_sh() -> str:
     """Guest-side CLI shipped on the live ISO (and the installed system via
-    /etc/skel or the installer copy). Only subcommand so far: --sshd.
+    /etc/skel or the installer copy). Only subcommand so far: --sshd-hypervisor.
 
-    azarch --sshd
+    azarch --sshd-hypervisor
       Installs the host's public key from ~/shared/authorized_keys (staged
       there by 'hypervisor install') into ~/.ssh/authorized_keys, then enables
-      and starts sshd. Safe to run more than once.
+      and starts sshd. Safe to run more than once. (The subcommand is named
+      --sshd-hypervisor because it wires the guest sshd up for the hypervisor's
+      forwarded host->guest SSH port; the host side is hypervisor.cfg's
+      sshd_hypervisor toggle.)
     """
     return """\
 #!/bin/sh
@@ -383,15 +386,15 @@ usage() {
     printf 'Usage: azarch <command>\\n'
     printf '\\n'
     printf 'Commands:\\n'
-    printf '  --sshd    Install host pubkey from ~/shared/authorized_keys and start sshd\\n'
+    printf '  --sshd-hypervisor    Install host pubkey from ~/shared/authorized_keys and start sshd\\n'
 }
 
 cmd="${1:-}"
 
 case "$cmd" in
-    --sshd)
+    --sshd-hypervisor)
         # Resolve the REAL login user, not whoever the shell says. The documented
-        # invocation is 'sudo azarch --sshd', under which $HOME is /root and $USER
+        # invocation is 'sudo azarch --sshd-hypervisor', under which $HOME is /root and $USER
         # is root -- so keying off $HOME would stage the pubkey into /root/.ssh and
         # the 'main' login (whose sshd reads /home/main/.ssh) would still be locked
         # out. $SUDO_USER is the invoking user under sudo; fall back to the current
@@ -399,12 +402,12 @@ case "$cmd" in
         # pubkey login for root here (blank password, PermitRootLogin prohibit-pw).
         TARGET_USER="${SUDO_USER:-$(id -un)}"
         if [ "$TARGET_USER" = "root" ]; then
-            printf 'azarch --sshd: run as a normal user via sudo (got root); cannot stage a login key for root\\n' >&2
+            printf 'azarch --sshd-hypervisor: run as a normal user via sudo (got root); cannot stage a login key for root\\n' >&2
             exit 1
         fi
         TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
         if [ -z "$TARGET_HOME" ]; then
-            printf 'azarch --sshd: could not resolve home for user %s\\n' "$TARGET_USER" >&2
+            printf 'azarch --sshd-hypervisor: could not resolve home for user %s\\n' "$TARGET_USER" >&2
             exit 1
         fi
         SHARED="$TARGET_HOME/shared"
@@ -412,12 +415,12 @@ case "$cmd" in
         if ! mountpoint -q "$SHARED" 2>/dev/null; then
             mkdir -p "$SHARED"
             sudo mount -t 9p -o trans=virtio,version=9p2000.L,msize=104857600 shared "$SHARED" || {
-                printf 'azarch --sshd: could not mount shared folder (is the VM running with shared_directory=true?)\\n' >&2
+                printf 'azarch --sshd-hypervisor: could not mount shared folder (is the VM running with shared_directory=true?)\\n' >&2
                 exit 1
             }
         fi
         if [ ! -f "$KEY" ]; then
-            printf 'azarch --sshd: %s not found -- stage a host pubkey there first\\n' "$KEY" >&2
+            printf 'azarch --sshd-hypervisor: %s not found -- stage a host pubkey there first\\n' "$KEY" >&2
             exit 1
         fi
         # Install the key into the TARGET user's ~/.ssh and hand ownership to them:

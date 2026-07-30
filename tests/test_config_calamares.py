@@ -20,12 +20,13 @@ import yaml
 from azarch.config import calamares
 
 
-# The 14 files Calamares reads, relative to /etc/calamares. Any drift here means
+# The 15 files Calamares reads, relative to /etc/calamares. Any drift here means
 # a module in the sequence has no config (or an orphan config exists).
 EXPECTED_FILES = {
     "settings.conf",
     "modules/partition.conf",
     "modules/unpackfs.conf",
+    "modules/shellprocess.conf",
     "modules/users.conf",
     "modules/packages.conf",
     "modules/mount.conf",
@@ -61,10 +62,10 @@ def _settings_show_list() -> list:
 
 # --- emit_map shape ---------------------------------------------------------
 
-def test_emit_map_has_exactly_14_files():
+def test_emit_map_has_exactly_15_files():
     m = calamares.emit_map()
     assert set(m) == EXPECTED_FILES
-    assert len(m) == 14
+    assert len(m) == 15
 
 
 def test_emit_map_values_are_nonempty_strings():
@@ -166,6 +167,60 @@ def test_unpackfs_source_and_sourcefs():
 
 def test_archiso_sfs_path_literal():
     assert calamares.ARCHISO_SFS == "/run/archiso/bootmnt/arch/x86_64/airootfs.sfs"
+
+
+# --- shellprocess.conf (the "user already exists" fix) ----------------------
+
+def test_shellprocess_runs_between_unpackfs_and_users():
+    # The whole point: remove the baked-in `main` account AFTER the target exists
+    # (unpackfs) but BEFORE the users module runs useradd. Order is load-bearing.
+    execs = _settings_exec_list()
+    assert "shellprocess" in execs
+    assert execs.index("unpackfs") < execs.index("shellprocess") < execs.index("users")
+
+
+def test_shellprocess_conf_schema_and_chroot():
+    d = yaml.safe_load(calamares.shellprocess_conf())
+    # Runs INSIDE the target chroot so it edits the target's user databases.
+    assert d["dontChroot"] is False
+    # script is a list of command strings (the shellprocess CommandList form).
+    assert isinstance(d["script"], list)
+    assert all(isinstance(c, str) for c in d["script"])
+
+
+def test_shellprocess_deletes_the_live_user_non_fatally():
+    d = yaml.safe_load(calamares.shellprocess_conf())
+    joined = "\n".join(d["script"])
+    # It must delete the `main` account (userdel), and every command is prefixed
+    # "-" so a rootfs lacking the account/group never aborts the install.
+    assert calamares.LIVE_USER == "main"
+    assert f"-userdel -f {calamares.LIVE_USER}" in d["script"]
+    assert f"-groupdel {calamares.LIVE_USER}" in d["script"]
+    for cmd in d["script"]:
+        assert cmd.startswith("-"), cmd
+    # It must NOT remove the home directory (reuseHome relies on /home/main staying).
+    assert "--remove" not in joined
+    assert "userdel -r" not in joined
+    assert "-r " not in joined
+
+
+# --- users.conf (reuse the surviving /home/main) ----------------------------
+
+def test_users_reuse_home_true():
+    # After shellprocess removes the account, /home/main (uid 1000) remains on the
+    # target; reuseHome makes useradd -m reuse it instead of erroring/wiping.
+    d = yaml.safe_load(calamares.users_conf())
+    assert d["reuseHome"] is True
+    # The live user must NOT be autologin on the installed system.
+    assert d["doAutologin"] is False
+
+
+# --- locale.conf timezone default -------------------------------------------
+
+def test_locale_conf_defaults_to_asia_jerusalem():
+    d = yaml.safe_load(calamares.locale_conf())
+    assert d["region"] == "Asia"
+    assert d["zone"] == "Jerusalem"
 
 
 # --- grubcfg.conf -----------------------------------------------------------

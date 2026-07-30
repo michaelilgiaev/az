@@ -52,14 +52,32 @@ def test_brace_escaping_collapsed():
     # The block is built with an f-string; every literal brace in the emitted bash
     # is written doubled in the source ({{ / }}). If a doubling is missed the
     # f-string raises at import; if a stray {{ survives into the OUTPUT the bash is
-    # broken. So the rendered text must contain NO doubled braces, and the
-    # optional-secondary-keyboard comma expansion must appear as single braces.
+    # broken. So the rendered text must contain NO doubled braces.
     block = locale._detect_and_apply_locale_block()
     assert "{{" not in block
     assert "}}" not in block
-    # The bash parameter expansion that inserts a comma only when a second layout
-    # exists: "$PRIMARY_KB${SECONDARY_KB:+,}$SECONDARY_KB".
-    assert "${SECONDARY_KB:+,}" in block
+
+
+def test_keyboard_is_english_only():
+    # Keyboard policy is English-only: a single "us" layout, no second layout, and
+    # no group-toggle. The old SECONDARY_KB machinery (comma expansion + the
+    # grp:alt_shift_toggle option) must be entirely gone from the emitted bash.
+    block = locale._detect_and_apply_locale_block()
+    assert 'PRIMARY_KB="us"' in block
+    assert "SECONDARY_KB" not in block
+    assert "grp:alt_shift_toggle" not in block
+    # The X11 layout line carries only the primary (us) layout, no comma-joined 2nd.
+    assert 'Option "XkbLayout" "$PRIMARY_KB"' in block
+
+
+def test_default_timezone_is_asia_jerusalem():
+    # Asia/Jerusalem is the shipped default timezone; it is the FALLBACK used when
+    # IP-geo does not resolve to a real zoneinfo file (geo still wins when it does).
+    assert locale.DEFAULT_TIMEZONE == "Asia/Jerusalem"
+    block = locale._detect_and_apply_locale_block()
+    assert 'ln -sf "/usr/share/zoneinfo/Asia/Jerusalem" /etc/localtime' in block
+    # The old UTC fallback must be gone.
+    assert "zoneinfo/UTC" not in block
 
 
 def test_setup_locale_single_shebang_and_marker():

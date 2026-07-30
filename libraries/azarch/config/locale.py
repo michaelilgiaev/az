@@ -44,20 +44,32 @@ def _language_map_heredoc() -> str:
     return "\n".join(f"{cc}|{name}|{loc}" for cc, (name, loc) in LANGUAGE_MAP.items())
 
 
-# Shared bash block: query IP geo, match country -> locale/keyboard, enable and
-# generate locales, set locale.conf / vconsole / X11 keyboard, set timezone.
-# Both the live-ISO script and the installer chroot script start from this.
+# Az'arch default timezone. IP-geo detection still wins when it resolves (so a
+# machine physically elsewhere keeps correct local time); this is the FALLBACK
+# used when geo is unreachable/unknown -- the shipped default, per requirements.
+DEFAULT_TIMEZONE = "Asia/Jerusalem"
+
+
+# Shared bash block: query IP geo for the display LANGUAGE, enable+generate that
+# locale, force an English-only (us) keyboard, and set the timezone (geo override,
+# Asia/Jerusalem default). Both the live-ISO script and the installer chroot script
+# start from this.
+#
+# Keyboard policy: ENGLISH-ONLY. The layout is always "us" with no second layout
+# and no group-toggle -- geo affects the display language (LANG) only, never the
+# keymap. (Earlier revisions added the country's native layout as a toggleable
+# secondary; that is intentionally gone.)
 def _detect_and_apply_locale_block() -> str:
     return f"""\
 # Get timezone and country from IP
 TIMEZONE=$(curl -s https://ipapi.co/timezone)
 COUNTRY=$(curl -s https://ipapi.co/country)
 
-# Defaults
+# Defaults. Keyboard is English-only (us) and never changes; only the display
+# language (PRIMARY_LANG) is geo-detected below.
 PRIMARY_LANG="en_US.UTF-8"
 SECONDARY_LANG=""
 PRIMARY_KB="us"
-SECONDARY_KB=""
 
 # Language mapping (generated from azarch.config.locale.LANGUAGE_MAP)
 LANGUAGE_MAP=$(cat <<EOF
@@ -65,20 +77,18 @@ LANGUAGE_MAP=$(cat <<EOF
 EOF
 )
 
-# Match country code to locale
+# Match country code to a display locale. US stays single-locale; any other
+# recognised country adds its locale as a SECONDARY generated locale while the
+# primary UI language stays English. The keyboard is NOT touched here.
 MATCH=$(echo "$LANGUAGE_MAP" | grep "^$COUNTRY|")
 if [ -n "$MATCH" ]; then
   LOCALE_CODE=$(echo "$MATCH" | cut -d'|' -f3)
-  KB_LAYOUT=$(echo "$COUNTRY" | tr '[:upper:]' '[:lower:]')
 
   if [ "$COUNTRY" = "US" ]; then
     PRIMARY_LANG="$LOCALE_CODE"
-    PRIMARY_KB="$KB_LAYOUT"
   else
     PRIMARY_LANG="en_US.UTF-8"
     SECONDARY_LANG="$LOCALE_CODE"
-    PRIMARY_KB="us"
-    SECONDARY_KB="$KB_LAYOUT"
   fi
 fi
 
@@ -94,26 +104,26 @@ locale-gen
 # Set system locale
 echo "LANG=$PRIMARY_LANG" > /etc/locale.conf
 
-# Set console keyboard
+# Set console keyboard (English-only)
 echo "KEYMAP=$PRIMARY_KB" > /etc/vconsole.conf
 echo "FONT=lat2-16" >> /etc/vconsole.conf
 
-# Set X11 keyboard layout
+# Set X11 keyboard layout (English-only: single "us" layout, no toggle)
 mkdir -p /etc/X11/xorg.conf.d
 cat <<EOF > /etc/X11/xorg.conf.d/00-keyboard.conf
 Section "InputClass"
     Identifier "system-keyboard"
     MatchIsKeyboard "on"
-    Option "XkbLayout" "$PRIMARY_KB${{SECONDARY_KB:+,}}$SECONDARY_KB"
-    Option "XkbOptions" "${{SECONDARY_KB:+grp:alt_shift_toggle}}"
+    Option "XkbLayout" "$PRIMARY_KB"
 EndSection
 EOF
 
-# Set timezone
+# Set timezone: use the geo-detected zone when it resolves to a real zoneinfo
+# file, else fall back to the Az'arch default ({DEFAULT_TIMEZONE}).
 if [ -n "$TIMEZONE" ] && [ -f "/usr/share/zoneinfo/$TIMEZONE" ]; then
   ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
 else
-  ln -sf /usr/share/zoneinfo/UTC /etc/localtime
+  ln -sf "/usr/share/zoneinfo/{DEFAULT_TIMEZONE}" /etc/localtime
 fi
 
 hwclock --systohc"""

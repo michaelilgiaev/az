@@ -43,6 +43,23 @@ module schemas we build from source -- these were bugs caught in review):
     unbootable (the copied-from-live initramfs lacks the encrypt hook).
   - branding.desc style keys are Capitalized (SidebarBackground, ...).
   - The `sequence` lists ONLY modules configured below or needing none.
+  - shellprocess: the OFFLINE install copies the live rootfs (which already has
+    the `main` user, uid 1000, baked into /etc/passwd) via unpackfs. The `users`
+    module then unconditionally runs `useradd -m -U -s /bin/bash -c <name> main`
+    inside the target and ABORTS with exit code 9 ("user 'main' already exists")
+    -- the users module has NO skip/reuse-existing-account option (verified
+    against the 3.4.2 users.so: only reuseHome/userShell/sudoersGroup/... exist).
+    So a shellprocess step (dontChroot:false -> runs in the target chroot) drops
+    the baked-in `main` account/group BEFORE `users` runs, letting the users
+    module recreate `main` with the user-chosen password. Its home /home/main is
+    left intact: Calamares' users module runs `useradd -m` unconditionally, which
+    on an already-existing home merely WARNS ("home directory already exists ...
+    not copying skel") and still exits 0 -- so the account is recreated and the
+    files are reused. (users.conf also sets reuseHome:true to state that intent;
+    in 3.4.2 that key gates a dotfiles backup, not the useradd flags, so it is
+    belt-and-suspenders rather than the load-bearing part.) shellprocess `script`
+    is a list of command strings; a leading "-" ignores that command's failure so
+    a variant rootfs (no such line) never aborts the install.
 """
 
 from __future__ import annotations
@@ -97,6 +114,10 @@ sequence:
   - partition
   - mount
   - unpackfs
+  # Remove the live rootfs's baked-in `main` account so the users module can
+  # recreate it (see shellprocess.conf / the module note above). MUST run after
+  # unpackfs (the target must exist) and before users.
+  - shellprocess
   - machineid
   - fstab
   - locale
@@ -227,11 +248,56 @@ unpack:
 """
 
 
+# --- 3b. modules/shellprocess.conf -----------------------------------------
+# The exact login name baked into the live rootfs (config/system.py PASSWD/GROUP).
+# Kept as a module-level constant so the shellprocess script and any test agree on
+# the account being removed.
+LIVE_USER = "main"
+
+
+def shellprocess_conf() -> str:
+    """Delete the live rootfs's pre-existing `main` account from the target so the
+    `users` module can re-create it (see the users.conf note / module docstring).
+
+    Runs INSIDE the target chroot (dontChroot: false) after unpackfs. We edit the
+    passwd/shadow/gshadow/group databases directly with `userdel`/`groupdel`
+    rather than trusting a single tool: `userdel main` removes the user's line and
+    its per-user primary group; a follow-up `groupdel` handles the case where the
+    group lingers. Every command is prefixed "-" so a rootfs that (for any reason)
+    lacks the `main` account or group does NOT abort the install -- the goal is
+    merely "main must not exist here when users runs", and a no-op is success.
+
+    We deliberately do NOT pass `-r`/`--remove`: /home/main must stay on the target
+    (its files are uid 1000), and users.conf reuseHome:true then reuses it. `-f`
+    forces removal even if userdel thinks the user is still logged in (it is not --
+    this is a freshly unpacked target), so the step is reliable and idempotent."""
+    return f"""\
+# Remove the live-ISO `main` account from the freshly unpacked target so the
+# `users` module can create it with the user-chosen password (offline installs
+# copy the live rootfs, which already carries `main` -- useradd would abort with
+# "user already exists"). Runs in the target chroot; /home/main is preserved.
+---
+dontChroot: false
+timeout: 30
+verbose: true
+script:
+    - "-userdel -f {LIVE_USER}"
+    - "-groupdel {LIVE_USER}"
+"""
+
+
 # --- 4. modules/users.conf --------------------------------------------------
 def users_conf() -> str:
     """User/hostname policy on the INSTALLED system: wheel-group sudo, hostname
     settable in the UI, NO autologin (the live ISO autologins; the installed
-    system should not)."""
+    system should not).
+
+    reuseHome:true -- the shellprocess step removed the live `main` ACCOUNT but
+    left /home/main (uid 1000) on the target. `useradd -m` (which the users module
+    always runs) does NOT fail on an existing home -- it warns and skips copying
+    skel, exiting 0 -- so the recreated `main` (again the first free uid >= 1000,
+    i.e. 1000) just reuses those files. reuseHome is set to declare that intent;
+    in Calamares 3.4.2 it gates a dotfiles backup rather than the useradd flags."""
     return """\
 # User account configuration for the installed system.
 ---
@@ -254,6 +320,12 @@ doReusePassword: false
 
 # Autologin OFF on the installed system (live ISO autologins, installed does not).
 doAutologin: false
+
+# The live rootfs's /home/main survives on the target (the shellprocess step
+# only removed the ACCOUNT, not the home). `useradd -m` recreates `main` and
+# reuses that directory (it only warns on an existing home, exit 0). reuseHome
+# declares the reuse intent (in 3.4.2 it gates a dotfiles backup, not useradd).
+reuseHome: true
 
 # Let the user pick the hostname on the users page, seeded with this template.
 # writeHostsFile keeps /etc/hosts in sync with the chosen name.
@@ -377,9 +449,10 @@ def locale_conf() -> str:
     return """\
 # Locale + timezone defaults (user can change these on the locale page).
 ---
-# Seed timezone; the locale page + geoip (if any) can override it.
-region: "America"
-zone: "New_York"
+# Seed timezone. Az'arch defaults to Asia/Jerusalem; the locale page can still
+# override it. (IANA zone name is "Jerusalem".)
+region: "Asia"
+zone: "Jerusalem"
 
 # Where the keyboard/locale live in the target.
 localeConfMappings:
@@ -618,6 +691,7 @@ def emit_map() -> dict[str, str]:
         "settings.conf": settings_conf(),
         "modules/partition.conf": partition_conf(),
         "modules/unpackfs.conf": unpackfs_conf(),
+        "modules/shellprocess.conf": shellprocess_conf(),
         "modules/users.conf": users_conf(),
         "modules/packages.conf": packages_conf(),
         "modules/mount.conf": mount_conf(),

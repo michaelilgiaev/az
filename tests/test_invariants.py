@@ -95,9 +95,10 @@ def test_every_config_emitter_returns_nonempty_str(label, fn):
 
 def test_emitter_family_covers_all_config_modules():
     # Sanity check that the parametrized family did not silently shrink to a
-    # handful of entries -- the whole point is breadth. 14 calamares files + 8
-    # desktop builders + 6 installer + locale + profile + 4 pacman + 5 pkgbuild.
-    assert len(_EMITTERS) == 14 + 8 + 6 + 1 + 1 + 4 + 5
+    # handful of entries -- the whole point is breadth. 15 calamares files (14 +
+    # the shellprocess.conf that clears the live `main` account) + 8 desktop
+    # builders + 6 installer + locale + profile + 4 pacman + 5 pkgbuild.
+    assert len(_EMITTERS) == 15 + 8 + 6 + 1 + 1 + 4 + 5
 
 
 def test_recipe_dir_contents_are_nonempty_str_both_tiers():

@@ -225,10 +225,23 @@ def test_install_wrapper_is_sh_script():
     assert desktop.install_wrapper_sh().startswith("#!/bin/sh\n")
 
 
-# --- azarch --sshd guest CLI ------------------------------------------------
+# --- azarch --sshd-hypervisor guest CLI -------------------------------------
+
+def test_azarch_subcommand_is_sshd_hypervisor():
+    # The guest CLI subcommand was renamed --sshd -> --sshd-hypervisor (the binary
+    # stays `azarch`). Assert the new case branch + usage line exist and no bare
+    # `--sshd` token survives (which would be a stale, unreachable spelling).
+    out = desktop.azarch_sh()
+    assert "--sshd-hypervisor)" in out
+    assert "--sshd-hypervisor    Install host pubkey" in out
+    # No standalone `--sshd` (not followed by `-hypervisor`) anywhere.
+    import re
+
+    assert not re.search(r"--sshd(?!-hypervisor)", out)
+
 
 def test_azarch_sshd_installs_pubkey_and_starts_sshd():
-    # The --sshd path must stage the host pubkey into the target user's
+    # The --sshd-hypervisor path must stage the host pubkey into the target user's
     # ~/.ssh/authorized_keys, (re)generate host keys, and enable+start sshd.
     out = desktop.azarch_sh()
     assert '"$TARGET_HOME/.ssh/authorized_keys"' in out
@@ -237,7 +250,7 @@ def test_azarch_sshd_installs_pubkey_and_starts_sshd():
 
 
 def test_azarch_sshd_targets_sudo_invoking_user_not_root_home():
-    # The documented invocation is `sudo azarch --sshd`, under which $HOME=/root
+    # The documented invocation is `sudo azarch --sshd-hypervisor`, under which $HOME=/root
     # and $USER=root. Keying off $HOME would stage the key into /root/.ssh and the
     # `main` login would stay locked out. The script must resolve the REAL user via
     # $SUDO_USER (fallback to the current user) and never key the install off $HOME.
