@@ -4,8 +4,8 @@ These PKGBUILDs are Python f-strings emitted to disk and then fed verbatim to
 makepkg. Two failure modes here are silent and expensive:
 
   1. A wrong version literal. LibreWolf has TWO version strings that look almost
-     identical -- the upstream tag "153.0-1" (used to build the download URL and
-     the source filename) and the pacman-legal pkgver "153.0.1" (the '-' is a
+     identical -- the upstream tag "153.0.1-1" (used to build the download URL and
+     the source filename) and the pacman-legal pkgver "153.0.1.1" (the '-' is a
      pkgrel separator, illegal in pkgver). Swap them and makepkg either 404s the
      download or rejects the version; nothing in Python catches it because both
      are valid strings.
@@ -44,8 +44,8 @@ _HEX = re.compile(r"\A[0-9a-fA-F]+\Z")
 def test_version_constants_distinct():
     # The two LibreWolf version strings must never be equal: the '-1' tag form
     # and the '.1' pkgver form are used in different, non-interchangeable places.
-    assert pkgbuild.LIBREWOLF_VERSION == "153.0-1"
-    assert pkgbuild.LIBREWOLF_PKGVER == "153.0.1"
+    assert pkgbuild.LIBREWOLF_VERSION == "153.0.1-1"
+    assert pkgbuild.LIBREWOLF_PKGVER == "153.0.1.1"
     assert pkgbuild.LIBREWOLF_VERSION != pkgbuild.LIBREWOLF_PKGVER
 
 
@@ -71,12 +71,12 @@ def test_calamares_version_literal():
 # --- pkgbuild_librewolf (DEFAULT / repackage tier) -------------------------
 
 def test_librewolf_pkgver_field_correct():
-    # The pkgver= field must carry the pacman-legal "153.0.1", NOT the tag form.
-    # _lwver= carries the tag form "153.0-1" for URL/filename construction.
+    # The pkgver= field must carry the pacman-legal "153.0.1.1", NOT the tag form.
+    # _lwver= carries the tag form "153.0.1-1" for URL/filename construction.
     s = pkgbuild.pkgbuild_librewolf()
-    assert "pkgver=153.0.1" in s
-    assert "pkgver=153.0-1" not in s
-    assert "_lwver=153.0-1" in s
+    assert "pkgver=153.0.1.1" in s
+    assert "pkgver=153.0.1-1" not in s
+    assert "_lwver=153.0.1-1" in s
 
 
 def test_librewolf_sha256sums_shape():
@@ -106,9 +106,10 @@ def test_librewolf_repackage_has_no_make_fetch():
 
 def test_librewolf_download_url_uses_tag_version():
     # The download host path and source filename are built from the tag form.
+    # Binaries are served from Codeberg's package API (dl.librewolf.net is down).
     s = pkgbuild.pkgbuild_librewolf()
-    assert "https://dl.librewolf.net/librewolf/153.0-1" in s
-    assert "librewolf-153.0-1-linux-x86_64-package.tar.xz" in s
+    assert "https://codeberg.org/api/packages/librewolf/generic/librewolf/153.0.1-1" in s
+    assert "librewolf-153.0.1-1-linux-x86_64-package.tar.xz" in s
 
 
 # --- pkgbuild_librewolf_src (FULL / from-source tier) ----------------------
@@ -134,8 +135,8 @@ def test_librewolf_src_runs_bsys6_make_targets():
 def test_librewolf_src_shares_pkgver_and_lwver():
     # The from-source recipe uses the SAME version split as the repackage one.
     s = pkgbuild.pkgbuild_librewolf_src()
-    assert "pkgver=153.0.1" in s
-    assert "_lwver=153.0-1" in s
+    assert "pkgver=153.0.1.1" in s
+    assert "_lwver=153.0.1-1" in s
 
 
 # --- pkgbuild_calamares -----------------------------------------------------

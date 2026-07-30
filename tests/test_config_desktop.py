@@ -25,9 +25,9 @@ from azarch.config import desktop
 
 # --- PLAN mode/owner/dest table --------------------------------------------
 
-def test_plan_has_exactly_six_entries():
+def test_plan_has_exactly_seven_entries():
     # steps.py iterates PLAN; a dropped/extra entry silently un-emits a file.
-    assert len(desktop.PLAN) == 6
+    assert len(desktop.PLAN) == 7
 
 
 def test_plan_entries_have_the_four_declared_keys():
@@ -85,10 +85,11 @@ def test_picom_entry_is_home_owned_conf():
 
 
 def test_only_wrapper_is_root_owned():
-    # Exactly one PLAN entry is root-owned: the /usr/local/bin wrapper. Everything
-    # else is a /home/main dotfile handed to the live user (uid 1000, gid 998).
+    # Exactly two PLAN entries are root-owned: the azarch CLI and the installer
+    # wrapper, both in /usr/local/bin. Everything else is a /home/main dotfile
+    # handed to the live user (uid 1000, gid 998).
     root_dests = [e["dest"] for e in desktop.PLAN if e["owner"] == "root"]
-    assert root_dests == [desktop.INSTALL_WRAPPER_PATH]
+    assert set(root_dests) == {desktop.INSTALL_WRAPPER_PATH, desktop.AZARCH_BIN_PATH}
 
 
 def test_home_owned_dests_live_under_home():
@@ -107,14 +108,14 @@ def test_home_owner_gid_is_autologin_group():
 
 # --- emit_plan(): PLAN + bash_profile, without mutating PLAN ----------------
 
-def test_emit_plan_length_is_seven():
-    assert len(desktop.emit_plan()) == 7
+def test_emit_plan_length_is_eight():
+    assert len(desktop.emit_plan()) == 8
 
 
 def test_emit_plan_prefix_is_plan():
-    # First six entries are exactly PLAN (same dict objects), the bash_profile is
+    # First seven entries are exactly PLAN (same dict objects), the bash_profile is
     # appended last.
-    assert desktop.emit_plan()[:6] == desktop.PLAN
+    assert desktop.emit_plan()[:7] == desktop.PLAN
 
 
 def test_emit_plan_last_entry_is_bash_profile():
@@ -131,11 +132,11 @@ def test_bash_profile_dest_is_home_bash_profile():
 
 def test_emit_plan_does_not_mutate_module_plan():
     # steps.py may call emit_plan() more than once; it must not grow PLAN each call
-    # (PLAN + [x] builds a new list, so the constant stays at six).
+    # (PLAN + [x] builds a new list, so the constant stays at seven).
     before = len(desktop.PLAN)
     desktop.emit_plan()
     desktop.emit_plan()
-    assert len(desktop.PLAN) == before == 6
+    assert len(desktop.PLAN) == before == 7
 
 
 # --- Openbox XML well-formedness (the Az'arch apostrophe) -------------------

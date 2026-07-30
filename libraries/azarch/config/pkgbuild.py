@@ -45,11 +45,11 @@ CALAMARES_VERSION = "3.4.2"
 # sha256 of the official release tarball, obtained by download + sha256sum.
 CALAMARES_SHA256 = "733bbbb00dc9f84874bd5c22960952f317ea2537565431179fa2152b2fbfdccc"
 
-# LibreWolf: upstream tag is "153.0-1"; pacman-legal pkgver is "153.0.1".
-LIBREWOLF_VERSION = "153.0-1"
-LIBREWOLF_PKGVER = "153.0.1"
+# LibreWolf: upstream tag is "153.0.1-1"; pacman-legal pkgver is "153.0.1.1".
+LIBREWOLF_VERSION = "153.0.1-1"
+LIBREWOLF_PKGVER = "153.0.1.1"
 # sha256 from upstream's published .sha256sum, re-verified by download + hash.
-LIBREWOLF_SHA256 = "ca15edcb35e4af09ce59725f0ee28c6e9fcf7fc25367e540583b8c2c862c0df7"
+LIBREWOLF_SHA256 = "7b56e06071ece9e711a1c811e64129a3a14775c5fe00a4b777e5cbb0b087b5b5"
 # LibreWolf release signing key -- the PRIMARY key fingerprint of
 # "LibreWolf Maintainers <gpg@librewolf.net>". makepkg's validpgpkeys=() must list
 # the PRIMARY key, NOT the signing subkey: the tarball's detached .sig is made by
@@ -229,7 +229,7 @@ defaultPref("browser.startup.page", 3);
 # librewolf -- DEFAULT tier (repackage the verified upstream tarball)
 # ---------------------------------------------------------------------------
 def pkgbuild_librewolf() -> str:
-    dl = f"https://dl.librewolf.net/librewolf/{LIBREWOLF_VERSION}"
+    dl = f"https://codeberg.org/api/packages/librewolf/generic/librewolf/{LIBREWOLF_VERSION}"
     tar = f"librewolf-{LIBREWOLF_VERSION}-linux-x86_64-package.tar.xz"
     return f"""\
 # Maintainer: Az'arch <https://github.com/michaelilgiaev/azarch>
@@ -254,6 +254,8 @@ def pkgbuild_librewolf() -> str:
 #   Tarball      : {dl}/{tar}
 #   Signature    : {dl}/{tar}.sig   (key {LIBREWOLF_PGP_KEY})
 #   Checksum src : {dl}/{tar}.sha256sum
+#   Mirror note  : dl.librewolf.net is the upstream CDN; Codeberg's package API
+#                  hosts the same files (same sha256) and is the active mirror.
 #   License      : MPL-2.0
 # The tarball is built by LibreWolf from Firefox source + LibreWolf's public
 # patch set, so the lineage traces to scrutinizable source even in this path.
@@ -444,8 +446,11 @@ def recipe_dirs(full_compile: bool) -> list[tuple[str, dict[str, str]]]:
 # ---------------------------------------------------------------------------
 # Updating versions:
 #   1. Bump CALAMARES_VERSION / LIBREWOLF_VERSION / LIBREWOLF_PKGVER above.
-#   2. Refresh the pinned sha256 constants from upstream's published checksum
-#      (librewolf: .../<ver>/librewolf-<ver>-linux-x86_64-package.tar.xz.sha256sum).
+#      LIBREWOLF_VERSION is the upstream tag (e.g. "153.0.1-1");
+#      LIBREWOLF_PKGVER is the pacman-legal form (dots only, e.g. "153.0.1.1").
+#   2. Refresh the pinned sha256 from Codeberg's package API:
+#      https://codeberg.org/api/packages/librewolf/generic/librewolf/<tag>/
+#        librewolf-<tag>-linux-x86_64-package.tar.xz.sha256sum
 #   3. If LibreWolf rotates its signing key, update LIBREWOLF_PGP_KEY.
 #   4. Rebuild with FORCE_ONLINE=1 so the new sources are fetched.
 # ---------------------------------------------------------------------------
