@@ -209,6 +209,61 @@ def test_install_wrapper_is_sh_script():
     assert desktop.install_wrapper_sh().startswith("#!/bin/sh\n")
 
 
+# --- azarch --sshd guest CLI ------------------------------------------------
+
+def test_azarch_sshd_installs_pubkey_and_starts_sshd():
+    # The --sshd path must stage the host pubkey into the target user's
+    # ~/.ssh/authorized_keys, (re)generate host keys, and enable+start sshd.
+    out = desktop.azarch_sh()
+    assert '"$TARGET_HOME/.ssh/authorized_keys"' in out
+    assert "sudo ssh-keygen -A" in out
+    assert "sudo systemctl enable --now sshd" in out
+
+
+def test_azarch_sshd_targets_sudo_invoking_user_not_root_home():
+    # The documented invocation is `sudo azarch --sshd`, under which $HOME=/root
+    # and $USER=root. Keying off $HOME would stage the key into /root/.ssh and the
+    # `main` login would stay locked out. The script must resolve the REAL user via
+    # $SUDO_USER (fallback to the current user) and never key the install off $HOME.
+    out = desktop.azarch_sh()
+    assert 'TARGET_USER="${SUDO_USER:-$(id -un)}"' in out
+    assert 'getent passwd "$TARGET_USER"' in out
+    # It must NOT install the login key at $HOME (that is /root under sudo).
+    assert '"$HOME/.ssh/authorized_keys"' not in out
+
+
+def test_azarch_sshd_chowns_key_to_target_user():
+    # Under sudo the ~/.ssh tree is created as root; a root-owned
+    # authorized_keys trips sshd StrictModes and is ignored. The install must hand
+    # ownership to the target user.
+    out = desktop.azarch_sh()
+    assert '-o "$TARGET_USER" -g "$TARGET_USER" "$TARGET_HOME/.ssh"' in out
+    assert (
+        '-o "$TARGET_USER" -g "$TARGET_USER" "$KEY" "$TARGET_HOME/.ssh/authorized_keys"'
+        in out
+    )
+
+
+def test_azarch_sshd_refuses_bare_root_target():
+    # If the resolved target is root (no SUDO_USER, invoked as root), there is no
+    # home pubkey login for root here, so the script must bail with a clear error
+    # rather than silently staging a key nobody can use.
+    out = desktop.azarch_sh()
+    assert 'if [ "$TARGET_USER" = "root" ]; then' in out
+
+
+def test_azarch_sshd_opens_firewall_before_starting_sshd():
+    # setup-pkgs.sh sets 'ufw default reject incoming', so without an explicit
+    # allow the forwarded host->guest :22 connection is dropped and SSH fails
+    # even though sshd is listening. The rule must come BEFORE sshd starts so the
+    # port is reachable the instant it listens.
+    out = desktop.azarch_sh()
+    assert "sudo ufw allow ssh" in out
+    allow_idx = out.index("sudo ufw allow ssh")
+    start_idx = out.index("sudo systemctl enable --now sshd")
+    assert allow_idx < start_idx
+
+
 # --- bash_profile tty1 guard ------------------------------------------------
 
 def test_bash_profile_guard_keys_off_tty():

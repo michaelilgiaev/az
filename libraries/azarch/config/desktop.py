@@ -390,7 +390,24 @@ cmd="${1:-}"
 
 case "$cmd" in
     --sshd)
-        SHARED="$HOME/shared"
+        # Resolve the REAL login user, not whoever the shell says. The documented
+        # invocation is 'sudo azarch --sshd', under which $HOME is /root and $USER
+        # is root -- so keying off $HOME would stage the pubkey into /root/.ssh and
+        # the 'main' login (whose sshd reads /home/main/.ssh) would still be locked
+        # out. $SUDO_USER is the invoking user under sudo; fall back to the current
+        # user when run without sudo. Refuse a bare-root target: there is no home
+        # pubkey login for root here (blank password, PermitRootLogin prohibit-pw).
+        TARGET_USER="${SUDO_USER:-$(id -un)}"
+        if [ "$TARGET_USER" = "root" ]; then
+            printf 'azarch --sshd: run as a normal user via sudo (got root); cannot stage a login key for root\\n' >&2
+            exit 1
+        fi
+        TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
+        if [ -z "$TARGET_HOME" ]; then
+            printf 'azarch --sshd: could not resolve home for user %s\\n' "$TARGET_USER" >&2
+            exit 1
+        fi
+        SHARED="$TARGET_HOME/shared"
         KEY="$SHARED/authorized_keys"
         if ! mountpoint -q "$SHARED" 2>/dev/null; then
             mkdir -p "$SHARED"
@@ -403,11 +420,19 @@ case "$cmd" in
             printf 'azarch --sshd: %s not found -- stage a host pubkey there first\\n' "$KEY" >&2
             exit 1
         fi
-        install -d -m 700 "$HOME/.ssh"
-        install -m 600 "$KEY" "$HOME/.ssh/authorized_keys"
-        printf 'Installed pubkey -> ~/.ssh/authorized_keys\\n'
+        # Install the key into the TARGET user's ~/.ssh and hand ownership to them:
+        # under sudo these are created as root, and root-owned ~/.ssh/authorized_keys
+        # trips sshd StrictModes, so the pubkey would be ignored on login.
+        sudo install -d -m 700 -o "$TARGET_USER" -g "$TARGET_USER" "$TARGET_HOME/.ssh"
+        sudo install -m 600 -o "$TARGET_USER" -g "$TARGET_USER" "$KEY" "$TARGET_HOME/.ssh/authorized_keys"
+        printf 'Installed pubkey -> %s/.ssh/authorized_keys\\n' "$TARGET_HOME"
+        sudo ssh-keygen -A
+        # setup-pkgs.sh sets 'ufw default reject incoming', so the forwarded
+        # host->guest :22 connection is dropped unless we open it here. Do this
+        # before starting sshd so the port is reachable the moment it listens.
+        sudo ufw allow ssh
         sudo systemctl enable --now sshd
-        printf 'sshd enabled and started.\\n'
+        printf 'sshd enabled and started -- ssh in as %s.\\n' "$TARGET_USER"
         ;;
     -h|--help|help)
         usage
