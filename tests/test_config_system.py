@@ -162,8 +162,11 @@ def test_syslinux_head_rebranded():
 # --- systemd units: the two must diverge on purpose -------------------------
 
 def test_locale_service_waits_for_network_online():
-    # The locale detector needs actual connectivity (IP geolocation), so it orders
-    # AFTER and WANTS network-online.target, and stays active (yes) after exit.
+    # The live locale oneshot orders AFTER and WANTS network-online.target and
+    # stays active (yes) after exit. The setup itself is now STATIC (no IP-geo
+    # since auto-resolve was removed), so this ordering is currently harmless
+    # rather than required; it is kept for the deferred `azarch --resolve-*`
+    # network resolver (issue #46) that reuses this unit's timing.
     s = system.LOCALE_SETUP_SERVICE
     assert "After=network-online.target" in s
     assert "Wants=network-online.target" in s

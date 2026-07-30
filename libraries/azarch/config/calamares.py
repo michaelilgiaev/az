@@ -254,35 +254,161 @@ unpack:
 # the account being removed.
 LIVE_USER = "main"
 
+# The OFFLINE install copies the live archiso rootfs verbatim via unpackfs, which
+# leaves the target's /boot and mkinitcpio config in an ISO-only state that makes
+# Calamares' `initcpio` step (`mkinitcpio -P`) fail. TWO distinct archiso artifacts
+# are to blame, and BOTH must be undone before initcpio runs:
+#
+#   A. /boot is EMPTY. mkarchiso's `_cleanup_pacstrap_dir` deletes everything under
+#      the rootfs's /boot before it squashes airootfs.sfs (verified in
+#      /usr/bin/mkarchiso). The kernel therefore survives ONLY as the modules-tree
+#      copy /usr/lib/modules/<kver>/vmlinuz (pkgbase file alongside names it, e.g.
+#      "linux"); there is NO /boot/vmlinuz-linux in the unpacked target. This is the
+#      real cause of the observed failure:
+#          ==> ERROR: Invalid option -k -- '/boot/vmlinuz-linux' must be readable
+#      mkinitcpio's ALL_kver points at /boot/vmlinuz-<pkgbase>, which does not exist.
+#      An installed system normally gets /boot/vmlinuz-linux from the `linux`
+#      package's 90-mkinitcpio-install.hook (`install -Dm644 .../vmlinuz
+#      /boot/vmlinuz-<pkgbase>`); an offline rsync install never runs that pacman
+#      hook, so we replicate it here.
+#
+#   B. The mkinitcpio PRESET is the *archiso* one: /etc/mkinitcpio.d/linux.preset is
+#      PRESETS=('archiso') with archiso_config=/etc/mkinitcpio.conf.d/archiso.conf,
+#      and archiso.conf's HOOKS carry `archiso archiso_loop_mnt ...`. Even with a
+#      kernel present, that preset builds an archiso-hooked initramfs that cannot
+#      boot an installed disk (it expects the live SquashFS/cow overlay). We replace
+#      it with the STANDARD `linux` preset (default + fallback images, no archiso_*
+#      keys) and remove archiso.conf so its HOOKS -- a conf.d drop-in sourced LAST,
+#      which would otherwise OVERRIDE the /etc/mkinitcpio.conf that Calamares'
+#      initcpiocfg writes -- no longer apply. initcpiocfg then injects the
+#      encrypt/btrfs hooks the chosen layout needs into a clean HOOKS line.
+#
+# STOCK_LINUX_PRESET is the content the `linux` package installs as its preset
+# (mkinitcpio's %KERNELBASE% -> "linux").
+STOCK_LINUX_PRESET = """\
+# mkinitcpio preset file for the 'linux' package
+
+ALL_config="/etc/mkinitcpio.conf"
+ALL_kver="/boot/vmlinuz-linux"
+
+PRESETS=('default' 'fallback')
+
+#default_config="/etc/mkinitcpio.conf"
+default_image="/boot/initramfs-linux.img"
+#default_options=""
+
+#fallback_config="/etc/mkinitcpio.conf"
+fallback_image="/boot/initramfs-linux-fallback.img"
+fallback_options="-S autodetect"
+"""
+
+# Absolute (target-chroot) paths the reset touches.
+_PRESET_PATH = "/etc/mkinitcpio.d/linux.preset"
+_ARCHISO_CONF_PATH = "/etc/mkinitcpio.conf.d/archiso.conf"
+
+
+# Where the copied-in rootfs keeps the kernel image (mkarchiso empties /boot but
+# leaves the modules tree). A shell glob (NOT a Calamares/shell variable -- see the
+# no-`$` note in _mkinitcpio_reset_command) resolves the single installed kernel's
+# version directory. Az'arch ships exactly one kernel (pkgbase `linux`, matching
+# STOCK_LINUX_PRESET), verified against the built airootfs.sfs.
+_MODULES_VMLINUZ_GLOB = "/usr/lib/modules/*/vmlinuz"
+_TARGET_KERNEL = "/boot/vmlinuz-linux"
+
+
+def _mkinitcpio_reset_command() -> str:
+    """A single shellprocess command (a YAML literal-block list item -> one shell
+    invocation in the target chroot) that makes `mkinitcpio -P` succeed on the
+    unpacked target. Steps, in order:
+
+    1. Reinstate the kernel image the pacman install hook would have placed. The
+       `linux` package's 90-mkinitcpio-install.hook copies /usr/lib/modules/<kver>/
+       vmlinuz to /boot/vmlinuz-linux; the OFFLINE install skips that hook, so we
+       replicate it. A shell glob (`/usr/lib/modules/*/vmlinuz`) resolves the single
+       version dir (Az'arch ships one kernel, pkgbase `linux`); `install -Dm644`
+       creates /boot and sets mode 644.
+    2. Overwrite the inherited archiso preset with the stock one. A quoted heredoc
+       (``<<'EOF'``) writes every byte of STOCK_LINUX_PRESET verbatim -- including
+       the single quotes in ``PRESETS=('default' 'fallback')`` -- with no expansion.
+    3. Remove the archiso conf.d drop-in (`rm -f` is a no-op if it is absent).
+
+    CRITICAL -- no `$` anywhere: Calamares runs each shellprocess command through a
+    KWordMacroExpander (escape char `$`) BEFORE the shell sees it. Any bare `$WORD`
+    that is not a Calamares variable makes the whole job ABORT ("Missing variables")
+    without running a single command, and the only way to get a literal `$` through
+    is `$$`, which the expander turns into a SHELL-escaped `\\$` -- i.e. `\\$x` is a
+    literal `$x`, not a variable expansion. So shell variables / `$(...)` cannot be
+    used here at all; this command is written entirely with globs and fixed paths.
+    `set -e` (no `$`) makes a missing kernel or a failed write a HARD error (per the
+    failure policy in shellprocess_conf) rather than a silent skip that would only
+    surface as an obscure `initcpio` failure later."""
+    return (
+        f"set -e\n"
+        # A. reinstate the kernel image the pacman install hook would have placed.
+        f"install -Dm644 {_MODULES_VMLINUZ_GLOB} {_TARGET_KERNEL}\n"
+        # B. install the stock preset (replacing the archiso one).
+        f"mkdir -p /etc/mkinitcpio.d\n"
+        f"cat > {_PRESET_PATH} <<'EOF'\n"
+        f"{STOCK_LINUX_PRESET}"
+        f"EOF\n"
+        # C. drop the archiso conf.d override.
+        f"rm -f {_ARCHISO_CONF_PATH}"
+    )
+
 
 def shellprocess_conf() -> str:
-    """Delete the live rootfs's pre-existing `main` account from the target so the
-    `users` module can re-create it (see the users.conf note / module docstring).
+    """Two pre-`users` / pre-`initcpio` fixups the OFFLINE (copy-the-live-rootfs)
+    install needs, run INSIDE the target chroot (dontChroot: false) after unpackfs:
 
-    Runs INSIDE the target chroot (dontChroot: false) after unpackfs. We edit the
-    passwd/shadow/gshadow/group databases directly with `userdel`/`groupdel`
-    rather than trusting a single tool: `userdel main` removes the user's line and
-    its per-user primary group; a follow-up `groupdel` handles the case where the
-    group lingers. Every command is prefixed "-" so a rootfs that (for any reason)
-    lacks the `main` account or group does NOT abort the install -- the goal is
-    merely "main must not exist here when users runs", and a no-op is success.
+    1. Delete the live rootfs's pre-existing `main` account so the `users` module
+       can re-create it (see the users.conf note / module docstring). We edit the
+       passwd/shadow/gshadow/group databases via `userdel`/`groupdel` rather than
+       trusting one tool: `userdel main` removes the user line and its per-user
+       primary group; a follow-up `groupdel` handles a lingering group. We do NOT
+       pass `-r`/`--remove`: /home/main (uid 1000) must stay so users.conf
+       reuseHome:true reuses it. `-f` forces removal on a freshly unpacked target.
 
-    We deliberately do NOT pass `-r`/`--remove`: /home/main must stay on the target
-    (its files are uid 1000), and users.conf reuseHome:true then reuses it. `-f`
-    forces removal even if userdel thinks the user is still logged in (it is not --
-    this is a freshly unpacked target), so the step is reliable and idempotent."""
+    2. Make the target's initramfs buildable: reinstate /boot/vmlinuz-linux
+       (mkarchiso emptied /boot; the kernel survives only under /usr/lib/modules)
+       and replace the inherited *archiso* mkinitcpio preset with the stock `linux`
+       preset (+ drop archiso.conf). Without this the later `initcpio` module's
+       `mkinitcpio -P` fails with "'/boot/vmlinuz-linux' must be readable" (missing
+       kernel) or, past that, builds an unbootable archiso-hooked initramfs. See
+       `_mkinitcpio_reset_command` / STOCK_LINUX_PRESET above. NOTE: this fixup uses
+       NO `$` (no shell variables / `$(...)`) -- Calamares macro-expands `$WORD` and
+       would abort the whole job on an unknown one (see _mkinitcpio_reset_command).
+
+    Command-failure policy: the user-removal commands are prefixed "-" so a rootfs
+    that (for any reason) lacks the `main` account/group never aborts the install
+    -- the goal is merely "main must not exist when users runs", so a no-op is
+    success. The mkinitcpio fixup is NOT prefixed "-" (and uses `set -e` internally):
+    reinstating the kernel and a correct preset is load-bearing -- a silent failure
+    would leave /boot empty or the archiso preset in place and the install would die
+    obscurely later at `initcpio`, so it should stop here with a clear failure.
+
+    Ordering note: shellprocess sits after unpackfs and before both `users` and
+    `initcpiocfg`/`initcpio` in settings.conf's exec sequence, so both fixups land
+    on the unpacked target before the modules that depend on them run."""
+    reset_cmd = _mkinitcpio_reset_command()
+    # Indent the multi-line reset command to sit under the YAML "- |" block scalar.
+    reset_block = "\n".join("        " + line for line in reset_cmd.splitlines())
     return f"""\
-# Remove the live-ISO `main` account from the freshly unpacked target so the
-# `users` module can create it with the user-chosen password (offline installs
-# copy the live rootfs, which already carries `main` -- useradd would abort with
-# "user already exists"). Runs in the target chroot; /home/main is preserved.
+# Post-unpackfs target fixups for the OFFLINE install (runs in the target chroot):
+#   1. remove the live-ISO `main` account so the `users` module can recreate it
+#      with the user-chosen password (/home/main is preserved), and
+#   2. make the initramfs buildable: reinstate /boot/vmlinuz-<pkgbase> (mkarchiso
+#      emptied /boot) and replace the copied-in *archiso* mkinitcpio preset with the
+#      stock `linux` preset (+ drop archiso.conf), so `initcpio`'s `mkinitcpio -P`
+#      produces a bootable installed-system initramfs instead of failing.
 ---
 dontChroot: false
-timeout: 30
+timeout: 60
 verbose: true
 script:
     - "-userdel -f {LIVE_USER}"
     - "-groupdel {LIVE_USER}"
+    - |
+{reset_block}
 """
 
 

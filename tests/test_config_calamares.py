@@ -169,39 +169,122 @@ def test_archiso_sfs_path_literal():
     assert calamares.ARCHISO_SFS == "/run/archiso/bootmnt/arch/x86_64/airootfs.sfs"
 
 
-# --- shellprocess.conf (the "user already exists" fix) ----------------------
+# --- shellprocess.conf (the "user already exists" + archiso-preset fixes) ----
 
-def test_shellprocess_runs_between_unpackfs_and_users():
-    # The whole point: remove the baked-in `main` account AFTER the target exists
-    # (unpackfs) but BEFORE the users module runs useradd. Order is load-bearing.
+def test_shellprocess_runs_between_unpackfs_and_its_dependents():
+    # The whole point: both fixups run AFTER the target exists (unpackfs) but
+    # BEFORE the modules that depend on them -- `users` (account recreation) and
+    # `initcpiocfg`/`initcpio` (mkinitcpio -P). Order is load-bearing.
     execs = _settings_exec_list()
     assert "shellprocess" in execs
     assert execs.index("unpackfs") < execs.index("shellprocess") < execs.index("users")
+    assert execs.index("shellprocess") < execs.index("initcpiocfg") < execs.index("initcpio")
 
 
 def test_shellprocess_conf_schema_and_chroot():
     d = yaml.safe_load(calamares.shellprocess_conf())
-    # Runs INSIDE the target chroot so it edits the target's user databases.
+    # Runs INSIDE the target chroot so it edits the target's databases/config.
     assert d["dontChroot"] is False
     # script is a list of command strings (the shellprocess CommandList form).
     assert isinstance(d["script"], list)
     assert all(isinstance(c, str) for c in d["script"])
 
 
+def _userdel_commands(script: list) -> list:
+    """The two account-removal commands (userdel/groupdel), which are the ones
+    prefixed '-' to be non-fatal. The mkinitcpio-reset command is separate."""
+    return [c for c in script if "userdel" in c or "groupdel" in c]
+
+
 def test_shellprocess_deletes_the_live_user_non_fatally():
     d = yaml.safe_load(calamares.shellprocess_conf())
-    joined = "\n".join(d["script"])
-    # It must delete the `main` account (userdel), and every command is prefixed
-    # "-" so a rootfs lacking the account/group never aborts the install.
+    script = d["script"]
+    # It must delete the `main` account (userdel), and the account-removal commands
+    # are prefixed "-" so a rootfs lacking the account/group never aborts install.
     assert calamares.LIVE_USER == "main"
-    assert f"-userdel -f {calamares.LIVE_USER}" in d["script"]
-    assert f"-groupdel {calamares.LIVE_USER}" in d["script"]
-    for cmd in d["script"]:
+    assert f"-userdel -f {calamares.LIVE_USER}" in script
+    assert f"-groupdel {calamares.LIVE_USER}" in script
+    removal = _userdel_commands(script)
+    assert len(removal) == 2
+    for cmd in removal:
         assert cmd.startswith("-"), cmd
     # It must NOT remove the home directory (reuseHome relies on /home/main staying).
+    joined = "\n".join(removal)
     assert "--remove" not in joined
     assert "userdel -r" not in joined
     assert "-r " not in joined
+
+
+# --- shellprocess.conf: the archiso mkinitcpio fix (kernel + preset) --------
+
+def _mkinitcpio_reset_command(script: list) -> str:
+    """The single script command that fixes the target's initramfs setup (the one
+    that writes linux.preset). Exactly one such command must exist."""
+    matches = [c for c in script if "linux.preset" in c]
+    assert len(matches) == 1, matches
+    return matches[0]
+
+
+def test_shellprocess_reinstates_the_kernel_image():
+    # mkarchiso empties the rootfs /boot before squashing, so the unpacked target
+    # has NO /boot/vmlinuz-linux -- the kernel survives only at
+    # /usr/lib/modules/<kver>/vmlinuz. mkinitcpio -P would fail "'/boot/vmlinuz-linux'
+    # must be readable" without this. The command must replicate the linux package's
+    # install hook: copy modules/<kver>/vmlinuz -> /boot/vmlinuz-linux. A shell GLOB
+    # (version-agnostic; no hardcoded kernel version a bump would break) selects the
+    # single installed kernel, and `install -Dm644` recreates /boot with mode 644.
+    d = yaml.safe_load(calamares.shellprocess_conf())
+    cmd = _mkinitcpio_reset_command(d["script"])
+    assert "install -Dm644 /usr/lib/modules/*/vmlinuz /boot/vmlinuz-linux" in cmd
+
+
+def test_shellprocess_uses_no_shell_variables():
+    # LOAD-BEARING: Calamares runs each shellprocess command through a
+    # KWordMacroExpander (escape char '$') BEFORE the shell sees it. Any bare
+    # `$WORD` that is not a Calamares variable makes the ENTIRE job abort with
+    # "Missing variables" -- nothing runs, including the userdel/groupdel. And the
+    # only literal-`$` escape ('$$') yields a shell-escaped `\\$` (a literal, not an
+    # expansion), so shell variables / `$(...)` are unusable here. Assert NO '$'
+    # appears in any emitted script command.
+    d = yaml.safe_load(calamares.shellprocess_conf())
+    for cmd in d["script"]:
+        assert "$" not in cmd, cmd
+
+
+def test_shellprocess_replaces_archiso_preset_with_stock():
+    d = yaml.safe_load(calamares.shellprocess_conf())
+    cmd = _mkinitcpio_reset_command(d["script"])
+    # Writes the stock `linux` preset to the canonical path...
+    assert "/etc/mkinitcpio.d/linux.preset" in cmd
+    # ...whose defining feature is the default+fallback PRESETS (NOT archiso).
+    assert "PRESETS=('default' 'fallback')" in cmd
+    assert "default_image=\"/boot/initramfs-linux.img\"" in cmd
+    assert "fallback_image=\"/boot/initramfs-linux-fallback.img\"" in cmd
+    # The archiso preset name must be gone from what we write (that name is exactly
+    # what makes `mkinitcpio -P` fail on the copied-in live rootfs).
+    assert "archiso'" not in cmd  # PRESETS=('archiso') fragment
+    # And it removes the archiso conf.d drop-in whose HOOKS would otherwise win.
+    assert "rm -f /etc/mkinitcpio.conf.d/archiso.conf" in cmd
+
+
+def test_shellprocess_mkinitcpio_command_is_fatal_on_failure():
+    # The mkinitcpio fixup is deliberately NOT prefixed "-" and uses `set -e`:
+    # reinstating the kernel + writing a correct preset is load-bearing (a silent
+    # failure would leave /boot empty or the archiso preset in place, and the
+    # install would die obscurely later at `initcpio`).
+    d = yaml.safe_load(calamares.shellprocess_conf())
+    cmd = _mkinitcpio_reset_command(d["script"])
+    assert not cmd.startswith("-")
+    assert cmd.startswith("set -e")
+
+
+def test_stock_preset_constant_is_a_valid_default_fallback_preset():
+    # The reused constant is the source of truth for the written preset.
+    preset = calamares.STOCK_LINUX_PRESET
+    assert "PRESETS=('default' 'fallback')" in preset
+    assert 'ALL_kver="/boot/vmlinuz-linux"' in preset
+    # No archiso-specific keys leak into the installed-system preset.
+    assert "archiso" not in preset
 
 
 # --- users.conf (reuse the surviving /home/main) ----------------------------

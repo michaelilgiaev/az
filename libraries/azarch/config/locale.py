@@ -1,13 +1,28 @@
-"""Locale auto-detection: the country->locale map (as a Python dict, the single
-source of truth) plus the two scripts that consume it -- setup-locale.sh (runs on
-the LIVE ISO) and the locale portion of chroot-setup.sh (runs in the INSTALL
-chroot). Both derive their bash LANGUAGE_MAP heredoc from LANGUAGE_MAP below, so
-adding a language is a one-line Python edit.
+"""Locale setup: a STATIC English-only, Asia/Jerusalem configuration plus the
+country->locale map kept as data for the (deferred) dynamic resolver.
+
+Both consumers -- setup-locale.sh (runs on the LIVE ISO) and the locale portion
+of chroot-setup.sh (runs in the INSTALL chroot) -- share
+``_detect_and_apply_locale_block()`` below. As of the "no auto-resolve" change it
+does NOT query the network: the display language is English (en_US.UTF-8), the
+keyboard is English-only ("us"), and the timezone is Asia/Jerusalem, all fixed.
+
+The old behaviour -- IP-geolocating the timezone/country (curl ipapi.co) and
+switching the display locale from LANGUAGE_MAP -- is intentionally gone. It is
+being reimplemented as separate, user-invoked guest commands (`azarch
+--resolve-date-time` / `--resolve-language` / `--resolve-region`) tracked in
+issue #46; that work is deliberately NOT done here. LANGUAGE_MAP is retained as
+the single source of truth those future commands will consume (adding a language
+is still a one-line Python edit), but it is no longer embedded in the shipped
+setup scripts.
 """
 
 from __future__ import annotations
 
 # country code -> (language name, locale). Order preserved (matches the original).
+# NOTE: this is now DATA ONLY -- retained for the deferred `azarch --resolve-*`
+# commands (issue #46). The static locale block below no longer reads it, so the
+# live/installed systems ship English-only regardless of what is added here.
 LANGUAGE_MAP: dict[str, tuple[str, str]] = {
     "US": ("English", "en_US.UTF-8"),
     "GB": ("English", "en_GB.UTF-8"),
@@ -40,63 +55,41 @@ LANGUAGE_MAP: dict[str, tuple[str, str]] = {
 
 
 def _language_map_heredoc() -> str:
-    """Render LANGUAGE_MAP as the ``CC|Language|locale`` lines the bash scripts grep."""
+    """Render LANGUAGE_MAP as the ``CC|Language|locale`` lines the (deferred)
+    resolver will grep. Retained as a helper for issue #46; NOT used by the
+    static setup block below."""
     return "\n".join(f"{cc}|{name}|{loc}" for cc, (name, loc) in LANGUAGE_MAP.items())
 
 
-# Az'arch default timezone. IP-geo detection still wins when it resolves (so a
-# machine physically elsewhere keeps correct local time); this is the FALLBACK
-# used when geo is unreachable/unknown -- the shipped default, per requirements.
+# Az'arch default/only display language and keyboard. English everywhere; the
+# keymap is always "us" with no second layout and no group-toggle.
+DEFAULT_LANG = "en_US.UTF-8"
+DEFAULT_KEYMAP = "us"
+
+# Az'arch default (and, since auto-resolve was removed, ONLY) timezone. Dynamic
+# geo detection is deferred to `azarch --resolve-date-time` (issue #46).
 DEFAULT_TIMEZONE = "Asia/Jerusalem"
 
 
-# Shared bash block: query IP geo for the display LANGUAGE, enable+generate that
-# locale, force an English-only (us) keyboard, and set the timezone (geo override,
-# Asia/Jerusalem default). Both the live-ISO script and the installer chroot script
-# start from this.
+# Shared bash block: apply the STATIC locale -- English display language, an
+# English-only ("us") keyboard, and the Asia/Jerusalem timezone. NO network call.
+# Both the live-ISO script and the installer chroot script start from this.
 #
+# Language policy: ENGLISH-ONLY. LANG is en_US.UTF-8, unconditionally.
 # Keyboard policy: ENGLISH-ONLY. The layout is always "us" with no second layout
-# and no group-toggle -- geo affects the display language (LANG) only, never the
-# keymap. (Earlier revisions added the country's native layout as a toggleable
-# secondary; that is intentionally gone.)
+# and no group-toggle.
+# Timezone policy: Asia/Jerusalem, unconditionally. (No IP geolocation -- that is
+# reimplemented as the user-invoked `azarch --resolve-*` commands, issue #46.)
 def _detect_and_apply_locale_block() -> str:
     return f"""\
-# Get timezone and country from IP
-TIMEZONE=$(curl -s https://ipapi.co/timezone)
-COUNTRY=$(curl -s https://ipapi.co/country)
+# Static locale: English display language, English-only ("us") keyboard, and the
+# Asia/Jerusalem timezone. Nothing here is auto-resolved from the network -- the
+# dynamic resolver lives in the `azarch --resolve-*` commands (issue #46).
+PRIMARY_LANG="{DEFAULT_LANG}"
+PRIMARY_KB="{DEFAULT_KEYMAP}"
 
-# Defaults. Keyboard is English-only (us) and never changes; only the display
-# language (PRIMARY_LANG) is geo-detected below.
-PRIMARY_LANG="en_US.UTF-8"
-SECONDARY_LANG=""
-PRIMARY_KB="us"
-
-# Language mapping (generated from azarch.config.locale.LANGUAGE_MAP)
-LANGUAGE_MAP=$(cat <<EOF
-{_language_map_heredoc()}
-EOF
-)
-
-# Match country code to a display locale. US stays single-locale; any other
-# recognised country adds its locale as a SECONDARY generated locale while the
-# primary UI language stays English. The keyboard is NOT touched here.
-MATCH=$(echo "$LANGUAGE_MAP" | grep "^$COUNTRY|")
-if [ -n "$MATCH" ]; then
-  LOCALE_CODE=$(echo "$MATCH" | cut -d'|' -f3)
-
-  if [ "$COUNTRY" = "US" ]; then
-    PRIMARY_LANG="$LOCALE_CODE"
-  else
-    PRIMARY_LANG="en_US.UTF-8"
-    SECONDARY_LANG="$LOCALE_CODE"
-  fi
-fi
-
-# Enable locales
+# Enable the single (English) locale.
 sed -i "s/^#\\?\\s*$PRIMARY_LANG/$PRIMARY_LANG/" /etc/locale.gen
-if [ -n "$SECONDARY_LANG" ]; then
-  sed -i "s/^#\\?\\s*$SECONDARY_LANG/$SECONDARY_LANG/" /etc/locale.gen
-fi
 
 # Generate locales
 locale-gen
@@ -118,19 +111,14 @@ Section "InputClass"
 EndSection
 EOF
 
-# Set timezone: use the geo-detected zone when it resolves to a real zoneinfo
-# file, else fall back to the Az'arch default ({DEFAULT_TIMEZONE}).
-if [ -n "$TIMEZONE" ] && [ -f "/usr/share/zoneinfo/$TIMEZONE" ]; then
-  ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
-else
-  ln -sf "/usr/share/zoneinfo/{DEFAULT_TIMEZONE}" /etc/localtime
-fi
+# Set timezone: Asia/Jerusalem (fixed; no geo detection).
+ln -sf "/usr/share/zoneinfo/{DEFAULT_TIMEZONE}" /etc/localtime
 
 hwclock --systohc"""
 
 
 def setup_locale_sh() -> str:
-    """The live-ISO oneshot: detect + apply locale, then mark complete."""
+    """The live-ISO oneshot: apply the static locale, then mark complete."""
     return f"""\
 #!/bin/bash
 
