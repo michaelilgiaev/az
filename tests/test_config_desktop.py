@@ -1,4 +1,4 @@
-"""azarch.config.desktop -- the Openbox live-session config-as-Python payloads.
+"""azarch.config.desktop -- the KDE Plasma live-session config-as-Python payloads.
 
 Why these tests matter: steps.py never inspects the CONTENT of these builders;
 it blindly iterates PLAN/emit_plan() and calls emit.write_text/write_exec with
@@ -9,16 +9,12 @@ guards then silently skip it) or a config world-writable; a wrong owner chowns a
 root-owned wrapper to uid 1000 (or leaves a home dotfile root-owned so the live
 user cannot read it). None of that raises in Python; it only shows up as a dead
 live session. These tests pin the mode/owner/dest table, prove emit_plan() does
-not mutate the module-level PLAN (steps.py may call it more than once), prove the
-two Openbox XML documents stay well-formed despite the literal `Az'arch`
-apostrophe spliced into them, and lock the two brittle shell contracts: the
-installer autostart's exec-bit-or-fallback launch and the privileged wrapper's
-`unset XDG_RUNTIME_DIR` happening BEFORE `exec sudo`.
+not mutate the module-level PLAN (steps.py may call it more than once), lock the
+Plasma session contract (xinitrc execs startplasma-x11, no cyan flash, wallpaper
+baked in), and the privileged wrapper's `unset XDG_RUNTIME_DIR` before `exec sudo`.
 """
 
 from __future__ import annotations
-
-import xml.etree.ElementTree as ET
 
 from azarch.config import desktop
 
@@ -55,14 +51,14 @@ def test_exec_and_conf_octal_values():
 
 
 def test_scripts_are_exec_configs_are_conf():
-    # xinitrc and autostart are shell scripts -> 0o755; the three dotfiles that are
-    # parsed (rc.xml, menu.xml, picom.conf) are data -> 0o644.
+    # xinitrc is a shell script -> 0o755; the Plasma dotfiles (appletsrc, ksplashrc,
+    # the .desktop launchers) are data -> 0o644.
     by_builder = {e["builder"].__name__: e for e in desktop.PLAN}
     assert by_builder["xinitrc"]["mode"] == 0o755
-    assert by_builder["openbox_autostart"]["mode"] == 0o755
-    assert by_builder["openbox_rc_xml"]["mode"] == 0o644
-    assert by_builder["openbox_menu_xml"]["mode"] == 0o644
-    assert by_builder["picom_conf"]["mode"] == 0o644
+    assert by_builder["plasma_appletsrc"]["mode"] == 0o644
+    assert by_builder["ksplashrc"]["mode"] == 0o644
+    assert by_builder["autostart_install_desktop"]["mode"] == 0o644
+    assert by_builder["install_menu_desktop"]["mode"] == 0o644
 
 
 def test_install_wrapper_entry_is_root_owned_exec():
@@ -75,21 +71,27 @@ def test_install_wrapper_entry_is_root_owned_exec():
     assert entry["builder"] is desktop.install_wrapper_sh
 
 
-def test_picom_entry_is_home_owned_conf():
+def test_appletsrc_entry_is_home_owned_conf():
     entry = next(
-        e for e in desktop.PLAN if e["dest"] == f"{desktop.HOME}/.config/picom.conf"
+        e for e in desktop.PLAN
+        if e["dest"] == f"{desktop.HOME}/.config/plasma-org.kde.plasma.desktop-appletsrc"
     )
     assert entry["mode"] == 0o644
     assert entry["owner"] == "home"
-    assert entry["builder"] is desktop.picom_conf
+    assert entry["builder"] is desktop.plasma_appletsrc
 
 
-def test_only_wrapper_is_root_owned():
-    # Exactly two PLAN entries are root-owned: the azarch CLI and the installer
-    # wrapper, both in /usr/local/bin. Everything else is a /home/main dotfile
-    # handed to the live user (uid 1000, gid 998).
+def test_root_owned_dests_are_wrapper_cli_and_menu_launcher():
+    # Exactly three PLAN entries are root-owned: the azarch CLI, the installer
+    # wrapper (both /usr/local/bin), and the system-wide menu launcher
+    # (/usr/share/applications). Everything else is a /home/main dotfile handed to
+    # the live user (uid 1000, gid 998).
     root_dests = [e["dest"] for e in desktop.PLAN if e["owner"] == "root"]
-    assert set(root_dests) == {desktop.INSTALL_WRAPPER_PATH, desktop.AZARCH_BIN_PATH}
+    assert set(root_dests) == {
+        desktop.INSTALL_WRAPPER_PATH,
+        desktop.AZARCH_BIN_PATH,
+        "/usr/share/applications/azarch-install.desktop",
+    }
 
 
 def test_home_owned_dests_live_under_home():
@@ -139,54 +141,89 @@ def test_emit_plan_does_not_mutate_module_plan():
     assert len(desktop.PLAN) == before == 7
 
 
-# --- Openbox XML well-formedness (the Az'arch apostrophe) -------------------
+# --- xinitrc: Plasma X11 session, no flash ----------------------------------
 
-def test_openbox_rc_xml_is_well_formed():
-    # The literal apostrophe in "Az'arch" sits inside XML text/attributes; if it
-    # ever leaked into an attribute quote it would break the parser here.
-    root = ET.fromstring(desktop.openbox_rc_xml())
-    assert root.tag.endswith("openbox_config")
+def test_xinitrc_execs_startplasma_x11():
+    # startx hands the session to the Plasma X11 session launcher.
+    assert "exec startplasma-x11" in desktop.xinitrc()
 
 
-def test_openbox_menu_xml_is_well_formed():
-    root = ET.fromstring(desktop.openbox_menu_xml())
-    assert root.tag.endswith("openbox_menu")
+def test_xinitrc_exports_desktop_session_plasma():
+    # The one env var the Arch Wiki has you set for a startx Plasma session.
+    assert "export DESKTOP_SESSION=plasma" in desktop.xinitrc()
 
 
-def test_menu_xml_install_command_is_the_wrapper():
-    # The top menu entry's <command> must be the single privileged wrapper path,
-    # spliced from INSTALL_WRAPPER_PATH.
-    xml = desktop.openbox_menu_xml()
-    assert (
-        "<command>" + desktop.INSTALL_WRAPPER_PATH + "</command>" in xml
-    )
+def test_xinitrc_has_no_cyan_solid_flash():
+    # THE regression this fixes: the old session did `xsetroot -solid <cyan>`,
+    # flashing a solid color before the desktop painted. The new xinitrc must NOT
+    # set any solid color; it paints the wallpaper instead (see below).
+    out = desktop.xinitrc()
+    assert "xsetroot -solid" not in out
+    assert "#06b8fd" not in out
 
 
-def test_rc_xml_desktop_name_is_azarch():
-    # The single desktop is named with the branded apostrophe form.
-    assert "<name>Az'arch</name>" in desktop.openbox_rc_xml()
+def test_xinitrc_prepaints_wallpaper_before_exec():
+    # No-flash contract: feh paints the SAME wallpaper onto the X root BEFORE the
+    # exec that starts Plasma, so the first visible frame is the wallpaper and
+    # Plasma's own wallpaper repaint is invisible (identical pixels).
+    out = desktop.xinitrc()
+    assert "feh --no-fehbg --bg-fill '" + desktop.WALLPAPER_DEST + "'" in out
+    feh_idx = out.index("feh --no-fehbg --bg-fill")
+    exec_idx = out.index("exec startplasma-x11")
+    assert feh_idx < exec_idx
 
 
-# --- Installer autostart: exec-bit-or-fallback launch -----------------------
+# --- Plasma wallpaper appletsrc ---------------------------------------------
 
-def test_autostart_has_exec_bit_and_readable_fallback():
-    # A lost exec bit (archiso normalizes overlay modes) must not silently stop the
-    # installer from opening; the -x branch runs the wrapper, the -r fallback runs
-    # it through `sh`.
-    out = desktop.openbox_autostart()
-    wrapper = desktop.INSTALL_WRAPPER_PATH
-    assert f"[ -x {wrapper} ]" in out
-    assert f"elif [ -r {wrapper} ]" in out
-    assert f"sh {wrapper} &" in out
+def test_appletsrc_sets_wallpaper_in_nested_image_group():
+    # The wallpaper Image= MUST live in the nested
+    # [Containments][1][Wallpaper][org.kde.image][General] group (not the
+    # containment's own [General]) or Plasma ignores it. Value is a file:// URI.
+    out = desktop.plasma_appletsrc()
+    assert "[Containments][1][Wallpaper][org.kde.image][General]" in out
+    assert "Image=file://" + desktop.WALLPAPER_DEST in out
 
 
-def test_autostart_backgrounds_helpers():
-    # picom / xsetroot / nm-applet must be backgrounded (&) so the autostart script
-    # returns and the session comes up.
-    out = desktop.openbox_autostart()
-    assert "picom --config" in out and "picom" in out
-    assert "xsetroot -solid '" + desktop.ACCENT_HEX + "' &" in out
-    assert "nm-applet &" in out
+def test_appletsrc_uses_image_wallpaper_plugin():
+    out = desktop.plasma_appletsrc()
+    assert "wallpaperplugin=org.kde.image" in out
+    assert "plugin=org.kde.desktopcontainment" in out
+
+
+# --- KSplash disabled (no splash frame) -------------------------------------
+
+def test_ksplashrc_disables_splash():
+    # KSplash off so the only paint between the wallpaper root-pixmap and the live
+    # desktop is the wallpaper itself -- no splash frame, reinforcing no-flash.
+    out = desktop.ksplashrc()
+    assert "[KSplash]" in out
+    assert "Engine=none" in out
+    assert "Theme=None" in out
+
+
+# --- Autostart + menu launchers open the installer via the wrapper ----------
+
+def test_autostart_desktop_execs_the_wrapper():
+    # The Plasma autostart .desktop must run the single privileged wrapper so the
+    # installer auto-opens once at login.
+    out = desktop.autostart_install_desktop()
+    assert out.splitlines()[0] == "[Desktop Entry]"
+    assert "Exec=" + desktop.INSTALL_WRAPPER_PATH in out
+    assert "Type=Application" in out
+
+
+def test_autostart_desktop_runs_in_phase_two():
+    # Delay until the desktop/panel are ready so the installer window has a session
+    # to map into.
+    assert "X-KDE-autostart-phase=2" in desktop.autostart_install_desktop()
+
+
+def test_menu_launcher_execs_the_wrapper():
+    # The application-menu launcher (re-open after close) shares the same wrapper.
+    out = desktop.install_menu_desktop()
+    assert out.splitlines()[0] == "[Desktop Entry]"
+    assert "Exec=" + desktop.INSTALL_WRAPPER_PATH in out
+    assert "Categories=System;" in out
 
 
 # --- Privileged wrapper: unset before exec ----------------------------------
@@ -321,23 +358,24 @@ def test_bash_profile_sources_bashrc():
     assert "[[ -f ~/.bashrc ]] && . ~/.bashrc" in desktop.bash_profile_startx()
 
 
-# --- Branding / wrapper constants -------------------------------------------
-
-def test_accent_hex_value_and_length():
-    # Matches os-release ANSI_COLOR (6,184,253); a 7-char #rrggbb string used as
-    # the xsetroot solid background (in both ~/.xinitrc and the autostart).
-    assert desktop.ACCENT_HEX == "#06b8fd"
-    assert len(desktop.ACCENT_HEX) == 7
-
+# --- Branding / wrapper / wallpaper constants -------------------------------
 
 def test_install_wrapper_path_value():
     assert desktop.INSTALL_WRAPPER_PATH == "/usr/local/bin/azarch-install"
 
 
-def test_accent_hex_used_in_xinitrc_and_autostart():
-    # The accent color is spliced into two builders; both must carry it verbatim.
-    assert desktop.ACCENT_HEX in desktop.xinitrc()
-    assert desktop.ACCENT_HEX in desktop.openbox_autostart()
+def test_wallpaper_dest_and_asset_values():
+    # The wallpaper ships to a system path (referenced by both the appletsrc and
+    # the xinitrc pre-paint) and is sourced from the requested asset.
+    assert desktop.WALLPAPER_DEST == "/usr/share/azarch/wallpaper.png"
+    assert desktop.WALLPAPER_ASSET == "wallpapers/wallpaper_years.png"
+
+
+def test_wallpaper_dest_used_in_xinitrc_and_appletsrc():
+    # The wallpaper path is spliced into two builders; both must carry it verbatim
+    # so the pre-paint and the Plasma wallpaper are the same image (no flash).
+    assert desktop.WALLPAPER_DEST in desktop.xinitrc()
+    assert desktop.WALLPAPER_DEST in desktop.plasma_appletsrc()
 
 
 # --- Every builder returns non-empty content --------------------------------
@@ -349,8 +387,3 @@ def test_all_builders_return_nonempty_str():
         content = entry["builder"]()
         assert isinstance(content, str)
         assert content.strip(), entry["dest"]
-
-
-def test_xinitrc_execs_openbox_session():
-    # startx hands the session to openbox-session (not bare openbox).
-    assert "exec openbox-session" in desktop.xinitrc()

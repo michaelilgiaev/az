@@ -181,22 +181,28 @@ xorg-xrandr
 xorg-xsetroot
 xcb-util-cursor
 mesa
-openbox
-picom
 feh
-pcmanfm
 gvfs
-lxappearance
-network-manager-applet
-polkit-gnome
 xdg-user-dirs
 xdg-utils
-dunst
 kitty
-xterm
 ttf-dejavu
 ttf-liberation
 noto-fonts
+# --- KDE Plasma desktop (minimal, no display manager) ---------------------
+# plasma-desktop hard-pulls plasma-workspace (the panel/launcher/startplasma-x11
+# + kscreenlocker), polkit-kde-agent, and powerdevil (laptop sleep/wake), so
+# those are NOT listed. kwin-x11 IS listed explicitly: it is only an optdepend of
+# plasma-workspace, but it is the actual X11 window manager the startx session
+# needs (the auto-pulled `kwin` package is the Wayland compositor only). plasma-nm
+# / plasma-pa are the NetworkManager + audio tray applets (optdepends, ride on the
+# networkmanager + pipewire-pulse already in this manifest). dolphin is the file
+# manager. No sddm (autologin + startx instead), no konsole (kitty is the terminal).
+plasma-desktop
+kwin-x11
+plasma-nm
+plasma-pa
+dolphin
 adwaita-icon-theme
 gnome-themes-extra
 xcursor-themes

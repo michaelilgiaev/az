@@ -150,13 +150,13 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: 
     # Overlay the releng `archiso` hostname with `azarch` (prompt + fastfetch title).
     emit.write_text(airootfs / "etc/hostname", system.HOSTNAME)
 
-    # 8 -- Overlay the Openbox live desktop + Calamares installer config.
+    # 8 -- Overlay the KDE Plasma live desktop + Calamares installer config.
     # The graphical live session (Manjaro-style): user configs go to BOTH the live
     # `main` home AND /etc/skel (so a Calamares-created user on the installed system
     # inherits the same desktop). The tty1 autologin override switches the releng
-    # default (autologin root) to autologin `main`, whose .bash_profile execs startx.
-    # The Calamares config tree lands under /etc/calamares.
-    bar.step("Overlay Openbox desktop and Calamares config")
+    # default (autologin root) to autologin `main`, whose .bash_profile execs startx
+    # into a Plasma X11 session. The Calamares config tree lands under /etc/calamares.
+    bar.step("Overlay Plasma desktop and Calamares config")
     _emit_desktop(airootfs, home)
     _emit_calamares(airootfs)
     _emit_tty1_autologin(airootfs)
@@ -193,12 +193,13 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: 
 
     # 10 -- Emit profiledef and installer payload.
     # profiledef.sh (archiso metadata at the PROFILE ROOT, not airootfs) plus the
-    # first-boot script/service/conf. Calamares (auto-launched from the Openbox
-    # session, step 8) is now the PRIMARY installer; the legacy bash installer is
-    # still emitted to the Desktop as a terminal fallback for rescue use.
+    # first-boot script/service/conf. Calamares (auto-launched from the Plasma
+    # session, step 8) is the SOLE installer: the legacy terminal
+    # azarch-iso-installer.sh is no longer emitted to the live user's Desktop
+    # (the on-disk installer scripts remain in config/installer.py for the
+    # first-boot pipeline, but the Desktop launcher is gone).
     bar.step("Emit profiledef and installer payload")
     emit.write_exec(W / "profiledef.sh", profile.profiledef_sh(variant))
-    emit.write_exec(home / "Desktop/azarch-iso-installer.sh", installer.installer_sh())
     emit.write_exec(ea / "first-boot-setup.sh", installer.first_boot_sh())
     emit.write_text(ea / "first-boot-setup.service", installer.first_boot_service())
     emit.write_text(ea / "first-boot-setup.conf", installer.first_boot_conf())
@@ -251,7 +252,7 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: 
 # --- helpers ---------------------------------------------------------------
 
 def _emit_desktop(airootfs: Path, home: Path) -> None:
-    """Emit the Openbox live-session files. Each PLAN entry has an absolute dest
+    """Emit the Plasma live-session files. Each PLAN entry has an absolute dest
     (either under /home/main for the live user or an absolute system path). User
     files are ALSO copied into /etc/skel so a Calamares-created user on the
     installed system inherits the same desktop (Manjaro-style). The /home/main
@@ -267,6 +268,12 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
         if entry["owner"] == "home" and dest_abs.startswith(desktop.HOME + "/"):
             rel = dest_abs[len(desktop.HOME) + 1:]   # path under the home dir
             emit.write_text(skel / rel, content, mode=mode)
+    # Wallpaper image the Plasma appletsrc + the ~/.xinitrc root pre-paint both
+    # reference (WALLPAPER_DEST). Copied to a SYSTEM path (root-owned), so the live
+    # `main` user and any Calamares-created user (skel appletsrc points at the same
+    # absolute path) both resolve it. unpackfs copies it onto the installed target.
+    emit.copy_asset(desktop.WALLPAPER_ASSET,
+                    airootfs / desktop.WALLPAPER_DEST.lstrip("/"), mode=0o644)
     # re-assert ownership of the live user's tree (new files were added under it).
     subprocess.run(_sudo() + ["chown", "-R", "1000:998", str(home)], check=False)
 
@@ -476,10 +483,10 @@ def _emit_fastfetch(ea: Path, home: Path) -> None:
 
 def _link_services(airootfs: Path, variant: str = "base") -> None:
     # Graphical live medium WITHOUT a display manager: the tty1 autologin (overridden
-    # to `main`) drops into a login shell whose ~/.bash_profile execs startx -> Openbox
-    # -> Calamares. So there is deliberately NO display-manager unit and NO
-    # graphical.target.wants here; we only enable the multi-user daemons and the two
-    # azarch oneshots. X is started from the shell, not by systemd.
+    # to `main`) drops into a login shell whose ~/.bash_profile execs startx ->
+    # startplasma-x11 -> Calamares. So there is deliberately NO display-manager unit
+    # and NO graphical.target.wants here; we only enable the multi-user daemons and
+    # the two azarch oneshots. X is started from the shell, not by systemd.
     base = airootfs / "etc/systemd/system"
     emit.mkdir(base / "multi-user.target.wants")
     for svc in ("NetworkManager.service", "bluetooth.service", "org.cups.cupsd.service"):

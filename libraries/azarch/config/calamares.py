@@ -1,6 +1,6 @@
 """Calamares installer configuration, authored as config-as-Python strings.
 
-Az'arch boots to a minimal Openbox live session and auto-launches Calamares
+Az'arch boots to a minimal KDE Plasma live session and auto-launches Calamares
 (Manjaro-style) to install Az'arch Linux to disk. Calamares 3.4.2 reads:
 
   /etc/calamares/settings.conf          -- module search paths + the sequence
@@ -140,6 +140,19 @@ sequence:
   # unpackfs (the target must exist) and before users.
   - shellprocess
   - machineid
+  # luksbootkeyfile: when the user encrypted the disk, create /crypto_keyfile.bin
+  # on the target root and `cryptsetup luksAddKey` it as a second LUKS key slot,
+  # so the initramfs `encrypt` hook can unlock the root from the embedded keyfile
+  # instead of RE-PROMPTING for the passphrase. THIS is the fix for the
+  # "type the password twice at boot" report: GRUB still prompts once to read
+  # /boot (it lives on the encrypted btrfs root), but the initramfs no longer
+  # prompts a second time. It is a built-in Calamares C++ job (globalstorage
+  # access -- it reads the passphrase the partition page captured, which a
+  # shellprocess step cannot). MUST run BEFORE `fstab` (fstab points crypttab at
+  # the keyfile only if it already exists) and BEFORE `initcpiocfg` (which adds
+  # /crypto_keyfile.bin to mkinitcpio FILES= only if the file is present). No-op
+  # on an unencrypted install or one with an unencrypted separate /boot.
+  - luksbootkeyfile
   - fstab
   - locale
   - keyboard
@@ -229,8 +242,18 @@ allowManualPartitioning: true
 # --- LUKS full-disk encryption -----------------------------------------------
 # Presence of luksGeneration + an encryption-capable install choice makes the
 # "Encrypt system" checkbox (with a passphrase field) appear on the Erase page.
-# luks2 is the modern default cipher container format.
-luksGeneration: luks2
+#
+# luks1 (NOT luks2) on purpose. /boot lives on the encrypted btrfs root (there is
+# no separate unencrypted /boot), so GRUB itself must unlock the container to read
+# the kernel. GRUB <= 2.12 CANNOT open a LUKS2 container whose key slot uses
+# Argon2id -- and cryptsetup's LUKS2 default PBKDF is Argon2id -- so a luks2 install
+# would leave GRUB unable to unlock at all (or, on GRUB 2.14, fail on Argon2's
+# memory cost). This is exactly why upstream Calamares defaults luksGeneration to
+# luks1. LUKS1 always uses PBKDF2, which GRUB reads fine. Combined with the
+# luksbootkeyfile module (added to the sequence above), the user types the
+# passphrase ONCE at the GRUB prompt and the initramfs unlocks from the embedded
+# keyfile -- fixing the previous "password twice" behaviour.
+luksGeneration: luks1
 
 # Partition layout table style. "gpt" for UEFI is standard; Calamares still falls
 # back to msdos on legacy BIOS systems automatically when needed.
@@ -367,7 +390,7 @@ update_db: false
 update_system: false
 
 # Operations run against the target after unpackfs. We only remove the INSTALLER
-# itself (calamares has no place on an installed system); the desktop (openbox,
+# itself (calamares has no place on an installed system); the desktop (plasma,
 # xorg, kitty, librewolf, ...) is KEPT so the installed system boots to the same
 # graphical environment as the live medium. Nothing is installed over the network.
 # `try_remove` (not `remove`) so an absent package does not fail the step.
@@ -499,7 +522,9 @@ def keyboard_conf() -> str:
     /etc/X11/xorg.conf.d/00-keyboard.conf (the file setup-locale.sh already wrote
     with "us") rather than going through systemd-localed -- consistent with the
     English-only, no-auto-resolve policy in config/locale.py. The `configure`
-    block mirrors the shipped default (kwin/gnome off; Az'arch is Openbox/X11).
+    block keeps kwin/gnome off: Az'arch runs Plasma on X11, which reads its
+    keyboard layout from the standard xkb xorg.conf.d file we manage directly, so
+    the module needs no KWin- or GNOME-specific keyboard integration.
 
     Language stays English-only and the region stays Asia/Jerusalem: this changes
     ONLY the keyboard auto-guess, nothing else. Dynamic per-user resolution is the
@@ -514,7 +539,7 @@ xOrgConfFileName: "/etc/X11/xorg.conf.d/00-keyboard.conf"
 convertedKeymapPath: "/usr/share/kbd/keymaps/xkb"
 
 # Manage the plain xorg.conf.d file directly instead of going through
-# systemd-localed. Az'arch is Openbox/X11 and setup-locale.sh already wrote
+# systemd-localed. Az'arch is Plasma/X11 and setup-locale.sh already wrote
 # /etc/X11/xorg.conf.d/00-keyboard.conf with the "us" layout, so the module reads
 # that as the current layout and keeps it (see guessLayout below).
 useLocale1: false
@@ -525,7 +550,9 @@ useLocale1: false
 # the default instead of deriving one from the region.
 guessLayout: false
 
-# Az'arch runs Openbox on X11 -- no KWin/GNOME keyboard integration to configure.
+# Az'arch runs Plasma on X11, but the layout is read from the plain xkb
+# xorg.conf.d file we manage (useLocale1:false) -- so no KWin/GNOME keyboard
+# integration needs configuring here.
 configure:
     kwin: false
     gnome: false
@@ -581,6 +608,31 @@ def initcpiocfg_conf() -> str:
 # unlock line up with the rest of the install.
 ---
 useSystemdHook: false
+"""
+
+
+# --- 6d3. modules/luksbootkeyfile.conf -------------------------------------
+def luksbootkeyfile_conf() -> str:
+    """Config for the luksbootkeyfile module (added to the exec sequence). The
+    module creates /crypto_keyfile.bin on the target and `cryptsetup luksAddKey`s
+    it so the initramfs `encrypt` hook unlocks the root from the embedded keyfile
+    instead of prompting a SECOND time at boot -- the fix for the "password twice"
+    report. See settings.conf's sequence note.
+
+    The single valid key is `luks2Hash` (the PBKDF for the keyfile's LUKS2 key
+    slot: pbkdf2 / argon2i / argon2id / default). Az'arch installs LUKS1
+    (partition.conf luksGeneration: luks1, so GRUB can unlock /boot on the
+    encrypted root), and LUKS1 always uses PBKDF2 -- so luks2Hash has no effect
+    here. We ship it explicitly as `default` for clarity and so a future switch to
+    luks2 has an obvious, documented knob (set pbkdf2 to keep GRUB-openable slots).
+    The module is a no-op on an unencrypted install."""
+    return """\
+# luksbootkeyfile: embed a LUKS keyfile in the initramfs so the encrypted root is
+# unlocked automatically after GRUB's prompt (no second passphrase prompt).
+---
+# PBKDF for the keyfile's key slot. Only meaningful for LUKS2; Az'arch uses LUKS1
+# (always PBKDF2), so this is inert -- shipped as `default` for clarity.
+luks2Hash: default
 """
 
 
@@ -795,6 +847,7 @@ def emit_map() -> dict[str, str]:
         "modules/locale.conf": locale_conf(),
         "modules/keyboard.conf": keyboard_conf(),
         "modules/initcpiocfg.conf": initcpiocfg_conf(),
+        "modules/luksbootkeyfile.conf": luksbootkeyfile_conf(),
         "modules/services-systemd.conf": services_conf(),
         "modules/grubcfg.conf": grubcfg_conf(),
         "modules/bootloader.conf": bootloader_conf(),

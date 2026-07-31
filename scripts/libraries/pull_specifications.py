@@ -172,14 +172,22 @@ def _build_glance(packages, resolved, tiers, tags):
 
     # Derive the desktop/display-manager facts from the resolved closure so they
     # stay correct as components change. We detect a display manager by looking
-    # for any known DM package in the closure; the live session is Openbox when
-    # 'openbox' is present. NOTE: Calamares is built from a local/AUR source and
-    # is NOT in the Arch DBs, so it never appears in the closure -- do not detect
-    # the session from it. We still mention it unconditionally because the build
-    # always ships and auto-launches it.
+    # for any known DM package in the closure; the live session is KDE Plasma when
+    # 'plasma-desktop' is present (Openbox when 'openbox' is, for older builds).
+    # NOTE: Calamares is built from a local/AUR source and is NOT in the Arch DBs,
+    # so it never appears in the closure -- do not detect the session from it. We
+    # still mention it unconditionally because the build always ships and
+    # auto-launches it.
     known_dms = ("sddm", "gdm", "lightdm", "lxdm", "ly")
     present_dm = next((dm for dm in known_dms if dm in closure), None)
-    if "openbox" in closure:
+    if "plasma-desktop" in closure:
+        desktop = ("KDE Plasma (X11) live session; getty autologin -> startx -> "
+                   "startplasma-x11, auto-launches Calamares")
+        if present_dm:
+            dm = f"{present_dm} display manager"
+        else:
+            dm = "None -- getty autologin to startx (no display manager)"
+    elif "openbox" in closure:
         desktop = ("Openbox live session; getty autologin -> startx -> "
                    "openbox-session, auto-launches Calamares")
         if present_dm:
@@ -191,7 +199,7 @@ def _build_glance(packages, resolved, tiers, tags):
         desktop = f"graphical session (via {present_dm})"
         dm = f"{present_dm} display manager"
     else:
-        # No Openbox, no display manager, no known desktop: a console-only build.
+        # No known desktop, no display manager: a console-only build.
         desktop = "None (console only)"
         dm = "None -- getty autologin, no display manager"
 

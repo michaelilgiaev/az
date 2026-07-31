@@ -35,6 +35,7 @@ EXPECTED_FILES = {
     "modules/locale.conf",
     "modules/keyboard.conf",
     "modules/initcpiocfg.conf",
+    "modules/luksbootkeyfile.conf",
     "modules/services-systemd.conf",
     "modules/grubcfg.conf",
     "modules/bootloader.conf",
@@ -68,7 +69,7 @@ def _settings_show_list() -> list:
 def test_emit_map_has_exactly_expected_files():
     m = calamares.emit_map()
     assert set(m) == EXPECTED_FILES
-    assert len(m) == len(EXPECTED_FILES) == 18
+    assert len(m) == len(EXPECTED_FILES) == 19
 
 
 def test_emit_map_values_are_nonempty_strings():
@@ -119,6 +120,27 @@ def test_settings_exec_ordering_constraints():
     assert execs.index("grubcfg") < execs.index("bootloader")
 
 
+def test_luksbootkeyfile_runs_before_fstab_and_initcpiocfg():
+    # The double-password fix: luksbootkeyfile creates /crypto_keyfile.bin +
+    # luksAddKey. It MUST run before fstab (which points crypttab at the keyfile
+    # only if it exists) and before initcpiocfg (which adds the keyfile to
+    # mkinitcpio FILES= only if it exists). It also must run after unpackfs (the
+    # target root must exist to write the keyfile onto).
+    execs = _settings_exec_list()
+    assert "luksbootkeyfile" in execs
+    assert execs.index("unpackfs") < execs.index("luksbootkeyfile")
+    assert execs.index("luksbootkeyfile") < execs.index("fstab")
+    assert execs.index("luksbootkeyfile") < execs.index("initcpiocfg")
+
+
+def test_luksbootkeyfile_conf_schema():
+    # The module's only valid key is luks2Hash. Az'arch uses LUKS1 so it is inert,
+    # but it must parse and carry a recognized value.
+    doc = yaml.safe_load(calamares.luksbootkeyfile_conf())
+    assert set(doc) == {"luks2Hash"}
+    assert doc["luks2Hash"] in ("default", "pbkdf2", "argon2i", "argon2id")
+
+
 def _instance_config_stems() -> dict:
     """Map a custom-instance config STEM (e.g. 'shellprocess-desparse') to the
     `module@id` token it is used as in the sequence (e.g. 'shellprocess@desparse'),
@@ -160,7 +182,12 @@ def test_partition_filesystem_key_spelling():
     assert d["defaultFileSystemType"] == "btrfs"
     assert "defaultFileSystem" not in d
     assert d["availableFileSystemTypes"][0] == "btrfs"
-    assert d["luksGeneration"] == "luks2"
+    # luks1, NOT luks2: /boot is on the encrypted btrfs root, so GRUB must unlock
+    # the container, and GRUB <= 2.12 cannot open LUKS2 + Argon2id (cryptsetup's
+    # luks2 default). luks1 is PBKDF2 and GRUB-openable. This + the luksbootkeyfile
+    # module is the "password twice" fix; a drift back to luks2 would break the
+    # GRUB unlock. (Matches upstream Calamares' own default.)
+    assert d["luksGeneration"] == "luks1"
 
 
 def test_partition_btrfs_subvolumes():

@@ -241,12 +241,13 @@ def render(packages, resolved, tiers, tags, glance, svg_rel):
     # 4. Live session --------------------------------------------------------
     d.w("## 4. Live session")
     d.w()
-    d.w("The live session runs **Openbox** under X11 -- there is no display "
+    d.w("The live session runs **KDE Plasma** under X11 -- there is no display "
         "manager. The boot path is: `getty@tty1` autologins the live user `main`, "
-        "whose `~/.bash_profile` execs `startx`, whose `~/.xinitrc` execs "
-        "`openbox-session`; Openbox autostart then brings up the compositor "
-        "(`picom`), the wallpaper (`feh`), notifications (`dunst`) and the "
-        "NetworkManager applet, and auto-launches the Calamares installer once via "
+        "whose `~/.bash_profile` execs `startx`, whose `~/.xinitrc` paints the "
+        "wallpaper (`feh`, so there is no solid-color flash) and execs "
+        "`startplasma-x11`; Plasma brings up the panel/launcher, `kwin_x11`, the "
+        "NetworkManager (`plasma-nm`) and audio (`plasma-pa`) applets, and a "
+        "`~/.config/autostart` entry auto-launches the Calamares installer once via "
         "`sudo -E`.")
     d.w()
     d.w("The live user `main` has passwordless `sudo` and a blank password and is "

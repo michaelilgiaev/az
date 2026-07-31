@@ -271,7 +271,7 @@ echo -e "\\e[94mazarch disk installation complete, you can reboot now.\\e[0m"
 
 # --- Live-ISO post-boot tweaks ----------------------------------------------
 def setup_pkgs_sh() -> str:
-    """Live-ISO oneshot: firewall setup + installer perms + SSH host keys."""
+    """Live-ISO oneshot: firewall setup + SSH host keys."""
     return """\
 #!/bin/bash
 
@@ -279,9 +279,6 @@ def setup_pkgs_sh() -> str:
 sudo ufw enable
 sudo ufw default reject incoming
 sudo ufw default allow outgoing
-
-# Fix azarch iso installer permissions
-sudo chmod +x /home/main/Desktop/azarch-iso-installer.sh
 
 # Generate SSH host keys so sshd can complete the handshake
 sudo ssh-keygen -A

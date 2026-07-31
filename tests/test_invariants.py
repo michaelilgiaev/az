@@ -95,13 +95,14 @@ def test_every_config_emitter_returns_nonempty_str(label, fn):
 
 def test_emitter_family_covers_all_config_modules():
     # Sanity check that the parametrized family did not silently shrink to a
-    # handful of entries -- the whole point is breadth. 18 calamares files (14 base
+    # handful of entries -- the whole point is breadth. 19 calamares files (14 base
     # + shellprocess.conf that clears the live `main` account + keyboard.conf that
     # pins the layout and disables auto-guess + shellprocess-desparse.conf that
     # de-sparsifies /boot so GRUB can read the kernel + finished.conf that adds the
-    # Restart-now option) + 8 desktop builders + 6 installer + locale + profile +
-    # 4 pacman + 5 pkgbuild.
-    assert len(_EMITTERS) == 18 + 8 + 6 + 1 + 1 + 4 + 5
+    # Restart-now option + luksbootkeyfile.conf that embeds the LUKS keyfile so the
+    # encrypted root is not prompted for twice at boot) + 8 desktop builders +
+    # 6 installer + locale + profile + 4 pacman + 5 pkgbuild.
+    assert len(_EMITTERS) == 19 + 8 + 6 + 1 + 1 + 4 + 5
 
 
 def test_recipe_dir_contents_are_nonempty_str_both_tiers():

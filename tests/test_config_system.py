@@ -104,6 +104,28 @@ def test_customize_airootfs_copies_os_release():
     assert "chmod 0644 /usr/lib/os-release" in s
 
 
+def test_customize_airootfs_sets_default_plasma_wallpaper():
+    # The regeneration-proof wallpaper mechanism: rewrite the org.kde.image plugin's
+    # Image default (owned by plasma-workspace) to the Az'arch wallpaper. Must target
+    # the stable main.xml path and be guarded so an absent Plasma / parse surprise
+    # never aborts the mkarchiso build.
+    s = system.CUSTOMIZE_AIROOTFS
+    assert "/usr/share/plasma/wallpapers/org.kde.image/contents/config/main.xml" in s
+    assert "/usr/share/azarch/wallpaper.png" in s
+    # non-fatal + only runs when both files exist
+    assert "|| true" in s
+    assert 'if [ -f "$IMG_MAIN_XML" ] && [ -f "$WALLPAPER" ]; then' in s
+
+
+def test_customize_airootfs_wallpaper_python_is_valid():
+    # The embedded Python rewriter must at least compile -- a SyntaxError would only
+    # surface at build time inside the chroot, aborting mkarchiso. Extract the
+    # heredoc body and compile it.
+    s = system.CUSTOMIZE_AIROOTFS
+    body = s.split("<<'PYEOF' || true\n", 1)[1].split("\nPYEOF", 1)[0]
+    compile(body, "<customize_airootfs embedded python>", "exec")
+
+
 # --- getty autologin drop-in ------------------------------------------------
 
 def test_getty_autologin_reset_first():

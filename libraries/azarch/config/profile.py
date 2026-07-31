@@ -61,10 +61,10 @@ FILE_PERMISSIONS = {
     "/usr/local/bin/choose-mirror": "0:0:755",
     "/usr/local/bin/Installation_guide": "0:0:755",
     "/usr/local/bin/livecd-sound": "0:0:755",
-    # The Calamares launcher the Openbox autostart runs on live login. archiso
-    # NORMALIZES overlay file modes when it packs the squashfs -- only paths
-    # listed here keep an explicit mode. Without this entry the wrapper ships
-    # 0644 (non-executable), the autostart's `[ -x ... ]` guard is false, and
+    # The Calamares launcher the Plasma autostart .desktop runs on live login.
+    # archiso NORMALIZES overlay file modes when it packs the squashfs -- only
+    # paths listed here keep an explicit mode. Without this entry the wrapper ships
+    # 0644 (non-executable), so the autostart .desktop's Exec= cannot run it and
     # Calamares never auto-launches. THIS is what breaks the live installer.
     "/usr/local/bin/azarch-install": "0:0:755",
     "/usr/local/bin/azarch": "0:0:755",

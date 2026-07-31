@@ -1,12 +1,12 @@
-"""Minimal Openbox live-session desktop, authored as config-as-Python strings.
+"""Minimal KDE Plasma live-session desktop, authored as config-as-Python strings.
 
-The overhaul boots the ISO to a graphical live session WITHOUT a display
+The ISO boots to a graphical Plasma (X11) live session WITHOUT a display
 manager, Manjaro-style:
 
     getty@tty1 autologins `main`  ->  ~/.bash_profile runs `exec startx` on
-    tty1 only  ->  ~/.xinitrc execs openbox-session  ->  Openbox autostart
-    launches picom (compositor), xsetroot (solid wallpaper), nm-applet (network),
-    and the Calamares installer once (the live "Install" window that auto-opens).
+    tty1 only  ->  ~/.xinitrc paints the wallpaper (no flash) and execs
+    `startplasma-x11`  ->  Plasma launches the panel/launcher/kwin_x11, and a
+    ~/.config/autostart entry opens the Calamares installer once.
 
 Everything here is a small builder function returning the CONTENT of one file.
 steps.py emits each to its airootfs destination via emit.write_text/write_exec
@@ -14,53 +14,78 @@ and iterates PLAN (below) so the mapping (path + mode) stays declarative. The
 /home/main tree is chowned 1000:998 by steps.py after emit, exactly like the
 fastfetch/first-boot payloads.
 
-Design constraints (match archiso/Openbox/Calamares reality):
+Design constraints (match archiso/Plasma/Calamares reality):
   * No emojis, ASCII only.
-  * Calamares MUST run privileged. On a live medium with a passwordless-sudo
-    `main` and passwordless root, the simplest correct launch is `sudo -E
-    calamares` from the Openbox autostart (polkit's pkexec would need a GUI
-    auth agent running, which this minimal session deliberately omits). We
-    provide a tiny /usr/local/bin/azarch-install wrapper so the menu entry and
-    autostart share one privileged launch path.
-  * startx-from-tty replaces graphical.target: _link_services no longer needs a
-    display-manager .wants symlink or graphical.target (see STEPS_NOTE).
+  * No display manager. `startplasma-x11` is provided by plasma-workspace; the
+    X11 window manager is kwin_x11 (package kwin-x11, listed explicitly in the
+    manifest because it is only an optdepend of plasma-workspace). The Wayland
+    kwin comes in via plasma-workspace but is unused here (we start the X11
+    session). See libraries/data/packages.x86_64.
+  * Calamares MUST run privileged. Plasma DOES ship polkit-kde-agent (pulled by
+    plasma-desktop), so pkexec would work -- but the live medium has a
+    passwordless-sudo `main` and passwordless root, so the simplest correct,
+    dependency-order-free launch stays `sudo -E calamares` via the tiny
+    /usr/local/bin/azarch-install wrapper the autostart entry runs.
+  * NO cyan/black flash: the old Openbox session did `xsetroot -solid <cyan>`,
+    which flashed a solid color before the desktop painted. Instead ~/.xinitrc
+    sets the X root to the SAME wallpaper image Plasma will show (feh --bg-fill),
+    and ksplashrc disables KSplash, so the first and only paint is the wallpaper.
+  * The default Plasma wallpaper is baked per-user (appletsrc) into the live
+    `main` home AND /etc/skel, so a Calamares-created user inherits it too.
+  * startx-from-tty replaces graphical.target: _link_services needs no
+    display-manager .wants symlink or graphical.target (see steps.py STEPS_NOTE).
 """
 
 from __future__ import annotations
 
-# --- Branding ---------------------------------------------------------------
-# Az'arch accent color (matches os-release ANSI_COLOR 6,184,253 -> #06b8fd),
-# used as the solid xsetroot wallpaper so no image asset needs shipping. If a logo
-# image is later added under /usr/share/azarch/, swap the xsetroot line in
-# openbox_autostart() to `feh --bg-scale /usr/share/azarch/wallpaper.png`.
-ACCENT_HEX = "#06b8fd"
+# --- Branding / assets ------------------------------------------------------
+# The desktop wallpaper baked into the ISO. steps.py copies
+# assets/wallpapers/wallpaper_years.png here (emit.copy_asset) and the Plasma
+# appletsrc + the ~/.xinitrc root-pixmap pre-paint both point at this path, so
+# the first paint IS the wallpaper (no solid-color flash).
+WALLPAPER_DEST = "/usr/share/azarch/wallpaper.png"
+WALLPAPER_ASSET = "wallpapers/wallpaper_years.png"
 
-# The one privileged launch path shared by autostart + the menu entry.
+# The one privileged launch path shared by the autostart entry + a menu launcher.
 INSTALL_WRAPPER_PATH = "/usr/local/bin/azarch-install"
 
 
 # --- 1. ~/.xinitrc ----------------------------------------------------------
 def xinitrc() -> str:
-    """Run by `startx`. Sets a couple of sane env bits then execs the Openbox
-    SESSION (openbox-session, not bare openbox -- the -session variant sources
-    autostart and the menu/rc config and wires up the SM/XDG dirs)."""
+    """Run by `startx` (see ~/.bash_profile). Paints the wallpaper onto the X
+    root BEFORE handing the session to Plasma so nothing flashes, then execs the
+    Plasma X11 session.
+
+    `DESKTOP_SESSION=plasma` is the one env var the Arch Wiki has you export for
+    a startx Plasma session; `startplasma-x11` sets XDG_CURRENT_DESKTOP=KDE
+    itself and logind sets XDG_SESSION_TYPE=x11, so nothing else is needed.
+
+    The `feh --bg-fill <wallpaper>` line replaces the old `xsetroot -solid
+    <cyan>`: feh can show a PNG (xsetroot only does solid colors), and painting
+    the SAME image Plasma will show makes Plasma's own wallpaper repaint
+    invisible (identical pixels) -- so there is no cyan/black flash. `--no-fehbg`
+    keeps feh from writing a ~/.fehbg helper we do not use."""
     return """\
 #!/bin/sh
 # ~/.xinitrc -- started by `startx` (see ~/.bash_profile). Hands the X session
-# to Openbox. Keep this minimal: per-app launches live in the Openbox autostart.
+# to Plasma (X11). Keep this minimal: per-app launches live in Plasma autostart.
 
 # Make sure user-dir XDG paths resolve for anything the session spawns.
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 
-# A neutral cursor and a sane DPI-agnostic setup; harmless if xsetroot/xrdb are
-# absent (they ship with xorg). This sets the solid background early to avoid the
-# default X stipple flashing; the autostart re-applies the same solid via xsetroot.
-[ -x /usr/bin/xsetroot ] && xsetroot -solid '""" + ACCENT_HEX + """' -cursor_name left_ptr
+# Paint the wallpaper onto the X root FIRST so the first visible frame is the
+# wallpaper, not a solid color. Plasma repaints the same image over it moments
+# later (identical pixels -> no visible transition, no cyan/black flash). feh is
+# shipped in the manifest; xsetroot cannot display a PNG, only solid colors.
+[ -x /usr/bin/feh ] && feh --no-fehbg --bg-fill '""" + WALLPAPER_DEST + """'
 
-# Replace this shell with the Openbox session; when Openbox exits, X exits and
+# The one env var the Arch Wiki has you set for a startx Plasma session.
+export DESKTOP_SESSION=plasma
+
+# Replace this shell with the Plasma X11 session; when Plasma exits, X exits and
 # control returns to the login shell (which, per bash_profile, logs out the tty).
-exec openbox-session
+exec startplasma-x11
 """
 
 
@@ -69,8 +94,8 @@ def bash_profile_startx() -> str:
     """Appended to /home/main/.bash_profile. On the FIRST virtual terminal only
     (and only when not already in X) it replaces the login shell with startx, so
     the autologin drops straight into the graphical session. On any other VT or
-    an SSH login $DISPLAY is set or $XDG_VTNR != 1, so the guard is false and you
-    get a normal shell -- important for rescue/maintenance use of the ISO."""
+    an SSH login $DISPLAY is set or $(tty) != /dev/tty1, so the guard is false and
+    you get a normal shell -- important for rescue/maintenance use of the ISO."""
     return """\
 # ~/.bash_profile -- Az'arch live session bootstrap.
 # Source .bashrc for interactive niceties if present.
@@ -88,279 +113,96 @@ fi
 """
 
 
-# --- 3. ~/.config/openbox/rc.xml --------------------------------------------
-def openbox_rc_xml() -> str:
-    """Minimal-but-sane Openbox config. One desktop, no decorations fuss, a few
-    keybinds (kitty on W-Return, close on A-F4, menu on right-click via menu.xml)
-    and a right-click root menu. Kept close to Openbox's shipped rc.xml so it is
-    schema-valid against openbox-3."""
+# --- 3. ~/.config/plasma-org.kde.plasma.desktop-appletsrc -------------------
+def plasma_appletsrc() -> str:
+    """Seed the Plasma desktop wallpaper for a fresh profile (a BELT; the primary,
+    regeneration-proof mechanism is the org.kde.image `main.xml` default rewritten
+    by customize_airootfs.sh -- see config/system.CUSTOMIZE_AIROOTFS).
+
+    The wallpaper image lives in the `org.kde.image` wallpaper plugin's config,
+    which for a containment is the NESTED group
+    `[Containments][1][Wallpaper][org.kde.image][General]` with an `Image=`
+    file:// URI -- NOT the containment's own `[General]` group (a common mistake
+    that silently does nothing). Containment number 1 is arbitrary but the
+    `[Containments][1]` block and its `[Containments][1][Wallpaper]...` block
+    must share the same number.
+
+    NOTE this seed is best-effort: plasmashell may REGENERATE this file on first
+    login with its own containment ids, orphaning the seeded block. That is why it
+    is only a belt -- the load-bearing wallpaper default lives in main.xml (which
+    Plasma consults for any containment without an explicit image, so it holds
+    regardless of regeneration). This file is written to BOTH the live `main` home
+    and /etc/skel so it applies to the live and installed users on the runs where
+    it is honored."""
     return """\
-<?xml version="1.0" encoding="UTF-8"?>
-<openbox_config xmlns="http://openbox.org/3.4/rc">
-  <resistance>
-    <strength>10</strength>
-    <screen_edge_strength>20</screen_edge_strength>
-  </resistance>
-  <focus>
-    <focusNew>yes</focusNew>
-    <followMouse>no</followMouse>
-    <focusLast>yes</focusLast>
-    <underMouse>no</underMouse>
-    <focusDelay>200</focusDelay>
-    <raiseOnFocus>no</raiseOnFocus>
-  </focus>
-  <placement>
-    <policy>Smart</policy>
-    <center>yes</center>
-    <monitor>Primary</monitor>
-    <primaryMonitor>1</primaryMonitor>
-  </placement>
-  <theme>
-    <name>Clearlooks</name>
-    <titleLayout>NLIMC</titleLayout>
-    <keepBorder>yes</keepBorder>
-    <animateIconify>yes</animateIconify>
-    <font place="ActiveWindow">
-      <name>sans</name>
-      <size>9</size>
-      <weight>bold</weight>
-      <slant>normal</slant>
-    </font>
-    <font place="InactiveWindow">
-      <name>sans</name>
-      <size>9</size>
-      <weight>bold</weight>
-      <slant>normal</slant>
-    </font>
-    <font place="MenuHeader">
-      <name>sans</name>
-      <size>9</size>
-      <weight>normal</weight>
-      <slant>normal</slant>
-    </font>
-    <font place="MenuItem">
-      <name>sans</name>
-      <size>9</size>
-      <weight>normal</weight>
-      <slant>normal</slant>
-    </font>
-  </theme>
-  <desktops>
-    <number>1</number>
-    <firstdesk>1</firstdesk>
-    <names>
-      <name>Az'arch</name>
-    </names>
-    <popupTime>875</popupTime>
-  </desktops>
-  <resize>
-    <drawContents>yes</drawContents>
-    <popupShow>Nonpixel</popupShow>
-    <popupPosition>Center</popupPosition>
-  </resize>
-  <keyboard>
-    <keybind key="W-Return">
-      <action name="Execute">
-        <command>kitty</command>
-      </action>
-    </keybind>
-    <keybind key="W-e">
-      <action name="Execute">
-        <command>pcmanfm</command>
-      </action>
-    </keybind>
-    <keybind key="W-w">
-      <action name="Execute">
-        <command>librewolf</command>
-      </action>
-    </keybind>
-    <keybind key="A-F4">
-      <action name="Close"/>
-    </keybind>
-    <keybind key="A-Tab">
-      <action name="NextWindow"/>
-    </keybind>
-    <keybind key="A-S-Tab">
-      <action name="PreviousWindow"/>
-    </keybind>
-    <keybind key="W-d">
-      <action name="ToggleShowDesktop"/>
-    </keybind>
-  </keyboard>
-  <mouse>
-    <dragThreshold>8</dragThreshold>
-    <doubleClickTime>200</doubleClickTime>
-    <screenEdgeWarpTime>400</screenEdgeWarpTime>
-    <context name="Frame">
-      <mousebind button="A-Left" action="Press">
-        <action name="Focus"/>
-        <action name="Raise"/>
-      </mousebind>
-      <mousebind button="A-Left" action="Drag">
-        <action name="Move"/>
-      </mousebind>
-      <mousebind button="A-Right" action="Drag">
-        <action name="Resize"/>
-      </mousebind>
-    </context>
-    <context name="Titlebar">
-      <mousebind button="Left" action="Press">
-        <action name="Focus"/>
-        <action name="Raise"/>
-      </mousebind>
-      <mousebind button="Left" action="Drag">
-        <action name="Move"/>
-      </mousebind>
-      <mousebind button="Left" action="DoubleClick">
-        <action name="ToggleMaximize"/>
-      </mousebind>
-    </context>
-    <context name="Client">
-      <mousebind button="Left" action="Press">
-        <action name="Focus"/>
-        <action name="Raise"/>
-      </mousebind>
-    </context>
-    <context name="Desktop">
-      <mousebind button="Right" action="Press">
-        <action name="ShowMenu">
-          <menu>root-menu</menu>
-        </action>
-      </mousebind>
-      <mousebind button="Middle" action="Press">
-        <action name="ShowMenu">
-          <menu>root-menu</menu>
-        </action>
-      </mousebind>
-    </context>
-    <context name="Root">
-      <mousebind button="Right" action="Press">
-        <action name="ShowMenu">
-          <menu>root-menu</menu>
-        </action>
-      </mousebind>
-    </context>
-  </mouse>
-  <menu>
-    <file>menu.xml</file>
-    <hideDelay>200</hideDelay>
-    <middle>no</middle>
-    <submenuShowDelay>100</submenuShowDelay>
-    <submenuHideDelay>400</submenuHideDelay>
-    <showIcons>yes</showIcons>
-    <manageDesktops>no</manageDesktops>
-  </menu>
-  <applications>
-    <!-- Center and focus the live installer window when it opens. -->
-    <application name="calamares">
-      <focus>yes</focus>
-      <position force="yes">
-        <x>center</x>
-        <y>center</y>
-      </position>
-    </application>
-  </applications>
-</openbox_config>
+[Containments][1]
+plugin=org.kde.desktopcontainment
+wallpaperplugin=org.kde.image
+
+[Containments][1][Wallpaper][org.kde.image][General]
+Image=file://""" + WALLPAPER_DEST + """
 """
 
 
-# --- 4. ~/.config/openbox/menu.xml ------------------------------------------
-def openbox_menu_xml() -> str:
-    """Right-click root menu. Top entry is the live installer (shares the
-    privileged wrapper), then terminal/browser/file-manager, then session
-    controls. `openbox --reconfigure` reloads this without a restart."""
+# --- 4. ~/.config/ksplashrc -------------------------------------------------
+def ksplashrc() -> str:
+    """Disable the Plasma startup splash (KSplash). `startplasma-x11` would
+    otherwise show a full-screen splash while the session loads; turning it off
+    means the only thing painted between the wallpaper root-pixmap (set in
+    ~/.xinitrc) and the live desktop is the wallpaper itself -- no splash frame,
+    no flash. Shipped to the live home and /etc/skel."""
     return """\
-<?xml version="1.0" encoding="UTF-8"?>
-<openbox_menu xmlns="http://openbox.org/3.4/menu">
-  <menu id="root-menu" label="Az'arch">
-    <item label="Install Az'arch">
-      <action name="Execute">
-        <command>""" + INSTALL_WRAPPER_PATH + """</command>
-      </action>
-    </item>
-    <separator/>
-    <item label="Terminal">
-      <action name="Execute">
-        <command>kitty</command>
-      </action>
-    </item>
-    <item label="Browser">
-      <action name="Execute">
-        <command>librewolf</command>
-      </action>
-    </item>
-    <item label="File Manager">
-      <action name="Execute">
-        <command>pcmanfm</command>
-      </action>
-    </item>
-    <separator/>
-    <item label="Reconfigure Openbox">
-      <action name="Reconfigure"/>
-    </item>
-    <separator/>
-    <item label="Reboot">
-      <action name="Execute">
-        <command>systemctl reboot</command>
-      </action>
-    </item>
-    <item label="Power Off">
-      <action name="Execute">
-        <command>systemctl poweroff</command>
-      </action>
-    </item>
-    <item label="Exit (log out)">
-      <action name="Exit">
-        <prompt>yes</prompt>
-      </action>
-    </item>
-  </menu>
-</openbox_menu>
+[KSplash]
+Engine=none
+Theme=None
 """
 
 
-# --- 5. ~/.config/openbox/autostart -----------------------------------------
-def openbox_autostart() -> str:
-    """Openbox autostart (sh, sourced by openbox-session at session start). Each
-    persistent helper is backgrounded with `&`; the installer launches ONCE via
-    the privileged wrapper. `command -v` guards keep the session from erroring if
-    an optional helper is missing on a stripped build."""
+# --- 5. ~/.config/autostart/azarch-install.desktop --------------------------
+def autostart_install_desktop() -> str:
+    """Plasma autostart entry that opens the Calamares installer ONCE at session
+    login, Manjaro-style, via the privileged wrapper (Calamares must run as root;
+    see INSTALL_WRAPPER_PATH). Plasma reads ~/.config/autostart/*.desktop and
+    runs each `Exec=` after the session is up.
+
+    X-KDE-autostart-phase=2 delays it until the desktop/panel are ready so the
+    installer window has a session to map into. It is a normal .desktop launcher,
+    so it does not depend on the wrapper's exec bit the way a sourced sh autostart
+    did."""
     return """\
-#!/bin/sh
-# ~/.config/openbox/autostart -- sourced by openbox-session at login.
-
-# Compositor: tear-free, light config (see ~/.config/picom.conf).
-if command -v picom >/dev/null 2>&1; then
-    picom --config "$HOME/.config/picom.conf" &
-fi
-
-# Wallpaper: solid Az'arch accent color (no image asset shipped). feh has NO
-# solid-color flag (its --bg-* options all require an IMAGE), so a solid fill is
-# set with xsetroot -solid (xorg-xsetroot ships; already used in ~/.xinitrc). If a
-# logo image is later added, swap this for `feh --bg-scale /usr/share/azarch/wallpaper.png &`.
-if command -v xsetroot >/dev/null 2>&1; then
-    xsetroot -solid '""" + ACCENT_HEX + """' &
-fi
-
-# Network tray applet (NetworkManager).
-if command -v nm-applet >/dev/null 2>&1; then
-    nm-applet &
-fi
-
-# Auto-launch the Calamares installer ONCE, Manjaro-style, via the privileged
-# wrapper (Calamares must run as root; see """ + INSTALL_WRAPPER_PATH + """).
-# Run via the exec bit when present, else fall back to `sh <wrapper>` so a lost
-# exec bit (archiso normalizes overlay modes) can never silently stop the
-# installer from opening -- the wrapper is a plain /bin/sh script either way.
-if [ -x """ + INSTALL_WRAPPER_PATH + """ ]; then
-    """ + INSTALL_WRAPPER_PATH + """ &
-elif [ -r """ + INSTALL_WRAPPER_PATH + """ ]; then
-    sh """ + INSTALL_WRAPPER_PATH + """ &
-fi
+[Desktop Entry]
+Type=Application
+Name=Install Az'arch
+Comment=Launch the Az'arch Linux installer
+Exec=""" + INSTALL_WRAPPER_PATH + """
+Icon=system-software-install
+Terminal=false
+X-KDE-autostart-phase=2
+X-GNOME-Autostart-enabled=true
+NoDisplay=false
 """
 
 
-# --- 5b. /usr/local/bin/azarch (guest-side CLI) ------------------------------
+# --- 6. /usr/share/applications/azarch-install.desktop ----------------------
+def install_menu_desktop() -> str:
+    """A launcher in the application menu (Kickoff) so the installer can be
+    re-opened after it is closed, sharing the same privileged wrapper. Lands in
+    /usr/share/applications (system-wide), so it is not a per-user file."""
+    return """\
+[Desktop Entry]
+Type=Application
+Name=Install Az'arch
+GenericName=System Installer
+Comment=Install Az'arch Linux to disk
+Exec=""" + INSTALL_WRAPPER_PATH + """
+Icon=system-software-install
+Terminal=false
+Categories=System;
+Keywords=install;calamares;setup;
+"""
+
+
+# --- 7. /usr/local/bin/azarch (guest-side CLI) ------------------------------
 AZARCH_BIN_PATH = "/usr/local/bin/azarch"
 
 
@@ -453,13 +295,14 @@ esac
 """
 
 
-# --- 5c. /usr/local/bin/azarch-install (privileged Calamares launcher) ------
+# --- 8. /usr/local/bin/azarch-install (privileged Calamares launcher) -------
 def install_wrapper_sh() -> str:
-    """The single privileged launch path for Calamares, used by both the Openbox
-    autostart and the menu entry. On the live medium `main` has passwordless
-    sudo, so `sudo -E calamares` is the correct, dependency-free way to get root
-    for the GUI installer (pkexec would require a running polkit auth agent,
-    which this minimal Openbox session intentionally does not run).
+    """The single privileged launch path for Calamares, used by both the Plasma
+    autostart entry and the application-menu launcher. On the live medium `main`
+    has passwordless sudo, so `sudo -E calamares` is the correct, dependency-free
+    way to get root for the GUI installer. Plasma DOES run polkit-kde-agent (so
+    pkexec would also work), but keeping `sudo -E` avoids depending on the agent
+    being up before the autostart phase fires and matches the prior behavior.
 
     -E preserves the X env (DISPLAY, XAUTHORITY, XDG_*) so the root-owned
     Calamares Qt process can connect to `main`'s X server.
@@ -493,59 +336,7 @@ exec sudo -E calamares
 """
 
 
-# --- 6. ~/.config/picom.conf ------------------------------------------------
-def picom_conf() -> str:
-    """Minimal picom: a compositor for tear-free rendering with light shadows and
-    a touch of fade, no blur/rounded-corner heaviness. Uses the modern
-    `backend = "glx"`; falls back gracefully to xrender if GLX is unavailable
-    (picom auto-detects). Valid for picom >= 10 (libconfig syntax)."""
-    return """\
-# ~/.config/picom.conf -- minimal compositor config for the Az'arch live session.
-
-backend = "glx";
-vsync = true;
-
-# Light shadows on floating windows (menus/tooltips excluded).
-shadow = true;
-shadow-radius = 7;
-shadow-opacity = 0.35;
-shadow-offset-x = -7;
-shadow-offset-y = -7;
-shadow-exclude = [
-  "class_g = 'Conky'",
-  "_GTK_FRAME_EXTENTS@:c",
-  "window_type = 'dock'",
-  "window_type = 'desktop'",
-  "window_type = 'menu'",
-  "window_type = 'dropdown_menu'",
-  "window_type = 'popup_menu'",
-  "window_type = 'tooltip'"
-];
-
-# Subtle fade on open/close so the installer window does not pop harshly.
-fading = true;
-fade-in-step = 0.06;
-fade-out-step = 0.06;
-fade-delta = 8;
-
-# Keep everything else default/off for a light footprint.
-detect-rounded-corners = true;
-detect-client-opacity = true;
-detect-transient = true;
-use-damage = true;
-
-wintypes:
-{
-  tooltip = { fade = true; shadow = false; };
-  dock = { shadow = false; };
-  dnd = { shadow = false; };
-  popup_menu = { shadow = false; };
-  dropdown_menu = { shadow = false; };
-};
-"""
-
-
-# --- 7. Emit plan -----------------------------------------------------------
+# --- 9. Emit plan -----------------------------------------------------------
 # Declarative map so steps.py can iterate. Each entry: the builder function that
 # produces the content, the DESTINATION (absolute, or $HOME-relative for the live
 # `main` user), and the file MODE. `owner` records the intended chown so steps.py
@@ -554,7 +345,8 @@ wintypes:
 # HOME-relative paths are given relative to /home/main so the airootfs overlay
 # lands them under airootfs/home/main/...; steps.py chowns that whole tree
 # 1000:998 after emit (as it already does for the fastfetch/first-boot payloads).
-# Absolute paths (/usr/local/bin/...) stay root-owned (0:0) -- do NOT chown them.
+# Absolute paths (/usr/local/bin/..., /usr/share/...) stay root-owned (0:0) --
+# do NOT chown them.
 
 # scripts -> 0o755, configs -> 0o644.
 _EXEC = 0o755
@@ -579,28 +371,28 @@ PLAN = [
         "owner": "home",
     },
     {
-        "builder": openbox_rc_xml,
-        "dest": f"{HOME}/.config/openbox/rc.xml",
+        "builder": plasma_appletsrc,
+        "dest": f"{HOME}/.config/plasma-org.kde.plasma.desktop-appletsrc",
         "mode": _CONF,
         "owner": "home",
     },
     {
-        "builder": openbox_menu_xml,
-        "dest": f"{HOME}/.config/openbox/menu.xml",
+        "builder": ksplashrc,
+        "dest": f"{HOME}/.config/ksplashrc",
         "mode": _CONF,
         "owner": "home",
     },
     {
-        "builder": openbox_autostart,
-        "dest": f"{HOME}/.config/openbox/autostart",
-        "mode": _EXEC,
+        "builder": autostart_install_desktop,
+        "dest": f"{HOME}/.config/autostart/azarch-install.desktop",
+        "mode": _CONF,
         "owner": "home",
     },
     {
-        "builder": picom_conf,
-        "dest": f"{HOME}/.config/picom.conf",
+        "builder": install_menu_desktop,
+        "dest": "/usr/share/applications/azarch-install.desktop",
         "mode": _CONF,
-        "owner": "home",
+        "owner": "root",
     },
     {
         "builder": install_wrapper_sh,

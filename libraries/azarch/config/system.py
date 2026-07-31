@@ -67,12 +67,22 @@ LOGO=archlinux-logo
 
 # Post-pacstrap customization hook. mkarchiso runs airootfs/root/customize_airootfs.sh
 # INSIDE the pacstrapped rootfs (arch-chroot) AFTER packages are installed, then
-# deletes it -- so it never ships on the ISO. We use it purely to plant the branded
-# os-release: doing this here (post-pacstrap) avoids the file-conflict that pre-
-# placing it in the airootfs overlay triggers against the `filesystem` package (see
-# steps.py step 7). The staged source lives at /root/azarch/os-release in the chroot.
-# NoExtract (config/pacman.py) already kept `filesystem` from writing its own
-# "Arch Linux" copy, so usr/lib/os-release is absent until this cp lands ours.
+# deletes it -- so it never ships on the ISO. We use it to (1) plant the branded
+# os-release and (2) set the DEFAULT Plasma wallpaper. Doing both here (post-pacstrap)
+# avoids the file-conflicts that pre-placing files in the airootfs overlay triggers
+# against the owning packages (filesystem / plasma-workspace); see steps.py step 7.
+# The staged sources live under /root/azarch/ in the chroot. NoExtract
+# (config/pacman.py) already kept `filesystem` from writing its own "Arch Linux"
+# os-release, so usr/lib/os-release is absent until this cp lands ours.
+#
+# Wallpaper: rather than seeding a per-user appletsrc Image= (which plasmashell
+# regenerates on first login, orphaning the seed -> the desktop falls back to a
+# black/default background), we rewrite the DEFAULT of the org.kde.image wallpaper
+# plugin (owned by plasma-workspace at a stable path). That default is what Plasma
+# uses for any containment with no explicit image, so it survives appletsrc
+# regeneration and applies to every user. unpackfs copies this edited file onto the
+# installed target, so the installed system inherits the same default -- no separate
+# Calamares step needed. The edit is idempotent and a no-op if Plasma is absent.
 CUSTOMIZE_AIROOTFS = """\
 #!/usr/bin/env bash
 set -euo pipefail
@@ -80,11 +90,52 @@ set -euo pipefail
 # Brand the live system as Az'arch Linux. /etc/os-release symlinks to this path.
 cp /root/azarch/os-release /usr/lib/os-release
 chmod 0644 /usr/lib/os-release
+
+# Set the default Plasma wallpaper by rewriting the org.kde.image plugin's Image
+# default (the fallback Plasma uses when a containment has no explicit image). This
+# is regeneration-proof, unlike a per-user appletsrc Image= seed.
+IMG_MAIN_XML="/usr/share/plasma/wallpapers/org.kde.image/contents/config/main.xml"
+WALLPAPER="/usr/share/azarch/wallpaper.png"
+# The wallpaper is not build-critical, so a parse surprise must not abort the ISO
+# build: guard the edit with `|| true`.
+if [ -f "$IMG_MAIN_XML" ] && [ -f "$WALLPAPER" ]; then
+    python3 - "$IMG_MAIN_XML" "file://$WALLPAPER" <<'PYEOF' || true
+import re
+import sys
+
+path, uri = sys.argv[1], sys.argv[2]
+with open(path, encoding="utf-8") as fh:
+    xml = fh.read()
+
+# Replace the <default>...</default> (or self-closing <default/>) INSIDE the
+# <entry name="Image" ...> ... </entry> block only, leaving every other entry
+# untouched. Anchored on the Image entry so no other wallpaper option is affected.
+entry = re.compile(r'(<entry\\s+name="Image".*?</entry>)', re.DOTALL)
+
+
+def fix(m):
+    block = m.group(1)
+    if "<default" not in block:
+        # Insert a default right after the entry's opening tag if none exists.
+        return re.sub(r'(<entry\\s+name="Image"[^>]*>)',
+                      r'\\1\\n      <default>%s</default>' % uri, block, count=1)
+    block = re.sub(r'<default\\s*/>', '<default>%s</default>' % uri, block, count=1)
+    block = re.sub(r'<default>.*?</default>', '<default>%s</default>' % uri,
+                   block, count=1, flags=re.DOTALL)
+    return block
+
+
+new = entry.sub(fix, xml, count=1)
+if new != xml:
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(new)
+PYEOF
+fi
 """
 
 # getty@tty1 autologin override. The releng base autologins ROOT on tty1; the
 # graphical live session must instead autologin the unprivileged `main` user, whose
-# ~/.bash_profile execs startx into the Openbox session. Running the desktop as root
+# ~/.bash_profile execs startx into the Plasma session. Running the desktop as root
 # is wrong (Calamares/Qt dislike it, and the live user model expects `main`). The
 # empty first ExecStart= clears the unit's default before we set ours (systemd
 # requires the reset to override ExecStart in a drop-in).
