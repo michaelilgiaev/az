@@ -213,3 +213,49 @@ RemainAfterExit=true
 [Install]
 WantedBy=multi-user.target
 """
+
+# --- sshd-hypervisor variant only -------------------------------------------
+# Baked into the `azarch-sshd` ISO ONLY (steps.py emits + enables it only when
+# variant == "sshd"). It runs `azarch --sshd-hypervisor` automatically at boot --
+# the whole point of that variant ("sudo azarch --sshd-hypervisor on by default").
+#
+# It runs as ROOT with Environment=SUDO_USER=main (rather than User=main) on
+# purpose. The azarch CLI resolves its target user from ${SUDO_USER:-$(id -un)} and
+# REFUSES a bare-root target, so SUDO_USER=main makes it stage the pubkey into
+# /home/main/.ssh (the account sshd accepts) exactly as an interactive
+# `sudo azarch --sshd-hypervisor` would. Running the UNIT as root avoids the PAM
+# session a `User=main` unit would need for the CLI's internal `sudo` calls (mount
+# the 9p share, ssh-keygen -A, ufw, systemctl enable --now sshd): as root those
+# `sudo` invocations are trivial no-op elevations and the `install -o main` calls
+# still hand the key files to `main`.
+#
+# It orders After the pkgs-setup oneshot because setup-pkgs.sh runs `ufw enable`
+# with a default-reject-incoming policy; running after it means our `ufw allow ssh`
+# is the final word and the forwarded host->guest :22 is actually reachable.
+# NOTE: no `After=multi-user.target` -- this unit is itself WantedBy that target, and
+# ordering after the target that pulls it in would push it past boot completion (or
+# risk an ordering cycle). After=pkgs-setup.service (also WantedBy=multi-user.target)
+# is sufficient and correct.
+#
+# Failure is non-fatal to boot: the guest still boots to the desktop if the shared
+# folder / host pubkey is absent (e.g. booted without the hypervisor's shared dir).
+# The azarch CLI exits non-zero in that case, but Type=oneshot + no other unit
+# depending on it means the system carries on; the user can re-run it by hand.
+SSHD_HYPERVISOR_SETUP_SERVICE = """\
+[Unit]
+Description=Az'arch sshd-hypervisor auto-setup (install host pubkey + start sshd)
+After=pkgs-setup.service
+Wants=pkgs-setup.service
+ConditionPathExists=/usr/local/bin/azarch
+
+[Service]
+Type=oneshot
+Environment=SUDO_USER=main
+ExecStart=/usr/local/bin/azarch --sshd-hypervisor
+RemainAfterExit=true
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+"""

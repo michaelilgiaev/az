@@ -58,12 +58,19 @@ def kill_active_child(sudo: list[str]) -> None:
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
 
-def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: bool = False) -> Path:
+def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: bool = False,
+        variant: str = "base") -> Path:
     """Execute all steps; return the path to the built ISO. Raises on failure.
 
     full_compile: when True, Az'arch's own packages (librewolf) are compiled from
     source instead of repackaged from the verified upstream tarball. Passed to the
     makepkg stage below.
+
+    variant: "base" (the normal ISO) or "sshd" (identical, but named azarch-sshd
+    and auto-running `azarch --sshd-hypervisor` at boot). It changes only the
+    profiledef iso_name (step 10) and whether the sshd-hypervisor auto-setup
+    service is emitted+enabled (steps 8/9); the package set is identical, so both
+    variants share the same offline cache.
     """
     W = paths.WORKDIR
     airootfs = W / "airootfs"
@@ -153,6 +160,14 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: 
     _emit_desktop(airootfs, home)
     _emit_calamares(airootfs)
     _emit_tty1_autologin(airootfs)
+    # ckbcomp: Calamares' keyboard page renders its on-screen key legends by shelling
+    # out to `ckbcomp`; without it the preview draws BLANK keys ("ckbcomp not found,
+    # keyboard preview disabled"). `ckbcomp` is a self-contained Perl script that
+    # Arch does NOT package (it is Debian/Manjaro-only), so we vendor it from
+    # assets/bin/ckbcomp into /usr/bin. It needs only perl (in base) and the XKB data
+    # in /usr/share/X11/xkb (shipped by xkeyboard-config), both present. It lands in
+    # the live ISO and is copied to the target by unpackfs.
+    emit.copy_asset("bin/ckbcomp", airootfs / "usr/bin/ckbcomp", mode=0o755)
 
     # 9 -- Stage installed-system pacman and pkgs service.
     # The package-management unit of the installed system: its /etc/pacman.conf, the
@@ -164,9 +179,14 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: 
 
     # 9 -- Enable systemd units and sudoers policy.
     # Activation/policy at profile finalization: the *.target.wants symlinks that enable
-    # the units, plus the sudoers.d drop-ins.
+    # the units, plus the sudoers.d drop-ins. The sshd variant ALSO gets the
+    # sshd-hypervisor auto-setup service (emitted + enabled) so `azarch
+    # --sshd-hypervisor` runs at boot; the base variant does not.
     bar.step("Enable systemd units and sudoers policy")
-    _link_services(airootfs)
+    if variant == "sshd":
+        emit.write_text(airootfs / "etc/systemd/system/sshd-hypervisor-setup.service",
+                        system.SSHD_HYPERVISOR_SETUP_SERVICE)
+    _link_services(airootfs, variant)
     emit.write_text(airootfs / "etc/sudoers.d/00-rootpw", system.SUDOERS_ROOTPW, mode=0o440)
     emit.write_text(airootfs / "etc/sudoers.d/00-main", system.SUDOERS_MAIN, mode=0o440)
     emit.write_text(airootfs / "etc/sudoers.d/00-secure-path", system.SUDOERS_SECURE_PATH, mode=0o440)
@@ -177,7 +197,7 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: 
     # session, step 8) is now the PRIMARY installer; the legacy bash installer is
     # still emitted to the Desktop as a terminal fallback for rescue use.
     bar.step("Emit profiledef and installer payload")
-    emit.write_exec(W / "profiledef.sh", profile.profiledef_sh())
+    emit.write_exec(W / "profiledef.sh", profile.profiledef_sh(variant))
     emit.write_exec(home / "Desktop/azarch-iso-installer.sh", installer.installer_sh())
     emit.write_exec(ea / "first-boot-setup.sh", installer.first_boot_sh())
     emit.write_text(ea / "first-boot-setup.service", installer.first_boot_service())
@@ -223,7 +243,8 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: 
     # mkarchiso: pacstrap into airootfs, mksquashfs, checksum, build the .iso
     # (drives bar.sub sub-progress via _drive_mkarchiso_progress).
     bar.step("Assemble ISO (mkarchiso)")
-    iso = _run_mkarchiso(sudo, W, bar, reclaim_after_mkarchiso)
+    iso = _run_mkarchiso(sudo, W, bar, reclaim_after_mkarchiso,
+                         iso_name=profile.iso_name_for(variant))
     return iso
 
 
@@ -453,7 +474,7 @@ def _emit_fastfetch(ea: Path, home: Path) -> None:
     emit.write_text(staged / fastfetch.LOGO_FILENAME, fastfetch.logo_txt())
 
 
-def _link_services(airootfs: Path) -> None:
+def _link_services(airootfs: Path, variant: str = "base") -> None:
     # Graphical live medium WITHOUT a display manager: the tty1 autologin (overridden
     # to `main`) drops into a login shell whose ~/.bash_profile execs startx -> Openbox
     # -> Calamares. So there is deliberately NO display-manager unit and NO
@@ -465,6 +486,12 @@ def _link_services(airootfs: Path) -> None:
         emit.link(f"/usr/lib/systemd/system/{svc}", base / f"multi-user.target.wants/{svc}")
     emit.link("/etc/systemd/system/locale-setup.service", base / "multi-user.target.wants/locale-setup.service")
     emit.link("/etc/systemd/system/pkgs-setup.service", base / "multi-user.target.wants/pkgs-setup.service")
+    # sshd variant only: enable the oneshot that runs `azarch --sshd-hypervisor` at
+    # boot (the service file is emitted in step 9 for this variant). The base ISO
+    # never enables it, so it stays a manual `sudo azarch --sshd-hypervisor` there.
+    if variant == "sshd":
+        emit.link("/etc/systemd/system/sshd-hypervisor-setup.service",
+                  base / "multi-user.target.wants/sshd-hypervisor-setup.service")
 
 
 def _switch_offline(W: Path, conf: str, localrepo: Path) -> None:
@@ -527,7 +554,7 @@ def _probe_and_maybe_switch(W: Path, conf: str, localrepo: Path, bar: ProgressBa
     subprocess.run(["rm", "-rf", str(probe)], check=False)
 
 
-def _run_mkarchiso(sudo, W: Path, bar: ProgressBar, reclaim_after) -> Path:
+def _run_mkarchiso(sudo, W: Path, bar: ProgressBar, reclaim_after, iso_name: str = "azarch") -> Path:
     # temp dir cleanup (matches the old "Cleaning up temp directory" step)
     subprocess.run(["rm", "-rf", str(W / ".temp")], check=False)
     env = dict(os.environ)
@@ -560,10 +587,18 @@ def _run_mkarchiso(sudo, W: Path, bar: ProgressBar, reclaim_after) -> Path:
     reclaim_after()
     if rc != 0:
         raise SystemExit(f"[x] mkarchiso failed (exit {rc})")
-    isos = sorted(paths.BUILDDIR.glob("*.iso"))
+    # Select the ISO THIS build produced by its iso_name prefix, not just the first
+    # *.iso: output/ may hold BOTH variants (azarch-*.iso and azarch-sshd-*.iso) when
+    # both have been built, and a bare sorted()[0] would return the wrong one (e.g.
+    # picking azarch-* after an azarch-sshd build). Match the exact prefix.
+    isos = sorted(paths.BUILDDIR.glob(f"{iso_name}-*.iso"))
+    if not isos:
+        # Fall back to any .iso so a naming surprise still surfaces the artifact.
+        isos = sorted(paths.BUILDDIR.glob("*.iso"))
     if not isos:
         raise SystemExit("[x] ISO build failed: no .iso found in output/")
-    return isos[0]
+    # Newest matching ISO (this run's), in case an older same-variant ISO lingers.
+    return max(isos, key=lambda p: p.stat().st_mtime)
 
 
 # pacman phase -> (base, span) sub-band within 20..820 for live mkarchiso progress.

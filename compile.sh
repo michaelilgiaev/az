@@ -22,6 +22,12 @@
 # Then it hands off to `python3 -m azarch.build`, which does the rest.
 #
 # ARGS: any args are passed straight through to the Python build driver.
+#   --sshd                   build the `azarch-sshd` ISO variant instead of the base
+#                            `azarch` ISO: identical contents, but named
+#                            azarch-sshd-<ver>-x86_64.iso and auto-running
+#                            `azarch --sshd-hypervisor` at boot (guest sshd auto-setup
+#                            enabled). Shares the same package cache as the base ISO,
+#                            so building both is just a second mkarchiso pass.
 #   --full-compile           build Az'arch's own packages ENTIRELY from source
 #                            (incl. a multi-hour LibreWolf/Firefox compile) instead
 #                            of the default, which repackages LibreWolf's verified

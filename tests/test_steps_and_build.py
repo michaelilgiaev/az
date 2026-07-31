@@ -14,7 +14,26 @@ from __future__ import annotations
 
 import inspect
 
-from azarch import build, steps
+from azarch import build, paths, steps
+
+
+def test_ckbcomp_asset_is_vendored_and_executable_perl():
+    # Calamares' keyboard preview shells out to `ckbcomp` to render key legends;
+    # Arch does not package it, so we vendor the Perl script under assets/bin. It
+    # must exist and be the actual ckbcomp Perl script (not an empty placeholder).
+    src = paths.ASSETSDIR / "bin" / "ckbcomp"
+    assert src.is_file(), "assets/bin/ckbcomp is missing"
+    head = src.read_text(errors="ignore")[:200]
+    assert head.startswith("#!/usr/bin/perl")
+    assert "ckbcomp" in head  # the script's own banner names itself
+
+
+def test_run_installs_ckbcomp_into_usr_bin():
+    # run() must plant the vendored ckbcomp at /usr/bin/ckbcomp (executable) so the
+    # keyboard preview finds it. Assert the copy_asset call is present in run().
+    src = inspect.getsource(steps.run)
+    assert 'bin/ckbcomp' in src
+    assert 'usr/bin/ckbcomp' in src
 
 
 def test_step_weights_match_number_of_steps():

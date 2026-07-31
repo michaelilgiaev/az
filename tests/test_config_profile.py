@@ -47,6 +47,13 @@ def test_calamares_launcher_stays_executable():
     assert '["/usr/local/bin/azarch-install"]="0:0:755"' in profile.profiledef_sh()
 
 
+def test_ckbcomp_stays_executable():
+    # The vendored ckbcomp Perl script must keep its exec bit through archiso's mode
+    # normalization, or Calamares cannot run it and the keyboard preview is blank.
+    assert profile.FILE_PERMISSIONS["/usr/bin/ckbcomp"] == "0:0:755"
+    assert '["/usr/bin/ckbcomp"]="0:0:755"' in profile.profiledef_sh()
+
+
 def test_secrets_locked_down():
     # shadow/gshadow/sudoers must not ship world-readable.
     assert profile.FILE_PERMISSIONS["/etc/shadow"] == "0:0:400"

@@ -20,22 +20,25 @@ import yaml
 from azarch.config import calamares
 
 
-# The 15 files Calamares reads, relative to /etc/calamares. Any drift here means
+# The files Calamares reads, relative to /etc/calamares. Any drift here means
 # a module in the sequence has no config (or an orphan config exists).
 EXPECTED_FILES = {
     "settings.conf",
     "modules/partition.conf",
     "modules/unpackfs.conf",
     "modules/shellprocess.conf",
+    "modules/shellprocess-desparse.conf",
     "modules/users.conf",
     "modules/packages.conf",
     "modules/mount.conf",
     "modules/fstab.conf",
     "modules/locale.conf",
+    "modules/keyboard.conf",
     "modules/initcpiocfg.conf",
     "modules/services-systemd.conf",
     "modules/grubcfg.conf",
     "modules/bootloader.conf",
+    "modules/finished.conf",
     "branding/azarch/branding.desc",
     "branding/azarch/show.qml",
 }
@@ -62,10 +65,10 @@ def _settings_show_list() -> list:
 
 # --- emit_map shape ---------------------------------------------------------
 
-def test_emit_map_has_exactly_15_files():
+def test_emit_map_has_exactly_expected_files():
     m = calamares.emit_map()
     assert set(m) == EXPECTED_FILES
-    assert len(m) == 15
+    assert len(m) == len(EXPECTED_FILES) == 18
 
 
 def test_emit_map_values_are_nonempty_strings():
@@ -116,15 +119,36 @@ def test_settings_exec_ordering_constraints():
     assert execs.index("grubcfg") < execs.index("bootloader")
 
 
+def _instance_config_stems() -> dict:
+    """Map a custom-instance config STEM (e.g. 'shellprocess-desparse') to the
+    `module@id` token it is used as in the sequence (e.g. 'shellprocess@desparse'),
+    read from settings.conf's `instances:` block. Lets the orphan check recognise a
+    per-instance config file whose name does not equal any bare module name."""
+    doc = yaml.safe_load(calamares.settings_conf())
+    out = {}
+    for inst in doc.get("instances", []):
+        stem = inst["config"][:-len(".conf")] if inst["config"].endswith(".conf") \
+            else inst["config"]
+        out[stem] = f"{inst['module']}@{inst['id']}"
+    return out
+
+
 def test_configured_modules_referenced_in_sequence():
-    # Every modules/<x>.conf we emit must name a module that actually appears in
-    # the settings.conf sequence (show or exec). An orphan config is dead weight;
-    # a missing one means a configured module never runs.
+    # Every modules/<x>.conf we emit must name a module (or a declared instance)
+    # that actually appears in the settings.conf sequence (show or exec). An orphan
+    # config is dead weight; a missing one means a configured module never runs.
     seq_names = set(_settings_exec_list()) | set(_settings_show_list())
+    inst = _instance_config_stems()
     for rel in calamares.emit_map():
         if rel.startswith("modules/") and rel.endswith(".conf"):
             stem = rel[len("modules/"):-len(".conf")]
-            assert stem in seq_names, stem
+            # A per-instance config (shellprocess-desparse.conf) is referenced via
+            # its module@id token (shellprocess@desparse); a plain config via its
+            # bare module name.
+            if stem in inst:
+                assert inst[stem] in seq_names, inst[stem]
+            else:
+                assert stem in seq_names, stem
 
 
 # --- partition.conf ---------------------------------------------------------
@@ -151,6 +175,52 @@ def test_partition_supplies_efi_system_partition():
     # so partition.conf must be the one that sets it.
     d = yaml.safe_load(calamares.partition_conf())
     assert d["efiSystemPartition"] == "/boot/efi"
+
+
+# --- mount.conf -------------------------------------------------------------
+
+def _extra_mount_points(doc) -> set:
+    return {m["mountPoint"] for m in doc["extraMounts"]}
+
+
+def test_mount_binds_the_standard_pseudo_filesystems():
+    # proc/sys/dev/run must all be mounted into the target chroot so the
+    # bootloader + initcpio jobs (which run chrooted) can see the running kernel's
+    # interfaces. A missing one silently breaks a chrooted command.
+    d = yaml.safe_load(calamares.mount_conf())
+    pts = _extra_mount_points(d)
+    assert {"/proc", "/sys", "/dev", "/run"} <= pts
+
+
+def test_mount_includes_efivarfs_for_uefi_grub_install():
+    # THE bootloader-install fix. grub-install (UEFI) shells out to efibootmgr to
+    # register the NVRAM boot entry, and efibootmgr needs efivarfs mounted RW at
+    # /sys/firmware/efi/efivars INSIDE the target chroot. A fresh sysfs mount does
+    # NOT carry the efivarfs submount, so without an explicit entry grub-install
+    # dies with "EFI variables are not supported on this system" /
+    # "efibootmgr failed to register the boot entry" and Calamares aborts at the
+    # bootloader step. This asserts the explicit efivarfs extraMount exists.
+    d = yaml.safe_load(calamares.mount_conf())
+    efivars = [m for m in d["extraMounts"]
+               if m.get("mountPoint") == "/sys/firmware/efi/efivars"]
+    assert efivars, "mount.conf must mount efivarfs for UEFI grub-install"
+    entry = efivars[0]
+    assert entry["fs"] == "efivarfs"
+    assert entry["device"] == "efivarfs"
+
+
+def test_mount_efivarfs_is_efi_only():
+    # The entry MUST carry `efi: true` so Calamares' mount module drops it on a
+    # legacy-BIOS install (where /sys/firmware/efi does not exist). Without this
+    # flag a BIOS install still boots fine but logs a spurious "Cannot mount
+    # efivarfs" warning; with it the efivarfs mount is a clean no-op off UEFI.
+    # (Calamares sorts extraMounts lexically by mountPoint at runtime, so list
+    # ORDER is irrelevant -- /sys sorts before /sys/firmware/... regardless and
+    # the mountpoint dir is created on demand; the efi flag is the real contract.)
+    d = yaml.safe_load(calamares.mount_conf())
+    entry = next(m for m in d["extraMounts"]
+                 if m.get("mountPoint") == "/sys/firmware/efi/efivars")
+    assert entry.get("efi") is True
 
 
 # --- unpackfs.conf ----------------------------------------------------------
@@ -228,14 +298,21 @@ def _mkinitcpio_reset_command(script: list) -> str:
 def test_shellprocess_reinstates_the_kernel_image():
     # mkarchiso empties the rootfs /boot before squashing, so the unpacked target
     # has NO /boot/vmlinuz-linux -- the kernel survives only at
-    # /usr/lib/modules/<kver>/vmlinuz. mkinitcpio -P would fail "'/boot/vmlinuz-linux'
-    # must be readable" without this. The command must replicate the linux package's
-    # install hook: copy modules/<kver>/vmlinuz -> /boot/vmlinuz-linux. A shell GLOB
-    # (version-agnostic; no hardcoded kernel version a bump would break) selects the
-    # single installed kernel, and `install -Dm644` recreates /boot with mode 644.
+    # /usr/lib/modules/<kver>/vmlinuz. Calamares' initcpio step (`mkinitcpio -p
+    # linux`) would fail "'/boot/vmlinuz-linux' must be readable" without this. The
+    # command must replicate the linux package's install hook: copy
+    # modules/<kver>/vmlinuz -> /boot/vmlinuz-linux. `find ... -exec install` (NOT a
+    # glob passed to `install`, which would treat a second kernel as a target dir and
+    # abort under set -e) is version-agnostic and recreates /boot with mode 644.
     d = yaml.safe_load(calamares.shellprocess_conf())
     cmd = _mkinitcpio_reset_command(d["script"])
-    assert "install -Dm644 /usr/lib/modules/*/vmlinuz /boot/vmlinuz-linux" in cmd
+    assert (
+        "find /usr/lib/modules -maxdepth 2 -name vmlinuz "
+        "-exec install -Dm644 {} /boot/vmlinuz-linux \\;"
+    ) in cmd
+    # find -exec exits 0 even on no match, so set -e alone would miss a missing
+    # kernel; a `test -r` guard re-arms the hard failure the old glob provided.
+    assert "test -r /boot/vmlinuz-linux" in cmd
 
 
 def test_shellprocess_uses_no_shell_variables():
@@ -287,6 +364,119 @@ def test_stock_preset_constant_is_a_valid_default_fallback_preset():
     assert "archiso" not in preset
 
 
+# --- shellprocess@desparse (make /boot GRUB-readable) -----------------------
+
+def _desparse_cmd() -> str:
+    d = yaml.safe_load(calamares.shellprocess_desparsify_conf())
+    # Single block-scalar command in the script list.
+    assert len(d["script"]) == 1
+    return d["script"][0]
+
+
+def test_desparse_conf_schema_and_chroot():
+    d = yaml.safe_load(calamares.shellprocess_desparsify_conf())
+    # Runs INSIDE the target chroot (paths like /boot/vmlinuz-linux are target-abs).
+    assert d["dontChroot"] is False
+    assert "script" in d
+
+
+def test_desparse_rewrites_boot_files_hole_free():
+    # THE boot fix: cp --sparse=never eliminates the trailing EOF hole that makes
+    # GRUB's btrfs driver read the kernel/initramfs short ("premature end of file").
+    cmd = _desparse_cmd()
+    assert "--sparse=never" in cmd
+    # It must touch the kernel AND both initramfs images GRUB loads.
+    assert "/boot/vmlinuz-linux" in cmd
+    assert "/boot/initramfs-linux.img" in cmd
+    assert "/boot/initramfs-linux-fallback.img" in cmd
+
+
+def test_desparse_kernel_is_unconditional_initramfs_guarded():
+    # The kernel always exists by now (reinstated pre-initcpio) -> de-sparsified
+    # unconditionally (no `if`/`test` guard). The initramfs images are guarded with
+    # `if [ -f ... ]` so a preset emitting only one image never aborts the install.
+    cmd = calamares._boot_desparsify_command()
+    lines = cmd.splitlines()
+    # The kernel cp/mv lines are NOT inside an `if` guard (they sit at top level,
+    # right after `set -e`, before the first `if`).
+    first_if = next(i for i, l in enumerate(lines) if l.startswith("if "))
+    kernel_lines = [l for l in lines[:first_if] if "/boot/vmlinuz-linux" in l]
+    assert kernel_lines, "kernel must be de-sparsified before the first guard"
+    assert not any(l.strip().startswith(("if ", "test ")) for l in kernel_lines)
+    # Both initramfs rewrites ARE guarded with `if [ -f ... ]`.
+    for img in ("/boot/initramfs-linux.img", "/boot/initramfs-linux-fallback.img"):
+        assert f"if [ -f {img} ]; then" in cmd
+
+
+def test_desparse_cp_and_mv_are_separate_statements_not_and_chains():
+    # REGRESSION GUARD (the exact adversarial finding): `cp ... && mv ...` would let
+    # a failed kernel `cp` slip past `set -e` (a command left of `&&` is a "tested"
+    # command whose failure is ignored), so the script would exit 0 and Calamares
+    # would ship an UNBOOTABLE system. The cp and mv MUST be separate statements.
+    cmd = calamares._boot_desparsify_command()
+    assert "&&" not in cmd, "cp/mv must not be && -chained (defeats set -e)"
+
+
+def test_desparse_uses_no_shell_variables():
+    # Same Calamares macro-expander constraint as the other shellprocess: a bare
+    # `$WORD` aborts the whole job. Assert NO '$' in the emitted command.
+    assert "$" not in _desparse_cmd()
+
+
+def test_desparse_is_fatal_on_failure():
+    # Making /boot GRUB-readable is load-bearing: NOT prefixed "-", uses `set -e`.
+    cmd = calamares._boot_desparsify_command()
+    assert not cmd.startswith("-")
+    assert cmd.startswith("set -e")
+
+
+def test_desparse_actually_aborts_when_kernel_cp_fails(tmp_path):
+    # BEHAVIORAL proof of the fatal-on-failure contract (not just a string check):
+    # run the emitted command with the kernel source ABSENT but an initramfs image
+    # PRESENT. The kernel `cp` must fail and, under set -e, abort the WHOLE script
+    # with a non-zero exit -- even though the later (present) initramfs step would
+    # succeed. The old `&&`-chained form exited 0 here (the bug).
+    import subprocess
+    cmd = calamares._boot_desparsify_command()
+    # Rebase the absolute /boot/... paths into a sandbox so the test touches no real
+    # system files. The kernel source is deliberately NOT created (cp will fail);
+    # one initramfs image IS created (its guarded step would otherwise succeed).
+    boot = tmp_path / "boot"
+    boot.mkdir()
+    (boot / "initramfs-linux.img").write_bytes(b"present")
+    sandboxed = cmd.replace("/boot/", f"{boot}/")
+    rc = subprocess.run(["bash", "-c", sandboxed], capture_output=True).returncode
+    assert rc != 0, "a failed kernel cp must abort the install (set -e), not exit 0"
+
+
+def test_desparse_runs_after_initcpio_before_bootloader():
+    # It MUST run after initcpio (which writes the initramfs) and before grubcfg/
+    # bootloader (which point grub.cfg at the /boot files). Wrong order => the very
+    # boot failure this fixes.
+    execs = _settings_exec_list()
+    assert "shellprocess@desparse" in execs
+    i = execs.index("shellprocess@desparse")
+    assert execs.index("initcpio") < i
+    assert i < execs.index("grubcfg")
+    assert i < execs.index("bootloader")
+
+
+def test_desparse_declared_as_shellprocess_instance():
+    # The second instance must be declared so Calamares loads
+    # shellprocess-desparse.conf for the `shellprocess@desparse` sequence entry.
+    doc = yaml.safe_load(calamares.settings_conf())
+    insts = {i["id"]: i for i in doc.get("instances", [])}
+    assert "desparse" in insts
+    assert insts["desparse"]["module"] == "shellprocess"
+    assert insts["desparse"]["config"] == "shellprocess-desparse.conf"
+
+
+def test_desparse_conf_wired_to_right_path():
+    # The emitted file name must match the instance's config: reference.
+    assert (calamares.emit_map()["modules/shellprocess-desparse.conf"]
+            == calamares.shellprocess_desparsify_conf())
+
+
 # --- users.conf (reuse the surviving /home/main) ----------------------------
 
 def test_users_reuse_home_true():
@@ -304,6 +494,39 @@ def test_locale_conf_defaults_to_asia_jerusalem():
     d = yaml.safe_load(calamares.locale_conf())
     assert d["region"] == "Asia"
     assert d["zone"] == "Jerusalem"
+
+
+# --- keyboard.conf: no auto-resolve (the Hebrew-preselect fix) --------------
+
+def test_keyboard_conf_disables_layout_guess():
+    # THE fix for the installer auto-resolving the keyboard to Hebrew from the
+    # Asia/Jerusalem region default: guessLayout MUST be false so the module keeps
+    # the live system's current layout ("us", set by setup-locale.sh) instead of
+    # deriving one from the locale/timezone. (Verified against Calamares 3.4.2
+    # keyboard Config.cpp: guessLocaleKeyboardLayout() early-returns when false.)
+    d = yaml.safe_load(calamares.keyboard_conf())
+    assert d["guessLayout"] is False
+
+
+def test_keyboard_conf_uses_plain_xorg_not_locale1():
+    # Az'arch is Openbox/X11 and setup-locale.sh already wrote
+    # /etc/X11/xorg.conf.d/00-keyboard.conf with "us"; managing that file directly
+    # (useLocale1 false) is what lets the module read "us" as the current layout.
+    d = yaml.safe_load(calamares.keyboard_conf())
+    assert d["useLocale1"] is False
+    assert d["xOrgConfFileName"] == "/etc/X11/xorg.conf.d/00-keyboard.conf"
+
+
+def test_keyboard_conf_no_kde_gnome_integration():
+    # Openbox/X11 -- no KWin/GNOME keyboard integration to configure.
+    d = yaml.safe_load(calamares.keyboard_conf())
+    assert d["configure"] == {"kwin": False, "gnome": False}
+
+
+def test_keyboard_in_show_and_configured():
+    # keyboard is a UI page (show) and now carries a real config (not defaults).
+    assert "keyboard" in _settings_show_list()
+    assert calamares.emit_map()["modules/keyboard.conf"] == calamares.keyboard_conf()
 
 
 # --- grubcfg.conf -----------------------------------------------------------
@@ -367,6 +590,28 @@ def test_bootloader_grub_identity():
     d = yaml.safe_load(calamares.bootloader_conf())
     assert d["efiBootLoader"] == "grub"
     assert d["efiBootloaderId"] == "azarch"
+
+
+# --- finished.conf (Restart-now option on the Finish page) ------------------
+
+def test_finished_offers_restart_now():
+    # Without this config the Finish page shows only "Done" and cannot reboot into
+    # the new system. user-unchecked shows a "Restart now" checkbox, default off.
+    d = yaml.safe_load(calamares.finished_conf())
+    assert d["restartNowMode"] == "user-unchecked"
+    # Reboot command must ignore inhibitors so it actually restarts.
+    assert d["restartNowCommand"] == "systemctl -i reboot"
+
+
+def test_finished_conf_schema_only_valid_keys():
+    # finished schema is additionalProperties:false -- an unknown key aborts
+    # Calamares at startup. Assert we only use documented keys.
+    d = yaml.safe_load(calamares.finished_conf())
+    valid = {"restartNowEnabled", "restartNowChecked", "restartNowCommand",
+             "restartNowMode", "notifyOnFinished"}
+    assert set(d) <= valid
+    # finished is in the sequence's show phase, so its config is not an orphan.
+    assert "finished" in _settings_show_list()
 
 
 # --- branding.desc ----------------------------------------------------------

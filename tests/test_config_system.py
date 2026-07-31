@@ -181,3 +181,4 @@ def test_pkgs_service_diverges_from_locale():
     assert "network-online" not in s
     assert "ConditionPathExists=/root/azarch/setup-pkgs.sh" in s
     assert "RemainAfterExit=true" in s
+

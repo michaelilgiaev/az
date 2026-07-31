@@ -75,6 +75,20 @@ def test_copy_data_applies_mode_when_given(tmp_path, monkeypatch):
     assert _mode(dest) == 0o755
 
 
+def test_copy_asset_reads_from_assetsdir_and_applies_mode(tmp_path, monkeypatch):
+    # copy_asset resolves its source against paths.ASSETSDIR (binaries/scripts like
+    # the vendored ckbcomp) and applies the executable bit when asked.
+    src_root = tmp_path / "assets"
+    (src_root / "bin").mkdir(parents=True)
+    (src_root / "bin" / "tool").write_text("#!/usr/bin/perl\n")
+    monkeypatch.setattr(emit.paths, "ASSETSDIR", src_root)
+
+    dest = tmp_path / "out" / "usr/bin/tool"
+    emit.copy_asset("bin/tool", dest, mode=0o755)
+    assert dest.read_text() == "#!/usr/bin/perl\n"
+    assert _mode(dest) == 0o755
+
+
 def test_link_replaces_an_existing_link(tmp_path):
     # emit.link must overwrite a stale symlink (systemd .wants links get re-pointed).
     link = tmp_path / "wants" / "unit"

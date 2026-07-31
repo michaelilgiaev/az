@@ -64,6 +64,20 @@ module schemas we build from source -- these were bugs caught in review):
 
 from __future__ import annotations
 
+# The shellprocess module (the post-unpackfs `main`-account removal + archiso
+# mkinitcpio-preset reset) lives in its own file -- it is the most intricate part of
+# the install. Re-exported here so the public surface stays flat:
+# calamares.shellprocess_conf / .LIVE_USER / .STOCK_LINUX_PRESET, and the internal
+# _mkinitcpio_reset_command the tests pin.
+from .calamares_shellprocess import (  # noqa: F401  (re-exported for the public API)
+    LIVE_USER,
+    STOCK_LINUX_PRESET,
+    _boot_desparsify_command,
+    _mkinitcpio_reset_command,
+    shellprocess_conf,
+    shellprocess_desparsify_conf,
+)
+
 # The branding component directory name (under branding/) and product identity.
 BRANDING = "azarch"
 PRODUCT = "Az'arch Linux"
@@ -85,8 +99,8 @@ def settings_conf() -> str:
 
     Every module named here has a config emitted below, or needs none (welcome,
     summary, finished, machineid, hwclock, networkcfg, mount, umount, fstab,
-    localecfg, keyboard have no required per-module config for our flow -- the
-    ones we DO configure are listed in emit_map()).
+    localecfg have no required per-module config for our flow -- the ones we DO
+    configure, including keyboard, are listed in emit_map()).
     """
     return """\
 # Calamares master configuration for Az'arch Linux.
@@ -96,8 +110,15 @@ def settings_conf() -> str:
 # settings.conf so our /etc/calamares/modules/*.conf overrides are picked up.
 modules-search: [ local, /usr/lib/calamares/modules ]
 
-# instances: only needed to run the same module twice with different configs; we
-# do not, so the implicit one-instance-per-module mapping is used.
+# instances: run the `shellprocess` module a SECOND time with a different config.
+# The default (id == module name) instance uses modules/shellprocess.conf (the
+# pre-users/pre-initcpio fixups). The `desparse` instance -- referenced as
+# `shellprocess@desparse` in the sequence -- uses modules/shellprocess-desparse.conf
+# (de-sparsify /boot after initcpio so GRUB can read the kernel/initramfs).
+instances:
+- id: desparse
+  module: shellprocess
+  config: shellprocess-desparse.conf
 
 # The ordered install sequence. `show` phases render UI pages; `exec` phases do
 # the actual work with a progress bar. Only modules with a config below (or that
@@ -128,6 +149,12 @@ sequence:
   - hwclock
   - initcpiocfg
   - initcpio
+  # De-sparsify /boot (kernel + initramfs) so GRUB's btrfs driver can read the
+  # whole files. MUST run after initcpio (which writes the initramfs) and before
+  # bootloader/grubcfg -- otherwise the install completes but the target fails to
+  # boot: "premature end of file /@/boot/vmlinuz-linux". Second shellprocess
+  # instance; its config is modules/shellprocess-desparse.conf (see instances:).
+  - shellprocess@desparse
   - services-systemd
   - grubcfg
   - bootloader
@@ -249,167 +276,9 @@ unpack:
 
 
 # --- 3b. modules/shellprocess.conf -----------------------------------------
-# The exact login name baked into the live rootfs (config/system.py PASSWD/GROUP).
-# Kept as a module-level constant so the shellprocess script and any test agree on
-# the account being removed.
-LIVE_USER = "main"
-
-# The OFFLINE install copies the live archiso rootfs verbatim via unpackfs, which
-# leaves the target's /boot and mkinitcpio config in an ISO-only state that makes
-# Calamares' `initcpio` step (`mkinitcpio -P`) fail. TWO distinct archiso artifacts
-# are to blame, and BOTH must be undone before initcpio runs:
-#
-#   A. /boot is EMPTY. mkarchiso's `_cleanup_pacstrap_dir` deletes everything under
-#      the rootfs's /boot before it squashes airootfs.sfs (verified in
-#      /usr/bin/mkarchiso). The kernel therefore survives ONLY as the modules-tree
-#      copy /usr/lib/modules/<kver>/vmlinuz (pkgbase file alongside names it, e.g.
-#      "linux"); there is NO /boot/vmlinuz-linux in the unpacked target. This is the
-#      real cause of the observed failure:
-#          ==> ERROR: Invalid option -k -- '/boot/vmlinuz-linux' must be readable
-#      mkinitcpio's ALL_kver points at /boot/vmlinuz-<pkgbase>, which does not exist.
-#      An installed system normally gets /boot/vmlinuz-linux from the `linux`
-#      package's 90-mkinitcpio-install.hook (`install -Dm644 .../vmlinuz
-#      /boot/vmlinuz-<pkgbase>`); an offline rsync install never runs that pacman
-#      hook, so we replicate it here.
-#
-#   B. The mkinitcpio PRESET is the *archiso* one: /etc/mkinitcpio.d/linux.preset is
-#      PRESETS=('archiso') with archiso_config=/etc/mkinitcpio.conf.d/archiso.conf,
-#      and archiso.conf's HOOKS carry `archiso archiso_loop_mnt ...`. Even with a
-#      kernel present, that preset builds an archiso-hooked initramfs that cannot
-#      boot an installed disk (it expects the live SquashFS/cow overlay). We replace
-#      it with the STANDARD `linux` preset (default + fallback images, no archiso_*
-#      keys) and remove archiso.conf so its HOOKS -- a conf.d drop-in sourced LAST,
-#      which would otherwise OVERRIDE the /etc/mkinitcpio.conf that Calamares'
-#      initcpiocfg writes -- no longer apply. initcpiocfg then injects the
-#      encrypt/btrfs hooks the chosen layout needs into a clean HOOKS line.
-#
-# STOCK_LINUX_PRESET is the content the `linux` package installs as its preset
-# (mkinitcpio's %KERNELBASE% -> "linux").
-STOCK_LINUX_PRESET = """\
-# mkinitcpio preset file for the 'linux' package
-
-ALL_config="/etc/mkinitcpio.conf"
-ALL_kver="/boot/vmlinuz-linux"
-
-PRESETS=('default' 'fallback')
-
-#default_config="/etc/mkinitcpio.conf"
-default_image="/boot/initramfs-linux.img"
-#default_options=""
-
-#fallback_config="/etc/mkinitcpio.conf"
-fallback_image="/boot/initramfs-linux-fallback.img"
-fallback_options="-S autodetect"
-"""
-
-# Absolute (target-chroot) paths the reset touches.
-_PRESET_PATH = "/etc/mkinitcpio.d/linux.preset"
-_ARCHISO_CONF_PATH = "/etc/mkinitcpio.conf.d/archiso.conf"
-
-
-# Where the copied-in rootfs keeps the kernel image (mkarchiso empties /boot but
-# leaves the modules tree). A shell glob (NOT a Calamares/shell variable -- see the
-# no-`$` note in _mkinitcpio_reset_command) resolves the single installed kernel's
-# version directory. Az'arch ships exactly one kernel (pkgbase `linux`, matching
-# STOCK_LINUX_PRESET), verified against the built airootfs.sfs.
-_MODULES_VMLINUZ_GLOB = "/usr/lib/modules/*/vmlinuz"
-_TARGET_KERNEL = "/boot/vmlinuz-linux"
-
-
-def _mkinitcpio_reset_command() -> str:
-    """A single shellprocess command (a YAML literal-block list item -> one shell
-    invocation in the target chroot) that makes `mkinitcpio -P` succeed on the
-    unpacked target. Steps, in order:
-
-    1. Reinstate the kernel image the pacman install hook would have placed. The
-       `linux` package's 90-mkinitcpio-install.hook copies /usr/lib/modules/<kver>/
-       vmlinuz to /boot/vmlinuz-linux; the OFFLINE install skips that hook, so we
-       replicate it. A shell glob (`/usr/lib/modules/*/vmlinuz`) resolves the single
-       version dir (Az'arch ships one kernel, pkgbase `linux`); `install -Dm644`
-       creates /boot and sets mode 644.
-    2. Overwrite the inherited archiso preset with the stock one. A quoted heredoc
-       (``<<'EOF'``) writes every byte of STOCK_LINUX_PRESET verbatim -- including
-       the single quotes in ``PRESETS=('default' 'fallback')`` -- with no expansion.
-    3. Remove the archiso conf.d drop-in (`rm -f` is a no-op if it is absent).
-
-    CRITICAL -- no `$` anywhere: Calamares runs each shellprocess command through a
-    KWordMacroExpander (escape char `$`) BEFORE the shell sees it. Any bare `$WORD`
-    that is not a Calamares variable makes the whole job ABORT ("Missing variables")
-    without running a single command, and the only way to get a literal `$` through
-    is `$$`, which the expander turns into a SHELL-escaped `\\$` -- i.e. `\\$x` is a
-    literal `$x`, not a variable expansion. So shell variables / `$(...)` cannot be
-    used here at all; this command is written entirely with globs and fixed paths.
-    `set -e` (no `$`) makes a missing kernel or a failed write a HARD error (per the
-    failure policy in shellprocess_conf) rather than a silent skip that would only
-    surface as an obscure `initcpio` failure later."""
-    return (
-        f"set -e\n"
-        # A. reinstate the kernel image the pacman install hook would have placed.
-        f"install -Dm644 {_MODULES_VMLINUZ_GLOB} {_TARGET_KERNEL}\n"
-        # B. install the stock preset (replacing the archiso one).
-        f"mkdir -p /etc/mkinitcpio.d\n"
-        f"cat > {_PRESET_PATH} <<'EOF'\n"
-        f"{STOCK_LINUX_PRESET}"
-        f"EOF\n"
-        # C. drop the archiso conf.d override.
-        f"rm -f {_ARCHISO_CONF_PATH}"
-    )
-
-
-def shellprocess_conf() -> str:
-    """Two pre-`users` / pre-`initcpio` fixups the OFFLINE (copy-the-live-rootfs)
-    install needs, run INSIDE the target chroot (dontChroot: false) after unpackfs:
-
-    1. Delete the live rootfs's pre-existing `main` account so the `users` module
-       can re-create it (see the users.conf note / module docstring). We edit the
-       passwd/shadow/gshadow/group databases via `userdel`/`groupdel` rather than
-       trusting one tool: `userdel main` removes the user line and its per-user
-       primary group; a follow-up `groupdel` handles a lingering group. We do NOT
-       pass `-r`/`--remove`: /home/main (uid 1000) must stay so users.conf
-       reuseHome:true reuses it. `-f` forces removal on a freshly unpacked target.
-
-    2. Make the target's initramfs buildable: reinstate /boot/vmlinuz-linux
-       (mkarchiso emptied /boot; the kernel survives only under /usr/lib/modules)
-       and replace the inherited *archiso* mkinitcpio preset with the stock `linux`
-       preset (+ drop archiso.conf). Without this the later `initcpio` module's
-       `mkinitcpio -P` fails with "'/boot/vmlinuz-linux' must be readable" (missing
-       kernel) or, past that, builds an unbootable archiso-hooked initramfs. See
-       `_mkinitcpio_reset_command` / STOCK_LINUX_PRESET above. NOTE: this fixup uses
-       NO `$` (no shell variables / `$(...)`) -- Calamares macro-expands `$WORD` and
-       would abort the whole job on an unknown one (see _mkinitcpio_reset_command).
-
-    Command-failure policy: the user-removal commands are prefixed "-" so a rootfs
-    that (for any reason) lacks the `main` account/group never aborts the install
-    -- the goal is merely "main must not exist when users runs", so a no-op is
-    success. The mkinitcpio fixup is NOT prefixed "-" (and uses `set -e` internally):
-    reinstating the kernel and a correct preset is load-bearing -- a silent failure
-    would leave /boot empty or the archiso preset in place and the install would die
-    obscurely later at `initcpio`, so it should stop here with a clear failure.
-
-    Ordering note: shellprocess sits after unpackfs and before both `users` and
-    `initcpiocfg`/`initcpio` in settings.conf's exec sequence, so both fixups land
-    on the unpacked target before the modules that depend on them run."""
-    reset_cmd = _mkinitcpio_reset_command()
-    # Indent the multi-line reset command to sit under the YAML "- |" block scalar.
-    reset_block = "\n".join("        " + line for line in reset_cmd.splitlines())
-    return f"""\
-# Post-unpackfs target fixups for the OFFLINE install (runs in the target chroot):
-#   1. remove the live-ISO `main` account so the `users` module can recreate it
-#      with the user-chosen password (/home/main is preserved), and
-#   2. make the initramfs buildable: reinstate /boot/vmlinuz-<pkgbase> (mkarchiso
-#      emptied /boot) and replace the copied-in *archiso* mkinitcpio preset with the
-#      stock `linux` preset (+ drop archiso.conf), so `initcpio`'s `mkinitcpio -P`
-#      produces a bootable installed-system initramfs instead of failing.
----
-dontChroot: false
-timeout: 60
-verbose: true
-script:
-    - "-userdel -f {LIVE_USER}"
-    - "-groupdel {LIVE_USER}"
-    - |
-{reset_block}
-"""
+# The shellprocess config (LIVE_USER, STOCK_LINUX_PRESET, _mkinitcpio_reset_command,
+# shellprocess_conf) is defined in config/calamares_shellprocess.py and imported at
+# the top of this module. It is emitted below via emit_map()'s shellprocess_conf().
 
 
 # --- 4. modules/users.conf --------------------------------------------------
@@ -511,7 +380,21 @@ operations:
 # --- 6a. modules/mount.conf -------------------------------------------------
 def mount_conf() -> str:
     """Extra mount options applied when mounting the target for the install.
-    Btrfs gets compression + noatime so the copied system is space-efficient."""
+    Btrfs gets compression + noatime so the copied system is space-efficient.
+
+    extraMounts also bind/mount the pseudo-filesystems the chrooted install jobs
+    (initcpio, bootloader) need. The efivarfs entry is LOAD-BEARING for UEFI: the
+    bootloader module runs `grub-install --target=x86_64-efi`, which shells out to
+    efibootmgr to register the NVRAM boot entry, and efibootmgr can only do that if
+    efivarfs is mounted RW at /sys/firmware/efi/efivars *inside the target chroot*.
+    A fresh `sysfs` mount on /sys does NOT bring the efivarfs submount along, so
+    without this explicit entry grub-install fails with:
+        EFI variables are not supported on this system.
+        grub-install: error: efibootmgr failed to register the boot entry: ...
+    and Calamares aborts at the bootloader step. It must be listed AFTER the /sys
+    (sysfs) entry so its mountpoint directory exists first. On a BIOS/non-UEFI host
+    /sys/firmware/efi is absent; Calamares logs the failed extra mount and carries
+    on, and BIOS grub-install (--target=i386-pc) never touches efivars anyway."""
     return """\
 # Filesystem-specific mount options used while installing to / and after.
 ---
@@ -522,6 +405,13 @@ extraMounts:
     - device: sys
       fs: sysfs
       mountPoint: /sys
+    # efivarfs must sit UNDER /sys (mounted above) so the target chroot's
+    # grub-install/efibootmgr can register the UEFI boot entry. Without it the
+    # bootloader step dies with "EFI variables are not supported on this system".
+    - device: efivarfs
+      fs: efivarfs
+      mountPoint: /sys/firmware/efi/efivars
+      efi: true
     - device: /dev
       mountPoint: /dev
       options: [ bind ]
@@ -584,6 +474,61 @@ zone: "Jerusalem"
 localeConfMappings:
     - LANG
     - LC_ALL
+"""
+
+
+# --- 6c2. modules/keyboard.conf --------------------------------------------
+def keyboard_conf() -> str:
+    """Pin the installer keyboard to the live system's layout (English/"us") and
+    DISABLE the locale-based auto-guess.
+
+    THE BUG this fixes: with no keyboard.conf, Calamares' keyboard module runs
+    with its default `guessLayout: true`. On the Keyboard page it first detects the
+    live system's current xkb layout -- which Az'arch's setup-locale.sh pins to
+    "us" -- but then `guessLocaleKeyboardLayout()` OVERRIDES that with a guess
+    derived from the locale/timezone. Az'arch defaults the region to Asia/Jerusalem
+    (locale.conf), so the guess resolves to Israel -> **Hebrew**, which is what the
+    installer pre-selected (and its blank-key/no-letters preview came from). Verified
+    against the Calamares 3.4.2 keyboard Config.cpp:
+      * `m_guessLayout = getBool(configurationMap, "guessLayout", true)` (default on)
+      * `guessLocaleKeyboardLayout()` early-returns `if (!m_guessLayout)` -- so
+        `guessLayout: false` keeps the DETECTED current layout ("us") as the default
+        instead of guessing Hebrew.
+
+    We ALSO pin useLocale1:false so the module reads/writes the plain
+    /etc/X11/xorg.conf.d/00-keyboard.conf (the file setup-locale.sh already wrote
+    with "us") rather than going through systemd-localed -- consistent with the
+    English-only, no-auto-resolve policy in config/locale.py. The `configure`
+    block mirrors the shipped default (kwin/gnome off; Az'arch is Openbox/X11).
+
+    Language stays English-only and the region stays Asia/Jerusalem: this changes
+    ONLY the keyboard auto-guess, nothing else. Dynamic per-user resolution is the
+    deferred `azarch --resolve-*` work (issue #46), intentionally NOT done here."""
+    return """\
+# Keyboard configuration for the Az'arch installer.
+---
+# Where to write the X11 keyboard config on the target (systemd-localed default).
+xOrgConfFileName: "/etc/X11/xorg.conf.d/00-keyboard.conf"
+
+# Path used to convert X11 keymaps to kbd format for the console.
+convertedKeymapPath: "/usr/share/kbd/keymaps/xkb"
+
+# Manage the plain xorg.conf.d file directly instead of going through
+# systemd-localed. Az'arch is Openbox/X11 and setup-locale.sh already wrote
+# /etc/X11/xorg.conf.d/00-keyboard.conf with the "us" layout, so the module reads
+# that as the current layout and keeps it (see guessLayout below).
+useLocale1: false
+
+# DO NOT guess the layout from the locale/timezone. This is THE fix for the
+# installer auto-resolving to Hebrew from the Asia/Jerusalem default: false makes
+# the module keep the current OS keyboard layout ("us", set by setup-locale.sh) as
+# the default instead of deriving one from the region.
+guessLayout: false
+
+# Az'arch runs Openbox on X11 -- no KWin/GNOME keyboard integration to configure.
+configure:
+    kwin: false
+    gnome: false
 """
 
 
@@ -702,6 +647,30 @@ grubProbe: "grub-probe"
 """
 
 
+# --- 6g. modules/finished.conf ---------------------------------------------
+def finished_conf() -> str:
+    """The Finish ("All done.") page. Without this config the page shows only a
+    bare "Done" button and cannot restart into the new system -- the user asked for
+    a Reboot option there. `restartNowMode: user-unchecked` shows a "Restart now"
+    checkbox (defaulting to unchecked, so it never reboots unexpectedly); when the
+    user ticks it and clicks Done, Calamares runs restartNowCommand.
+
+    restartNowCommand uses `systemctl -i reboot` (the module's own documented value):
+    `-i` (--ignore-inhibitors) guarantees the reboot proceeds even if a session
+    inhibitor is held. We do NOT enable notifyOnFinished (the installer runs as root
+    via pkexec and cannot reliably reach the live user's session bus). Schema is
+    additionalProperties:false; only restartNowMode/restartNowCommand/
+    restartNowChecked/restartNowEnabled/notifyOnFinished are valid keys."""
+    return """\
+# Finish page: offer a "Restart now" option so the user can boot straight into the
+# freshly installed system (unchecked by default -- never reboots unless ticked).
+---
+restartNowMode: user-unchecked
+restartNowCommand: "systemctl -i reboot"
+notifyOnFinished: false
+"""
+
+
 # --- 7. branding/azarch/branding.desc --------------------------------------
 def branding_desc() -> str:
     """Product identity + a single-slide QML slideshow placeholder + colors."""
@@ -811,22 +780,25 @@ def emit_map() -> dict[str, str]:
 
     Every module named in the settings.conf `sequence` either has its config
     here or needs none (welcome, summary, finished, machineid, hwclock,
-    networkcfg, umount, localecfg, keyboard use built-in defaults).
+    networkcfg, umount, localecfg use built-in defaults).
     """
     return {
         "settings.conf": settings_conf(),
         "modules/partition.conf": partition_conf(),
         "modules/unpackfs.conf": unpackfs_conf(),
         "modules/shellprocess.conf": shellprocess_conf(),
+        "modules/shellprocess-desparse.conf": shellprocess_desparsify_conf(),
         "modules/users.conf": users_conf(),
         "modules/packages.conf": packages_conf(),
         "modules/mount.conf": mount_conf(),
         "modules/fstab.conf": fstab_conf(),
         "modules/locale.conf": locale_conf(),
+        "modules/keyboard.conf": keyboard_conf(),
         "modules/initcpiocfg.conf": initcpiocfg_conf(),
         "modules/services-systemd.conf": services_conf(),
         "modules/grubcfg.conf": grubcfg_conf(),
         "modules/bootloader.conf": bootloader_conf(),
+        "modules/finished.conf": finished_conf(),
         f"branding/{BRANDING}/branding.desc": branding_desc(),
         f"branding/{BRANDING}/show.qml": branding_show_qml(),
     }

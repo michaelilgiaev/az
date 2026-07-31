@@ -141,6 +141,16 @@ def main() -> int:
         print("[*] --full-compile: Az'arch's own packages will be built ENTIRELY from source.")
         print("    This includes a LibreWolf/Firefox compile that can take 1.5-3+ hours.")
 
+    # --sshd: build the `azarch-sshd` ISO variant -- identical to the base ISO but
+    # named azarch-sshd-<ver>-x86_64.iso and auto-running `azarch --sshd-hypervisor`
+    # at boot (its guest sshd auto-setup service is enabled). Without the flag the
+    # base `azarch` ISO is built. The package set is identical, so the two variants
+    # share the same offline cache -- building the second is only a fresh mkarchiso.
+    variant = "sshd" if "--sshd" in sys.argv[1:] else "base"
+    if variant == "sshd":
+        print("[*] --sshd: building the azarch-sshd variant "
+              "(auto-runs `azarch --sshd-hypervisor` at boot).")
+
     offline = cache_is_complete()
     _stale_cache_notice(offline)
 
@@ -181,7 +191,7 @@ def main() -> int:
 
     bar.init()
     try:
-        iso = steps.run(bar, offline, full_compile=full_compile,
+        iso = steps.run(bar, offline, full_compile=full_compile, variant=variant,
                         reclaim_after_mkarchiso=own.reclaim_full)
     except SystemExit as e:
         teardown()

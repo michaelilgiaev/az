@@ -47,6 +47,17 @@ def copy_data(rel: str, dest: Path, mode: int | None = None) -> Path:
     return dest
 
 
+def copy_asset(rel: str, dest: Path, mode: int | None = None) -> Path:
+    """Copy a verbatim file from assets/<rel> to dest (binaries, scripts, images)."""
+    src = paths.ASSETSDIR / rel
+    dest = Path(dest)
+    _ensure_parent(dest)
+    shutil.copy2(src, dest)
+    if mode is not None:
+        os.chmod(dest, mode)
+    return dest
+
+
 def copy_tree(src: Path, dest: Path) -> None:
     """Recursively copy src/* into dest (like `cp -r src/. dest/`)."""
     src = Path(src)
