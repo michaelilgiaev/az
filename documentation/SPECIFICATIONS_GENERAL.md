@@ -7,7 +7,7 @@ Technical, developer-facing specification of the Az'arch Linux distribution. It 
 ## 1. At a glance
 
 - **Base distribution:** Arch Linux (rolling), x86_64
-- **Live session:** Openbox live session; getty autologin -> startx -> openbox-session, auto-launches Calamares
+- **Live session:** KDE Plasma (X11) live session; getty autologin -> startx -> startplasma-x11, auto-launches Calamares
 - **Kernel:** `linux` 7.1.5.arch1-2
 - **Init:** `systemd` 261.2-1
 - **Display manager / session:** None -- getty autologin to startx (no display manager)
@@ -17,15 +17,15 @@ Technical, developer-facing specification of the Az'arch Linux distribution. It 
 
 | Metric | Value |
 |---|---:|
-| Explicit manifest entries | 211 (226 non-comment lines; 15 duplicate lines de-duped) |
-| Explicit entries incl. group members (e.g. `xorg`) | 209 |
-| **Full package set (transitive closure)** | **984** |
-| &nbsp;&nbsp;from `core` / `extra` / `multilib` | 227 / 652 / 105 |
-| Edition: Az'arch Component / Stock Arch | 462 / 522 |
-| Top / leaf packages (nothing depends on them) | 151 |
-| Base / sink packages (depend on nothing else in the set) | 56 |
-| Deepest dependency chain (leaf -> base) | 37 hops |
-| Total installed size of the package set | 5.68 GiB |
+| Explicit manifest entries | 208 (223 non-comment lines; 15 duplicate lines de-duped) |
+| Explicit entries incl. group members (e.g. `xorg`) | 206 |
+| **Full package set (transitive closure)** | **1121** |
+| &nbsp;&nbsp;from `core` / `extra` / `multilib` | 227 / 789 / 105 |
+| Edition: Az'arch Component / Stock Arch | 599 / 522 |
+| Top / leaf packages (nothing depends on them) | 139 |
+| Base / sink packages (depend on nothing else in the set) | 60 |
+| Deepest dependency chain (leaf -> base) | 44 hops |
+| Total installed size of the package set | 6.40 GiB |
 
 **Edition tags** (used throughout, and marked on the component graph):
 
@@ -57,7 +57,7 @@ The medium boots on both firmware types:
 
 ## 4. Live session
 
-The live session runs **Openbox** under X11 -- there is no display manager. The boot path is: `getty@tty1` autologins the live user `main`, whose `~/.bash_profile` execs `startx`, whose `~/.xinitrc` execs `openbox-session`; Openbox autostart then brings up the compositor (`picom`), the wallpaper (`feh`), notifications (`dunst`) and the NetworkManager applet, and auto-launches the Calamares installer once via `sudo -E`.
+The live session runs **KDE Plasma** under X11 -- there is no display manager. The boot path is: `getty@tty1` autologins the live user `main`, whose `~/.bash_profile` execs `startx`, whose `~/.xinitrc` paints the wallpaper (`feh`, so there is no solid-color flash) and execs `startplasma-x11`; Plasma brings up the panel/launcher, `kwin_x11`, the NetworkManager (`plasma-nm`) and audio (`plasma-pa`) applets, and a `~/.config/autostart` entry auto-launches the Calamares installer once via `sudo -E`.
 
 The live user `main` has passwordless `sudo` and a blank password and is autologged in -- this is a live medium, not the installed posture. The installed system is different (see below).
 
@@ -99,23 +99,25 @@ What the medium can do, grouped by the role each component plays. Counts and siz
 | Kernel & firmware | 21 | 987.6 MiB | the Linux kernel, CPU microcode, and device firmware blobs |
 | Boot & init | 14 | 123.7 MiB | boot loaders for both firmware types, the initramfs generator, and the systemd init/service manager |
 | Core system | 13 | 71.5 MiB | the base userland -- C library, coreutils, package manager, PAM/polkit, and privilege escalation |
-| Shell & CLI tools | 30 | 75.0 MiB | interactive shells, terminal editors, pagers, multiplexers, and everyday command-line utilities |
-| Desktop app | 2 | 426.7 MiB | graphical end-user applications shipped on the medium |
-| GUI toolkit/framework | 22 | 417.0 MiB | the widget toolkits and UI frameworks graphical apps are built on |
-| Graphics & display | 83 | 266.0 MiB | the X11 display server, Mesa/Vulkan drivers, and display configuration |
-| Audio | 36 | 47.9 MiB | the audio server and mixer/control tooling |
-| Networking | 39 | 134.6 MiB | connection management, wireless, VPN, SSH, DNS, and network diagnostics |
+| Shell & CLI tools | 29 | 73.9 MiB | interactive shells, terminal editors, pagers, multiplexers, and everyday command-line utilities |
+| Desktop shell | 25 | 169.8 MiB | the live-session desktop shell and its supporting session services |
+| Window/compositor | 4 | 58.8 MiB | the window manager / compositor that draws and manages windows |
+| Desktop app | 6 | 454.7 MiB | graphical end-user applications shipped on the medium |
+| GUI toolkit/framework | 83 | 690.2 MiB | the widget toolkits and UI frameworks graphical apps are built on |
+| Graphics & display | 85 | 268.0 MiB | the X11 display server, Mesa/Vulkan drivers, and display configuration |
+| Audio | 41 | 52.9 MiB | the audio server and mixer/control tooling |
+| Networking | 38 | 142.8 MiB | connection management, wireless, VPN, SSH, DNS, and network diagnostics |
 | Storage & filesystems | 44 | 68.1 MiB | partitioning, RAID/LVM, encryption setup, and filesystem/imaging tooling |
-| Security & crypto | 18 | 71.0 MiB | the host firewall, full-disk encryption, TPM/FIDO/smartcard, and OpenPGP |
-| Developer tools | 92 | 885.1 MiB | compilers, build tooling, version control, and developer editors |
+| Security & crypto | 19 | 74.8 MiB | the host firewall, full-disk encryption, TPM/FIDO/smartcard, and OpenPGP |
+| Developer tools | 93 | 886.5 MiB | compilers, build tooling, version control, and developer editors |
 | Language runtime | 22 | 895.5 MiB | language interpreters and runtimes available out of the box |
-| Multimedia codec/player | 64 | 188.3 MiB | media players and the codec/plugin stack that decodes and encodes them |
-| Fonts & icons | 20 | 155.6 MiB | console and desktop fonts, cursors, and icon themes |
+| Multimedia codec/player | 66 | 213.0 MiB | media players and the codec/plugin stack that decodes and encodes them |
+| Fonts & icons | 22 | 167.0 MiB | console and desktop fonts, cursors, and icon themes |
 | Printing & scanning | 4 | 16.4 MiB | the printing subsystem and its device support |
 | Bluetooth & devices | 12 | 16.8 MiB | Bluetooth, USB, accessibility, and other peripheral device support |
 | Virtualization guest | 4 | 7.9 MiB | guest integration agents for the major hypervisors |
-| Shared library | 320 | 608.8 MiB | shared libraries other components link against |
-| System | 124 | 353.7 MiB | supporting system components that back the above |
+| Shared library | 333 | 668.8 MiB | shared libraries other components link against |
+| System | 143 | 446.0 MiB | supporting system components that back the above |
 
 ---
 
@@ -129,7 +131,6 @@ Every external host and service the distribution talks to: where it downloads pa
 | `mirror.rackspace.com` | Package download mirror (build-time, hard-coded) | pacman.py -- used by the cache/download step; host-independent |
 | `/etc/pacman.d/mirrorlist` | Package download mirrors (installed system + live ISO) | pacman.py -- the standard Arch mirrorlist on the running OS |
 | `file:///mnt/pacstrap-azarch-repo/` | Offline package install from the baked-in local repo | pacman.py -- the fully-offline install path |
-| `ipapi.co` | Geo-IP lookup -> timezone, country, locale, keyboard | locale.py -- queried on first boot to auto-detect region |
 | `archlinux.org` | Connectivity probe before enabling time sync | installer.py -- pinged for up to 15s on first boot |
 | `systemd-timesyncd (NTP)` | Network time sync once connectivity is confirmed | installer.py -- `timedatectl set-ntp true`; uses systemd's default NTP servers |
 
