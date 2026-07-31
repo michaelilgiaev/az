@@ -153,9 +153,11 @@ def _mkinitcpio_reset_command() -> str:
 
 def _boot_desparsify_command() -> str:
     """Rewrite the /boot files GRUB reads so they contain NO trailing (EOF) sparse
-    hole. Runs in the target chroot AFTER the `initcpio` module has (re)generated
-    the initramfs images, and BEFORE `bootloader` (so grub.cfg points at files GRUB
-    can fully read).
+    hole. Runs in the target chroot as the LAST step that touches /boot -- after
+    `initcpio` (which generates the initramfs) and after every other /boot-writing
+    step, immediately before `umount` -- so it always operates on the FINAL on-disk
+    /boot state and no later step can reintroduce a hole (see settings.conf's
+    ordering note).
 
     THE BUG this fixes (found by booting the installed disk):
         error: loader/efi/linux.c:grub_cmd_linux:551: premature end of file
@@ -217,20 +219,22 @@ def _boot_desparsify_command() -> str:
         lines.append(f"if [ -f {img} ]; then")
         lines += [f"    {stmt}" for stmt in desparse_lines(img)]
         lines.append("fi")
-    # Flush the rewritten /boot files to disk before `bootloader`/grub-install runs.
+    # Flush the rewritten /boot files to disk before the target is unmounted.
     # cp+mv leave the fresh, hole-free extents in the page cache; `sync` forces them
-    # out so grub-install (and the very first real boot) reads the de-sparsified data
-    # off disk, not a state that could still be settling. Plain `sync` (no `$`).
+    # out so the very first real boot reads the de-sparsified data off disk, not a
+    # state that could still be settling. Plain `sync` (no `$`).
     lines.append("sync")
     return "\n".join(lines)
 
 
 def shellprocess_desparsify_conf() -> str:
     """Second `shellprocess` instance (shellprocess@desparse in settings.conf),
-    scheduled AFTER `initcpio` and BEFORE `bootloader`. It de-sparsifies the /boot
-    kernel + initramfs so GRUB's btrfs driver can read them in full -- without it the
-    install completes but the target fails to boot with GRUB "premature end of file
-    /@/boot/vmlinuz-linux". See _boot_desparsify_command for the full root-cause note.
+    scheduled as the LAST step that touches /boot -- after `initcpio` AND after
+    `packages` (see the settings.conf ordering note), immediately before `umount`.
+    It de-sparsifies the /boot kernel + initramfs so GRUB's btrfs driver can read
+    them in full -- without it the install completes but the target fails to boot
+    with GRUB "premature end of file /@/boot/vmlinuz-linux". See
+    _boot_desparsify_command for the full root-cause note.
 
     NOT prefixed "-" (and uses `set -e`): making /boot GRUB-readable is load-bearing,
     so a failure here must stop the install with a clear error rather than ship an
@@ -242,9 +246,10 @@ def shellprocess_desparsify_conf() -> str:
 # de-sparsify /boot/vmlinuz-linux + the initramfs images so they carry no trailing
 # (EOF) sparse hole. GRUB's btrfs driver reads a file's length from the extent tree,
 # not i_size, and would otherwise drop the trailing hole and fail to boot with
-# "premature end of file /@/boot/vmlinuz-linux". MUST run after `initcpio` (which
-# generates the initramfs) and before `bootloader`. Uses NO `$` (Calamares macro-
-# expands $WORD and aborts on an unknown one -- see calamares_shellprocess.py).
+# "premature end of file /@/boot/vmlinuz-linux". MUST run as the LAST step to touch
+# /boot -- after `initcpio` and every other /boot-writing step, right before
+# `umount`. Uses NO `$` (Calamares macro-expands $WORD and aborts on an unknown one
+# -- see calamares_shellprocess.py).
 ---
 dontChroot: false
 # Generous timeout: this cp-rewrites three files, one of which (the fallback

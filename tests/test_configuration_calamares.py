@@ -568,22 +568,29 @@ def test_desparse_timeout_is_generous_for_large_initramfs():
     assert int(d["timeout"]) >= 300, "desparse timeout too tight for a 200MB+ initramfs cp"
 
 
-def test_desparse_syncs_before_bootloader():
-    # The rewritten /boot files must be flushed to disk before bootloader/grub-install
-    # reads them, so a trailing `sync` is part of the command.
+def test_desparse_ends_with_sync():
+    # The rewritten /boot files must be flushed to disk before the target is
+    # unmounted, so a trailing `sync` is part of the command.
     assert calamares._boot_desparsify_command().rstrip().endswith("sync")
 
 
-def test_desparse_runs_after_initcpio_before_bootloader():
-    # It MUST run after initcpio (which writes the initramfs) and before grubcfg/
-    # bootloader (which point grub.cfg at the /boot files). Wrong order => the very
-    # boot failure this fixes.
+def test_desparse_is_the_LAST_step_that_touches_boot():
+    # ORDERING regression guard. The de-sparsify must be the LAST step to touch /boot
+    # so it always operates on the final on-disk state and no later step can
+    # reintroduce a trailing hole: it must run AFTER `initcpio` (writes the initramfs)
+    # and AFTER `grubcfg`/`bootloader`/`packages` (any of which could, now or after a
+    # future change, write a /boot file -- e.g. a pacman transaction firing the
+    # mkinitcpio hook), immediately before `umount`. This is the invariant that keeps
+    # "boot files are hole-free" robust regardless of step order/removal-set changes.
     execs = _settings_exec_list()
     assert "shellprocess@desparse" in execs
     i = execs.index("shellprocess@desparse")
-    assert execs.index("initcpio") < i
-    assert i < execs.index("grubcfg")
-    assert i < execs.index("bootloader")
+    # after everything that writes /boot:
+    for earlier in ("initcpio", "initcpiocfg", "grubcfg", "bootloader", "packages"):
+        assert execs.index(earlier) < i, f"{earlier} must run BEFORE desparse"
+    # and it must be the final exec step before umount (nothing may touch /boot after).
+    assert execs[i + 1] == "umount", "desparse must be the last step before umount"
+    assert i == len(execs) - 2, "nothing may run between desparse and umount"
 
 
 def test_desparse_declared_as_shellprocess_instance():
