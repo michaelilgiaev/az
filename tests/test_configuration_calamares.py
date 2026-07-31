@@ -145,14 +145,46 @@ def _instance_config_stems() -> dict:
     """Map a custom-instance configuration STEM (e.g. 'shellprocess-desparse') to the
     `module@id` token it is used as in the sequence (e.g. 'shellprocess@desparse'),
     read from settings.conf's `instances:` block. Lets the orphan check recognise a
-    per-instance configuration file whose name does not equal any bare module name."""
+    per-instance configuration file whose name does not equal any bare module name.
+
+    The per-instance key is `config` (what Calamares' Settings.cpp actually reads);
+    an entry missing it silently defaults to `<module>.conf`, so a `configuration:`
+    typo makes the instance run the WRONG config (this once disabled the boot fix)."""
     doc = yaml.safe_load(calamares.settings_conf())
     out = {}
     for inst in doc.get("instances", []):
-        stem = inst["configuration"][:-len(".conf")] if inst["configuration"].endswith(".conf") \
-            else inst["configuration"]
+        cfg = inst["config"]
+        stem = cfg[:-len(".conf")] if cfg.endswith(".conf") else cfg
         out[stem] = f"{inst['module']}@{inst['id']}"
     return out
+
+
+def test_instances_use_config_key_not_configuration():
+    # REGRESSION GUARD for the boot bug that shipped TWICE: the per-instance config
+    # filename key MUST be `config`. Calamares Settings.cpp reads m.value("config");
+    # if it is misspelled `configuration` (or anything else) Calamares does NOT error
+    # -- the instance's config filename SILENTLY defaults to `<module>.conf`, so
+    # `shellprocess@desparse` re-runs the DEFAULT shellprocess.conf (mkinitcpio reset)
+    # instead of the /boot de-compress/de-sparsify, and the installed system fails to
+    # boot with "premature end of file /@/boot/vmlinuz-linux". Assert every instance
+    # entry uses `config` and never the silent-default-inducing `configuration`.
+    doc = yaml.safe_load(calamares.settings_conf())
+    instances = doc.get("instances", [])
+    assert instances, "expected at least the shellprocess@desparse instance"
+    for inst in instances:
+        assert "config" in inst, (
+            f"instance {inst.get('id')!r} is missing the `config:` key -- Calamares "
+            f"would default its config to {inst.get('module')}.conf and run the wrong "
+            f"commands"
+        )
+        assert "configuration" not in inst, (
+            f"instance {inst.get('id')!r} uses the WRONG key `configuration:` -- "
+            f"Calamares reads `config:`; this silently disables the instance's real "
+            f"config (the exact boot-fix regression)"
+        )
+    # And specifically: the desparse instance must point at the desparse conf.
+    by_id = {i["id"]: i for i in instances}
+    assert by_id["desparse"]["config"] == "shellprocess-desparse.conf"
 
 
 def test_configured_modules_referenced_in_sequence():
@@ -471,7 +503,9 @@ def test_desparse_actually_aborts_when_kernel_cp_fails(tmp_path):
     boot = tmp_path / "boot"
     boot.mkdir()
     (boot / "initramfs-linux.img").write_bytes(b"present")
-    sandboxed = cmd.replace("/boot/", f"{boot}/")
+    # Rebase EVERY /boot occurrence (no trailing slash) into the sandbox so the
+    # command -- including its `chattr +C /boot` line -- never touches the host /boot.
+    sandboxed = cmd.replace("/boot", str(boot))
     rc = subprocess.run(["bash", "-c", sandboxed], capture_output=True).returncode
     assert rc != 0, "a failed kernel cp must abort the install (set -e), not exit 0"
 
@@ -518,7 +552,7 @@ def test_desparse_actually_removes_trailing_hole_on_disk(tmp_path):
         import pytest as _pytest
         _pytest.skip("test filesystem does not create sparse files; on-disk check N/A")
 
-    cmd = calamares._boot_desparsify_command().replace("/boot/", f"{boot}/")
+    cmd = calamares._boot_desparsify_command().replace("/boot", str(boot))
     res = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True)
     assert res.returncode == 0, f"desparse command failed: {res.stderr}"
 
@@ -532,6 +566,99 @@ def test_desparse_actually_removes_trailing_hole_on_disk(tmp_path):
         )
     # No leftover .nosparse temp files (mv must have renamed them into place).
     assert not list(boot.glob("*.nosparse")), "desparse left a .nosparse temp behind"
+
+
+def test_desparse_marks_boot_nocompress_so_future_kernels_stay_readable():
+    # THE actual boot fix (the sparse-hole theory was a MISdiagnosis): the target
+    # btrfs is mounted `compress=zstd:1` (mount.conf), so unpackfs writes
+    # /boot/vmlinuz-linux as ZSTD-COMPRESSED btrfs extents, and GRUB's btrfs driver
+    # cannot decompress zstd -> it reads the kernel short and fails with
+    # "premature end of file /@/boot/vmlinuz-linux". Rewriting the file IN PLACE under
+    # the same compressed mount (the old `cp --sparse=never`) leaves it compressed --
+    # which is why the bug survived that "fix". The command MUST mark /boot with the
+    # btrfs no-compress attribute (`chattr +C`) so both the rewritten files AND every
+    # kernel a FUTURE `pacman -Syu` writes into /boot are stored uncompressed.
+    cmd = calamares._boot_desparsify_command()
+    assert "chattr +C /boot" in cmd, (
+        "desparse must set the btrfs no-compress attribute on /boot (compress=zstd "
+        "makes GRUB read the kernel short); rewriting alone leaves it compressed"
+    )
+    # The +C must be applied BEFORE the file rewrites, so the fresh temp copies land
+    # in a no-compress directory (a copy made before +C would inherit compression).
+    # The kernel rewrite is the `cp ... /boot/vmlinuz-linux ...nosparse` line.
+    assert cmd.index("chattr +C /boot") < cmd.index("cp --reflink=never --sparse=never -f /boot/vmlinuz-linux"), (
+        "chattr +C /boot must precede the kernel rewrite so the rewrite is uncompressed"
+    )
+
+
+def test_desparse_actually_yields_uncompressed_boot_on_zstd_btrfs(tmp_path):
+    # BEHAVIORAL proof against the REAL failure mode, on a real btrfs mounted exactly
+    # like the installer mounts the target (compress=zstd:1). Reproduces the state
+    # unpackfs leaves -- a compressible kernel written as ZSTD-COMPRESSED extents --
+    # runs the REAL emitted command, and asserts every /boot file GRUB reads ends up
+    # with NO compressed ("encoded") extents. The old cp-in-place desparse fails this
+    # (the file stays `encoded`), catching the exact regression the user hit twice.
+    #
+    # Needs root + loop mount + btrfs + filefrag; skips cleanly when unavailable so
+    # the pure-Python CI still passes.
+    import os
+    import shutil
+    import subprocess
+
+    if os.geteuid() != 0:
+        import pytest as _pytest
+        _pytest.skip("needs root to loop-mount a btrfs image")
+    for tool in ("mkfs.btrfs", "filefrag", "chattr"):
+        if shutil.which(tool) is None:
+            import pytest as _pytest
+            _pytest.skip(f"{tool} not available")
+
+    img = tmp_path / "btrfs.img"
+    with open(img, "wb") as fh:
+        fh.truncate(400 * 1024 * 1024)
+    if subprocess.run(["mkfs.btrfs", "-q", "-f", str(img)]).returncode != 0:
+        import pytest as _pytest
+        _pytest.skip("mkfs.btrfs failed in this environment")
+    mnt = tmp_path / "mnt"
+    mnt.mkdir()
+    # Mount exactly as the installer mounts the target root: compress=zstd:1.
+    if subprocess.run(
+        ["mount", "-o", "compress=zstd:1", str(img), str(mnt)]
+    ).returncode != 0:
+        import pytest as _pytest
+        _pytest.skip("cannot loop-mount btrfs here")
+    try:
+        boot = mnt / "boot"
+        boot.mkdir()
+        # A highly compressible ~12 MB "kernel" -> btrfs stores it zstd-compressed.
+        for name in ("vmlinuz-linux", "initramfs-linux.img", "initramfs-linux-fallback.img"):
+            (boot / name).write_bytes(b"\x00" * (12 * 1024 * 1024))
+        subprocess.run(["sync"], check=True)
+
+        def is_compressed(p) -> bool:
+            out = subprocess.run(
+                ["filefrag", "-v", str(p)], capture_output=True, text=True
+            ).stdout
+            return "encoded" in out
+
+        # Sanity: the pre-fix state IS compressed (else the test proves nothing).
+        assert is_compressed(boot / "vmlinuz-linux"), (
+            "test setup failed to produce a compressed kernel; cannot prove the fix"
+        )
+
+        cmd = calamares._boot_desparsify_command().replace("/boot", str(boot))
+        res = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True)
+        assert res.returncode == 0, f"desparse command failed: {res.stderr}"
+
+        # Every /boot file GRUB reads must now be UNCOMPRESSED (no `encoded` extents),
+        # so GRUB's btrfs driver can read it in full.
+        for name in ("vmlinuz-linux", "initramfs-linux.img", "initramfs-linux-fallback.img"):
+            assert not is_compressed(boot / name), (
+                f"{name} still has zstd-compressed extents after desparse -- GRUB "
+                f"cannot decompress them and boots with 'premature end of file'"
+            )
+    finally:
+        subprocess.run(["umount", str(mnt)], capture_output=True)
 
 
 def test_desparse_preserves_file_contents(tmp_path):
@@ -552,7 +679,7 @@ def test_desparse_preserves_file_contents(tmp_path):
             fh.truncate(len(body) + 777)   # trailing hole
     want = hashlib.sha256(body + b"\x00" * 777).hexdigest()
 
-    cmd = calamares._boot_desparsify_command().replace("/boot/", f"{boot}/")
+    cmd = calamares._boot_desparsify_command().replace("/boot", str(boot))
     assert subprocess.run(["bash", "-c", cmd]).returncode == 0
     for name in ("vmlinuz-linux", "initramfs-linux.img", "initramfs-linux-fallback.img"):
         got = hashlib.sha256((boot / name).read_bytes()).hexdigest()
@@ -596,17 +723,188 @@ def test_desparse_is_the_LAST_step_that_touches_boot():
 def test_desparse_declared_as_shellprocess_instance():
     # The second instance must be declared so Calamares loads
     # shellprocess-desparse.conf for the `shellprocess@desparse` sequence entry.
+    # The filename key is `config` (Calamares Settings.cpp) -- NOT `configuration`;
+    # the wrong key silently defaults the instance to shellprocess.conf and the /boot
+    # fixup never runs (the boot regression). See
+    # test_instances_use_config_key_not_configuration.
     doc = yaml.safe_load(calamares.settings_conf())
     insts = {i["id"]: i for i in doc.get("instances", [])}
     assert "desparse" in insts
     assert insts["desparse"]["module"] == "shellprocess"
-    assert insts["desparse"]["configuration"] == "shellprocess-desparse.conf"
+    assert insts["desparse"]["config"] == "shellprocess-desparse.conf"
 
 
 def test_desparse_conf_wired_to_right_path():
     # The emitted file name must match the instance's configuration: reference.
     assert (calamares.emit_map()["modules/shellprocess-desparse.conf"]
             == calamares.shellprocess_desparsify_conf())
+
+
+# --- END-TO-END boot regression guard ---------------------------------------
+#
+# THE boot bug shipped TWICE and cost a full debug cycle each time, because every
+# piece looked right in isolation:
+#   * the desparse command was correct (its own tests passed),
+#   * settings.conf declared a `desparse` instance (its own test passed -- but it
+#     asserted the WRONG key `configuration:`, so it "passed" while broken),
+#   * yet at install time Calamares resolved `shellprocess@desparse` to the DEFAULT
+#     shellprocess.conf (mkinitcpio reset) because the per-instance filename key must
+#     be `config`, not `configuration`. The /boot fixup never ran and GRUB failed
+#     with "premature end of file /@/boot/vmlinuz-linux".
+#
+# These two tests reproduce the FULL resolution chain the way Calamares does it, so a
+# regression in ANY link (wrong instance key, instance pointing at the wrong file,
+# the sequence dropping shellprocess@desparse, or the command no longer producing a
+# GRUB-readable kernel) fails HERE -- before an ISO ships.
+
+
+def _resolve_sequence_entry_to_conf(module_at_id: str) -> str:
+    """Resolve a `module@id` exec-sequence token to the STEM of the config file
+    Calamares would load for it, using the SAME rules as Calamares Settings.cpp:
+      * a bare `module` (id == module) loads `<module>.conf`;
+      * a `module@id` loads the `config:` filename declared in the matching
+        `instances:` entry, and if that entry has no `config` key it SILENTLY
+        defaults to `<module>.conf` (the exact trap that broke the boot fix).
+    Returns the stem (no `.conf`), so shellprocess@desparse -> "shellprocess-desparse".
+    """
+    doc = yaml.safe_load(calamares.settings_conf())
+    if "@" not in module_at_id:
+        return module_at_id
+    module, _id = module_at_id.split("@", 1)
+    for inst in doc.get("instances", []):
+        if inst.get("module") == module and str(inst.get("id")) == _id:
+            # Calamares reads m.value("config"); absent -> "<module>.conf".
+            cfg = inst.get("config", f"{module}.conf")
+            return cfg[:-len(".conf")] if cfg.endswith(".conf") else cfg
+    # No instance declared: Calamares would treat it as <module>.conf too.
+    return module
+
+
+def test_desparse_sequence_entry_resolves_to_the_desparse_conf_not_the_default():
+    # THE regression the `configuration:` typo caused: shellprocess@desparse must
+    # resolve to shellprocess-desparse.conf. With the wrong key it resolved to the
+    # DEFAULT "shellprocess" conf (the mkinitcpio reset) and the /boot fixup silently
+    # never ran. Assert the exec sequence actually contains the token AND that it
+    # resolves to the desparse config -- exactly as Calamares would resolve it.
+    doc = yaml.safe_load(calamares.settings_conf())
+    exec_seq = next(phase["exec"] for phase in doc["sequence"] if "exec" in phase)
+    assert "shellprocess@desparse" in exec_seq, (
+        "the /boot fixup step (shellprocess@desparse) is missing from the exec sequence"
+    )
+    resolved = _resolve_sequence_entry_to_conf("shellprocess@desparse")
+    assert resolved == "shellprocess-desparse", (
+        f"shellprocess@desparse resolves to {resolved!r}, not 'shellprocess-desparse' "
+        f"-- Calamares would run the WRONG commands (likely the mkinitcpio reset) and "
+        f"the /boot de-compress/de-sparsify would never run, so the installed system "
+        f"fails to boot with 'premature end of file /@/boot/vmlinuz-linux'. The usual "
+        f"cause is the instances entry using key `configuration:` instead of `config:`."
+    )
+    # And the config that token resolves to must be the one carrying the boot fixup
+    # (chattr +C /boot + the uncompressed rewrite), not the mkinitcpio reset.
+    resolved_conf = calamares.emit_map()[f"modules/{resolved}.conf"]
+    assert "chattr +C /boot" in resolved_conf and "vmlinuz-linux" in resolved_conf, (
+        "the config shellprocess@desparse resolves to is not the /boot fixup"
+    )
+
+
+def test_desparse_full_chain_yields_grub_readable_kernel_on_zstd_btrfs(tmp_path):
+    # THE definitive end-to-end guard: follow the WHOLE chain Calamares follows --
+    # settings.conf sequence -> instance -> config file -> command -- and run the
+    # command that shellprocess@desparse actually resolves to on a real btrfs mounted
+    # compress=zstd:1 (exactly like the installer mounts the target). Reproduce the
+    # pre-fix /boot state (a compressible kernel written as ZSTD-compressed extents,
+    # reflinked from the modules tree with a trailing hole), run the RESOLVED command,
+    # and assert the kernel ends up GRUB-readable: NO compressed ("encoded") extents
+    # AND no trailing hole (allocated bytes >= file size). If the resolution regresses
+    # (wrong instance key -> mkinitcpio reset) OR the command regresses, the kernel
+    # stays compressed/holey and this fails -- catching the boot bug before ship.
+    #
+    # Needs root + loop mount + btrfs + filefrag; skips cleanly when unavailable so
+    # pure-Python CI still passes.
+    import os
+    import shutil
+    import subprocess
+
+    if os.geteuid() != 0:
+        import pytest as _pytest
+        _pytest.skip("needs root to loop-mount a btrfs image")
+    for tool in ("mkfs.btrfs", "filefrag", "chattr"):
+        if shutil.which(tool) is None:
+            import pytest as _pytest
+            _pytest.skip(f"{tool} not available")
+
+    # 1. Resolve the sequence entry -> config -> command, the Calamares way.
+    resolved = _resolve_sequence_entry_to_conf("shellprocess@desparse")
+    conf = yaml.safe_load(calamares.emit_map()[f"modules/{resolved}.conf"])
+    # shellprocess config: a `script` list; our desparse conf is one block-scalar item.
+    script_items = conf["script"]
+    command = "\n".join(script_items) if isinstance(script_items, list) else script_items
+
+    # 2. Real btrfs mounted exactly like the installer mounts the target.
+    img = tmp_path / "btrfs.img"
+    with open(img, "wb") as fh:
+        fh.truncate(400 * 1024 * 1024)
+    if subprocess.run(["mkfs.btrfs", "-q", "-f", str(img)]).returncode != 0:
+        import pytest as _pytest
+        _pytest.skip("mkfs.btrfs failed in this environment")
+    mnt = tmp_path / "mnt"
+    mnt.mkdir()
+    if subprocess.run(
+        ["mount", "-o", "compress=zstd:1", str(img), str(mnt)]
+    ).returncode != 0:
+        import pytest as _pytest
+        _pytest.skip("cannot loop-mount btrfs here")
+    try:
+        # 3. Reproduce the pre-fix /boot: a modules-tree kernel with a 512-byte
+        #    trailing hole, reflinked into /boot (via install -Dm644), written under
+        #    the compressed mount so it lands as ZSTD-compressed extents.
+        modules = mnt / "usr/lib/modules/x/"
+        modules.mkdir(parents=True)
+        boot = mnt / "boot"
+        boot.mkdir()
+        # Highly compressible body so btrfs really compresses it; sub-block tail hole.
+        src = modules / "vmlinuz"
+        with open(src, "wb") as fh:
+            fh.write(b"\x00" * (12 * 1024 * 1024))
+            fh.truncate(12 * 1024 * 1024 + 512)   # 512-byte trailing hole
+        subprocess.run(
+            ["install", "-Dm644", str(src), str(boot / "vmlinuz-linux")], check=True
+        )
+        for img_name in ("initramfs-linux.img", "initramfs-linux-fallback.img"):
+            with open(boot / img_name, "wb") as fh:
+                fh.write(b"\x00" * (8 * 1024 * 1024))
+        subprocess.run(["sync"], check=True)
+
+        def is_compressed(p) -> bool:
+            out = subprocess.run(
+                ["filefrag", "-v", str(p)], capture_output=True, text=True
+            ).stdout
+            return "encoded" in out
+
+        def has_trailing_hole(p) -> bool:
+            st = os.stat(p)
+            return st.st_blocks * 512 < st.st_size
+
+        k = boot / "vmlinuz-linux"
+        # Sanity: pre-fix the kernel IS compressed (else the test proves nothing).
+        assert is_compressed(k), "setup failed to produce a compressed kernel"
+
+        # 4. Run the RESOLVED command, rebased into the sandbox /boot.
+        sandboxed = command.replace("/boot", str(boot))
+        res = subprocess.run(["bash", "-c", sandboxed], capture_output=True, text=True)
+        assert res.returncode == 0, f"resolved desparse command failed: {res.stderr}"
+
+        # 5. The kernel GRUB reads must now be readable: uncompressed AND hole-free.
+        assert not is_compressed(k), (
+            "kernel still has zstd-compressed extents after the resolved desparse "
+            "command -- GRUB cannot decompress zstd ('premature end of file')"
+        )
+        assert not has_trailing_hole(k), (
+            "kernel still has a trailing EOF hole after the resolved desparse command "
+            "-- GRUB reads it short ('premature end of file /@/boot/vmlinuz-linux')"
+        )
+    finally:
+        subprocess.run(["umount", str(mnt)], capture_output=True)
 
 
 # --- users.conf (reuse the surviving /home/main) ----------------------------

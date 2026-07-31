@@ -39,27 +39,38 @@ Design constraints (match archiso/Plasma/Calamares reality):
 from __future__ import annotations
 
 # --- Branding / assets ------------------------------------------------------
-# The desktop wallpaper baked into the ISO. steps.py copies
-# assets/wallpapers/wallpaper_years.png here (emit.copy_asset) and the Plasma
-# appletsrc + the ~/.xinitrc root-pixmap pre-paint both point at this path, so
-# the first paint IS the wallpaper (no solid-color flash). This is the DEFAULT
-# (the "years" image); the selectable grid entries are the KPackages below.
-WALLPAPER_DEST = "/usr/share/azarch/wallpaper.png"
-WALLPAPER_ASSET = "wallpapers/wallpaper_years.png"
-
 # Selectable wallpapers shown in Plasma's "Desktop and Wallpaper" grid. Each is a
 # KPackage under /usr/share/wallpapers/<Id>/ (metadata.json + contents/images/
 # <W>x<H>.png). We ship exactly TWO -- the azarch "years" and "decades" images --
 # and REMOVE the stock Plasma "Next" wallpaper (see system.CUSTOMIZE_AIROOTFS) so
-# the grid shows only these. The generic "wallpaper" name the user saw is renamed
-# to "years" by shipping the package under the id/name "years". Both source images
-# are 1672x941 (see assets/wallpapers/), so the packaged image is images/1672x941.png.
-WALLPAPER_PACKAGES = [
-    {"id": "years", "asset": "wallpapers/wallpaper_years.png"},
-    {"id": "decades", "asset": "wallpapers/wallpaper_decades.png"},
-]
-WALLPAPER_IMAGE_RES = "1672x941"          # WxH of the shipped PNGs
+# the grid shows only these. Both source images are 1672x941 (see
+# assets/wallpapers/), so the packaged image is images/1672x941.png.
 WALLPAPERS_SYSTEM_DIR = "/usr/share/wallpapers"
+WALLPAPER_IMAGE_RES = "1672x941"          # WxH of the shipped PNGs
+WALLPAPER_PACKAGES = [
+    {"id": "years", "asset": "wallpapers/years.png"},
+    {"id": "decades", "asset": "wallpapers/decades.png"},
+]
+
+# The DEFAULT wallpaper baked into the ISO -- the "years" image. It points at the
+# "years" KPackAGE's own image file (NOT a separate /usr/share/azarch/wallpaper.png).
+# Why: Plasma's wallpaper grid lists, in addition to the installed KPackages, the
+# CURRENT image as its own tile labelled by the image's filename. Pointing the
+# default at a standalone `wallpaper.png` therefore made the grid show THREE tiles
+# -- "years", "decades", and a duplicate "wallpaper" (the same image as years). By
+# pointing the default at the years package's image path instead, Plasma recognises
+# it as the existing "years" tile, so the grid shows exactly the TWO packages with
+# "years" pre-selected. The ~/.xinitrc feh pre-paint + appletsrc Image= + the
+# org.kde.image main.xml default all reference this same path.
+WALLPAPER_DEFAULT_ID = "years"
+WALLPAPER_DEST = (
+    f"{WALLPAPERS_SYSTEM_DIR}/{WALLPAPER_DEFAULT_ID}"
+    f"/contents/images/{WALLPAPER_IMAGE_RES}.png"
+)
+# The asset copied to WALLPAPER_DEST is the same "years" image the package ships;
+# steps.py already writes that package image, so the default resolves to a file that
+# exists without a second standalone copy.
+WALLPAPER_ASSET = "wallpapers/years.png"
 
 
 def wallpaper_metadata_json(wp_id: str) -> str:

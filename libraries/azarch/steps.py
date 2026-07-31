@@ -313,12 +313,6 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
         if entry["owner"] == "home" and dest_abs.startswith(desktop.HOME + "/"):
             rel = dest_abs[len(desktop.HOME) + 1:]   # path under the home dir
             emit.write_text(skel / rel, content, mode=mode)
-    # Wallpaper image the Plasma appletsrc + the ~/.xinitrc root pre-paint both
-    # reference (WALLPAPER_DEST). Copied to a SYSTEM path (root-owned), so the live
-    # `main` user and any Calamares-created user (skel appletsrc points at the same
-    # absolute path) both resolve it. unpackfs copies it onto the installed target.
-    emit.copy_asset(desktop.WALLPAPER_ASSET,
-                    airootfs / desktop.WALLPAPER_DEST.lstrip("/"), mode=0o644)
     # Installer launcher icon ("Az'" app tile). Copied to BOTH /usr/share/pixmaps
     # and the hicolor 256x256 apps dir so the Desktop/menu/autostart .desktop files
     # (Icon=azarch-installer) resolve it regardless of which path the icon loader

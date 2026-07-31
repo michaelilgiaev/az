@@ -413,10 +413,31 @@ def test_install_wrapper_path_value():
 
 
 def test_wallpaper_dest_and_asset_values():
-    # The wallpaper ships to a system path (referenced by both the appletsrc and
-    # the xinitrc pre-paint) and is sourced from the requested asset.
-    assert desktop.WALLPAPER_DEST == "/usr/share/azarch/wallpaper.png"
-    assert desktop.WALLPAPER_ASSET == "wallpapers/wallpaper_years.png"
+    # The DEFAULT wallpaper is the "years" KPackage's OWN image path (not a standalone
+    # /usr/share/azarch/wallpaper.png) so Plasma's grid shows exactly the two packages
+    # ("years"/"decades") with no duplicate "wallpaper" tile. The asset carries no
+    # "wallpaper_" prefix any more.
+    assert desktop.WALLPAPER_DEST == (
+        "/usr/share/wallpapers/years/contents/images/1672x941.png"
+    )
+    assert desktop.WALLPAPER_ASSET == "wallpapers/years.png"
+    # The default must be one of the shipped packages' image path (no separate copy).
+    assert desktop.WALLPAPER_DEFAULT_ID in [p["id"] for p in desktop.WALLPAPER_PACKAGES]
+
+
+def test_wallpaper_default_is_a_shipped_package_image():
+    # REGRESSION GUARD for the "three wallpapers, one duplicate" report: the default
+    # image path must be exactly the path steps.py writes for the years KPackage, so
+    # Plasma treats it as the existing tile rather than adding a standalone one.
+    years = next(p for p in desktop.WALLPAPER_PACKAGES if p["id"] == "years")
+    expected = (
+        f"{desktop.WALLPAPERS_SYSTEM_DIR}/{years['id']}"
+        f"/contents/images/{desktop.WALLPAPER_IMAGE_RES}.png"
+    )
+    assert desktop.WALLPAPER_DEST == expected
+    # No asset carries the old "wallpaper_" prefix.
+    for p in desktop.WALLPAPER_PACKAGES:
+        assert "wallpaper_" not in p["asset"]
 
 
 def test_wallpaper_dest_used_in_xinitrc_and_appletsrc():

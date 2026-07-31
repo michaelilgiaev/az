@@ -111,7 +111,12 @@ def test_customize_airootfs_sets_default_plasma_wallpaper():
     # never aborts the mkarchiso build.
     s = system.CUSTOMIZE_AIROOTFS
     assert "/usr/share/plasma/wallpapers/org.kde.image/contents/config/main.xml" in s
-    assert "/usr/share/azarch/wallpaper.png" in s
+    # The default points at the "years" KPackage image (== desktop.WALLPAPER_DEST),
+    # NOT a standalone /usr/share/azarch/wallpaper.png (which would add a duplicate
+    # "wallpaper" tile to the grid).
+    from azarch.configuration import desktop
+    assert desktop.WALLPAPER_DEST in s
+    assert "/usr/share/azarch/wallpaper.png" not in s
     # non-fatal + only runs when both files exist
     assert "|| true" in s
     assert 'if [ -f "$IMG_MAIN_XML" ] && [ -f "$WALLPAPER" ]; then' in s

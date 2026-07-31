@@ -114,11 +114,20 @@ modules-search: [ local, /usr/lib/calamares/modules ]
 # The default (id == module name) instance uses modules/shellprocess.conf (the
 # pre-users/pre-initcpio fixups). The `desparse` instance -- referenced as
 # `shellprocess@desparse` in the sequence -- uses modules/shellprocess-desparse.conf
-# (de-sparsify /boot after initcpio so GRUB can read the kernel/initramfs).
+# (mark /boot no-compress + rewrite the kernel/initramfs so GRUB can read them).
+#
+# The per-instance config-file key is `config:` -- NOT `configuration:`. Calamares'
+# Settings.cpp InstanceDescription::fromSettings() reads `m.value("config")`; if that
+# key is absent the instance's config filename SILENTLY DEFAULTS to `<module>.conf`
+# (here shellprocess.conf). So a `configuration:` typo does NOT error -- it makes
+# `shellprocess@desparse` re-run the DEFAULT shellprocess.conf (the mkinitcpio reset)
+# instead of the desparse commands, the /boot fixup never runs, and the installed
+# system fails to boot with "premature end of file /@/boot/vmlinuz-linux". This exact
+# typo silently disabled the boot fix once already; keep it `config:`.
 instances:
 - id: desparse
   module: shellprocess
-  configuration: shellprocess-desparse.conf
+  config: shellprocess-desparse.conf
 
 # The ordered install sequence. `show` phases render UI pages; `exec` phases do
 # the actual work with a progress bar. Only modules with a configuration below (or that
@@ -166,22 +175,27 @@ sequence:
   - grubcfg
   - bootloader
   - packages
-  # De-sparsify /boot (kernel + initramfs) so GRUB's btrfs driver can read the
-  # WHOLE files -- otherwise the install completes but the target fails to boot:
-  # "premature end of file /@/boot/vmlinuz-linux" (a trailing EOF sparse hole makes
-  # GRUB's extent-based read return the kernel short; verified with grub-fstest).
+  # Make /boot GRUB-readable: mark it no-compress (chattr +C) and rewrite the kernel
+  # + initramfs UNCOMPRESSED. The target btrfs is mounted compress=zstd:1 (mount.conf),
+  # so unpackfs stores /boot/vmlinuz-linux as zstd-compressed extents, and GRUB's
+  # btrfs driver -- which cannot decompress zstd -- reads it short: the install
+  # completes but the target fails to boot with "premature end of file
+  # /@/boot/vmlinuz-linux". (An earlier revision misdiagnosed this as a trailing
+  # sparse hole; a plain in-place rewrite left the file compressed, so it never
+  # booted. See calamares_shellprocess._boot_desparsify_command.)
   #
   # ORDERING invariant: keep this the LAST step that touches /boot -- after every
   # step that writes a /boot file (initcpio writes the initramfs; the `packages`
   # pacman transaction COULD, via mkinitcpio/kernel install hooks, rewrite /boot if
-  # its removal set ever changes), immediately before `umount`. That way the
-  # de-sparsify always runs on the FINAL on-disk /boot state, so no later step can
-  # reintroduce a hole. (As currently configured `packages` only try_removes
-  # calamares, which does not itself trigger the mkinitcpio hook -- but pinning
-  # desparse last makes the "boot files are hole-free" invariant robust to future
-  # changes in the removal set or step order rather than depending on that.) grub.cfg
-  # (grubcfg/bootloader, above) records only PATHS, not extents/lengths, so writing
-  # it before this step is fine. Second shellprocess instance; its configuration is
+  # its removal set ever changes), immediately before `umount`. That way the fixup
+  # always runs on the FINAL on-disk /boot state, so no later step can leave a
+  # compressed file behind. (As currently configured `packages` only try_removes
+  # calamares, which does not itself trigger the mkinitcpio hook -- but pinning this
+  # last makes the "boot files are readable" invariant robust to future changes in
+  # the removal set or step order. The chattr +C additionally keeps any file a
+  # future step or update writes into /boot uncompressed.) grub.cfg (grubcfg/
+  # bootloader, above) records only PATHS, not extents/lengths, so writing it before
+  # this step is fine. Second shellprocess instance; its configuration is
   # modules/shellprocess-desparse.conf (see instances:).
   - shellprocess@desparse
   - umount

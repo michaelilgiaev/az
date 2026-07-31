@@ -94,8 +94,13 @@ chmod 0644 /usr/lib/os-release
 # Set the default Plasma wallpaper by rewriting the org.kde.image plugin's Image
 # default (the fallback Plasma uses when a containment has no explicit image). This
 # is regeneration-proof, unlike a per-user appletsrc Image= seed.
+# WALLPAPER points at the "years" KPackage's own image (== desktop.WALLPAPER_DEST),
+# NOT a standalone image under /usr/share/azarch: a standalone file would make
+# Plasma's wallpaper grid show a third, duplicate "wallpaper" tile alongside the two
+# packages. Using the package image path keeps the grid to exactly "years"/"decades"
+# with "years" as the default. (test_configuration_system pins this equality.)
 IMG_MAIN_XML="/usr/share/plasma/wallpapers/org.kde.image/contents/config/main.xml"
-WALLPAPER="/usr/share/azarch/wallpaper.png"
+WALLPAPER="/usr/share/wallpapers/years/contents/images/1672x941.png"
 # The wallpaper is not build-critical, so a parse surprise must not abort the ISO
 # build: guard the edit with `|| true`.
 if [ -f "$IMG_MAIN_XML" ] && [ -f "$WALLPAPER" ]; then
