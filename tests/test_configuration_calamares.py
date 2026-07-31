@@ -476,6 +476,104 @@ def test_desparse_actually_aborts_when_kernel_cp_fails(tmp_path):
     assert rc != 0, "a failed kernel cp must abort the install (set -e), not exit 0"
 
 
+def test_desparse_actually_removes_trailing_hole_on_disk(tmp_path):
+    # THE regression guard the project was missing (this boot bug has now hit TWICE):
+    # every other desparse test checks the COMMAND STRING; none proved the command
+    # actually yields a hole-free file. Here we reproduce the exact pre-desparse
+    # state -- a kernel + initramfs with a TRAILING EOF SPARSE HOLE, as unpackfs'
+    # rsync --sparse leaves them -- run the REAL emitted command, and assert the
+    # result carries NO trailing hole (allocated blocks cover the whole file). A file
+    # with a hole at EOF is precisely what makes GRUB's btrfs driver read the kernel
+    # short ("premature end of file /@/boot/vmlinuz-linux"); if a future edit weakens
+    # the desparse (drops --sparse=never, re-&&-chains cp/mv, etc.) the file stays
+    # sparse and THIS test fails -- catching the regression before an ISO ships.
+    import os
+    import subprocess
+
+    boot = tmp_path / "boot"
+    boot.mkdir()
+
+    def make_sparse(name: str, data_bytes: int, hole_bytes: int) -> None:
+        # Write `data_bytes` of real data, then extend the file by `hole_bytes` via
+        # truncate -> a genuine sparse hole at EOF (last data extent ends before
+        # i_size), the exact shape rsync --sparse produces for a zero-padded bzImage.
+        # The hole is 1 MiB+ so the FS reliably leaves it unallocated (a sub-block
+        # hole is not portably sparse -- tail allocation/delalloc can back it).
+        p = boot / name
+        with open(p, "wb") as fh:
+            fh.write(b"\xa5" * data_bytes)
+            fh.truncate(data_bytes + hole_bytes)
+
+    make_sparse("vmlinuz-linux", 5_000_000, 4 * 1024 * 1024)
+    make_sparse("initramfs-linux.img", 3_000_000, 2 * 1024 * 1024)
+    make_sparse("initramfs-linux-fallback.img", 7_000_000, 8 * 1024 * 1024)
+
+    # If the test filesystem refuses to make ANY of them sparse (rare -- some tmpfs/
+    # overlay setups), there is nothing to de-sparsify and the on-disk assertion is
+    # meaningless here; skip rather than assert a false pass/fail.
+    if not any(
+        os.stat(boot / n).st_blocks * 512 < os.stat(boot / n).st_size
+        for n in ("vmlinuz-linux", "initramfs-linux.img", "initramfs-linux-fallback.img")
+    ):
+        import pytest as _pytest
+        _pytest.skip("test filesystem does not create sparse files; on-disk check N/A")
+
+    cmd = calamares._boot_desparsify_command().replace("/boot/", f"{boot}/")
+    res = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True)
+    assert res.returncode == 0, f"desparse command failed: {res.stderr}"
+
+    # Every /boot file GRUB reads must now be hole-free: allocated blocks >= size.
+    for name in ("vmlinuz-linux", "initramfs-linux.img", "initramfs-linux-fallback.img"):
+        st = os.stat(boot / name)
+        assert st.st_blocks * 512 >= st.st_size, (
+            f"{name} still has a trailing hole after desparse "
+            f"(allocated {st.st_blocks * 512} < size {st.st_size}) -- GRUB would "
+            f"read it short and fail to boot"
+        )
+    # No leftover .nosparse temp files (mv must have renamed them into place).
+    assert not list(boot.glob("*.nosparse")), "desparse left a .nosparse temp behind"
+
+
+def test_desparse_preserves_file_contents(tmp_path):
+    # De-sparsifying must not change the bytes GRUB/the kernel see: cp --sparse=never
+    # rewrites the trailing zeros as real data but the logical content is identical.
+    # (A bzImage carries its own length and ignores trailing zeros; an initramfs
+    # decoder stops at its own end marker -- so real-zeros vs a hole is equivalent.)
+    import hashlib
+    import os
+    import subprocess
+
+    boot = tmp_path / "boot"
+    boot.mkdir()
+    body = b"AZ" * 100_000
+    for name in ("vmlinuz-linux", "initramfs-linux.img", "initramfs-linux-fallback.img"):
+        with open(boot / name, "wb") as fh:
+            fh.write(body)
+            fh.truncate(len(body) + 777)   # trailing hole
+    want = hashlib.sha256(body + b"\x00" * 777).hexdigest()
+
+    cmd = calamares._boot_desparsify_command().replace("/boot/", f"{boot}/")
+    assert subprocess.run(["bash", "-c", cmd]).returncode == 0
+    for name in ("vmlinuz-linux", "initramfs-linux.img", "initramfs-linux-fallback.img"):
+        got = hashlib.sha256((boot / name).read_bytes()).hexdigest()
+        assert got == want, f"{name} content changed across desparse"
+
+
+def test_desparse_timeout_is_generous_for_large_initramfs():
+    # REGRESSION GUARD: the fallback initramfs is 200+ MB; three sequential cp copies
+    # on a slow target disk can exceed a tight timeout, and if Calamares KILLS the
+    # step mid-cp the mv leaves a truncated/sparse file -> the exact unbootable state.
+    # The timeout must be comfortably large (>= 300 s).
+    d = yaml.safe_load(calamares.shellprocess_desparsify_conf())
+    assert int(d["timeout"]) >= 300, "desparse timeout too tight for a 200MB+ initramfs cp"
+
+
+def test_desparse_syncs_before_bootloader():
+    # The rewritten /boot files must be flushed to disk before bootloader/grub-install
+    # reads them, so a trailing `sync` is part of the command.
+    assert calamares._boot_desparsify_command().rstrip().endswith("sync")
+
+
 def test_desparse_runs_after_initcpio_before_bootloader():
     # It MUST run after initcpio (which writes the initramfs) and before grubcfg/
     # bootloader (which point grub.cfg at the /boot files). Wrong order => the very

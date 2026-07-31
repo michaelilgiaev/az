@@ -217,6 +217,11 @@ def _boot_desparsify_command() -> str:
         lines.append(f"if [ -f {img} ]; then")
         lines += [f"    {stmt}" for stmt in desparse_lines(img)]
         lines.append("fi")
+    # Flush the rewritten /boot files to disk before `bootloader`/grub-install runs.
+    # cp+mv leave the fresh, hole-free extents in the page cache; `sync` forces them
+    # out so grub-install (and the very first real boot) reads the de-sparsified data
+    # off disk, not a state that could still be settling. Plain `sync` (no `$`).
+    lines.append("sync")
     return "\n".join(lines)
 
 
@@ -242,7 +247,13 @@ def shellprocess_desparsify_conf() -> str:
 # expands $WORD and aborts on an unknown one -- see calamares_shellprocess.py).
 ---
 dontChroot: false
-timeout: 120
+# Generous timeout: this cp-rewrites three files, one of which (the fallback
+# initramfs) is 200+ MB. On a slow target disk (spinning rust, a loaded VM's
+# qcow2) three sequential copies of ~370 MB can take well over the old 120 s, and
+# if Calamares KILLS the step mid-cp the `mv` leaves a truncated/sparse file -- the
+# very unbootable state this step exists to prevent. 600 s leaves ample headroom
+# while still bounding a genuinely hung copy.
+timeout: 600
 verbose: true
 script:
     - |
