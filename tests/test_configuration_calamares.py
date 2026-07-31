@@ -791,7 +791,33 @@ def test_every_yaml_value_parses():
 
 def test_qml_slide_carries_product_name():
     qml = calamares.branding_show_qml()
-    # The apostrophe in "Az'arch" must survive into the QML string literal and the
-    # escaped newline must stay escaped (raw \\n in the emitted text).
-    assert "Installing Az'arch Linux" in qml
+    # The product name is rendered across styled Text runs (blue "Az'", white
+    # "arch") so the apostrophe must survive in the QML string literals.
+    assert "Installing " in qml
+    assert "Az'" in qml
+    assert "arch" in qml
+    assert " Linux" in qml
     assert "goToNextSlide()" in qml
+
+
+def test_qml_slide_has_no_motivational_copy():
+    # The installer must be "get out of my way": a status line only, no marketing.
+    qml = calamares.branding_show_qml()
+    lowered = qml.lower()
+    for banned in ("minimal, fast", "a minimal", "fast arch-based", "welcome to",
+                   "enjoy", "powerful", "beautiful", "experience"):
+        assert banned not in lowered, f"motivational copy leaked: {banned!r}"
+    # Only the neutral status line is allowed as human-facing copy.
+    assert "Please wait while the system is being installed." in qml
+
+
+def test_qml_and_branding_use_minimal_dark_palette():
+    # The near-black bg + blue accent + slate muted must match the inspiration.
+    qml = calamares.branding_show_qml()
+    assert "#030712" in qml          # near-black page background
+    assert "#3b82f6" in qml          # blue "Az'" accent
+    assert "#64748b" in qml          # slate muted status line
+    style = yaml.safe_load(calamares.branding_desc())["style"]
+    assert style["SidebarBackground"] == "#070e1b"
+    assert style["SidebarTextHighlight"] == "#3b82f6"
+    assert style["SidebarTextSelect"] == "#ffffff"
