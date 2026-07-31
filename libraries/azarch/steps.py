@@ -1,5 +1,5 @@
 """The ordered build steps: assemble the archiso profile tree from the
-config-as-Python modules, cache/stage the packages, and run mkarchiso.
+configuration-as-Python modules, cache/stage the packages, and run mkarchiso.
 
 This replaces the long body of the old compile.sh. Each `bar.step(...)` is one
 milestone, named for the archiso/pacman/systemd artifact it produces. Trivial
@@ -18,17 +18,26 @@ from pathlib import Path
 import signal
 
 from . import emit, logstream, makepkg, packages, paths
-from .config import calamares, desktop, fastfetch, installer, locale, pacman, profile, system
+from .configuration import calamares, desktop, fastfetch, installer, locale, pacman, profile, system
 from .progress import ProgressBar
 
 # Weights: setup/emit steps carry real weight so the bar visibly advances through
 # them (at weight 1 they were ~2% of the whole bar and looked frozen); the giants
 # are still the bulk, sized from real log spans. Keep in sync with steps below:
 # len(STEP_WEIGHTS) - 1 MUST equal the number of bar.step() calls in run(). The
-# final THREE weights belong, in order, to: the package-cache giant, the makepkg
+# final FOUR weights belong, in order, to: the package-cache giant, the makepkg
 # stage (our own calamares/librewolf; heavy in the default tier, VERY heavy with
-# --full-compile), and the mkarchiso giant.
-STEP_WEIGHTS = [0] + [8] * 12 + [250, 120, 270]
+# --full-compile), and the TWO mkarchiso giants -- one per ISO variant, since a
+# single build now assembles BOTH the base `azarch` and the `azarch-sshd` ISOs
+# (they share every step up to here, so the second is only a second mkarchiso pass).
+STEP_WEIGHTS = [0] + [8] * 12 + [250, 120, 270, 270]
+
+# The ISO variants a single build produces, in assembly order. Every step up to
+# mkarchiso is variant-independent (same packages, same airootfs), so both ISOs
+# come out of one build: the base `azarch` medium and the `azarch-sshd` medium
+# (identical, but auto-running `azarch --sshd-hypervisor` at boot). This is why
+# there is no build-time flag to pick one -- compile.sh always makes both.
+VARIANTS = ("base", "sshd")
 
 # PGID of the currently-running mkarchiso child (0 = none). mkarchiso is spawned in
 # its own session/process group so the signal handler can kill THAT group (and all
@@ -58,19 +67,22 @@ def kill_active_child(sudo: list[str]) -> None:
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
 
-def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: bool = False,
-        variant: str = "base") -> Path:
-    """Execute all steps; return the path to the built ISO. Raises on failure.
+def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
+        full_compile: bool = False) -> list[Path]:
+    """Execute all steps; return the paths of the built ISOs. Raises on failure.
 
     full_compile: when True, Az'arch's own packages (librewolf) are compiled from
     source instead of repackaged from the verified upstream tarball. Passed to the
     makepkg stage below.
 
-    variant: "base" (the normal ISO) or "sshd" (identical, but named azarch-sshd
-    and auto-running `azarch --sshd-hypervisor` at boot). It changes only the
-    profiledef iso_name (step 10) and whether the sshd-hypervisor auto-setup
-    service is emitted+enabled (steps 8/9); the package set is identical, so both
-    variants share the same offline cache.
+    A single build produces BOTH ISO variants (see VARIANTS): the base `azarch`
+    medium and the `azarch-sshd` medium (identical, but named azarch-sshd and
+    auto-running `azarch --sshd-hypervisor` at boot). Every step up to mkarchiso is
+    variant-independent -- same packages, same airootfs -- so the two variants
+    differ only in the profiledef iso_name and whether the sshd-hypervisor
+    auto-setup service is emitted+enabled. Those variant-specific bits plus a
+    per-variant mkarchiso pass run in the finalize loop at the end; the heavy,
+    shared work (package cache, own-package build) happens exactly once.
     """
     W = paths.WORKDIR
     airootfs = W / "airootfs"
@@ -135,14 +147,14 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: 
     _emit_fastfetch(ea, home)
 
     # os-release rebrand:
-    # Live ISO: the build pacman.conf NoExtracts usr/lib/os-release (config/pacman.py)
+    # Live ISO: the build pacman.conf NoExtracts usr/lib/os-release (configuration/pacman.py)
     # so the `filesystem` package's stock "Arch Linux" file never lands. We must NOT
     # pre-place our replacement in the airootfs overlay, though: mkarchiso copies the
     # overlay into the work root BEFORE pacstrap, and pacman's file-conflict check
     # (which runs before extraction and is NOT suppressed by NoExtract) then aborts
     # with "filesystem: usr/lib/os-release exists in filesystem". Instead we plant it
     # AFTER pacstrap via customize_airootfs.sh -- the same after-pacstrap ordering the
-    # on-disk installer already uses (config/installer.py copies it into /mnt post-
+    # on-disk installer already uses (configuration/installer.py copies it into /mnt post-
     # pacstrap). The branded file is staged read-only under root/azarch/os-release and
     # the hook copies it into place inside the pacstrapped rootfs.
     emit.write_text(ea / "os-release", system.OS_RELEASE)
@@ -150,23 +162,24 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: 
     # Overlay the releng `archiso` hostname with `azarch` (prompt + fastfetch title).
     emit.write_text(airootfs / "etc/hostname", system.HOSTNAME)
 
-    # 8 -- Overlay the KDE Plasma live desktop + Calamares installer config.
+    # 8 -- Overlay the KDE Plasma live desktop + Calamares installer configuration.
     # The graphical live session (Manjaro-style): user configs go to BOTH the live
     # `main` home AND /etc/skel (so a Calamares-created user on the installed system
     # inherits the same desktop). The tty1 autologin override switches the releng
     # default (autologin root) to autologin `main`, whose .bash_profile execs startx
-    # into a Plasma X11 session. The Calamares config tree lands under /etc/calamares.
-    bar.step("Overlay Plasma desktop and Calamares config")
+    # into a Plasma X11 session. The Calamares configuration tree lands under /etc/calamares.
+    bar.step("Overlay Plasma desktop and Calamares configuration")
     _emit_desktop(airootfs, home)
     _emit_calamares(airootfs)
     _emit_tty1_autologin(airootfs)
     # ckbcomp: Calamares' keyboard page renders its on-screen key legends by shelling
     # out to `ckbcomp`; without it the preview draws BLANK keys ("ckbcomp not found,
-    # keyboard preview disabled"). `ckbcomp` is a self-contained Perl script that
-    # Arch does NOT package (it is Debian/Manjaro-only), so we vendor it from
-    # libraries/azarch/ckbcomp into /usr/bin. It needs only perl (in base) and the XKB
-    # data in /usr/share/X11/xkb (shipped by xkeyboard-config), both present. It lands
-    # in the live ISO and is copied to the target by unpackfs.
+    # keyboard preview disabled"). `ckbcomp` is a self-contained Python 3 port of the
+    # upstream (Debian/Manjaro) Perl ckbcomp -- byte-identical output, no Perl in the
+    # tree -- which Arch does NOT package, so we vendor it from libraries/azarch/ckbcomp
+    # into /usr/bin. It needs only python (in base) and the XKB data in
+    # /usr/share/X11/xkb (shipped by xkeyboard-config), both present. It lands in the
+    # live ISO and is copied to the target by unpackfs.
     emit.copy_pkg_file("ckbcomp", airootfs / "usr/bin/ckbcomp", mode=0o755)
 
     # 9 -- Stage installed-system pacman and pkgs service.
@@ -178,28 +191,25 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: 
     emit.write_text(airootfs / "etc/systemd/system/pkgs-setup.service", system.PKGS_SETUP_SERVICE)
 
     # 9 -- Enable systemd units and sudoers policy.
-    # Activation/policy at profile finalization: the *.target.wants symlinks that enable
-    # the units, plus the sudoers.d drop-ins. The sshd variant ALSO gets the
-    # sshd-hypervisor auto-setup service (emitted + enabled) so `azarch
-    # --sshd-hypervisor` runs at boot; the base variant does not.
+    # Activation/policy at profile finalization: the always-on *.target.wants symlinks
+    # that enable the daemons, plus the sudoers.d drop-ins. The sshd-hypervisor
+    # auto-setup service (emitted + enabled ONLY for the azarch-sshd ISO) is handled
+    # per-variant in the finalize loop below, not here -- this step is variant-shared.
     bar.step("Enable systemd units and sudoers policy")
-    if variant == "sshd":
-        emit.write_text(airootfs / "etc/systemd/system/sshd-hypervisor-setup.service",
-                        system.SSHD_HYPERVISOR_SETUP_SERVICE)
-    _link_services(airootfs, variant)
+    _link_services(airootfs)
     emit.write_text(airootfs / "etc/sudoers.d/00-rootpw", system.SUDOERS_ROOTPW, mode=0o440)
     emit.write_text(airootfs / "etc/sudoers.d/00-main", system.SUDOERS_MAIN, mode=0o440)
     emit.write_text(airootfs / "etc/sudoers.d/00-secure-path", system.SUDOERS_SECURE_PATH, mode=0o440)
 
-    # 10 -- Emit profiledef and installer payload.
-    # profiledef.sh (archiso metadata at the PROFILE ROOT, not airootfs) plus the
-    # first-boot script/service/conf. Calamares (auto-launched from the Plasma
-    # session, step 8) is the SOLE installer: the legacy terminal
-    # azarch-iso-installer.sh is no longer emitted to the live user's Desktop
-    # (the on-disk installer scripts remain in config/installer.py for the
+    # 10 -- Emit installer payload.
+    # The first-boot script/service/conf. profiledef.sh (archiso metadata at the
+    # PROFILE ROOT) is NOT emitted here: its iso_name is the one thing that differs
+    # per variant, so it is written per-variant in the finalize loop below. Calamares
+    # (auto-launched from the Plasma session, step 8) is the SOLE installer: the
+    # legacy terminal azarch-iso-installer.sh is no longer emitted to the live user's
+    # Desktop (the on-disk installer scripts remain in configuration/installer.py for the
     # first-boot pipeline, but the Desktop launcher is gone).
-    bar.step("Emit profiledef and installer payload")
-    emit.write_exec(W / "profiledef.sh", profile.profiledef_sh(variant))
+    bar.step("Emit installer payload")
     emit.write_exec(ea / "first-boot-setup.sh", installer.first_boot_sh())
     emit.write_text(ea / "first-boot-setup.service", installer.first_boot_service())
     emit.write_text(ea / "first-boot-setup.conf", installer.first_boot_conf())
@@ -240,16 +250,51 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: 
     bar._arm(); bar.draw()
     _refold_own_packages_into_repo(W, full_compile)
 
-    # 14 -- Assemble ISO (GIANT, weight 270).
-    # mkarchiso: pacstrap into airootfs, mksquashfs, checksum, build the .iso
-    # (drives bar.sub sub-progress via _drive_mkarchiso_progress).
-    bar.step("Assemble ISO (mkarchiso)")
-    iso = _run_mkarchiso(sudo, W, bar, reclaim_after_mkarchiso,
-                         iso_name=profile.iso_name_for(variant))
-    return iso
+    # 14/15 -- Assemble BOTH ISO variants (two GIANT mkarchiso passes, weight 270 each).
+    # Every step above is variant-independent, so we now overlay each variant's tiny
+    # differences (its profiledef iso_name + whether the sshd-hypervisor auto-setup
+    # service is emitted/enabled) onto the shared airootfs and run one mkarchiso pass
+    # per variant. mkarchiso re-copies the profile's airootfs overlay into its work
+    # tree at the start of each pass, so toggling the sshd enable-symlink in the
+    # profile between passes is correctly reflected in each ISO. The base pass runs
+    # first, then the sshd pass; both land in output/ with their distinct iso_name.
+    isos: list[Path] = []
+    for variant in VARIANTS:
+        _apply_variant(W, airootfs, variant)
+        bar.step(f"Assemble {profile.iso_name_for(variant)} ISO (mkarchiso)")
+        isos.append(_run_mkarchiso(sudo, W, bar, reclaim_after_mkarchiso,
+                                   iso_name=profile.iso_name_for(variant)))
+    return isos
 
 
 # --- helpers ---------------------------------------------------------------
+
+def _apply_variant(W: Path, airootfs: Path, variant: str) -> None:
+    """Overlay the per-variant differences onto the shared profile tree just before
+    its mkarchiso pass. Two things differ between the base and sshd ISOs:
+
+      1. profiledef iso_name -- drives the artifact filename (azarch-<ver>.iso vs
+         azarch-sshd-<ver>.iso). Rewritten at the profile root every pass.
+      2. the sshd-hypervisor auto-setup service -- emitted AND enabled (a
+         multi-user.target.wants symlink) ONLY for the sshd variant, so that ISO
+         auto-runs `azarch --sshd-hypervisor` at boot. The base ISO must have
+         NEITHER, so we affirmatively remove both when building it -- otherwise a
+         leftover from the preceding sshd... (order is base-first today, but this
+         stays correct if the order ever flips) would bleed into the base ISO.
+
+    Everything else in the profile is identical across variants and already staged."""
+    emit.write_exec(W / "profiledef.sh", profile.profiledef_sh(variant))
+    svc = airootfs / "etc/systemd/system/sshd-hypervisor-setup.service"
+    link = (airootfs / "etc/systemd/system/multi-user.target.wants"
+            / "sshd-hypervisor-setup.service")
+    if variant == "sshd":
+        emit.write_text(svc, system.SSHD_HYPERVISOR_SETUP_SERVICE)
+        emit.link("/etc/systemd/system/sshd-hypervisor-setup.service", link)
+    else:
+        # Base ISO: ensure no trace of the sshd auto-setup unit or its enable link.
+        link.unlink(missing_ok=True)
+        svc.unlink(missing_ok=True)
+
 
 def _emit_desktop(airootfs: Path, home: Path) -> None:
     """Emit the Plasma live-session files. Each PLAN entry has an absolute dest
@@ -279,7 +324,7 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
 
 
 def _emit_calamares(airootfs: Path) -> None:
-    """Write the whole Calamares config tree under /etc/calamares."""
+    """Write the whole Calamares configuration tree under /etc/calamares."""
     base = airootfs / "etc/calamares"
     for rel, content in calamares.emit_map().items():
         emit.write_text(base / rel, content)
@@ -380,7 +425,7 @@ def _refresh_own_in_pacstrap_cache(full_compile: bool = False) -> None:
                   f"(rebuilt; syncing bytes so pacstrap gets a valid cache hit).")
             subprocess.run(sudo + ["cp", "-f", str(repo_copy), str(cached)], check=False)
             # keep a matching .sig alongside if the repo has one. The offline file://
-            # repo runs SigLevel = Never (config/pacman.py) so pacstrap does not verify
+            # repo runs SigLevel = Never (configuration/pacman.py) so pacstrap does not verify
             # it -- this copy is a harmless belt-and-braces, not load-bearing.
             sig = repo_copy.with_suffix(repo_copy.suffix + ".sig")
             if sig.is_file():
@@ -469,7 +514,7 @@ def _copy_releng(W: Path) -> None:
 
 
 def _emit_fastfetch(ea: Path, home: Path) -> None:
-    """Write the azarch fastfetch config + Az' logo for the live user, and stage
+    """Write the azarch fastfetch configuration + Az' logo for the live user, and stage
     a copy under root/azarch/fastfetch so the on-disk installer can replant it
     into the installed user's ~/.config/fastfetch."""
     cfg = home / ".config/fastfetch"
@@ -481,24 +526,22 @@ def _emit_fastfetch(ea: Path, home: Path) -> None:
     emit.write_text(staged / fastfetch.LOGO_FILENAME, fastfetch.logo_txt())
 
 
-def _link_services(airootfs: Path, variant: str = "base") -> None:
+def _link_services(airootfs: Path) -> None:
     # Graphical live medium WITHOUT a display manager: the tty1 autologin (overridden
     # to `main`) drops into a login shell whose ~/.bash_profile execs startx ->
     # startplasma-x11 -> Calamares. So there is deliberately NO display-manager unit
     # and NO graphical.target.wants here; we only enable the multi-user daemons and
     # the two azarch oneshots. X is started from the shell, not by systemd.
+    #
+    # These enable-links are variant-independent (both ISOs get them). The sshd
+    # variant's extra sshd-hypervisor-setup enable-link is added per-variant in
+    # _apply_variant, just before that variant's mkarchiso pass.
     base = airootfs / "etc/systemd/system"
     emit.mkdir(base / "multi-user.target.wants")
     for svc in ("NetworkManager.service", "bluetooth.service", "org.cups.cupsd.service"):
         emit.link(f"/usr/lib/systemd/system/{svc}", base / f"multi-user.target.wants/{svc}")
     emit.link("/etc/systemd/system/locale-setup.service", base / "multi-user.target.wants/locale-setup.service")
     emit.link("/etc/systemd/system/pkgs-setup.service", base / "multi-user.target.wants/pkgs-setup.service")
-    # sshd variant only: enable the oneshot that runs `azarch --sshd-hypervisor` at
-    # boot (the service file is emitted in step 9 for this variant). The base ISO
-    # never enables it, so it stays a manual `sudo azarch --sshd-hypervisor` there.
-    if variant == "sshd":
-        emit.link("/etc/systemd/system/sshd-hypervisor-setup.service",
-                  base / "multi-user.target.wants/sshd-hypervisor-setup.service")
 
 
 def _switch_offline(W: Path, conf: str, localrepo: Path) -> None:
@@ -512,7 +555,7 @@ def _switch_offline(W: Path, conf: str, localrepo: Path) -> None:
     emit.write_text(W / "pacman.conf", conf)
     if "[pacstrap-azarch-repo]" not in conf:
         sys.stderr.write(
-            "    [!] Offline conf rewrite did not inject the local repo -- check config/pacman.py.\n"
+            "    [!] Offline conf rewrite did not inject the local repo -- check configuration/pacman.py.\n"
         )
 
 
@@ -564,6 +607,18 @@ def _probe_and_maybe_switch(W: Path, conf: str, localrepo: Path, bar: ProgressBa
 def _run_mkarchiso(sudo, W: Path, bar: ProgressBar, reclaim_after, iso_name: str = "azarch") -> Path:
     # temp dir cleanup (matches the old "Cleaning up temp directory" step)
     subprocess.run(["rm", "-rf", str(W / ".temp")], check=False)
+    # Reset the mkarchiso work tree BEFORE every pass. This is load-bearing for the
+    # two-variant build: mkarchiso guards each build step with a `_run_once` sentinel
+    # file (work/base.<fn>, work/iso.<fn>) and REFUSES to remove a pre-existing work
+    # dir. If the sshd pass reused the base pass's work/, every step -- airootfs build,
+    # squashfs, and the final ISO write -- would be skipped as "already done", and
+    # azarch-sshd-*.iso would never be written (mkarchiso even reuses the base ISO's
+    # name slot). Wiping work/ first makes each variant a genuine fresh mkarchiso pass.
+    # Unmount any proc/sys/dev/run mkarchiso bind-mounted under the old airootfs before
+    # rm, or rm -rf would recurse into live mounts. The base pass's rm is a near-no-op
+    # (step 1 already reset W); the sshd pass's rm clears the base pass's sentinels.
+    _unmount_worktree(sudo)
+    subprocess.run(sudo + ["rm", "-rf", str(W / "work")], check=False)
     env = dict(os.environ)
     # Fixes sporadic "xz uncompress failed with error code 9" (kept from old build).
     env["MKSQUASHFS_OPTIONS"] = "-processors 4"
@@ -594,11 +649,15 @@ def _run_mkarchiso(sudo, W: Path, bar: ProgressBar, reclaim_after, iso_name: str
     reclaim_after()
     if rc != 0:
         raise SystemExit(f"[x] mkarchiso failed (exit {rc})")
-    # Select the ISO THIS build produced by its iso_name prefix, not just the first
-    # *.iso: output/ may hold BOTH variants (azarch-*.iso and azarch-sshd-*.iso) when
-    # both have been built, and a bare sorted()[0] would return the wrong one (e.g.
-    # picking azarch-* after an azarch-sshd build). Match the exact prefix.
-    isos = sorted(paths.BUILDDIR.glob(f"{iso_name}-*.iso"))
+    # Select the ISO THIS build produced. output/ may hold BOTH variants
+    # (azarch-*.iso AND azarch-sshd-*.iso) when both have been built, so we must not
+    # just take the first *.iso. mkarchiso names artifacts <iso_name>-<version>-<arch>
+    # where <version> is YYYY.MM.DD (always starts with a DIGIT). Anchoring the glob
+    # with a digit right after "{iso_name}-" makes the BASE selection exact: "azarch-"
+    # followed by a digit matches azarch-2026...iso but NOT azarch-sshd-...iso ("s" is
+    # not a digit) -- so the base pass can never accidentally pick up the sshd ISO,
+    # regardless of build order or mtimes.
+    isos = sorted(paths.BUILDDIR.glob(f"{iso_name}-[0-9]*.iso"))
     if not isos:
         # Fall back to any .iso so a naming surprise still surfaces the artifact.
         isos = sorted(paths.BUILDDIR.glob("*.iso"))

@@ -19,7 +19,7 @@ from __future__ import annotations
 import pytest
 
 from azarch import makepkg
-from azarch.config import pkgbuild as pkgbuild_cfg
+from azarch.configuration import pkgbuild as pkgbuild_cfg
 
 
 def test_produced_names_default_tier_builds_calamares_and_librewolf():

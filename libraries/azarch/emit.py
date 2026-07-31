@@ -1,8 +1,8 @@
-"""Emit contract: write config-as-Python content out as real files in the ISO tree.
+"""Emit contract: write configuration-as-Python content out as real files in the ISO tree.
 
-The config modules (``azarch.config.*``) hold each artifact's content as a
+The configuration modules (``azarch.configuration.*``) hold each artifact's content as a
 Python string. These helpers place that content on disk with the right mode,
-and copy the few verbatim data files. This is the seam between "config as data"
+and copy the few verbatim data files. This is the seam between "configuration as data"
 (the strings) and "build logic" (where they go).
 """
 
@@ -20,7 +20,7 @@ def _ensure_parent(path: Path) -> None:
 
 
 def write_text(path: Path, text: str, mode: int = 0o644) -> Path:
-    """Write a generated config file, creating parent dirs. Normalizes to a single
+    """Write a generated configuration file, creating parent dirs. Normalizes to a single
     trailing newline (the archiso/pacman/systemd parsers all expect one)."""
     path = Path(path)
     _ensure_parent(path)
@@ -62,7 +62,7 @@ def copy_pkg_file(rel: str, dest: Path, mode: int | None = None) -> Path:
     """Copy a verbatim file shipped inside the azarch package (libraries/azarch/<rel>).
 
     Used for payload the user keeps beside the package rather than under assets/
-    -- currently the vendored ckbcomp Perl script.
+    -- currently the vendored ckbcomp (a Python 3 port of the upstream Perl ckbcomp).
     """
     src = paths.PKGDIR / rel
     dest = Path(dest)

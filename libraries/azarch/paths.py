@@ -33,10 +33,11 @@ LIBDIR = REPODIR / "libraries"
 DATADIR = LIBDIR / "data"
 ASSETSDIR = REPODIR / "assets"
 
-# Vendored ckbcomp Perl script. Arch does not package it (Debian/Manjaro-only),
-# yet Calamares' keyboard-preview page shells out to `ckbcomp`, so we ship it in
-# the repo and copy it to /usr/bin at build time. It lives beside this package
-# rather than under assets/ because the user keeps it here.
+# Vendored ckbcomp: a Python 3 port of the upstream Perl ckbcomp (byte-identical
+# output, no Perl in the tree). Arch does not package it (Debian/Manjaro-only), yet
+# Calamares' keyboard-preview page shells out to `ckbcomp`, so we ship it in the repo
+# and copy it to /usr/bin at build time. It lives beside this package rather than
+# under assets/ because the user keeps it here.
 CKBCOMP_SRC = PKGDIR / "ckbcomp"
 
 CACHEDIR = REPODIR / "cache"

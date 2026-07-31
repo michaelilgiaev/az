@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import logstream, paths
-from .config import pacman as pacman_cfg
+from .configuration import pacman as pacman_cfg
 
 ProgressCb = Callable[[int], None]
 

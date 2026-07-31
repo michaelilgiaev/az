@@ -129,7 +129,7 @@ def test_root_negative_sign_rejected(monkeypatch):
 
 def test_root_leading_zero_uid_kept_verbatim(monkeypatch):
     # "01000" is all ASCII digits and != "0", so it is accepted verbatim (no
-    # numeric normalization -- the string is passed straight to the owner spec).
+    # numeric normalization -- the string is passed straight to the owner specification).
     own, _ = _make(monkeypatch, root=True, host_uid="01000", host_gid="998")
     assert own.owner == "01000:998"
 

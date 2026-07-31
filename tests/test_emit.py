@@ -1,4 +1,4 @@
-"""azarch.emit -- the seam that writes config strings to disk.
+"""azarch.emit -- the seam that writes configuration strings to disk.
 
 Pure filesystem behavior, exercised entirely in a pytest tmp_path. The whole
 build's on-disk correctness (file modes, trailing newlines the archiso/pacman/
@@ -80,12 +80,12 @@ def test_copy_asset_reads_from_assetsdir_and_applies_mode(tmp_path, monkeypatch)
     # and applies the executable bit when asked.
     src_root = tmp_path / "assets"
     (src_root / "bin").mkdir(parents=True)
-    (src_root / "bin" / "tool").write_text("#!/usr/bin/perl\n")
+    (src_root / "bin" / "tool").write_text("#!/usr/bin/env python3\n")
     monkeypatch.setattr(emit.paths, "ASSETSDIR", src_root)
 
     dest = tmp_path / "out" / "usr/bin/tool"
     emit.copy_asset("bin/tool", dest, mode=0o755)
-    assert dest.read_text() == "#!/usr/bin/perl\n"
+    assert dest.read_text() == "#!/usr/bin/env python3\n"
     assert _mode(dest) == 0o755
 
 
@@ -94,12 +94,12 @@ def test_copy_pkg_file_reads_from_pkgdir_and_applies_mode(tmp_path, monkeypatch)
     # the azarch package, like the vendored ckbcomp) and applies the exec bit.
     src_root = tmp_path / "azarch"
     src_root.mkdir(parents=True)
-    (src_root / "ckbcomp").write_text("#!/usr/bin/perl\n")
+    (src_root / "ckbcomp").write_text("#!/usr/bin/env python3\n")
     monkeypatch.setattr(emit.paths, "PKGDIR", src_root)
 
     dest = tmp_path / "out" / "usr/bin/ckbcomp"
     emit.copy_pkg_file("ckbcomp", dest, mode=0o755)
-    assert dest.read_text() == "#!/usr/bin/perl\n"
+    assert dest.read_text() == "#!/usr/bin/env python3\n"
     assert _mode(dest) == 0o755
 
 

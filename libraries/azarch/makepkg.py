@@ -2,7 +2,7 @@
 resulting *.pkg.tar.zst into the offline repo the rest of the build already uses.
 
 Everything not in the official Arch repos is built from recipes WE author in
-azarch.config.pkgbuild -- never the AUR, never an AUR helper. This module is the
+azarch.configuration.pkgbuild -- never the AUR, never an AUR helper. This module is the
 runner: it emits those recipes into a scratch dir, ensures the host has the
 makedepends, runs `makepkg` as an UNPRIVILEGED user (makepkg refuses root), and
 copies the built packages into cache/pkgs/repo/ so the normal index-reconcile
@@ -17,7 +17,7 @@ and is now AUR-only). --full-compile only changes the RECIPE, not the set:
                  full = build from Firefox source.
   * calamares -> always compiled from the pinned-sha256 source tarball (there is
                  no Arch binary to install anymore).
-config.pkgbuild.recipe_dirs(full_compile) picks the recipe set; produced_names()
+configuration.pkgbuild.recipe_dirs(full_compile) picks the recipe set; produced_names()
 below returns the (now tier-independent) set of names built HERE.
 
 Offline policy: makepkg needs to FETCH sources (the calamares/firefox/librewolf
@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import emit, logstream, paths
-from .config import pkgbuild as pkgbuild_cfg
+from .configuration import pkgbuild as pkgbuild_cfg
 
 ProgressCb = Callable[[int], None]
 
@@ -87,7 +87,7 @@ def _repo_has_all(pkg_repo: Path, names: tuple[str, ...]) -> bool:
 
 
 def _emit_recipes(scratch: Path, full_compile: bool) -> list[Path]:
-    """Write each recipe dir (PKGBUILD + companions) from config.pkgbuild into
+    """Write each recipe dir (PKGBUILD + companions) from configuration.pkgbuild into
     scratch/. Returns the list of recipe dirs to build, in order."""
     dirs: list[Path] = []
     for dirname, files in pkgbuild_cfg.recipe_dirs(full_compile):

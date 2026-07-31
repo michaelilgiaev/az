@@ -141,15 +141,13 @@ def main() -> int:
         print("[*] --full-compile: Az'arch's own packages will be built ENTIRELY from source.")
         print("    This includes a LibreWolf/Firefox compile that can take 1.5-3+ hours.")
 
-    # --sshd: build the `azarch-sshd` ISO variant -- identical to the base ISO but
-    # named azarch-sshd-<ver>-x86_64.iso and auto-running `azarch --sshd-hypervisor`
-    # at boot (its guest sshd auto-setup service is enabled). Without the flag the
-    # base `azarch` ISO is built. The package set is identical, so the two variants
-    # share the same offline cache -- building the second is only a fresh mkarchiso.
-    variant = "sshd" if "--sshd" in sys.argv[1:] else "base"
-    if variant == "sshd":
-        print("[*] --sshd: building the azarch-sshd variant "
-              "(auto-runs `azarch --sshd-hypervisor` at boot).")
+    # Every build produces BOTH ISO variants -- the base `azarch` medium and the
+    # `azarch-sshd` medium (identical, but auto-running `azarch --sshd-hypervisor` at
+    # boot). They share every step up to mkarchiso, so the second is only a second
+    # mkarchiso pass; there is deliberately no flag to pick one. steps.run emits both
+    # and returns both ISO paths.
+    print("[*] Building BOTH ISO variants: azarch and azarch-sshd "
+          "(the sshd medium auto-runs `azarch --sshd-hypervisor` at boot).")
 
     offline = cache_is_complete()
     _stale_cache_notice(offline)
@@ -191,8 +189,8 @@ def main() -> int:
 
     bar.init()
     try:
-        iso = steps.run(bar, offline, full_compile=full_compile, variant=variant,
-                        reclaim_after_mkarchiso=own.reclaim_full)
+        isos = steps.run(bar, offline, full_compile=full_compile,
+                         reclaim_after_mkarchiso=own.reclaim_full)
     except SystemExit as e:
         teardown()
         msg = str(e)
@@ -206,16 +204,22 @@ def main() -> int:
 
     bar.subfrac = 1000
     bar.finalize()
-    iso_size = subprocess.run(["du", "-h", str(iso)], capture_output=True, text=True).stdout.split("\t")[0]
-    iso_path = f"output/{iso.name}" if paths.in_docker() else str(iso)
-    line = f"\n[ {bar.total_steps}/{bar.total_steps} ] [OK] ISO built successfully: {iso_path}"
-    if iso_size:
-        line += f" ({iso_size})"
-    print(line)
-    with paths.STEPS_LOG.open("a") as f:
-        f.write(line + "\n")
+    # Both ISO variants were built; report each with its size. (isos is ordered
+    # base, sshd -- see steps.VARIANTS.)
+    lines = [f"\n[ {bar.total_steps}/{bar.total_steps} ] [OK] {len(isos)} ISOs built successfully:"]
+    for iso in isos:
+        iso_size = subprocess.run(["du", "-h", str(iso)], capture_output=True, text=True).stdout.split("\t")[0]
+        iso_path = f"output/{iso.name}" if paths.in_docker() else str(iso)
+        entry = f"           - {iso_path}"
+        if iso_size:
+            entry += f" ({iso_size})"
+        lines.append(entry)
     if paths.in_docker():
-        print(f"           The ISO is at {iso_path} on your host (NOT build/output/).")
+        lines.append("           The ISOs are in output/ on your host (NOT build/output/).")
+    report = "\n".join(lines)
+    print(report)
+    with paths.STEPS_LOG.open("a") as f:
+        f.write(report + "\n")
 
     teardown()
     return 0

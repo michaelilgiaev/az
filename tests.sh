@@ -10,8 +10,8 @@
 #
 # The tests here are PURE unit tests. They never build an ISO, never call
 # pacman/makepkg/mkarchiso, never touch the network, never use sudo or Docker.
-# They exercise the deterministic Python logic (the config-file emitters, the
-# package list handling, path building, the spec pipeline's transforms) -- the
+# They exercise the deterministic Python logic (the configuration-file emitters, the
+# package list handling, path building, the specification pipeline's transforms) -- the
 # exact code where a silent regression turns into whack-a-mole. If a test needs
 # a real build tool, it does not belong here.
 #

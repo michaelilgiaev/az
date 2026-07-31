@@ -25,12 +25,12 @@
 # The dependency data is resolved from the official Arch Linux core/extra/multilib
 # package databases (the repos the ISO is actually built against), NOT from the
 # host's pacman databases -- on a non-Arch host those carry different packages and
-# versions and would produce a wrong spec. The databases are fetched once and
-# cached under cache/spec-db/; pass --offline to reuse them without network.
+# versions and would produce a wrong specification. The databases are fetched once and
+# cached under cache/specification-db/; pass --offline to reuse them without network.
 #
 # This is a thin shim: it locates the repo, checks for python3, and hands off to
 # scripts/libraries/pull_specifications.py, which orchestrates the work across
-# scripts/libraries/spec_{db,resolve,classify,content,render,svg}.py. All flags
+# scripts/libraries/specification_{db,resolve,classify,content,render,svg}.py. All flags
 # are passed straight through.
 #
 # Usage:
@@ -42,7 +42,7 @@
 #       --html FILE     write the interactive HTML map here (default: documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
 #       --fulltext FILE write the full component listing here (default: documentation/SPECIFICATIONS_COMPONENTS_FULL.txt)
 #   -m, --manifest FILE package manifest (default: libraries/data/packages.x86_64)
-#       --db-cache DIR  where to cache the Arch .db files (default: cache/spec-db)
+#       --db-cache DIR  where to cache the Arch .db files (default: cache/specification-db)
 #       --mirror URL    Arch mirror base URL to fetch databases from
 #       --offline       reuse cached .db files; do not download
 #       --stdout        print the Markdown to stdout (skips writing both files)

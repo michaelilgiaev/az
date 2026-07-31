@@ -17,15 +17,16 @@ import inspect
 from azarch import build, paths, steps
 
 
-def test_ckbcomp_asset_is_vendored_and_executable_perl():
+def test_ckbcomp_asset_is_vendored_python_script():
     # Calamares' keyboard preview shells out to `ckbcomp` to render key legends;
-    # Arch does not package it, so we vendor the Perl script inside the azarch
-    # package (libraries/azarch/ckbcomp). It must exist and be the actual ckbcomp
-    # Perl script (not an empty placeholder).
+    # Arch does not package it, so we vendor it inside the azarch package
+    # (libraries/azarch/ckbcomp). It is a Python 3 port of the upstream Perl ckbcomp
+    # (byte-identical output, but no Perl in the tree). It must exist and be that
+    # Python script (not an empty placeholder).
     src = paths.CKBCOMP_SRC
     assert src.is_file(), "libraries/azarch/ckbcomp is missing"
     head = src.read_text(errors="ignore")[:200]
-    assert head.startswith("#!/usr/bin/perl")
+    assert head.startswith("#!/usr/bin/env python3")
     assert "ckbcomp" in head  # the script's own banner names itself
 
 
@@ -38,11 +39,18 @@ def test_run_installs_ckbcomp_into_usr_bin():
 
 
 def test_step_weights_match_number_of_steps():
+    # run() makes N literal bar.step() calls, but the final one is inside the
+    # per-variant finalize loop and executes once per variant (both ISOs are built in
+    # one run). So the number of EXECUTED milestones is (N - 1) + len(VARIANTS), and
+    # STEP_WEIGHTS must have exactly that many real entries (+ the index-0 sentinel).
     src = inspect.getsource(steps.run)
     n_calls = src.count("bar.step(")
-    assert len(steps.STEP_WEIGHTS) - 1 == n_calls, (
+    executed = (n_calls - 1) + len(steps.VARIANTS)
+    assert len(steps.STEP_WEIGHTS) - 1 == executed, (
         f"STEP_WEIGHTS has {len(steps.STEP_WEIGHTS)} entries "
-        f"(-> {len(steps.STEP_WEIGHTS) - 1} steps) but run() makes {n_calls} bar.step() calls"
+        f"(-> {len(steps.STEP_WEIGHTS) - 1} steps) but run() executes {executed} "
+        f"milestones ({n_calls} literal bar.step() calls, the last once per "
+        f"{len(steps.VARIANTS)} variants)"
     )
 
 
@@ -51,9 +59,10 @@ def test_step_weights_leading_zero():
     assert steps.STEP_WEIGHTS[0] == 0
 
 
-def test_step_weights_giants_are_last_three():
-    # package cache, makepkg, mkarchiso -- the three heavy tail weights.
-    assert steps.STEP_WEIGHTS[-3:] == [250, 120, 270]
+def test_step_weights_giants_are_last_four():
+    # package cache, makepkg, and the TWO mkarchiso passes (one per ISO variant) --
+    # the four heavy tail weights. Both ISOs are assembled in a single build.
+    assert steps.STEP_WEIGHTS[-4:] == [250, 120, 270, 270]
 
 
 def test_cache_complete_false_when_index_missing(monkeypatch, tmp_path):

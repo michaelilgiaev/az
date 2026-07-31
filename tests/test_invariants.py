@@ -6,11 +6,11 @@ instead assert the properties that must hold ACROSS every member of a family,
 so an edit that adds a new emitter / category / subsystem entry and forgets the
 shared contract fails here even if its own dedicated test was never written:
 
-  * every config emitter returns a non-empty ``str`` -- an f-string that raises
+  * every configuration emitter returns a non-empty ``str`` -- an f-string that raises
     at call time, or a helper that silently returns ``None``, is caught for the
-    whole config package at once (an empty file makes archiso/calamares/pacman
+    whole configuration package at once (an empty file makes archiso/calamares/pacman
     abort at build or install time, nothing in Python notices otherwise);
-  * every YAML config Calamares reads actually parses -- a stray tab or an
+  * every YAML configuration Calamares reads actually parses -- a stray tab or an
     unbalanced brace turns into a runtime abort inside the installer, never a
     Python error;
   * the shipped package manifest tokenizes to clean names with no accidental
@@ -39,7 +39,7 @@ import pytest
 import yaml
 
 from azarch import build, makepkg, packages, paths, steps
-from azarch.config import (
+from azarch.configuration import (
     calamares,
     desktop,
     installer,
@@ -48,18 +48,18 @@ from azarch.config import (
     pkgbuild,
     profile,
 )
-import spec_classify
-import spec_content
-import spec_stock_baseline
+import specification_classify
+import specification_content
+import specification_stock_baseline
 
 
 # ---------------------------------------------------------------------------
-# 1. Every config emitter returns non-empty content.
+# 1. Every configuration emitter returns non-empty content.
 # ---------------------------------------------------------------------------
 #
 # Collected as (label, callable) pairs so a failure names the offending emitter.
 # These are exactly the no-argument (or all-defaulted) content generators the
-# build iterates to write the config tree; recipe_dirs contents are checked
+# build iterates to write the configuration tree; recipe_dirs contents are checked
 # separately below because they are nested dicts, not top-level generators.
 
 _EMITTERS = [
@@ -118,7 +118,7 @@ def test_recipe_dir_contents_are_nonempty_str_both_tiers():
 
 
 # ---------------------------------------------------------------------------
-# 2. Every YAML config Calamares reads parses.
+# 2. Every YAML configuration Calamares reads parses.
 # ---------------------------------------------------------------------------
 
 def test_every_calamares_yaml_value_parses():
@@ -180,7 +180,7 @@ def test_packages_manifest_no_duplicate_within_additions_block():
 # ---------------------------------------------------------------------------
 
 def test_stock_packages_is_a_frozen_sorted_unique_tuple():
-    pkgs = spec_stock_baseline.STOCK_PACKAGES
+    pkgs = specification_stock_baseline.STOCK_PACKAGES
     assert isinstance(pkgs, tuple), "STOCK_PACKAGES must be a tuple (frozen ref data)"
     assert pkgs, "STOCK_PACKAGES is empty"
     assert len(set(pkgs)) == len(pkgs), "STOCK_PACKAGES has duplicates"
@@ -188,7 +188,7 @@ def test_stock_packages_is_a_frozen_sorted_unique_tuple():
 
 
 def test_stock_packages_entries_are_clean_tokens():
-    for p in spec_stock_baseline.STOCK_PACKAGES:
+    for p in specification_stock_baseline.STOCK_PACKAGES:
         assert isinstance(p, str) and p, f"bad STOCK entry: {p!r}"
         assert p == p.strip(), f"STOCK entry has surrounding whitespace: {p!r}"
         assert " " not in p, f"STOCK entry has internal whitespace: {p!r}"
@@ -206,12 +206,12 @@ def test_category_order_and_colors_are_the_same_set():
     # The SVG/legend iterates CATEGORY_ORDER and looks up CATEGORY_COLORS[cat];
     # a category present in one but not the other is either a legend slot with no
     # color or a color no legend ever shows.
-    assert set(spec_classify.CATEGORY_ORDER) == set(spec_classify.CATEGORY_COLORS)
-    assert len(spec_classify.CATEGORY_ORDER) == len(set(spec_classify.CATEGORY_ORDER))
+    assert set(specification_classify.CATEGORY_ORDER) == set(specification_classify.CATEGORY_COLORS)
+    assert len(specification_classify.CATEGORY_ORDER) == len(set(specification_classify.CATEGORY_ORDER))
 
 
 def test_every_category_color_is_six_hex_digits():
-    for cat, color in spec_classify.CATEGORY_COLORS.items():
+    for cat, color in specification_classify.CATEGORY_COLORS.items():
         assert _HEX6.match(color), f"{cat!r} color {color!r} is not #RRGGBB"
 
 
@@ -219,12 +219,12 @@ def test_every_rule_emitted_category_is_in_the_order():
     # Enumerate every category any of the five classification stages can return
     # (curated map, group map, name-prefix/substr rules, dev-tool constant, desc
     # keyword rules, and the two fallbacks). Every one must have a legend slot.
-    order = set(spec_classify.CATEGORY_ORDER)
-    emitted = set(spec_classify.CURATED.values())
-    emitted |= set(spec_classify.GROUP_ROLE.values())
-    emitted |= {cat for _, cat in spec_classify.NAME_PREFIX_RULES}
-    emitted |= {cat for _, cat in spec_classify.NAME_SUBSTR_RULES}
-    emitted |= {cat for _, cat in spec_classify.DESC_RULES}
+    order = set(specification_classify.CATEGORY_ORDER)
+    emitted = set(specification_classify.CURATED.values())
+    emitted |= set(specification_classify.GROUP_ROLE.values())
+    emitted |= {cat for _, cat in specification_classify.NAME_PREFIX_RULES}
+    emitted |= {cat for _, cat in specification_classify.NAME_SUBSTR_RULES}
+    emitted |= {cat for _, cat in specification_classify.DESC_RULES}
     emitted |= {"Developer tools", "Shared library", "System"}
     assert emitted <= order, f"rule categories missing from legend: {emitted - order}"
 
@@ -233,14 +233,14 @@ def test_azarch_configured_keys_and_removed_are_stable():
     # The per-package "Az'arch configured" notes cross-reference real package
     # names; every value must be a real note, and the removed set is empty (no
     # package is dropped from the stock baseline in this build).
-    conf = spec_classify.AZARCH_CONFIGURED
+    conf = specification_classify.AZARCH_CONFIGURED
     assert set(conf) == {
         "fastfetch", "filesystem", "grub", "pacman",
         "sudo", "syslinux", "systemd", "ufw",
     }
     for k, v in conf.items():
         assert isinstance(v, str) and v.strip(), f"empty note for {k!r}"
-    assert spec_classify.AZARCH_REMOVED == set()
+    assert specification_classify.AZARCH_REMOVED == set()
 
 
 # ---------------------------------------------------------------------------
@@ -293,13 +293,13 @@ def test_teardown_modules_use_dash_n_build_modules_do_not(monkeypatch):
 
 def test_subsystems_every_entry_is_a_4_tuple():
     # The renderer unpacks `for key, title, prose, pkgs in SUBSYSTEMS`; any entry
-    # with the wrong arity is a ValueError at spec-render time.
-    for entry in spec_content.SUBSYSTEMS:
+    # with the wrong arity is a ValueError at specification-render time.
+    for entry in specification_content.SUBSYSTEMS:
         assert isinstance(entry, tuple) and len(entry) == 4, f"bad arity: {entry!r}"
 
 
 def test_subsystems_keys_are_unique_and_clean():
-    keys = [key for key, _t, _p, _pkgs in spec_content.SUBSYSTEMS]
+    keys = [key for key, _t, _p, _pkgs in specification_content.SUBSYSTEMS]
     assert len(keys) == len(set(keys)), f"duplicate subsystem keys: {keys}"
     for k in keys:
         assert isinstance(k, str) and k == k.strip() and k, f"bad key: {k!r}"
@@ -309,7 +309,7 @@ def test_subsystems_multi_package_labels_use_space_slash_space():
     # Multi-package rows use `a / b` (space-slash-space); the renderer splits on
     # ' / '. A bare `a/b` would not split and would be treated as one bogus name.
     saw_multi = False
-    for _key, _title, _prose, pkgs in spec_content.SUBSYSTEMS:
+    for _key, _title, _prose, pkgs in specification_content.SUBSYSTEMS:
         for label, _cap in pkgs:
             assert label.count("/") == label.count(" / "), f"unspaced slash: {label!r}"
             if " / " in label:

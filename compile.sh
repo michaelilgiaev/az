@@ -21,13 +21,13 @@
 #
 # Then it hands off to `python3 -m azarch.build`, which does the rest.
 #
+# Every run builds BOTH ISO variants: the base `azarch` medium and the
+# `azarch-sshd` medium (identical contents, but named azarch-sshd-<ver>-x86_64.iso
+# and auto-running `azarch --sshd-hypervisor` at boot, with the guest sshd
+# auto-setup service enabled). They share the same package cache, so the second is
+# only a second mkarchiso pass -- there is no flag to select one.
+#
 # ARGS: any args are passed straight through to the Python build driver.
-#   --sshd                   build the `azarch-sshd` ISO variant instead of the base
-#                            `azarch` ISO: identical contents, but named
-#                            azarch-sshd-<ver>-x86_64.iso and auto-running
-#                            `azarch --sshd-hypervisor` at boot (guest sshd auto-setup
-#                            enabled). Shares the same package cache as the base ISO,
-#                            so building both is just a second mkarchiso pass.
 #   --full-compile           build Az'arch's own packages ENTIRELY from source
 #                            (incl. a multi-hour LibreWolf/Firefox compile) instead
 #                            of the default, which repackages LibreWolf's verified
@@ -53,6 +53,17 @@ FULL_LOG="$LOGDIR/full.log"
 STEPS_LOG="$LOGDIR/steps.log"
 mkdir -p "$LOGDIR"
 
+# Stopwatch: format a whole-second duration as e.g. "1h 04m 09s" / "7m 32s" / "12s".
+# Used at the very end to report how long the compile took, on success AND failure.
+_format_duration() {
+    local secs=$1 h m s
+    h=$(( secs / 3600 )); m=$(( (secs % 3600) / 60 )); s=$(( secs % 60 ))
+    if   [ "$h" -gt 0 ]; then printf '%dh %02dm %02ds' "$h" "$m" "$s"
+    elif [ "$m" -gt 0 ]; then printf '%dm %02ds' "$m" "$s"
+    else                      printf '%ds' "$s"
+    fi
+}
+
 # Any --estimate* variant is a pure, read-only query (no build, no privileged
 # steps, no live progress bar): hand straight to Python WITHOUT priming sudo or
 # re-execing on a PTY, so it runs instantly and never prompts for a password. The
@@ -75,6 +86,12 @@ if [ -z "$_COMPILE_LOGGING" ]; then
         sudo -n -v 2>/dev/null || sudo -n true 2>/dev/null || sudo -v || {
             echo "[!] sudo is required for the privileged build steps." >&2; exit 1; }
     fi
+    # Start the stopwatch HERE -- after the (possibly slow, interactive) sudo prompt
+    # so the user's password-typing time is not counted as build time, and BEFORE the
+    # PTY re-exec so it spans the whole build. Exported, so it survives the re-exec
+    # into `script` and reaches the innermost hand-off where the elapsed time is
+    # reported. Whole seconds from the epoch (SECONDS/date are always available).
+    export _COMPILE_START="$(date +%s)"
     # Truncate both logs so each launch overwrites the previous run's logs. Python
     # (azarch.logstream / azarch.progress) reopens them in append mode afterwards.
     : > "$FULL_LOG"
@@ -97,4 +114,22 @@ fi
 # so the bar and build output interleave correctly on the PTY and in full.log.
 export PYTHONPATH="$REPODIR/libraries${PYTHONPATH:+:$PYTHONPATH}"
 export _COMPILE_ONPTY
-exec python3 -u -m azarch.build "$@"
+# NOT exec'd (unlike before): the shell must OUTLIVE the Python build so it can stop
+# the stopwatch and report the elapsed time afterwards -- on success AND on failure.
+# We capture Python's exit code, print how long the compile took, then exit with that
+# same code so callers/CI still see the real build result.
+python3 -u -m azarch.build "$@"
+_rc=$?
+
+# Stop the stopwatch. _COMPILE_START was set before the PTY re-exec and exported
+# through it; fall back to now (0s) if somehow unset so this never divides on empty.
+_elapsed=$(( $(date +%s) - ${_COMPILE_START:-$(date +%s)} ))
+if [ "$_rc" -eq 0 ]; then
+    _line="[time] Compile finished in $(_format_duration "$_elapsed")."
+else
+    _line="[time] Compile FAILED after $(_format_duration "$_elapsed") (exit $_rc)."
+fi
+echo "$_line"
+# Mirror the timing line into steps.log so it is captured alongside the build log.
+echo "$_line" >> "$STEPS_LOG" 2>/dev/null || true
+exit "$_rc"

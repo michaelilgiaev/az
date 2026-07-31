@@ -38,22 +38,29 @@ from azarch import steps
 
 def test_step_weights_length_and_shape():
     # 13 lightweight setup/emit steps (index 0 unused sentinel + 12 real "8"s) then
-    # the three giants. Total 16 entries.
-    assert len(steps.STEP_WEIGHTS) == 16
+    # the four giants. Total 17 entries. The extra giant vs. before is the SECOND
+    # mkarchiso pass: one build now assembles BOTH ISO variants (base + sshd).
+    assert len(steps.STEP_WEIGHTS) == 17
     assert steps.STEP_WEIGHTS[0] == 0
     assert steps.STEP_WEIGHTS[1:13] == [8] * 12
-    # Final three, in order: package-cache giant, makepkg stage, mkarchiso giant.
-    assert steps.STEP_WEIGHTS[-3:] == [250, 120, 270]
+    # Final four, in order: package-cache giant, makepkg stage, and the TWO
+    # mkarchiso giants (one per ISO variant).
+    assert steps.STEP_WEIGHTS[-4:] == [250, 120, 270, 270]
 
 
-def test_step_weights_matches_bar_step_call_count():
+def test_step_weights_matches_executed_step_count():
     # The invariant the module comment stresses: len(STEP_WEIGHTS) - 1 MUST equal the
-    # number of bar.step() calls in run(). Index 0 is the unused sentinel, so each of
-    # the 15 real weights is one milestone.
+    # number of milestones run() EXECUTES. run() makes 15 literal bar.step() calls, but
+    # the last one lives inside the per-variant finalize loop and executes once per
+    # variant -- so the number of executed milestones is (15 - 1 loop call) + one call
+    # per variant = 14 + len(VARIANTS). The weights list must carry exactly that many
+    # real entries (plus the index-0 sentinel), so a step added/removed OR a variant
+    # added/removed without matching STEP_WEIGHTS fails here.
     src = inspect.getsource(steps.run)
-    n_steps = src.count("bar.step(")
-    assert n_steps == 15
-    assert n_steps == len(steps.STEP_WEIGHTS) - 1
+    n_literal = src.count("bar.step(")
+    assert n_literal == 15
+    executed = (n_literal - 1) + len(steps.VARIANTS)  # loop's single call runs per variant
+    assert executed == len(steps.STEP_WEIGHTS) - 1
 
 
 def test_step_weights_all_positive_after_sentinel():

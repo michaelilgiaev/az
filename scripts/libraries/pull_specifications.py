@@ -1,14 +1,14 @@
 """
 pull_specifications -- orchestrator for the Az'arch distribution specification.
 
-Generates documentation/SPECIFICATIONS.md: a technical spec of the OS that ships
+Generates documentation/SPECIFICATIONS.md: a technical specification of the OS that ships
 on the ISO, centred on the real package dependency graph (base kernel/libs at the
 bottom, leaf applications at the top).
 
 Pipeline:
-  spec_db      fetch + parse the official Arch core/extra/multilib databases
-  spec_resolve expand the manifest, walk the full transitive closure, tier it
-  spec_render  emit the Markdown from the resolved data + editorial content
+  specification_db      fetch + parse the official Arch core/extra/multilib databases
+  specification_resolve expand the manifest, walk the full transitive closure, tier it
+  specification_render  emit the Markdown from the resolved data + editorial content
 
 Invoked by scripts/pull_specifications.sh (which sets up paths), or directly:
   python3 scripts/libraries/pull_specifications.py [options]
@@ -23,20 +23,20 @@ _SELF_DIR = os.path.dirname(os.path.abspath(__file__))
 if _SELF_DIR not in sys.path:
     sys.path.insert(0, _SELF_DIR)
 
-import spec_db
-import spec_resolve
-import spec_classify
-import spec_render
-import spec_svg
-import spec_fulltext
-import spec_html
-import spec_stock_baseline
+import specification_db
+import specification_resolve
+import specification_classify
+import specification_render
+import specification_svg
+import specification_fulltext
+import specification_html
+import specification_stock_baseline
 
 # scripts/libraries/ -> repo root is two levels up.
 REPO_ROOT = os.path.abspath(os.path.join(_SELF_DIR, "..", ".."))
 DEFAULT_MANIFEST = os.path.join(REPO_ROOT, "libraries", "data", "packages.x86_64")
 # The stock archiso `releng` baseline (the ground truth for the "Stock Arch"
-# edition) lives in code as spec_stock_baseline.STOCK_PACKAGES, not as a data
+# edition) lives in code as specification_stock_baseline.STOCK_PACKAGES, not as a data
 # file, so it is not mistaken for an editable manifest. --stock-manifest can
 # still point at a file to override it; None means "use the module".
 DEFAULT_OUTPUT = os.path.join(REPO_ROOT, "documentation", "SPECIFICATIONS_GENERAL.md")
@@ -45,8 +45,8 @@ DEFAULT_FULLTEXT = os.path.join(REPO_ROOT, "documentation",
                                 "SPECIFICATIONS_COMPONENTS_FULL.txt")
 DEFAULT_HTML = os.path.join(REPO_ROOT, "documentation",
                             "SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html")
-DEFAULT_CACHE = os.path.join(REPO_ROOT, "cache", "spec-db")
-CONFIG_DIR = os.path.join(REPO_ROOT, "libraries", "azarch", "config")
+DEFAULT_CACHE = os.path.join(REPO_ROOT, "cache", "specification-db")
+CONFIG_DIR = os.path.join(REPO_ROOT, "libraries", "azarch", "configuration")
 PROFILE_PY = os.path.join(CONFIG_DIR, "profile.py")
 PACMAN_PY = os.path.join(CONFIG_DIR, "pacman.py")
 LOCALE_PY = os.path.join(CONFIG_DIR, "locale.py")
@@ -63,22 +63,22 @@ def _read(path):
 
 def read_cow_spacesize():
     """Read the live-session writable-RAM size (cow_spacesize) from the real build
-    config, so the spec reports the actual configured value, not a hardcoded one."""
+    configuration, so the specification reports the actual configured value, not a hardcoded one."""
     m = re.search(r'cow_spacesize\s*=\s*["\']([^"\']+)["\']', _read(PROFILE_PY))
     return m.group(1) if m else "unknown"
 
 
 def read_endpoints():
     """Extract the external network endpoints the distro contacts, live from the
-    real config modules. Returns a list of (endpoint, purpose, context) rows so the
-    spec stays honest if a mirror / service URL is changed.
+    real configuration modules. Returns a list of (endpoint, purpose, context) rows so the
+    specification stays honest if a mirror / service URL is changed.
 
-    Everything here is read from libraries/azarch/config/*.py -- the same strings
+    Everything here is read from libraries/azarch/configuration/*.py -- the same strings
     baked into the ISO -- so this is not a hand-maintained list that can drift.
     """
     rows = []
 
-    # Package mirrors: any 'Server = http(s)://...' in the pacman config.
+    # Package mirrors: any 'Server = http(s)://...' in the pacman configuration.
     pac = _read(PACMAN_PY)
     seen = set()
     for url in re.findall(r'Server\s*=\s*(https?://[^\s"\'\\]+)', pac):
@@ -146,13 +146,13 @@ def parse_args(argv):
                    help=f"package manifest (default: {DEFAULT_MANIFEST})")
     p.add_argument("--stock-manifest", default=None,
                    help="optional file to override the built-in stock archiso "
-                        "releng baseline (spec_stock_baseline.STOCK_PACKAGES) "
+                        "releng baseline (specification_stock_baseline.STOCK_PACKAGES) "
                         "used to split the two editions")
     p.add_argument("--db-cache", default=DEFAULT_CACHE,
                    help=f"where to store the fetched Arch .db files "
                         f"(default: {DEFAULT_CACHE})")
-    p.add_argument("--mirror", default=spec_db.DEFAULT_MIRROR,
-                   help=f"Arch mirror base URL (default: {spec_db.DEFAULT_MIRROR})")
+    p.add_argument("--mirror", default=specification_db.DEFAULT_MIRROR,
+                   help=f"Arch mirror base URL (default: {specification_db.DEFAULT_MIRROR})")
     p.add_argument("--offline", action="store_true",
                    help="do not download; reuse the .db files already in --db-cache")
     p.add_argument("--stdout", action="store_true",
@@ -165,7 +165,7 @@ def _build_glance(packages, resolved, tiers, tags):
     closure = resolved["closure"]
     roots = resolved["roots"]
     by_repo = {r: sum(1 for p in closure if packages[p]["repo"] == r)
-               for r in spec_db.REPOS}
+               for r in specification_db.REPOS}
     total_isize = sum(packages[p]["isize"] for p in closure)
     from collections import Counter
     ed_counts = Counter(t["edition"] for t in tags.values())
@@ -206,8 +206,8 @@ def _build_glance(packages, resolved, tiers, tags):
     return {
         "base": "Arch Linux (rolling), x86_64",
         "desktop": desktop,
-        "kernel": spec_render._pkg_version(packages, "linux"),
-        "init": spec_render._pkg_version(packages, "systemd"),
+        "kernel": specification_render._pkg_version(packages, "linux"),
+        "init": specification_render._pkg_version(packages, "systemd"),
         "dm": dm,
         "iso_version": "date-based, YYYY.MM.DD (no semver)",
         "ram": f"{read_cow_spacesize()} writable overlay held in RAM",
@@ -232,52 +232,52 @@ def build(manifest_path, db_cache, mirror, offline, svg_rel="SPECIFICATIONS.svg"
     """Run the full pipeline. Return (markdown, svg, fulltext, html).
 
     stock_manifest_path=None uses the built-in baseline
-    (spec_stock_baseline.STOCK_PACKAGES); pass a path to override it from a file.
+    (specification_stock_baseline.STOCK_PACKAGES); pass a path to override it from a file.
     """
-    db_paths = spec_db.fetch_databases(db_cache, mirror=mirror, offline=offline)
-    packages, provides, groups = spec_db.load_databases(db_paths)
-    print(f"[spec] indexed {len(packages)} packages from core/extra/multilib",
+    db_paths = specification_db.fetch_databases(db_cache, mirror=mirror, offline=offline)
+    packages, provides, groups = specification_db.load_databases(db_paths)
+    print(f"[specification] indexed {len(packages)} packages from core/extra/multilib",
           file=sys.stderr)
 
-    tokens, raw_lines = spec_resolve.load_manifest(manifest_path)
-    resolved = spec_resolve.resolve_closure(tokens, packages, provides, groups)
+    tokens, raw_lines = specification_resolve.load_manifest(manifest_path)
+    resolved = specification_resolve.resolve_closure(tokens, packages, provides, groups)
     resolved["raw_lines"] = raw_lines
-    tiers = spec_resolve.compute_tiers(resolved)
+    tiers = specification_resolve.compute_tiers(resolved)
 
     # Split the closure into the two editions by walking the STOCK archiso releng
     # baseline: anything that baseline already pulls in is "Stock Arch", the rest
     # is an "Az'arch Component". The baseline is the built-in list in
-    # spec_stock_baseline, unless a file override is supplied.
+    # specification_stock_baseline, unless a file override is supplied.
     if stock_manifest_path:
-        stock_tokens, _ = spec_resolve.load_manifest(stock_manifest_path)
+        stock_tokens, _ = specification_resolve.load_manifest(stock_manifest_path)
     else:
-        stock_tokens = list(spec_stock_baseline.STOCK_PACKAGES)
-    stock_reach = spec_resolve.stock_reachable(
+        stock_tokens = list(specification_stock_baseline.STOCK_PACKAGES)
+    stock_reach = specification_resolve.stock_reachable(
         stock_tokens, resolved["closure"], packages, provides, groups)
-    tags = spec_classify.classify(packages, resolved["closure"], stock_reach)
+    tags = specification_classify.classify(packages, resolved["closure"], stock_reach)
 
     unresolved_tokens = [t for t, v in resolved["manifest_map"].items()
                          if v["kind"] == "unresolved"]
     if unresolved_tokens:
-        print(f"[spec] WARN: manifest tokens that did not resolve: "
+        print(f"[specification] WARN: manifest tokens that did not resolve: "
               f"{unresolved_tokens}", file=sys.stderr)
     if resolved["unresolved"]:
         uniq = sorted({tok for _, tok in resolved["unresolved"]})
-        print(f"[spec] WARN: {len(resolved['unresolved'])} unresolved dependency "
+        print(f"[specification] WARN: {len(resolved['unresolved'])} unresolved dependency "
               f"edges ({len(uniq)} unique tokens)", file=sys.stderr)
 
     from collections import Counter
     ed_counts = Counter(t["edition"] for t in tags.values())
-    print(f"[spec] closure: {len(resolved['closure'])} packages | "
+    print(f"[specification] closure: {len(resolved['closure'])} packages | "
           f"{len(tiers['bases'])} base / {len(tiers['leaves'])} top | "
           f"editions {dict(ed_counts)}", file=sys.stderr)
 
     glance = _build_glance(packages, resolved, tiers, tags)
-    md = spec_render.render(packages, resolved, tiers, tags, glance, svg_rel)
-    svg = spec_svg.render_svg(packages, resolved, tiers, tags, glance)
-    full = spec_fulltext.render_fulltext(packages, resolved, tiers, tags, glance,
+    md = specification_render.render(packages, resolved, tiers, tags, glance, svg_rel)
+    svg = specification_svg.render_svg(packages, resolved, tiers, tags, glance)
+    full = specification_fulltext.render_fulltext(packages, resolved, tiers, tags, glance,
                                          svg_rel, general_rel)
-    page = spec_html.render_html(packages, resolved, tiers, tags, glance)
+    page = specification_html.render_html(packages, resolved, tiers, tags, glance)
     return md, svg, full, page
 
 
@@ -301,24 +301,24 @@ def main(argv=None):
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
     with open(args.output, "w") as f:
         f.write(md)
-    print(f"[spec] wrote {args.output} "
+    print(f"[specification] wrote {args.output} "
           f"({md.count(chr(10)) + 1} lines, {len(md)} bytes)", file=sys.stderr)
 
     os.makedirs(os.path.dirname(args.svg), exist_ok=True)
     with open(args.svg, "w") as f:
         f.write(svg)
-    print(f"[spec] wrote {args.svg} ({len(svg)} bytes)", file=sys.stderr)
+    print(f"[specification] wrote {args.svg} ({len(svg)} bytes)", file=sys.stderr)
 
     os.makedirs(os.path.dirname(args.fulltext), exist_ok=True)
     with open(args.fulltext, "w") as f:
         f.write(full)
-    print(f"[spec] wrote {args.fulltext} "
+    print(f"[specification] wrote {args.fulltext} "
           f"({full.count(chr(10)) + 1} lines, {len(full)} bytes)", file=sys.stderr)
 
     os.makedirs(os.path.dirname(args.html), exist_ok=True)
     with open(args.html, "w") as f:
         f.write(page)
-    print(f"[spec] wrote {args.html} ({len(page)} bytes)", file=sys.stderr)
+    print(f"[specification] wrote {args.html} ({len(page)} bytes)", file=sys.stderr)
     return 0
 
 
