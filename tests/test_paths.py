@@ -18,9 +18,13 @@ def test_repodir_is_repo_root():
 
 
 def test_static_dirs_are_under_repodir():
-    for d in (paths.LIBDIR, paths.DATADIR, paths.ASSETSDIR,
-              paths.CACHEDIR, paths.BUILDDIR, paths.LOGDIR):
+    for d in (paths.LIBDIR, paths.DATADIR, paths.ASSETSDIR, paths.PKGDIR,
+              paths.CACHEDIR, paths.BUILDDIR, paths.LOGDIR, paths.CKBCOMP_SRC):
         assert str(d).startswith(str(paths.REPODIR))
+
+
+def test_ckbcomp_src_is_inside_package():
+    assert paths.CKBCOMP_SRC == paths.REPODIR / "libraries" / "azarch" / "ckbcomp"
 
 
 def test_datadir_is_libraries_data():

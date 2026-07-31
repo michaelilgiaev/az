@@ -27,10 +27,17 @@ from pathlib import Path
 
 # libraries/azarch/paths.py -> repo root is three parents up.
 REPODIR = Path(__file__).resolve().parents[2]
+PKGDIR = Path(__file__).resolve().parent  # libraries/azarch (this package)
 
 LIBDIR = REPODIR / "libraries"
 DATADIR = LIBDIR / "data"
 ASSETSDIR = REPODIR / "assets"
+
+# Vendored ckbcomp Perl script. Arch does not package it (Debian/Manjaro-only),
+# yet Calamares' keyboard-preview page shells out to `ckbcomp`, so we ship it in
+# the repo and copy it to /usr/bin at build time. It lives beside this package
+# rather than under assets/ because the user keeps it here.
+CKBCOMP_SRC = PKGDIR / "ckbcomp"
 
 CACHEDIR = REPODIR / "cache"
 BUILDDIR = REPODIR / "output"

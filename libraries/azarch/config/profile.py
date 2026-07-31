@@ -68,7 +68,7 @@ FILE_PERMISSIONS = {
     # Calamares never auto-launches. THIS is what breaks the live installer.
     "/usr/local/bin/azarch-install": "0:0:755",
     "/usr/local/bin/azarch": "0:0:755",
-    # Vendored ckbcomp Perl script (assets/bin/ckbcomp). Same archiso mode-
+    # Vendored ckbcomp Perl script (libraries/azarch/ckbcomp). Same archiso mode-
     # normalization as azarch-install above: without an explicit 0755 here it ships
     # 0644, Calamares' `QProcess::start("ckbcomp")` cannot execute it, and the
     # keyboard-page preview stays BLANK ("ckbcomp not found, keyboard preview

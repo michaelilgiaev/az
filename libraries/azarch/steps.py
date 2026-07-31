@@ -164,10 +164,10 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso, full_compile: 
     # out to `ckbcomp`; without it the preview draws BLANK keys ("ckbcomp not found,
     # keyboard preview disabled"). `ckbcomp` is a self-contained Perl script that
     # Arch does NOT package (it is Debian/Manjaro-only), so we vendor it from
-    # assets/bin/ckbcomp into /usr/bin. It needs only perl (in base) and the XKB data
-    # in /usr/share/X11/xkb (shipped by xkeyboard-config), both present. It lands in
-    # the live ISO and is copied to the target by unpackfs.
-    emit.copy_asset("bin/ckbcomp", airootfs / "usr/bin/ckbcomp", mode=0o755)
+    # libraries/azarch/ckbcomp into /usr/bin. It needs only perl (in base) and the XKB
+    # data in /usr/share/X11/xkb (shipped by xkeyboard-config), both present. It lands
+    # in the live ISO and is copied to the target by unpackfs.
+    emit.copy_pkg_file("ckbcomp", airootfs / "usr/bin/ckbcomp", mode=0o755)
 
     # 9 -- Stage installed-system pacman and pkgs service.
     # The package-management unit of the installed system: its /etc/pacman.conf, the

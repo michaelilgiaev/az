@@ -58,6 +58,21 @@ def copy_asset(rel: str, dest: Path, mode: int | None = None) -> Path:
     return dest
 
 
+def copy_pkg_file(rel: str, dest: Path, mode: int | None = None) -> Path:
+    """Copy a verbatim file shipped inside the azarch package (libraries/azarch/<rel>).
+
+    Used for payload the user keeps beside the package rather than under assets/
+    -- currently the vendored ckbcomp Perl script.
+    """
+    src = paths.PKGDIR / rel
+    dest = Path(dest)
+    _ensure_parent(dest)
+    shutil.copy2(src, dest)
+    if mode is not None:
+        os.chmod(dest, mode)
+    return dest
+
+
 def copy_tree(src: Path, dest: Path) -> None:
     """Recursively copy src/* into dest (like `cp -r src/. dest/`)."""
     src = Path(src)
