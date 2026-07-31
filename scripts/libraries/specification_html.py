@@ -1,6 +1,6 @@
 """
 specification_html -- render the Az'arch component set as ONE self-contained, interactive
-HTML page (documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html).
+HTML page (documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html).
 
 This is the interactive twin of the SVG (specification_svg): the same layered map -- seven
 horizontal bands from the kernel at the bottom up to the leaf applications at the

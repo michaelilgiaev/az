@@ -1,6 +1,6 @@
 """
 specification_fulltext -- render the COMPLETE component listing as a formatted plain-text
-file (documentation/SPECIFICATIONS_COMPONENTS_FULL.txt).
+file (documentations/SPECIFICATIONS_COMPONENTS_FULL.txt).
 
 Where the SVG is the readable at-a-glance shape of the distribution (a curated
 subset per layer) and SPECIFICATIONS_GENERAL.md is the prose/subsystem view, this

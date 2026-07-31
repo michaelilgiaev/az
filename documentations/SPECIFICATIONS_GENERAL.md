@@ -144,7 +144,7 @@ Notes for a developer:
 
 ## 10. Where the component detail lives
 
-This document does not list packages. The complete component enumeration -- every package, its version, and the dependency edges between them -- lives in three companion artifacts, all in `documentation/`:
+This document does not list packages. The complete component enumeration -- every package, its version, and the dependency edges between them -- lives in three companion artifacts, all in `documentations/`:
 
 - [`SPECIFICATIONS_COMPONENTS_OVERVIEW.svg`](SPECIFICATIONS_COMPONENTS_OVERVIEW.svg) -- **overview graph** (SVG): the base->top dependency graph as a tiered image, coloured by category and marked with the edition tags above.
 - `SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html` -- **interactive map**: the same graph, navigable, with search and per-package detail.

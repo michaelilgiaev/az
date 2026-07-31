@@ -1,5 +1,5 @@
 """
-specification_render -- assemble the General specification (documentation/SPECIFICATIONS_GENERAL.md)
+specification_render -- assemble the General specification (documentations/SPECIFICATIONS_GENERAL.md)
 from resolved data, the per-package tags (specification_classify) and the configuration-derived
 at-a-glance facts (glance).
 
@@ -359,7 +359,7 @@ def render(packages, resolved, tiers, tags, glance, svg_rel):
     d.w()
     d.w("This document does not list packages. The complete component enumeration "
         "-- every package, its version, and the dependency edges between them -- "
-        "lives in three companion artifacts, all in `documentation/`:")
+        "lives in three companion artifacts, all in `documentations/`:")
     d.w()
     d.w(f"- [`{svg_rel}`]({svg_rel}) -- **overview graph** (SVG): the base->top "
         f"dependency graph as a tiered image, coloured by category and marked with "

@@ -1,7 +1,7 @@
 """
 pull_specifications -- orchestrator for the Az'arch distribution specification.
 
-Generates documentation/SPECIFICATIONS.md: a technical specification of the OS that ships
+Generates documentations/SPECIFICATIONS.md: a technical specification of the OS that ships
 on the ISO, centred on the real package dependency graph (base kernel/libs at the
 bottom, leaf applications at the top).
 
@@ -286,7 +286,7 @@ def main(argv=None):
     svg_rel = os.path.relpath(args.svg, os.path.dirname(args.output))
     # cross-link inside the full-text file points back to the general Markdown,
     # relative to the full-text file's own directory (the SVG link reuses svg_rel;
-    # all three artifacts are co-located in documentation/)
+    # all three artifacts are co-located in documentations/)
     ft_dir = os.path.dirname(args.fulltext)
     general_rel_ft = os.path.relpath(args.output, ft_dir)
     md, svg, full, page = build(args.manifest, args.db_cache, args.mirror,

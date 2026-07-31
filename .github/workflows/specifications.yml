@@ -30,10 +30,10 @@ jobs:
       - name: Commit updated specifications if anything changed
         run: |
           set -euo pipefail
-          if git diff --quiet -- documentation/; then
+          if git diff --quiet -- documentations/; then
             exit 0
           fi
-          git add documentation/
+          git add documentations/
           # Force BOTH author and committer to a human so the commit is never
           # attributed to github-actions[bot] on the contributor graph. Setting
           # only git config user.* is not enough: the runner stamps the committer

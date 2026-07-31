@@ -1,5 +1,5 @@
 """specification_fulltext -- the exhaustive plain-text component listing
-(documentation/SPECIFICATIONS_COMPONENTS_FULL.txt).
+(documentations/SPECIFICATIONS_COMPONENTS_FULL.txt).
 
 Why these tests matter: this file is meant to be BOTH pleasant to read AND
 trivially machine-parseable -- every block is a `### name` header plus stable

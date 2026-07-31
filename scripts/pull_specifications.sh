@@ -3,19 +3,19 @@
 # pull_specifications.sh -- generate the Az'arch DISTRIBUTION specification.
 #
 # This produces four artifacts:
-#   documentation/SPECIFICATIONS_GENERAL.md  the general / developer view:
+#   documentations/SPECIFICATIONS_GENERAL.md  the general / developer view:
 #                                     at-a-glance facts, what Az'arch changes on
 #                                     top of Arch, and the subsystem breakdown.
 #                                     No dependency-graph tables (those are below).
-#   documentation/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg  a navigable layered
+#   documentations/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg  a navigable layered
 #                                     image of the dependency graph, kernel at the
 #                                     bottom up to leaf apps at the top, boxes
 #                                     coloured by category and marked by edition.
-#   documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html  the interactive
+#   documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html  the interactive
 #                                     twin of the SVG: the same layered map, but
 #                                     open it in a browser and click any component
 #                                     to inspect it and highlight its dependencies.
-#   documentation/SPECIFICATIONS_COMPONENTS_FULL.txt  the exhaustive listing:
+#   documentations/SPECIFICATIONS_COMPONENTS_FULL.txt  the exhaustive listing:
 #                                     EVERY component, nothing collapsed, each with
 #                                     a plain-language purpose (the official Arch
 #                                     package description), its layer, and its full
@@ -37,10 +37,10 @@
 #   scripts/pull_specifications.sh [options]
 #
 # Options (forwarded to the Python orchestrator):
-#   -o, --output FILE   write the general Markdown here (default: documentation/SPECIFICATIONS_GENERAL.md)
-#       --svg FILE      write the components graph SVG here (default: documentation/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg)
-#       --html FILE     write the interactive HTML map here (default: documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
-#       --fulltext FILE write the full component listing here (default: documentation/SPECIFICATIONS_COMPONENTS_FULL.txt)
+#   -o, --output FILE   write the general Markdown here (default: documentations/SPECIFICATIONS_GENERAL.md)
+#       --svg FILE      write the components graph SVG here (default: documentations/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg)
+#       --html FILE     write the interactive HTML map here (default: documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
+#       --fulltext FILE write the full component listing here (default: documentations/SPECIFICATIONS_COMPONENTS_FULL.txt)
 #   -m, --manifest FILE package manifest (default: libraries/data/packages.x86_64)
 #       --db-cache DIR  where to cache the Arch .db files (default: cache/specification-db)
 #       --mirror URL    Arch mirror base URL to fetch databases from

@@ -28,8 +28,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p site/documentation
-          cp documentation/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg site/documentation/
-          cp documentation/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html site/documentation/
+          cp documentations/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg site/documentations/
+          cp documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html site/documentations/
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
