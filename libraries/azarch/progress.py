@@ -18,8 +18,25 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+import threading
+import time
 
 from . import paths
+
+
+def format_clock(secs: int) -> str:
+    """Format a whole-second elapsed duration for the pinned bar's live stopwatch.
+    Matches compile.sh's _format_duration style so the ticking display and the
+    final "[time] Compile finished in ..." line read the same: "1h 04m 09s" /
+    "7m 32s" / "12s"."""
+    secs = max(int(secs), 0)
+    h, rem = divmod(secs, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}h {m:02d}m {s:02d}s"
+    if m:
+        return f"{m}m {s:02d}s"
+    return f"{s}s"
 
 
 class ProgressBar:
@@ -51,6 +68,22 @@ class ProgressBar:
         self._armed = False
         self._armed_rows = None  # terminal height the scroll region was last armed to
         self._base_label = ""    # current step's label, prefixed onto phase() sub-labels
+        # Live stopwatch: elapsed time shown IN the pinned bar and ticking once a
+        # second (start_clock) so the user watches it advance, not just a final
+        # total. _COMPILE_START is exported by compile.sh BEFORE the PTY re-exec
+        # (whole seconds from the epoch) so the bar's clock and compile.sh's final
+        # "[time] Compile finished in ..." line agree; fall back to now if unset
+        # (e.g. running build.py directly without the shim).
+        try:
+            self.start_epoch = int(os.environ.get("_COMPILE_START", "") or time.time())
+        except (TypeError, ValueError):
+            self.start_epoch = int(time.time())
+        # draw() writes ANSI to the shared terminal from BOTH the main build thread
+        # and the once-a-second clock ticker; serialize them so their escape
+        # sequences never interleave and corrupt the pinned line.
+        self._draw_lock = threading.Lock()
+        self._clock_stop = threading.Event()
+        self._clock_thread: "threading.Thread | None" = None
 
     def _log_step(self, line: str) -> None:
         """Append a milestone/phase line to steps.log in real time."""
@@ -103,15 +136,22 @@ class ProgressBar:
         eff = self.done_weight * 1000 + self.cur_weight * min(max(self.subfrac, 0), 1000)
         pct = min(eff // 10 // self.total_weight, 100) if self.total_weight else 0
         pctstr = f" {pct:3d}% "                       # e.g. "  24% " -> 6 visible cols
-        # Reserve the pct field; give the bar ~45% of what's left, rest to the label.
-        room = max(cols - len(pctstr), 0)
+        # Live stopwatch field, e.g. "[7m 32s] ". Rendered right after the percent so
+        # it ticks in place next to the bar. Zero-width color codes are added when
+        # the field is composited into the final line, so its width budget is just
+        # the visible text.
+        clockstr = f"[{format_clock(time.time() - self.start_epoch)}] "
+        # Reserve the pct + clock fields; give the bar ~45% of what's left, rest to
+        # the label. The bar must never overrun cols even after both fixed fields.
+        reserved = len(pctstr) + len(clockstr)
+        room = max(cols - reserved, 0)
         barw = min(room, max(0, room * 45 // 100))
-        barw = min(barw, max(0, cols - len(pctstr)))  # never let bar+pct exceed cols
+        barw = min(barw, max(0, cols - reserved))     # never let bar+pct+clock exceed cols
         filled = (eff * barw // (1000 * self.total_weight)) if self.total_weight else 0
         filled = min(max(filled, 0), barw)
         bar = "█" * filled + "░" * (barw - filled)
         # Remaining columns for the label (after one separating space).
-        budget = cols - barw - len(pctstr) - 1
+        budget = cols - barw - reserved - 1
         label = self.label
         if budget <= 0:
             sep, field = "", ""
@@ -124,7 +164,10 @@ class ProgressBar:
             pad = max(budget - len(label), 0)
             left = pad // 2
             field = " " * left + label
-        return f"\033[36m{bar}\033[0m\033[1m{pctstr}\033[0m{sep}{field}"
+        # bar (cyan) + percent (bold) + stopwatch (dim) + centered label. The color
+        # codes are zero-width, so the visible line width is exactly the budget above.
+        return (f"\033[36m{bar}\033[0m\033[1m{pctstr}\033[0m"
+                f"\033[2m{clockstr}\033[0m{sep}{field}")
 
     # -- pinning -------------------------------------------------------------
     def _arm(self) -> None:
@@ -143,23 +186,58 @@ class ProgressBar:
     def draw(self) -> None:
         if not self.tty:
             return
-        cols, rows = self._size()
-        # If the terminal was resized since the region was armed, the old scroll region
-        # and bar row are stale -- the bar would paint on the wrong row and unstick. The
-        # giant steps drive many draw()s over a long span, so a resize mid-step is likely;
-        # re-arm to the new height before painting. (\033[u below restores to a saved
-        # position that re-arming would clobber, so re-arm BEFORE saving the cursor.)
-        if getattr(self, "_armed_rows", None) != rows:
-            self._arm()
-        line = self._layout(cols)
-        # save cursor, jump to last row, clear, paint, restore cursor
-        self.term.write(f"\033[s\033[{rows};1H\033[K{line}\033[u")
-        self.term.flush()
+        # Serialize with the once-a-second clock ticker so the two threads never
+        # interleave their escape sequences on the shared terminal.
+        with self._draw_lock:
+            cols, rows = self._size()
+            # If the terminal was resized since the region was armed, the old scroll region
+            # and bar row are stale -- the bar would paint on the wrong row and unstick. The
+            # giant steps drive many draw()s over a long span, so a resize mid-step is likely;
+            # re-arm to the new height before painting. (\033[u below restores to a saved
+            # position that re-arming would clobber, so re-arm BEFORE saving the cursor.)
+            if getattr(self, "_armed_rows", None) != rows:
+                self._arm()
+            line = self._layout(cols)
+            # save cursor, jump to last row, clear, paint, restore cursor
+            self.term.write(f"\033[s\033[{rows};1H\033[K{line}\033[u")
+            self.term.flush()
+
+    # -- live stopwatch ticker ----------------------------------------------
+    def start_clock(self) -> None:
+        """Start a daemon thread that repaints the bar once a second so the elapsed
+        stopwatch keeps ticking even during long quiet stretches (big downloads /
+        the mkarchiso squash) where no step/sub/phase event fires a draw(). No-op on
+        a non-TTY (the clock only lives in the pinned line, which non-TTY never paints)
+        or if already running."""
+        if not self.tty or self._clock_thread is not None:
+            return
+
+        def tick() -> None:
+            # wait() returns True when stopped -> exit; False on the 1s timeout -> paint.
+            while not self._clock_stop.wait(1.0):
+                try:
+                    self.draw()
+                except Exception:
+                    # A transient terminal write error must never take down the build.
+                    pass
+
+        self._clock_thread = threading.Thread(target=tick, name="progress-clock", daemon=True)
+        self._clock_thread.start()
+
+    def stop_clock(self) -> None:
+        """Stop the stopwatch ticker (idempotent). Called from teardown so no thread
+        keeps painting after the bar is unpinned."""
+        self._clock_stop.set()
+        t = self._clock_thread
+        if t is not None:
+            t.join(timeout=2.0)
+            self._clock_thread = None
 
     def init(self) -> None:
         if self.tty:
             self._arm()
             self.draw()
+            self.start_clock()  # begin ticking the elapsed-time stopwatch
 
     # -- step / sub ----------------------------------------------------------
     def step(self, label: str) -> None:
@@ -205,6 +283,7 @@ class ProgressBar:
     # -- teardown ------------------------------------------------------------
     def finalize(self) -> None:
         """Print a permanent full bar as a scrolled line (the 'done' state)."""
+        self.stop_clock()  # freeze the stopwatch before painting the final line
         self.subfrac = 1000
         if self.tty:
             # The final █/░ bar is bar glyphs -> terminal only (never the log).
@@ -226,6 +305,7 @@ class ProgressBar:
 
     def cleanup(self) -> None:
         """Restore the terminal on any exit (unpin scroll region, clear bar line)."""
+        self.stop_clock()  # no ticker thread may paint after teardown
         if self.tty:
             try:
                 self.term.write("\r\033[K\033[r\033[0m")

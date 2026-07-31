@@ -55,6 +55,11 @@ mkdir -p "$LOGDIR"
 
 # Stopwatch: format a whole-second duration as e.g. "1h 04m 09s" / "7m 32s" / "12s".
 # Used at the very end to report how long the compile took, on success AND failure.
+# The SAME elapsed time also ticks LIVE during the build: _COMPILE_START (set below,
+# before the PTY re-exec) is exported through it, and the Python progress bar
+# (azarch.progress.ProgressBar) reads it to paint a once-a-second stopwatch inside
+# the pinned bar -- so the duration is visible AS IT GROWS, not only at the end.
+# This bash helper mirrors azarch.progress.format_clock so both render identically.
 _format_duration() {
     local secs=$1 h m s
     h=$(( secs / 3600 )); m=$(( (secs % 3600) / 60 )); s=$(( secs % 60 ))

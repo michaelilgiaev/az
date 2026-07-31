@@ -33,6 +33,17 @@ def steps_log(tmp_path, monkeypatch):
     return p
 
 
+@pytest.fixture(autouse=True)
+def frozen_clock(monkeypatch):
+    """Freeze the live stopwatch to a fixed elapsed value so _layout's width math is
+    deterministic. The bar reads _COMPILE_START from the env and computes elapsed as
+    time.time() - start_epoch; pin start_epoch to 1000 and time.time() to 1000 so the
+    stopwatch always renders "[0s] " (5 visible cols) in these unit tests. Individual
+    tests that assert on longer clock strings advance time.time() themselves."""
+    monkeypatch.setenv("_COMPILE_START", "1000")
+    monkeypatch.setattr(progress.time, "time", lambda: 1000.0)
+
+
 def make_bar(steps_log, weights, tty=False):
     """Construct a bar with STEPS_LOG already redirected (see the steps_log fixture)."""
     return ProgressBar(weights, tty=tty)
@@ -62,16 +73,18 @@ def test_init_starts_at_zero(steps_log):
 
 def test_layout_bar_fill_at_80cols(steps_log):
     # done_weight=5 of total_weight=10 -> exactly 50%. At cols=80 the pct field is
-    # "  50% " (6 cols), the bar gets 45% of the remaining 74 -> 33 cells, and
-    # 50% of 33 rounds down to 16 filled / 17 empty.
+    # "  50% " (6 cols) and the live stopwatch field is "[0s] " (5 cols) -> 11 cols
+    # reserved. The bar gets 45% of the remaining 69 -> 31 cells, and 50% of 31
+    # rounds down to 15 filled / 16 empty.
     bar = make_bar(steps_log, [0, 2, 3, 5])
     bar.done_weight = 5
     bar.cur_weight = 0
     bar.subfrac = 0
     out = bar._layout(80)
-    assert out.count("█") == 16   # filled block
-    assert out.count("░") == 17   # light shade
+    assert out.count("█") == 15   # filled block
+    assert out.count("░") == 16   # light shade
     assert " 50% " in out
+    assert "[0s] " in out          # live stopwatch field present
 
 
 def test_layout_percent_string_is_three_wide(steps_log):
@@ -290,3 +303,93 @@ def test_non_tty_draw_and_init_noop(steps_log, monkeypatch):
     bar.init()
     bar.draw()
     assert fake.getvalue() == ""
+
+
+# --- live stopwatch --------------------------------------------------------
+
+def test_format_clock_matches_compile_sh_style():
+    # format_clock must render the SAME way compile.sh's _format_duration does, so
+    # the live ticking clock and the final "[time] Compile finished in ..." line
+    # agree: seconds-only, m+ss, and h+mm+ss with zero-padded minor fields.
+    assert progress.format_clock(0) == "0s"
+    assert progress.format_clock(9) == "9s"
+    assert progress.format_clock(12) == "12s"
+    assert progress.format_clock(60) == "1m 00s"
+    assert progress.format_clock(452) == "7m 32s"
+    assert progress.format_clock(3600) == "1h 00m 00s"
+    assert progress.format_clock(3849) == "1h 04m 09s"
+    # Negative/garbage clamps to 0s rather than printing a negative duration.
+    assert progress.format_clock(-5) == "0s"
+
+
+def test_start_epoch_read_from_compile_start_env(steps_log, monkeypatch):
+    # The bar seeds its stopwatch from _COMPILE_START (exported by compile.sh through
+    # the PTY re-exec) so its elapsed time lines up with the shell's final report.
+    monkeypatch.setenv("_COMPILE_START", "1234567")
+    bar = make_bar(steps_log, [0, 10])
+    assert bar.start_epoch == 1234567
+
+
+def test_start_epoch_falls_back_to_now_when_unset(steps_log, monkeypatch):
+    # Running build.py directly (no shim) leaves _COMPILE_START unset; the bar must
+    # fall back to the current time (frozen to 1000.0 by the frozen_clock fixture),
+    # not crash or render a garbage clock.
+    monkeypatch.delenv("_COMPILE_START", raising=False)
+    bar = make_bar(steps_log, [0, 10])
+    assert bar.start_epoch == 1000
+
+
+def test_layout_shows_live_stopwatch_field(steps_log, monkeypatch):
+    # The pinned bar carries the elapsed time as a "[...]" field. With start_epoch at
+    # 1000 and time advanced to 1000+452, it must read "[7m 32s]".
+    monkeypatch.setenv("_COMPILE_START", "1000")
+    bar = make_bar(steps_log, [0, 10])
+    monkeypatch.setattr(progress.time, "time", lambda: 1000.0 + 452)
+    out = bar._layout(80)
+    assert "[7m 32s]" in out
+
+
+def test_layout_stopwatch_advances_between_draws(steps_log, monkeypatch):
+    # The clock ticks: two _layout() calls at different wall-clock times render
+    # different elapsed values (this is what makes it "progress as it goes").
+    monkeypatch.setenv("_COMPILE_START", "1000")
+    bar = make_bar(steps_log, [0, 10])
+    monkeypatch.setattr(progress.time, "time", lambda: 1005.0)
+    first = bar._layout(80)
+    monkeypatch.setattr(progress.time, "time", lambda: 1075.0)
+    second = bar._layout(80)
+    assert "[5s]" in first
+    assert "[1m 15s]" in second
+    assert first != second
+
+
+def test_layout_visible_width_holds_with_wide_clock(steps_log, monkeypatch):
+    # A wide stopwatch ("[1h 04m 09s] ") must still be budgeted so the printable
+    # width never exceeds cols (otherwise the bar wraps and unsticks the region).
+    monkeypatch.setenv("_COMPILE_START", "1000")
+    bar = make_bar(steps_log, [0, 10])
+    bar.cur_weight = 10
+    bar.subfrac = 500
+    bar.label = "a long step label that competes with a wide clock for the row"
+    monkeypatch.setattr(progress.time, "time", lambda: 1000.0 + 3849)
+    out = bar._layout(60)
+    import re
+    visible = re.sub(r"\033\[[0-9;]*m", "", out)
+    assert "[1h 04m 09s]" in out
+    assert len(visible) <= 60
+
+
+def test_start_clock_noop_on_non_tty(steps_log):
+    # The ticker only exists to repaint the pinned line, which non-TTY never draws;
+    # start_clock() must be a no-op there (no thread spawned).
+    bar = make_bar(steps_log, [0, 10], tty=False)
+    bar.start_clock()
+    assert bar._clock_thread is None
+
+
+def test_stop_clock_is_idempotent(steps_log):
+    # teardown()/finalize() may both call stop_clock(); it must be safe to call when
+    # no ticker was ever started and to call twice.
+    bar = make_bar(steps_log, [0, 10], tty=False)
+    bar.stop_clock()
+    bar.stop_clock()   # must not raise
