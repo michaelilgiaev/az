@@ -24,6 +24,41 @@ from __future__ import annotations
 # the account being removed.
 LIVE_USER = "main"
 
+# The live session ships an "Azarch Installer" launcher ON the Desktop and a Plasma
+# autostart entry that opens Calamares once at login. The OFFLINE install copies the
+# live /home/main VERBATIM via unpackfs (and reuseHome:true keeps it), so WITHOUT the
+# cleanup below the INSTALLED system would still carry the installer icon on its
+# Desktop AND re-launch the installer on every login -- both wrong on a system that is
+# already installed. This shellprocess step (target chroot, post-unpackfs) deletes
+# both artifacts from the live user's reused home and from /etc/skel (so any later-
+# created user is clean too). `rm -f` is a no-op if a path is absent. The system-wide
+# application-menu launcher (/usr/share/applications/azarch-install.desktop) is LEFT
+# in place: re-running the installer from the menu on an installed system is harmless
+# and the user only asked for the DESKTOP icon (and the auto-launch) to be gone.
+INSTALLER_DESKTOP_LAUNCHER = f"/home/{LIVE_USER}/Desktop/azarch-install.desktop"
+INSTALLER_AUTOSTART_ENTRY = (
+    f"/home/{LIVE_USER}/.config/autostart/azarch-install.desktop"
+)
+INSTALLER_SKEL_LAUNCHER = "/etc/skel/Desktop/azarch-install.desktop"
+INSTALLER_SKEL_AUTOSTART = "/etc/skel/.config/autostart/azarch-install.desktop"
+
+
+def _installer_cleanup_command() -> str:
+    """A single shellprocess command (target chroot) that removes the live-session
+    installer artifacts so the INSTALLED system has no "Azarch Installer" Desktop icon
+    and does not auto-launch Calamares at login. Deletes the Desktop launcher + the
+    Plasma autostart entry from the reused /home/main AND from /etc/skel. `set -e` with
+    plain `rm -f` (a no-op on an absent path) -- there is nothing here that can
+    legitimately fail, and NO `$` (Calamares macro-expands $WORD and aborts on an
+    unknown one -- see _mkinitcpio_reset_command), so only fixed paths are used."""
+    return (
+        "set -e\n"
+        f"rm -f {INSTALLER_DESKTOP_LAUNCHER}\n"
+        f"rm -f {INSTALLER_AUTOSTART_ENTRY}\n"
+        f"rm -f {INSTALLER_SKEL_LAUNCHER}\n"
+        f"rm -f {INSTALLER_SKEL_AUTOSTART}"
+    )
+
 # The OFFLINE install copies the live archiso rootfs verbatim via unpackfs, which
 # leaves the target's /boot and mkinitcpio configuration in an ISO-only state that makes
 # Calamares' `initcpio` step fail. (That step runs `mkinitcpio -p linux` -- the
@@ -328,20 +363,31 @@ def shellprocess_conf() -> str:
     would leave /boot empty or the archiso preset in place and the install would die
     obscurely later at `initcpio`, so it should stop here with a clear failure.
 
+    3. Remove the live-session installer artifacts (the Desktop "Azarch Installer"
+       launcher + the Plasma autostart entry, from the reused /home/main and from
+       /etc/skel) so the INSTALLED system has no installer icon on its Desktop and
+       does not re-open Calamares at every login. This is load-bearing for the
+       "installer shouldn't be on the Desktop after install" request; `rm -f` is a
+       no-op on an absent path, so it never aborts.
+
     Ordering note: shellprocess sits after unpackfs and before both `users` and
-    `initcpiocfg`/`initcpio` in settings.conf's exec sequence, so both fixups land
-    on the unpacked target before the modules that depend on them run."""
+    `initcpiocfg`/`initcpio` in settings.conf's exec sequence, so all three fixups
+    land on the unpacked target before the modules that depend on them run."""
     reset_cmd = _mkinitcpio_reset_command()
-    # Indent the multi-line reset command to sit under the YAML "- |" block scalar.
+    cleanup_cmd = _installer_cleanup_command()
+    # Indent each multi-line command to sit under its YAML "- |" block scalar.
     reset_block = "\n".join("        " + line for line in reset_cmd.splitlines())
+    cleanup_block = "\n".join("        " + line for line in cleanup_cmd.splitlines())
     return f"""\
 # Post-unpackfs target fixups for the OFFLINE install (runs in the target chroot):
 #   1. remove the live-ISO `main` account so the `users` module can recreate it
-#      with the user-chosen password (/home/main is preserved), and
+#      with the user-chosen password (/home/main is preserved),
 #   2. make the initramfs buildable: reinstate /boot/vmlinuz-<pkgbase> (mkarchiso
 #      emptied /boot) and replace the copied-in *archiso* mkinitcpio preset with the
 #      stock `linux` preset (+ drop archiso.conf), so `initcpio`'s `mkinitcpio -p
-#      linux` produces a bootable installed-system initramfs instead of failing.
+#      linux` produces a bootable installed-system initramfs instead of failing, and
+#   3. remove the live-session installer artifacts (Desktop launcher + autostart
+#      entry) so the installed system has no installer icon and no auto-launch.
 ---
 dontChroot: false
 timeout: 60
@@ -351,4 +397,6 @@ script:
     - "-groupdel {LIVE_USER}"
     - |
 {reset_block}
+    - |
+{cleanup_block}
 """

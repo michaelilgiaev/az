@@ -27,7 +27,7 @@ jobs:
       - name: Stage only the rendered documentation
         run: |
           set -euo pipefail
-          mkdir -p site/documentation
+          mkdir -p site/documentations
           cp documentations/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg site/documentations/
           cp documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html site/documentations/
 

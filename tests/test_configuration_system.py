@@ -111,15 +111,28 @@ def test_customize_airootfs_sets_default_plasma_wallpaper():
     # never aborts the mkarchiso build.
     s = system.CUSTOMIZE_AIROOTFS
     assert "/usr/share/plasma/wallpapers/org.kde.image/contents/config/main.xml" in s
-    # The default points at the "years" KPackage image (== desktop.WALLPAPER_DEST),
-    # NOT a standalone /usr/share/azarch/wallpaper.png (which would add a duplicate
-    # "wallpaper" tile to the grid).
+    # The default points at the "years" KPackage DIRECTORY (== desktop.WALLPAPER_PACKAGE_DIR),
+    # NOT its inner image file (a file path makes Plasma add a duplicate resolution-
+    # labelled tile) and NOT a standalone /usr/share/azarch/wallpaper.png.
     from azarch.configuration import desktop
-    assert desktop.WALLPAPER_DEST in s
+    assert f'WALLPAPER="{desktop.WALLPAPER_PACKAGE_DIR}"' in s
     assert "/usr/share/azarch/wallpaper.png" not in s
-    # non-fatal + only runs when both files exist
+    # Must NOT reference the inner png for the Plasma default (the duplicate-tile bug).
+    assert 'WALLPAPER="/usr/share/wallpapers/years/contents/images' not in s
+    # non-fatal + only runs when the xml file and the wallpaper DIRECTORY both exist
     assert "|| true" in s
-    assert 'if [ -f "$IMG_MAIN_XML" ] && [ -f "$WALLPAPER" ]; then' in s
+    assert 'if [ -f "$IMG_MAIN_XML" ] && [ -d "$WALLPAPER" ]; then' in s
+
+
+def test_customize_airootfs_removes_notifications_applet_entirely():
+    # The user wants NO notifications on the distro. The plasmoid .so is deleted so
+    # plasmashell cannot load/auto-discover it into any tray. Guarded with `|| true`.
+    s = system.CUSTOMIZE_AIROOTFS
+    assert (
+        "rm -f /usr/lib/qt6/plugins/plasma/applets/org.kde.plasma.notifications.so"
+        in s
+    )
+    assert "rm -rf /usr/share/plasma/plasmoids/org.kde.plasma.notifications" in s
 
 
 def test_customize_airootfs_wallpaper_python_is_valid():

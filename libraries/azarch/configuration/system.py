@@ -94,16 +94,17 @@ chmod 0644 /usr/lib/os-release
 # Set the default Plasma wallpaper by rewriting the org.kde.image plugin's Image
 # default (the fallback Plasma uses when a containment has no explicit image). This
 # is regeneration-proof, unlike a per-user appletsrc Image= seed.
-# WALLPAPER points at the "years" KPackage's own image (== desktop.WALLPAPER_DEST),
-# NOT a standalone image under /usr/share/azarch: a standalone file would make
-# Plasma's wallpaper grid show a third, duplicate "wallpaper" tile alongside the two
-# packages. Using the package image path keeps the grid to exactly "years"/"decades"
+# WALLPAPER points at the "years" KPackage DIRECTORY (== desktop.WALLPAPER_PACKAGE_DIR),
+# NOT its inner image file: Plasma 6's wallpaper grid routes a DIRECTORY to the package
+# model (matched to the existing "years" tile) but routes a FILE path to the loose-
+# image model, which injects it as a THIRD, duplicate tile labelled by the filename
+# ("1672x941"). Using the package dir keeps the grid to exactly "years"/"decades"
 # with "years" as the default. (test_configuration_system pins this equality.)
 IMG_MAIN_XML="/usr/share/plasma/wallpapers/org.kde.image/contents/config/main.xml"
-WALLPAPER="/usr/share/wallpapers/years/contents/images/1672x941.png"
+WALLPAPER="/usr/share/wallpapers/years/"
 # The wallpaper is not build-critical, so a parse surprise must not abort the ISO
-# build: guard the edit with `|| true`.
-if [ -f "$IMG_MAIN_XML" ] && [ -f "$WALLPAPER" ]; then
+# build: guard the edit with `|| true`. `-d "$WALLPAPER"` (a directory now).
+if [ -f "$IMG_MAIN_XML" ] && [ -d "$WALLPAPER" ]; then
     python3 - "$IMG_MAIN_XML" "file://$WALLPAPER" <<'PYEOF' || true
 import re
 import sys
@@ -143,6 +144,17 @@ fi
 # removable package), so it must be deleted here rather than dropped from the
 # manifest. Guarded so a layout change upstream never aborts the build.
 rm -rf /usr/share/wallpapers/Next || true
+
+# Remove the Plasma NOTIFICATIONS applet ENTIRELY -- the distro ships with no
+# notifications ("i straight up dont need notifications on the distro, remove it
+# entirely"). Deleting the plasmoid .so means plasmashell cannot load or
+# auto-discover it into any system tray, so no notification widget can appear. It is
+# bundled inside plasma-workspace (a core package that cannot be dropped from the
+# manifest), so the applet file is deleted here. Guarded with `|| true` so a path
+# change upstream never aborts the ISO build. The `.so` is the loadable applet; the
+# glob also clears any packaged metadata/plasmoid dir if present.
+rm -f /usr/lib/qt6/plugins/plasma/applets/org.kde.plasma.notifications.so || true
+rm -rf /usr/share/plasma/plasmoids/org.kde.plasma.notifications || true
 """
 
 # getty@tty1 autologin override. The releng base autologins ROOT on tty1; the

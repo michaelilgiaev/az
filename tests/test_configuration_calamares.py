@@ -344,6 +344,54 @@ def test_shellprocess_deletes_the_live_user_non_fatally():
     assert "-r " not in joined
 
 
+# --- shellprocess.conf: remove the installer artifacts from the installed system ---
+
+def _installer_cleanup_command(script: list) -> str:
+    """The single script command that removes the Desktop launcher + autostart entry
+    from the installed target. Identified by the Desktop launcher path."""
+    from azarch.configuration import calamares_shellprocess as csp
+    matches = [c for c in script if csp.INSTALLER_DESKTOP_LAUNCHER in c]
+    assert len(matches) == 1, matches
+    return matches[0]
+
+
+def test_shellprocess_removes_installer_from_installed_desktop():
+    # The live session ships an installer launcher on the Desktop and a Plasma
+    # autostart entry; the OFFLINE install copies /home/main verbatim (reuseHome), so
+    # WITHOUT this the installed system would keep the Desktop icon AND re-launch the
+    # installer at every login. This is the "installer shouldn't be on the Desktop
+    # after install" fix. The command must delete the Desktop launcher + the autostart
+    # entry from BOTH the reused /home/main and /etc/skel.
+    from azarch.configuration import calamares_shellprocess as csp
+    d = yaml.safe_load(calamares.shellprocess_conf())
+    cmd = _installer_cleanup_command(d["script"])
+    assert f"rm -f {csp.INSTALLER_DESKTOP_LAUNCHER}" in cmd
+    assert f"rm -f {csp.INSTALLER_AUTOSTART_ENTRY}" in cmd
+    assert f"rm -f {csp.INSTALLER_SKEL_LAUNCHER}" in cmd
+    assert f"rm -f {csp.INSTALLER_SKEL_AUTOSTART}" in cmd
+    # It targets the live user's home Desktop and the autostart dir specifically.
+    assert csp.INSTALLER_DESKTOP_LAUNCHER == "/home/main/Desktop/azarch-install.desktop"
+    assert csp.INSTALLER_AUTOSTART_ENTRY == (
+        "/home/main/.config/autostart/azarch-install.desktop"
+    )
+    # The system-wide MENU launcher is intentionally LEFT in place (re-running the
+    # installer from the menu is harmless; only the Desktop icon + auto-launch go).
+    assert "/usr/share/applications/azarch-install.desktop" not in cmd
+
+
+def test_installer_cleanup_command_uses_no_shell_variables_and_rm_f():
+    # Same no-`$` rule as the other shellprocess commands (Calamares macro-expansion).
+    # rm -f so an absent path is a no-op and never aborts under set -e.
+    from azarch.configuration import calamares_shellprocess as csp
+    cmd = csp._installer_cleanup_command()
+    assert "$" not in cmd
+    assert cmd.startswith("set -e")
+    # Every removal uses rm -f (no interactive/failing bare rm).
+    for line in cmd.splitlines():
+        if line.startswith("rm"):
+            assert line.startswith("rm -f "), line
+
+
 # --- shellprocess.conf: the archiso mkinitcpio fix (kernel + preset) --------
 
 def _mkinitcpio_reset_command(script: list) -> str:

@@ -52,24 +52,41 @@ WALLPAPER_PACKAGES = [
     {"id": "decades", "asset": "wallpapers/decades.png"},
 ]
 
-# The DEFAULT wallpaper baked into the ISO -- the "years" image. It points at the
-# "years" KPackAGE's own image file (NOT a separate /usr/share/azarch/wallpaper.png).
-# Why: Plasma's wallpaper grid lists, in addition to the installed KPackages, the
-# CURRENT image as its own tile labelled by the image's filename. Pointing the
-# default at a standalone `wallpaper.png` therefore made the grid show THREE tiles
-# -- "years", "decades", and a duplicate "wallpaper" (the same image as years). By
-# pointing the default at the years package's image path instead, Plasma recognises
-# it as the existing "years" tile, so the grid shows exactly the TWO packages with
-# "years" pre-selected. The ~/.xinitrc feh pre-paint + appletsrc Image= + the
-# org.kde.image main.xml default all reference this same path.
+# The DEFAULT wallpaper baked into the ISO -- the "years" image.
+#
+# THE DUPLICATE-TILE BUG (see ISSUE/ screenshot: a third selected tile labelled by
+# the image RESOLUTION "1672x941" appeared next to "years" and "decades"):
+# Plasma 6's org.kde.image grid is a QConcatenateTablesProxyModel over TWO source
+# models -- a package model (dirs under /usr/share/wallpapers) and a loose-image
+# model (files). ImageProxyModel routes the CONFIGURED Image= by filesystem type:
+# a DIRECTORY is matched against the package model (-> the existing "years" tile),
+# but a FILE PATH is handed to the loose-image model, which -- when the path matches
+# no existing tile -- force-injects it as its OWN tile labelled by the file's
+# basename. Because the previous default pointed Image= at the package's INNER png
+# (.../years/contents/images/1672x941.png), Plasma added that loose "1672x941" tile:
+# the duplicate. (The earlier code comment claimed the inner-png path would be
+# "recognised as the years tile" -- the Plasma source proves the opposite; only a
+# DIRECTORY path matches a package.)
+#
+# FIX: point every Plasma `Image=` (appletsrc + the org.kde.image main.xml default in
+# system.CUSTOMIZE_AIROOTFS) at the package DIRECTORY (trailing slash), so Plasma
+# selects the "years" package tile and injects no loose tile -> the grid shows
+# exactly "years" (selected) and "decades". feh needs a real FILE, so the ~/.xinitrc
+# pre-paint keeps the inner-png path; hence the two separate constants below.
 WALLPAPER_DEFAULT_ID = "years"
-WALLPAPER_DEST = (
+# The package DIRECTORY -- what Plasma's Image= must point at to select the package
+# tile without adding a duplicate loose tile (trailing slash: KPackage path()s are
+# slash-normalised, and PackageListModel::indexOf matches the normalised dir).
+WALLPAPER_PACKAGE_DIR = f"{WALLPAPERS_SYSTEM_DIR}/{WALLPAPER_DEFAULT_ID}/"
+# The actual image FILE inside that package -- what feh --bg-fill paints (feh cannot
+# take a package dir). Same pixels Plasma shows, so the pre-paint is flash-free.
+WALLPAPER_IMAGE_FILE = (
     f"{WALLPAPERS_SYSTEM_DIR}/{WALLPAPER_DEFAULT_ID}"
     f"/contents/images/{WALLPAPER_IMAGE_RES}.png"
 )
-# The asset copied to WALLPAPER_DEST is the same "years" image the package ships;
-# steps.py already writes that package image, so the default resolves to a file that
-# exists without a second standalone copy.
+# The asset copied to WALLPAPER_IMAGE_FILE is the same "years" image the package
+# ships; steps.py already writes that package image, so the default resolves to a
+# file that exists without a second standalone copy.
 WALLPAPER_ASSET = "wallpapers/years.png"
 
 
@@ -136,7 +153,7 @@ export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 # wallpaper, not a solid color. Plasma repaints the same image over it moments
 # later (identical pixels -> no visible transition, no cyan/black flash). feh is
 # shipped in the manifest; xsetroot cannot display a PNG, only solid colors.
-[ -x /usr/bin/feh ] && feh --no-fehbg --bg-fill '""" + WALLPAPER_DEST + """'
+[ -x /usr/bin/feh ] && feh --no-fehbg --bg-fill '""" + WALLPAPER_IMAGE_FILE + """'
 
 # The one env var the Arch Wiki has you set for a startx Plasma session.
 export DESKTOP_SESSION=plasma
@@ -193,37 +210,129 @@ PANEL_LAUNCHERS = [
 # ships with Breeze.
 MENU_ICON = "application-menu"
 
+# Kickoff footer power buttons, as session-action ids (systemFavorites). The user
+# asked for shutdown/restart/sleep with SLEEP replacing logout. The ids are verified
+# from powerdevil/plasma-desktop SystemModel: "suspend" == Sleep, "reboot" == Restart,
+# "shutdown" == Shut Down (kickoff labels them exactly that with showActionButtonCaptions).
+# NOTE: kickoff renders these in a FIXED order (Suspend, Reboot, Shutdown), not the
+# order of this list -- which happens to be the desired left-to-right Sleep/Restart/
+# Shut Down anyway; the list's job is only to pick WHICH three appear (no logout).
+KICKOFF_SYSTEM_FAVORITES = ["suspend", "reboot", "shutdown"]
+
+# The status widgets on the RIGHT of the panel, placed as STANDALONE panel applets
+# (NOT inside an org.kde.plasma.systemtray container). Why standalone instead of a
+# tray: the user wanted the internet/audio/etc icons visible but with NO overflow "^"
+# expand-arrow AND with the notifications widget gone ENTIRELY. A systemtray fights
+# both goals -- it AUTO-DISCOVERS every installed tray plasmoid on first login (so it
+# re-adds notifications, plus a camera/virtual-keyboard the user never asked for) and
+# it shows the "^" arrow whenever any item is passive. Placing each wanted widget as
+# its own panel applet sidesteps all of that: exactly these icons, always visible, no
+# arrow, no auto-discovered extras (verified live in a booted VM). Left-to-right on
+# the right side (after an expanding spacer), ending at the clock:
+#   keyboard-layout, device-notifier, brightness, network, volume.
+# Plugin ids verified against plasma-nm/plasma-pa/plasma-workspace/powerdevil.
+# The KEYBOARD-LAYOUT indicator is the LEFTMOST of these (the user asked for it "to
+# the left of all the icons on the right"); it shows "US"/"HE" from the two configured
+# layouts (see kxkbrc()) and clicking it cycles them. Clipboard and battery/power were
+# deliberately dropped at the user's request (no clipboard history; power is reached
+# from the application menu).
+PANEL_STATUS_APPLETS = [
+    "org.kde.plasma.keyboardlayout",      # US/HE layout indicator (leftmost)
+    "org.kde.plasma.devicenotifier",      # removable devices
+    "org.kde.plasma.brightness",          # powerdevil -- brightness
+    "org.kde.plasma.networkmanagement",   # plasma-nm  -- internet
+    "org.kde.plasma.volume",              # plasma-pa  -- audio
+]
+# The notifications plasmoid -- the "notification thingy" the user wants gone from the
+# WHOLE distro. It is NOT placed on the panel here, and (because it would otherwise be
+# auto-discoverable by any systemtray) its plasmoid .so is DELETED from the image
+# entirely in configuration/system.CUSTOMIZE_AIROOTFS. Named here so a test can pin
+# both that it is not a panel applet and that system.py removes it.
+NOTIFICATIONS_APPLET_ID = "org.kde.plasma.notifications"
+
+# The two keyboard layouts the indicator switches between: US English and Hebrew.
+# xkb layout codes -> display labels shown in the applet. Alt+Shift toggles them, and
+# clicking the panel indicator cycles them. Shipped via ~/.config/kxkbrc; the keyboard
+# KDED module reads it at session start, so BOTH layouts are active from first login
+# (verified live -- switching updates the indicator US<->HE).
+KEYBOARD_LAYOUTS = [
+    {"code": "us", "label": "US"},   # English
+    {"code": "il", "label": "HE"},   # Hebrew (xkb layout "il")
+]
+KEYBOARD_TOGGLE = "grp:alt_shift_toggle"
+
+
+# Fixed applet ids in the panel. 1 = menu, 2 = task manager, 3 = expanding spacer,
+# then the standalone status applets (PANEL_STATUS_APPLETS) at 4.., then the digital
+# clock last. Computed so a change to PANEL_STATUS_APPLETS keeps the clock id / order
+# correct.
+_MENU_ID = 1
+_TASKS_ID = 2
+_SPACER_ID = 3
+_STATUS_ID_BASE = 4
+
 
 def plasma_appletsrc() -> str:
     """The full Plasma desktop + panel layout for a fresh profile: the desktop
-    containment (with the wallpaper seed) AND a bottom panel carrying, left to
-    right, the application menu (Kicker), a pinned task manager (LibreWolf, Kitty,
-    Dolphin), a spacer, and a digital clock.
+    containment (with the wallpaper seed) AND a bottom panel carrying, left to right:
+    the application menu (Kickoff), a pinned task manager (LibreWolf, Kitty, Dolphin),
+    an expanding spacer, then the STANDALONE status applets (keyboard-layout,
+    device-notifier, brightness, network, volume), and finally a digital clock.
+
+    NO system tray container. The status widgets are placed as individual panel
+    applets on purpose (see PANEL_STATUS_APPLETS): the user wanted these icons visible
+    but with NO overflow "^" expand-arrow and NO notifications widget at all. A
+    systemtray would auto-discover extra plasmoids (notifications, camera, virtual
+    keyboard) and show the "^" arrow for passive items; standalone applets give
+    exactly this set, always visible, no arrow (verified live in a booted VM).
 
     Deliberate OMISSIONS (the user's panel requests):
-      * NO org.kde.plasma.systemtray  -> no "Status and Notifications" tray/arrow.
-      * NO org.kde.plasma.showdesktop -> no "Peek at Desktop" button.
-    An applet is present ONLY if it appears in a [Containments][2][Applets][N] block,
-    so omitting these blocks IS how they are removed (there is no hide key).
+      * NO org.kde.plasma.showdesktop / minimizeall -> no "Peek at Desktop" button.
+      * NO org.kde.plasma.notifications anywhere (also DELETED from the image in
+        system.CUSTOMIZE_AIROOTFS) -> notifications gone from the whole distro.
+      * NO clipboard and NO battery/power applet (power is reached from the menu).
 
-    Application menu = org.kde.plasma.kicker (NOT kickoff): kicker has no user/avatar
-    header and can flatten categories (limitDepth) into a near-flat alphabetical app
-    list with a search field at the top -- kickoff cannot hide its Favorites/Places/
-    Sessions tabs, its category tree, or its user header at all. See kicker config
-    below for the flat-list + apps-only-search keys.
+    Application menu = org.kde.plasma.kickoff (NOT kicker): the user asked for the
+    shutdown/restart/sleep buttons on the RIGHT with TEXT LABELS and SLEEP instead of
+    logout. That footer -- right-aligned buttons rendered TextBesideIcon -- is a
+    kickoff feature (showActionButtonCaptions=true, primaryActions=0 Power,
+    systemFavorites=suspend,reboot,shutdown -> "Sleep / Restart / Shut Down"); kicker
+    can only draw icon-only power buttons on the LEFT and has no caption key at all.
+    For "no categories, just the applications" we use kickoff's List view
+    (applicationsDisplay=1) + alphaSort, whose "All Applications" entry is a flat
+    A-Z app list (kickoff hardcodes flat:true, so there is no category drill-down).
 
-    The wallpaper still lives in the NESTED [Containments][1][Wallpaper][org.kde.image]
-    [General] Image= group (a common mistake is the containment's own [General]).
-    This appletsrc seed is a BELT; the regeneration-proof wallpaper default is the
-    org.kde.image main.xml rewrite in configuration/system.CUSTOMIZE_AIROOTFS.
+    The wallpaper lives in the NESTED [Containments][1][Wallpaper][org.kde.image]
+    [General] Image= group (a common mistake is the containment's own [General]) and
+    points at the package DIRECTORY (WALLPAPER_PACKAGE_DIR), not the inner png, so
+    Plasma matches the existing "years" tile instead of injecting a duplicate loose
+    tile (see the WALLPAPER_* note above). This appletsrc seed is a BELT; the
+    regeneration-proof wallpaper default is the org.kde.image main.xml rewrite in
+    configuration/system.CUSTOMIZE_AIROOTFS.
 
     Written to BOTH the live `main` home and /etc/skel so the live and installed
     users get the same desktop. plasmashell MAY regenerate this on first login with
-    its own ids (documented caveat), so the panel-pin/theme also live in their own
-    regeneration-tolerant files (plasmashellrc, kdeglobals)."""
+    its own ids (documented caveat), so the panel-pin/thickness/theme also live in
+    their own regeneration-tolerant files (plasmashellrc, kdeglobals)."""
     d = DESKTOP_CONTAINMENT_ID
     p = PANEL_CONTAINMENT_ID
     launchers = ",".join(PANEL_LAUNCHERS)
+    system_favorites = ",".join(KICKOFF_SYSTEM_FAVORITES)
+    # Status applets get ids 4, 5, ...; the clock is the id right after the last one.
+    status_ids = [_STATUS_ID_BASE + i for i in range(len(PANEL_STATUS_APPLETS))]
+    clock_id = _STATUS_ID_BASE + len(PANEL_STATUS_APPLETS)
+    applet_order = ";".join(
+        str(i) for i in [_MENU_ID, _TASKS_ID, _SPACER_ID, *status_ids, clock_id]
+    )
+    # One block per standalone status applet (keyboard-layout, device-notifier, ...).
+    status_blocks = "\n".join(
+        f"""\
+[Containments][{p}][Applets][{status_ids[i]}]
+immutability=1
+plugin={item}
+"""
+        for i, item in enumerate(PANEL_STATUS_APPLETS)
+    )
     return f"""\
 [Containments][{d}]
 activityId=
@@ -235,7 +344,7 @@ plugin=org.kde.desktopcontainment
 wallpaperplugin=org.kde.image
 
 [Containments][{d}][Wallpaper][org.kde.image][General]
-Image=file://{WALLPAPER_DEST}
+Image=file://{WALLPAPER_PACKAGE_DIR}
 
 [Containments][{p}]
 activityId=
@@ -246,51 +355,86 @@ location=4
 plugin=org.kde.panel
 
 [Containments][{p}][General]
-AppletOrder=1;2;3
+AppletOrder={applet_order}
 
-# Application menu (Kicker): generic icon, flattened categories, alphabetical, and
-# search restricted to installed applications (useExtraRunners=false).
-[Containments][{p}][Applets][1]
+# 1. Application menu (Kickoff): generic icon, flat alphabetical app List, footer
+# power buttons labelled on the right = Sleep / Restart / Shut Down (sleep replaces
+# logout).
+[Containments][{p}][Applets][{_MENU_ID}]
 immutability=1
-plugin=org.kde.plasma.kicker
+plugin=org.kde.plasma.kickoff
 
-[Containments][{p}][Applets][1][Configuration][General]
+[Containments][{p}][Applets][{_MENU_ID}][Configuration][General]
 icon={MENU_ICON}
-useCustomButtonImage=false
-limitDepth=true
+applicationsDisplay=1
+favoritesDisplay=1
 alphaSort=true
-appNameFormat=0
+primaryActions=0
+systemFavorites={system_favorites}
+showActionButtonCaptions=true
 showRecentApps=false
 showRecentDocs=false
-showRecentContacts=false
-favoritesPortedToKAstats=true
-useExtraRunners=false
 
-# Pinned task manager: LibreWolf, Kitty, Dolphin.
-[Containments][{p}][Applets][2]
+# 2. Pinned task manager: LibreWolf, Kitty, Dolphin.
+[Containments][{p}][Applets][{_TASKS_ID}]
 immutability=1
 plugin=org.kde.plasma.icontasks
 
-[Containments][{p}][Applets][2][Configuration][General]
+[Containments][{p}][Applets][{_TASKS_ID}][Configuration][General]
 launchers={launchers}
 
+# 3. Expanding spacer -- pushes the status applets + clock to the right edge.
+[Containments][{p}][Applets][{_SPACER_ID}]
+immutability=1
+plugin=org.kde.plasma.panelspacer
+
+[Containments][{p}][Applets][{_SPACER_ID}][Configuration][General]
+expanding=true
+
+# Standalone status applets (no system tray, no "^" arrow): keyboard-layout (US/HE)
+# is the leftmost, then device-notifier, brightness, network, volume.
+{status_blocks}
 # Digital clock at the right end.
-[Containments][{p}][Applets][3]
+[Containments][{p}][Applets][{clock_id}]
 immutability=1
 plugin=org.kde.plasma.digitalclock
 """
 
 
+# Bottom panel height in pixels. Plasma 6's default panel is 44 px; the user asked to
+# make the bottom bar bigger (an initial 2x/88 looked too tall in the VM, so the
+# settled-on value is 55 -- a clearly-larger-but-not-gigantic bar, verified live).
+#
+# CRUCIAL Plasma-6 quirk (verified against plasma-workspace shell/panelview.cpp AND
+# empirically in a booted VM): the panel HEIGHT key `thickness` is read from the
+# SCREEN-INDEPENDENT nested group [PlasmaViews][Panel <id>][Defaults] -- NOT the flat
+# [PlasmaViews][Panel <id>] group. `floating` IS read from the flat group. Writing
+# thickness in the flat group (the obvious place) is SILENTLY IGNORED -- the panel
+# stays 44 px. So floating goes flat, thickness goes under [Defaults].
+PANEL_DEFAULT_THICKNESS = 44
+PANEL_THICKNESS = 55   # taller than the 44 px default, verified in a booted VM
+
+
 # --- 3b. ~/.config/plasmashellrc (panel pinned, not floating) ---------------
 def plasmashellrc() -> str:
-    """Pin the bottom panel (NOT floating). The float/pin toggle is NOT in
-    appletsrc -- plasma-workspace writes it to plasmashellrc under
-    [PlasmaViews][Panel <containment-id>] as an int (0 = pinned, 1 = floating).
-    The Panel id MUST match PANEL_CONTAINMENT_ID in appletsrc or the pin is
-    silently ignored. Shipped to the live home and /etc/skel."""
+    """Pin the bottom panel (NOT floating) and set its HEIGHT. Neither is in appletsrc
+    -- plasma-workspace writes them to plasmashellrc under [PlasmaViews][Panel <id>]:
+
+      * `floating` (0 = pinned, 1 = floating) in the FLAT [PlasmaViews][Panel <id>] group.
+      * `thickness` (panel height px) in the NESTED [PlasmaViews][Panel <id>][Defaults]
+        subgroup. Plasma 6's PanelView::restore() reads thickness from configDefaults()
+        == the "Defaults" subgroup; a flat `thickness=` is silently ignored (verified
+        live: the panel stayed 44 px until the key moved under [Defaults]).
+
+    The Panel id MUST match PANEL_CONTAINMENT_ID in appletsrc or the keys are ignored.
+    thickness=55 makes the bottom bar taller than the 44 px default, per the user's
+    "make it bigger" request. Shipped to the live home and /etc/skel."""
     return f"""\
 [PlasmaViews][Panel {PANEL_CONTAINMENT_ID}]
 floating=0
+
+[PlasmaViews][Panel {PANEL_CONTAINMENT_ID}][Defaults]
+thickness={PANEL_THICKNESS}
 """
 
 
@@ -333,6 +477,34 @@ def krunnerrc() -> str:
     lines = ["[Plugins]", "krunner_servicesEnabled=true"]
     lines += [f"{name}Enabled=false" for name in disabled]
     return "\n".join(lines) + "\n"
+
+
+# --- 3e. ~/.config/kxkbrc (keyboard layouts: US + Hebrew) -------------------
+def kxkbrc() -> str:
+    """Configure the two keyboard layouts the panel's keyboard-layout applet switches
+    between: US English and Hebrew (xkb "us" + "il"), shown as "US"/"HE". The Plasma
+    keyboard KDED module reads this at session start, so BOTH layouts are active from
+    first login and the panel indicator + Alt+Shift toggle (and clicking the indicator)
+    switch between them (verified live: switching updates the indicator US<->HE).
+
+    Keys (Plasma keyboard KCM / kxkbrc [Layout] group):
+      * Use=true              -- enable custom layout configuration.
+      * LayoutList=us,il      -- the xkb layout codes, in order (us first == default).
+      * DisplayNames=US,HE    -- the labels the applet shows for each layout.
+      * Options=grp:alt_shift_toggle -- Alt+Shift cycles layouts.
+      * SwitchMode=Global     -- one active layout for the whole session (not per-window).
+    Shipped to the live home and /etc/skel."""
+    codes = ",".join(l["code"] for l in KEYBOARD_LAYOUTS)
+    labels = ",".join(l["label"] for l in KEYBOARD_LAYOUTS)
+    return f"""\
+[Layout]
+Use=true
+LayoutList={codes}
+DisplayNames={labels}
+Options={KEYBOARD_TOGGLE}
+ResetOldOptions=true
+SwitchMode=Global
+"""
 
 
 # --- 4. ~/.config/ksplashrc -------------------------------------------------
@@ -399,15 +571,22 @@ def desktop_installer_launcher() -> str:
     Desktop, so the installer is one obvious icon away even after the autostart
     window is closed. Uses the same privileged wrapper and the "Az'" app icon.
 
-    It is written 0o755 (executable) AND carries the KDE trust marker below so
-    Plasma launches it directly instead of showing the "This .desktop file was
-    downloaded/is not trusted -- Continue/Cancel?" security prompt on first click:
-      * mode 0o755 (see PLAN owner/mode) -- KDE treats a world-executable local
-        .desktop as launchable, and
-      * X-KDE-AuthorizeExecute / the file being under the user's own Desktop with
-        the exec bit is what suppresses the untrusted-launcher dialog.
-    (On Plasma the exec bit is the load-bearing part; the launcher is generated by
-    us on the ISO, not downloaded, so this is safe.)"""
+    TRUST (no warning badge, no launch prompt): KDE Plasma paints an
+    "emblem-important" WARNING BADGE over a Desktop .desktop launcher -- and prompts
+    before running it -- whenever KDesktopFile::isAuthorizedDesktopFile() is false,
+    which for a user-owned Exec= launcher means "not executable". The badge is what
+    the user saw ("weird warning icon that disappears once you open the installer" --
+    it vanishes because the first launch marks the file trusted). The launcher must
+    therefore ship EXECUTABLE. Two things are required and BOTH matter:
+      * PLAN mode 0o755 (below), and -- crucially --
+      * an /etc/skel + /home/main FILE_PERMISSIONS pin in configuration/profile.py,
+        because archiso NORMALIZES overlay modes to 0644 in the squashfs unless a
+        path is pinned there. The 0o755 in PLAN alone is silently downgraded to 0644
+        by mkarchiso (the exact same gotcha documented for /usr/local/bin/azarch-
+        install), which is why the badge appeared even though PLAN said 0o755.
+    (KDE reads NO `user.xdg.trusted` xattr -- that is a GNOME concept; the exec bit /
+    root ownership is the only trust signal. The launcher is generated by us on the
+    ISO, not downloaded, so shipping it pre-trusted is safe.)"""
     return """\
 [Desktop Entry]
 Type=Application
@@ -617,6 +796,12 @@ PLAN = [
     {
         "builder": krunnerrc,
         "dest": f"{HOME}/.config/krunnerrc",
+        "mode": _CONF,
+        "owner": "home",
+    },
+    {
+        "builder": kxkbrc,
+        "dest": f"{HOME}/.config/kxkbrc",
         "mode": _CONF,
         "owner": "home",
     },

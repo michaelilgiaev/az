@@ -54,6 +54,26 @@ def test_ckbcomp_stays_executable():
     assert '["/usr/bin/ckbcomp"]="0:0:755"' in profile.profiledef_sh()
 
 
+def test_desktop_installer_launcher_stays_executable():
+    # THE WARNING-BADGE FIX: KDE paints an "emblem-important" warning badge over a
+    # Desktop .desktop launcher (and prompts on first launch) unless it is executable
+    # (KDesktopFile::isAuthorizedDesktopFile). steps.py emits it 0755, but archiso
+    # normalizes overlay modes to 0644 in the squashfs unless pinned here -- which is
+    # exactly why the badge appeared. Pin both the live-user copy (uid 1000:998) and
+    # the /etc/skel copy (root-owned) to 0755 so the shipped launcher is trusted.
+    assert (
+        profile.FILE_PERMISSIONS["/home/main/Desktop/azarch-install.desktop"]
+        == "1000:998:755"
+    )
+    assert (
+        profile.FILE_PERMISSIONS["/etc/skel/Desktop/azarch-install.desktop"]
+        == "0:0:755"
+    )
+    sh = profile.profiledef_sh()
+    assert '["/home/main/Desktop/azarch-install.desktop"]="1000:998:755"' in sh
+    assert '["/etc/skel/Desktop/azarch-install.desktop"]="0:0:755"' in sh
+
+
 def test_secrets_locked_down():
     # shadow/gshadow/sudoers must not ship world-readable.
     assert profile.FILE_PERMISSIONS["/etc/shadow"] == "0:0:400"

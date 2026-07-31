@@ -21,10 +21,11 @@ from azarch.configuration import desktop
 
 # --- PLAN mode/owner/dest table --------------------------------------------
 
-def test_plan_has_exactly_eleven_entries():
+def test_plan_has_exactly_twelve_entries():
     # steps.py iterates PLAN; a dropped/extra entry silently un-emits a file.
-    # (11 = original 7 + ~/Desktop launcher + plasmashellrc + kdeglobals + krunnerrc.)
-    assert len(desktop.PLAN) == 11
+    # (12 = original 7 + ~/Desktop launcher + plasmashellrc + kdeglobals + krunnerrc
+    #  + kxkbrc keyboard-layouts.)
+    assert len(desktop.PLAN) == 12
 
 
 def test_plan_entries_have_the_four_declared_keys():
@@ -158,8 +159,8 @@ def test_home_owner_gid_is_autologin_group():
 
 # --- emit_plan(): PLAN + bash_profile, without mutating PLAN ----------------
 
-def test_emit_plan_length_is_twelve():
-    assert len(desktop.emit_plan()) == 12
+def test_emit_plan_length_is_thirteen():
+    assert len(desktop.emit_plan()) == 13
 
 
 def test_emit_plan_prefix_is_plan():
@@ -186,7 +187,7 @@ def test_emit_plan_does_not_mutate_module_plan():
     before = len(desktop.PLAN)
     desktop.emit_plan()
     desktop.emit_plan()
-    assert len(desktop.PLAN) == before == 11
+    assert len(desktop.PLAN) == before == 12
 
 
 # --- xinitrc: Plasma X11 session, no flash ----------------------------------
@@ -213,9 +214,10 @@ def test_xinitrc_has_no_cyan_solid_flash():
 def test_xinitrc_prepaints_wallpaper_before_exec():
     # No-flash contract: feh paints the SAME wallpaper onto the X root BEFORE the
     # exec that starts Plasma, so the first visible frame is the wallpaper and
-    # Plasma's own wallpaper repaint is invisible (identical pixels).
+    # Plasma's own wallpaper repaint is invisible (identical pixels). feh needs the
+    # actual image FILE (it cannot take a package dir).
     out = desktop.xinitrc()
-    assert "feh --no-fehbg --bg-fill '" + desktop.WALLPAPER_DEST + "'" in out
+    assert "feh --no-fehbg --bg-fill '" + desktop.WALLPAPER_IMAGE_FILE + "'" in out
     feh_idx = out.index("feh --no-fehbg --bg-fill")
     exec_idx = out.index("exec startplasma-x11")
     assert feh_idx < exec_idx
@@ -226,10 +228,11 @@ def test_xinitrc_prepaints_wallpaper_before_exec():
 def test_appletsrc_sets_wallpaper_in_nested_image_group():
     # The wallpaper Image= MUST live in the nested
     # [Containments][1][Wallpaper][org.kde.image][General] group (not the
-    # containment's own [General]) or Plasma ignores it. Value is a file:// URI.
+    # containment's own [General]) or Plasma ignores it. Value is a file:// URI to the
+    # package DIRECTORY (the duplicate-tile fix).
     out = desktop.plasma_appletsrc()
     assert "[Containments][1][Wallpaper][org.kde.image][General]" in out
-    assert "Image=file://" + desktop.WALLPAPER_DEST in out
+    assert "Image=file://" + desktop.WALLPAPER_PACKAGE_DIR in out
 
 
 def test_appletsrc_uses_image_wallpaper_plugin():
@@ -412,39 +415,45 @@ def test_install_wrapper_path_value():
     assert desktop.INSTALL_WRAPPER_PATH == "/usr/local/bin/azarch-install"
 
 
-def test_wallpaper_dest_and_asset_values():
-    # The DEFAULT wallpaper is the "years" KPackage's OWN image path (not a standalone
-    # /usr/share/azarch/wallpaper.png) so Plasma's grid shows exactly the two packages
-    # ("years"/"decades") with no duplicate "wallpaper" tile. The asset carries no
-    # "wallpaper_" prefix any more.
-    assert desktop.WALLPAPER_DEST == (
+def test_wallpaper_package_dir_and_image_file_values():
+    # THE DUPLICATE-TILE FIX: Plasma's Image= must point at the package DIRECTORY
+    # (trailing slash) so Plasma matches the "years" package tile instead of injecting
+    # a loose "1672x941" tile; feh needs the actual image FILE. Both constants derive
+    # from the "years" package. The asset carries no "wallpaper_" prefix any more.
+    assert desktop.WALLPAPER_PACKAGE_DIR == "/usr/share/wallpapers/years/"
+    assert desktop.WALLPAPER_IMAGE_FILE == (
         "/usr/share/wallpapers/years/contents/images/1672x941.png"
     )
     assert desktop.WALLPAPER_ASSET == "wallpapers/years.png"
-    # The default must be one of the shipped packages' image path (no separate copy).
+    # The default must be one of the shipped packages (no separate standalone copy).
     assert desktop.WALLPAPER_DEFAULT_ID in [p["id"] for p in desktop.WALLPAPER_PACKAGES]
 
 
-def test_wallpaper_default_is_a_shipped_package_image():
-    # REGRESSION GUARD for the "three wallpapers, one duplicate" report: the default
-    # image path must be exactly the path steps.py writes for the years KPackage, so
-    # Plasma treats it as the existing tile rather than adding a standalone one.
+def test_wallpaper_default_is_a_shipped_package_dir():
+    # REGRESSION GUARD for the "three wallpapers, one duplicate" report: the Plasma
+    # default must be the years KPackage's DIRECTORY (not its inner png), so Plasma
+    # selects the existing tile rather than adding a standalone resolution-labelled one.
     years = next(p for p in desktop.WALLPAPER_PACKAGES if p["id"] == "years")
-    expected = (
-        f"{desktop.WALLPAPERS_SYSTEM_DIR}/{years['id']}"
-        f"/contents/images/{desktop.WALLPAPER_IMAGE_RES}.png"
-    )
-    assert desktop.WALLPAPER_DEST == expected
+    expected_dir = f"{desktop.WALLPAPERS_SYSTEM_DIR}/{years['id']}/"
+    assert desktop.WALLPAPER_PACKAGE_DIR == expected_dir
+    # The package dir must be a strict prefix of the inner image file it contains.
+    assert desktop.WALLPAPER_IMAGE_FILE.startswith(desktop.WALLPAPER_PACKAGE_DIR)
     # No asset carries the old "wallpaper_" prefix.
     for p in desktop.WALLPAPER_PACKAGES:
         assert "wallpaper_" not in p["asset"]
 
 
-def test_wallpaper_dest_used_in_xinitrc_and_appletsrc():
-    # The wallpaper path is spliced into two builders; both must carry it verbatim
-    # so the pre-paint and the Plasma wallpaper are the same image (no flash).
-    assert desktop.WALLPAPER_DEST in desktop.xinitrc()
-    assert desktop.WALLPAPER_DEST in desktop.plasma_appletsrc()
+def test_wallpaper_paths_used_in_xinitrc_and_appletsrc():
+    # feh (xinitrc) paints the FILE; Plasma (appletsrc Image=) references the package
+    # DIR. Neither may point Plasma at the inner png (that is the duplicate-tile bug).
+    assert desktop.WALLPAPER_IMAGE_FILE in desktop.xinitrc()
+    assert f"Image=file://{desktop.WALLPAPER_PACKAGE_DIR}" in desktop.plasma_appletsrc()
+    # The appletsrc must NOT reference the inner image file for Plasma's Image= (the
+    # whole point of the fix). Guard the Image= line specifically.
+    image_lines = [
+        ln for ln in desktop.plasma_appletsrc().splitlines() if ln.startswith("Image=")
+    ]
+    assert image_lines == [f"Image=file://{desktop.WALLPAPER_PACKAGE_DIR}"]
 
 
 # --- Every builder returns non-empty content --------------------------------
@@ -489,28 +498,44 @@ def test_wallpaper_seeded_in_nested_image_group():
     cp = _parse_ini(desktop.plasma_appletsrc())
     d = desktop.DESKTOP_CONTAINMENT_ID
     grp = f"Containments][{d}][Wallpaper][org.kde.image][General"
-    assert cp[grp]["Image"] == f"file://{desktop.WALLPAPER_DEST}"
+    assert cp[grp]["Image"] == f"file://{desktop.WALLPAPER_PACKAGE_DIR}"
 
 
-def test_panel_uses_kicker_not_kickoff():
-    # Kicker (no user header, flattenable) -- NOT kickoff (which cannot hide tabs/
-    # categories/user header).
+def test_panel_uses_kickoff_not_kicker():
+    # The user asked for labelled shutdown/restart/sleep buttons on the RIGHT and
+    # sleep-instead-of-logout: that footer is a KICKOFF feature (kicker only draws
+    # icon-only power buttons on the left with no caption key). So the menu applet is
+    # org.kde.plasma.kickoff, NOT kicker.
     body = desktop.plasma_appletsrc()
-    assert "org.kde.plasma.kicker" in body
-    assert "org.kde.plasma.kickoff" not in body
+    assert "org.kde.plasma.kickoff" in body
+    assert "org.kde.plasma.kicker" not in body
 
 
-def test_kicker_is_flat_alpha_apps_only_search_generic_icon():
+def test_kickoff_menu_flat_list_labelled_power_sleep_generic_icon():
     cp = _parse_ini(desktop.plasma_appletsrc())
     p = desktop.PANEL_CONTAINMENT_ID
     kcfg = f"Containments][{p}][Applets][1][Configuration][General"
     assert cp[kcfg]["icon"] == desktop.MENU_ICON          # generic, not the KDE logo
     assert cp[kcfg]["icon"] != "start-here-kde"
-    assert cp[kcfg]["limitDepth"] == "true"               # flatten categories
-    assert cp[kcfg]["alphaSort"] == "true"                # alphabetical list
-    assert cp[kcfg]["useExtraRunners"] == "false"         # search = installed apps only
+    # Flat alphabetical app List (kickoff's "All Applications" is a flat A-Z list).
+    assert cp[kcfg]["applicationsDisplay"] == "1"          # 1 = List view
+    assert cp[kcfg]["alphaSort"] == "true"                 # alphabetical
+    # Footer power buttons: Power actions, labelled (text beside icon), sleep first.
+    assert cp[kcfg]["primaryActions"] == "0"               # 0 = Power actions in footer
+    assert cp[kcfg]["showActionButtonCaptions"] == "true"  # TEXT labels on buttons
+    # systemFavorites picks WHICH buttons appear: sleep (suspend) replaces logout.
+    favs = cp[kcfg]["systemFavorites"].split(",")
+    assert favs == ["suspend", "reboot", "shutdown"]
+    assert "logout" not in favs                            # logout replaced by sleep
     assert cp[kcfg]["showRecentApps"] == "false"
     assert cp[kcfg]["showRecentDocs"] == "false"
+
+
+def test_kickoff_system_favorites_constant_is_sleep_restart_shutdown():
+    # The power-button set: sleep (suspend) instead of logout. "suspend" is the
+    # verified Plasma 6 session-action id that kickoff labels "Sleep".
+    assert desktop.KICKOFF_SYSTEM_FAVORITES == ["suspend", "reboot", "shutdown"]
+    assert "logout" not in desktop.KICKOFF_SYSTEM_FAVORITES
 
 
 def test_panel_pins_librewolf_kitty_dolphin_in_order():
@@ -527,19 +552,110 @@ def test_panel_pins_librewolf_kitty_dolphin_in_order():
     assert cp[f"Containments][{p}][Applets][2"]["plugin"] == "org.kde.plasma.icontasks"
 
 
-def test_panel_has_no_systemtray_or_peek_at_desktop():
-    # "Status and Notifications" arrow == systemtray; "Peek at Desktop" == showdesktop.
-    # Both are removed by simply not appearing as applets.
+def test_panel_uses_standalone_status_applets_no_systray_no_peek():
+    # The status widgets are STANDALONE panel applets, not a systemtray container --
+    # so there is NO "^" overflow arrow and no auto-discovered extras. There must be
+    # NO systemtray, NO Peek-at-Desktop (showdesktop/minimizeall), and NO notifications.
     body = desktop.plasma_appletsrc()
-    assert "org.kde.plasma.systemtray" not in body
-    assert "org.kde.plasma.showdesktop" not in body
+    assert "org.kde.plasma.systemtray" not in body        # no tray container -> no "^"
+    assert "org.kde.plasma.showdesktop" not in body       # no Peek at Desktop
     assert "org.kde.plasma.minimizeall" not in body
+    assert desktop.NOTIFICATIONS_APPLET_ID == "org.kde.plasma.notifications"
+    assert desktop.NOTIFICATIONS_APPLET_ID not in body    # notifications gone entirely
+    assert desktop.NOTIFICATIONS_APPLET_ID not in desktop.PANEL_STATUS_APPLETS
+
+
+def test_panel_status_applets_are_the_expected_set_in_order():
+    # Exactly: keyboard-layout (leftmost), device-notifier, brightness, network,
+    # volume. NO clipboard, NO battery/power (dropped at the user's request).
+    assert desktop.PANEL_STATUS_APPLETS == [
+        "org.kde.plasma.keyboardlayout",
+        "org.kde.plasma.devicenotifier",
+        "org.kde.plasma.brightness",
+        "org.kde.plasma.networkmanagement",
+        "org.kde.plasma.volume",
+    ]
+    # keyboard-layout must be the LEFTMOST status applet (left of all right-side icons).
+    assert desktop.PANEL_STATUS_APPLETS[0] == "org.kde.plasma.keyboardlayout"
+    # Explicitly dropped widgets must not appear anywhere.
+    body = desktop.plasma_appletsrc()
+    assert "org.kde.plasma.clipboard" not in body         # no clipboard history
+    assert "org.kde.plasma.battery" not in body           # power reached from the menu
+
+
+def test_panel_status_applets_each_have_a_block_and_carry_internet_audio():
+    # Every status applet is emitted as its own panel-applet block plugin=<item>, and
+    # the internet (plasma-nm) + audio (plasma-pa) the user wanted back are present.
+    body = desktop.plasma_appletsrc()
+    for item in desktop.PANEL_STATUS_APPLETS:
+        assert f"plugin={item}" in body
+    assert "plugin=org.kde.plasma.networkmanagement" in body   # internet
+    assert "plugin=org.kde.plasma.volume" in body              # audio
+
+
+def test_panel_applet_order_lists_menu_tasks_spacer_status_clock():
+    # AppletOrder must be menu(1), tasks(2), spacer(3), the N status applets (4..),
+    # then the clock (last). A missing id silently drops that applet.
+    cp = _parse_ini(desktop.plasma_appletsrc())
+    p = desktop.PANEL_CONTAINMENT_ID
+    n = len(desktop.PANEL_STATUS_APPLETS)
+    expected = ";".join(str(i) for i in range(1, 3 + n + 1 + 1))  # 1..(3+n+1)
+    assert cp[f"Containments][{p}][General"]["AppletOrder"] == expected
+    # The spacer (id 3) must be an expanding panelspacer so the status icons+clock sit right.
+    scfg = f"Containments][{p}][Applets][3][Configuration][General"
+    assert cp[f"Containments][{p}][Applets][3"]["plugin"] == "org.kde.plasma.panelspacer"
+    assert cp[scfg]["expanding"] == "true"
+    # The clock is the LAST applet id and is the digital clock.
+    clock_id = 3 + n + 1
+    assert cp[f"Containments][{p}][Applets][{clock_id}"]["plugin"] == "org.kde.plasma.digitalclock"
+
+
+def test_keyboard_layouts_us_and_hebrew_configured():
+    # kxkbrc ships US + Hebrew (xkb us/il) shown as US/HE, Alt+Shift toggles them.
+    assert desktop.KEYBOARD_LAYOUTS == [
+        {"code": "us", "label": "US"},
+        {"code": "il", "label": "HE"},
+    ]
+    cp = _parse_ini(desktop.kxkbrc())
+    layout = cp["Layout"]
+    assert layout["Use"] == "true"
+    assert layout["LayoutList"] == "us,il"
+    assert layout["DisplayNames"] == "US,HE"
+    assert layout["Options"] == desktop.KEYBOARD_TOGGLE == "grp:alt_shift_toggle"
+
+
+def test_kxkbrc_is_home_owned_conf():
+    by_builder = {e["builder"].__name__: e for e in desktop.PLAN}
+    assert by_builder["kxkbrc"]["mode"] == 0o644
+    assert by_builder["kxkbrc"]["owner"] == "home"
+    assert by_builder["kxkbrc"]["dest"] == f"{desktop.HOME}/.config/kxkbrc"
 
 
 def test_panel_pinned_not_floating_matches_containment_id():
     cp = _parse_ini(desktop.plasmashellrc())
     grp = f"PlasmaViews][Panel {desktop.PANEL_CONTAINMENT_ID}"
     assert cp[grp]["floating"] == "0"      # 0 = pinned
+
+
+def test_panel_thickness_is_larger_than_default_in_defaults_group():
+    # The user asked for a bigger bottom bar; settled on 55 px (verified live -- 88
+    # looked too tall). CRUCIAL Plasma-6 quirk: `thickness` is read from the NESTED
+    # [PlasmaViews][Panel <id>][Defaults] subgroup, NOT the flat group (a flat
+    # thickness= is silently ignored). `floating` stays in the flat group.
+    assert desktop.PANEL_DEFAULT_THICKNESS == 44
+    assert desktop.PANEL_THICKNESS == 55
+    assert desktop.PANEL_THICKNESS > desktop.PANEL_DEFAULT_THICKNESS
+    out = desktop.plasmashellrc()
+    cp = _parse_ini(out)
+    flat = f"PlasmaViews][Panel {desktop.PANEL_CONTAINMENT_ID}"
+    defaults = f"PlasmaViews][Panel {desktop.PANEL_CONTAINMENT_ID}][Defaults"
+    # floating in the flat group; thickness in the nested [Defaults] group.
+    assert cp[flat]["floating"] == "0"
+    assert cp[defaults]["thickness"] == str(desktop.PANEL_THICKNESS)
+    # thickness must NOT be in the flat group (that placement is a no-op on Plasma 6).
+    assert "thickness" not in cp[flat]
+    # The nested group header must literally appear.
+    assert f"[PlasmaViews][Panel {desktop.PANEL_CONTAINMENT_ID}][Defaults]" in out
 
 
 def test_global_theme_is_breeze_dark():

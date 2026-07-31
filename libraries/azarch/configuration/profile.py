@@ -69,6 +69,19 @@ FILE_PERMISSIONS = {
     # Calamares never auto-launches. THIS is what breaks the live installer.
     "/usr/local/bin/azarch-install": "0:0:755",
     "/usr/local/bin/azarch": "0:0:755",
+    # The live-session Desktop "Azarch Installer" launcher. Same archiso mode-
+    # normalization as azarch-install above: steps.py emits it 0755, but the squashfs
+    # ships it 0644 unless pinned here. A 0644 (non-executable) .desktop on the Desktop
+    # is UNTRUSTED to KDE -- KDesktopFile::isAuthorizedDesktopFile() returns false for a
+    # user-owned, non-executable Exec= launcher, so Plasma's Folder View paints an
+    # "emblem-important" WARNING BADGE over it (and prompts on first launch) until the
+    # user marks it executable. THIS is the "weird warning icon that disappears once
+    # you open the installer" report: the badge is gone after the first launch trusts
+    # it. Pinning 0755 makes the shipped file executable -> authorized -> no badge, no
+    # prompt, from first boot. Both the live-user copy (uid 1000:998) and the /etc/skel
+    # copy (root-owned; root-owned is ALSO trusted) are pinned.
+    "/home/main/Desktop/azarch-install.desktop": "1000:998:755",
+    "/etc/skel/Desktop/azarch-install.desktop": "0:0:755",
     # Vendored ckbcomp (libraries/azarch/ckbcomp), a Python 3 port of the upstream
     # Perl ckbcomp. Same archiso mode-normalization as azarch-install above: without
     # an explicit 0755 here it ships 0644, Calamares' `QProcess::start("ckbcomp")`
