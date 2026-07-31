@@ -131,6 +131,13 @@ if new != xml:
         fh.write(new)
 PYEOF
 fi
+
+# Remove the stock Plasma "Next" wallpaper so the "Desktop and Wallpaper" grid
+# shows ONLY the azarch wallpapers ("years", "decades") shipped as KPackages under
+# /usr/share/wallpapers. "Next" is bundled with plasma-workspace (not a separate
+# removable package), so it must be deleted here rather than dropped from the
+# manifest. Guarded so a layout change upstream never aborts the build.
+rm -rf /usr/share/wallpapers/Next || true
 """
 
 # getty@tty1 autologin override. The releng base autologins ROOT on tty1; the

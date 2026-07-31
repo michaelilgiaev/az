@@ -100,9 +100,12 @@ def test_emitter_family_covers_all_config_modules():
     # pins the layout and disables auto-guess + shellprocess-desparse.conf that
     # de-sparsifies /boot so GRUB can read the kernel + finished.conf that adds the
     # Restart-now option + luksbootkeyfile.conf that embeds the LUKS keyfile so the
-    # encrypted root is not prompted for twice at boot) + 8 desktop builders +
+    # encrypted root is not prompted for twice at boot) + 12 desktop builders
+    # (emit_plan: the 11 PLAN entries -- xinitrc, appletsrc, ksplashrc, plasmashellrc,
+    # kdeglobals, krunnerrc, autostart + menu + Desktop installer launchers, the
+    # install wrapper, the azarch CLI -- plus the appended bash_profile) +
     # 6 installer + locale + profile + 4 pacman + 5 pkgbuild.
-    assert len(_EMITTERS) == 19 + 8 + 6 + 1 + 1 + 4 + 5
+    assert len(_EMITTERS) == 19 + 12 + 6 + 1 + 1 + 4 + 5
 
 
 def test_recipe_dir_contents_are_nonempty_str_both_tiers():

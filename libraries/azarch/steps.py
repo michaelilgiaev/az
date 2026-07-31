@@ -326,6 +326,18 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
     for icon_dest in (desktop.INSTALLER_ICON_PIXMAP, desktop.INSTALLER_ICON_HICOLOR):
         emit.copy_asset(desktop.INSTALLER_ICON_ASSET,
                         airootfs / icon_dest.lstrip("/"), mode=0o644)
+    # Selectable wallpaper KPackages ("years", "decades") shown in Plasma's
+    # "Desktop and Wallpaper" grid. Each: metadata.json + contents/images/<res>.png
+    # (+ a screenshot.png thumbnail). Root-owned under /usr/share/wallpapers. The
+    # stock "Next" wallpaper is removed in customize_airootfs.sh so only these show.
+    for pkg in desktop.WALLPAPER_PACKAGES:
+        pkg_root = airootfs / desktop.WALLPAPERS_SYSTEM_DIR.lstrip("/") / pkg["id"]
+        emit.write_text(pkg_root / "metadata.json",
+                        desktop.wallpaper_metadata_json(pkg["id"]), mode=0o644)
+        img = pkg_root / "contents" / "images" / f"{desktop.WALLPAPER_IMAGE_RES}.png"
+        emit.copy_asset(pkg["asset"], img, mode=0o644)
+        # screenshot.png = the grid thumbnail (reuse the full image).
+        emit.copy_asset(pkg["asset"], pkg_root / "contents" / "screenshot.png", mode=0o644)
     # re-assert ownership of the live user's tree (new files were added under it).
     subprocess.run(_sudo() + ["chown", "-R", "1000:998", str(home)], check=False)
 

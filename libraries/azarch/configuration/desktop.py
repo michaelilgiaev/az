@@ -42,9 +42,43 @@ from __future__ import annotations
 # The desktop wallpaper baked into the ISO. steps.py copies
 # assets/wallpapers/wallpaper_years.png here (emit.copy_asset) and the Plasma
 # appletsrc + the ~/.xinitrc root-pixmap pre-paint both point at this path, so
-# the first paint IS the wallpaper (no solid-color flash).
+# the first paint IS the wallpaper (no solid-color flash). This is the DEFAULT
+# (the "years" image); the selectable grid entries are the KPackages below.
 WALLPAPER_DEST = "/usr/share/azarch/wallpaper.png"
 WALLPAPER_ASSET = "wallpapers/wallpaper_years.png"
+
+# Selectable wallpapers shown in Plasma's "Desktop and Wallpaper" grid. Each is a
+# KPackage under /usr/share/wallpapers/<Id>/ (metadata.json + contents/images/
+# <W>x<H>.png). We ship exactly TWO -- the azarch "years" and "decades" images --
+# and REMOVE the stock Plasma "Next" wallpaper (see system.CUSTOMIZE_AIROOTFS) so
+# the grid shows only these. The generic "wallpaper" name the user saw is renamed
+# to "years" by shipping the package under the id/name "years". Both source images
+# are 1672x941 (see assets/wallpapers/), so the packaged image is images/1672x941.png.
+WALLPAPER_PACKAGES = [
+    {"id": "years", "asset": "wallpapers/wallpaper_years.png"},
+    {"id": "decades", "asset": "wallpapers/wallpaper_decades.png"},
+]
+WALLPAPER_IMAGE_RES = "1672x941"          # WxH of the shipped PNGs
+WALLPAPERS_SYSTEM_DIR = "/usr/share/wallpapers"
+
+
+def wallpaper_metadata_json(wp_id: str) -> str:
+    """Minimal KPackage metadata.json for a custom image wallpaper. Only the
+    KPlugin block is required for an image wallpaper (the org.kde.image engine
+    reads contents/images/<W>x<H>.png); Id + Name are what the grid shows and what
+    the desktop config stores. Name == Id so the grid label reads "years"/"decades"."""
+    return (
+        "{\n"
+        '    "KPlugin": {\n'
+        f'        "Id": "{wp_id}",\n'
+        f'        "Name": "{wp_id}",\n'
+        '        "License": "CC-BY-SA-4.0",\n'
+        '        "Authors": [\n'
+        '            { "Name": "Az\'arch", "Email": "" }\n'
+        "        ]\n"
+        "    }\n"
+        "}\n"
+    )
 
 # The one privileged launch path shared by the autostart entry + a menu launcher.
 INSTALL_WRAPPER_PATH = "/usr/local/bin/azarch-install"
@@ -127,34 +161,167 @@ fi
 
 
 # --- 3. ~/.config/plasma-org.kde.plasma.desktop-appletsrc -------------------
+# Fixed containment ids used across appletsrc + plasmashellrc. Pinned to constants
+# so the panel-pin key in plasmashellrc ([PlasmaViews][Panel PANEL_ID]) always
+# matches the panel containment number here (a mismatch = the pin is silently
+# ignored). 1 = desktop, 2 = bottom panel.
+DESKTOP_CONTAINMENT_ID = 1
+PANEL_CONTAINMENT_ID = 2
+
+# The three apps pinned to the bottom panel's task manager, in order. The .desktop
+# ids are the ones shipped on the installed system: LibreWolf -> librewolf.desktop,
+# Kitty -> kitty.desktop, Dolphin -> org.kde.dolphin.desktop (reverse-DNS).
+PANEL_LAUNCHERS = [
+    "applications:librewolf.desktop",
+    "applications:kitty.desktop",
+    "applications:org.kde.dolphin.desktop",
+]
+
+# Generic, minimal application-menu button icon (NOT the KDE/Plasma "start-here"
+# logo the user asked to drop). "application-menu" is a plain hamburger glyph that
+# ships with Breeze.
+MENU_ICON = "application-menu"
+
+
 def plasma_appletsrc() -> str:
-    """Seed the Plasma desktop wallpaper for a fresh profile (a BELT; the primary,
-    regeneration-proof mechanism is the org.kde.image `main.xml` default rewritten
-    by customize_airootfs.sh -- see configuration/system.CUSTOMIZE_AIROOTFS).
+    """The full Plasma desktop + panel layout for a fresh profile: the desktop
+    containment (with the wallpaper seed) AND a bottom panel carrying, left to
+    right, the application menu (Kicker), a pinned task manager (LibreWolf, Kitty,
+    Dolphin), a spacer, and a digital clock.
 
-    The wallpaper image lives in the `org.kde.image` wallpaper plugin's configuration,
-    which for a containment is the NESTED group
-    `[Containments][1][Wallpaper][org.kde.image][General]` with an `Image=`
-    file:// URI -- NOT the containment's own `[General]` group (a common mistake
-    that silently does nothing). Containment number 1 is arbitrary but the
-    `[Containments][1]` block and its `[Containments][1][Wallpaper]...` block
-    must share the same number.
+    Deliberate OMISSIONS (the user's panel requests):
+      * NO org.kde.plasma.systemtray  -> no "Status and Notifications" tray/arrow.
+      * NO org.kde.plasma.showdesktop -> no "Peek at Desktop" button.
+    An applet is present ONLY if it appears in a [Containments][2][Applets][N] block,
+    so omitting these blocks IS how they are removed (there is no hide key).
 
-    NOTE this seed is best-effort: plasmashell may REGENERATE this file on first
-    login with its own containment ids, orphaning the seeded block. That is why it
-    is only a belt -- the load-bearing wallpaper default lives in main.xml (which
-    Plasma consults for any containment without an explicit image, so it holds
-    regardless of regeneration). This file is written to BOTH the live `main` home
-    and /etc/skel so it applies to the live and installed users on the runs where
-    it is honored."""
-    return """\
-[Containments][1]
+    Application menu = org.kde.plasma.kicker (NOT kickoff): kicker has no user/avatar
+    header and can flatten categories (limitDepth) into a near-flat alphabetical app
+    list with a search field at the top -- kickoff cannot hide its Favorites/Places/
+    Sessions tabs, its category tree, or its user header at all. See kicker config
+    below for the flat-list + apps-only-search keys.
+
+    The wallpaper still lives in the NESTED [Containments][1][Wallpaper][org.kde.image]
+    [General] Image= group (a common mistake is the containment's own [General]).
+    This appletsrc seed is a BELT; the regeneration-proof wallpaper default is the
+    org.kde.image main.xml rewrite in configuration/system.CUSTOMIZE_AIROOTFS.
+
+    Written to BOTH the live `main` home and /etc/skel so the live and installed
+    users get the same desktop. plasmashell MAY regenerate this on first login with
+    its own ids (documented caveat), so the panel-pin/theme also live in their own
+    regeneration-tolerant files (plasmashellrc, kdeglobals)."""
+    d = DESKTOP_CONTAINMENT_ID
+    p = PANEL_CONTAINMENT_ID
+    launchers = ",".join(PANEL_LAUNCHERS)
+    return f"""\
+[Containments][{d}]
+activityId=
+formfactor=0
+immutability=1
+lastScreen=0
+location=0
 plugin=org.kde.desktopcontainment
 wallpaperplugin=org.kde.image
 
-[Containments][1][Wallpaper][org.kde.image][General]
-Image=file://""" + WALLPAPER_DEST + """
+[Containments][{d}][Wallpaper][org.kde.image][General]
+Image=file://{WALLPAPER_DEST}
+
+[Containments][{p}]
+activityId=
+formfactor=2
+immutability=1
+lastScreen=0
+location=4
+plugin=org.kde.panel
+
+[Containments][{p}][General]
+AppletOrder=1;2;3
+
+# Application menu (Kicker): generic icon, flattened categories, alphabetical, and
+# search restricted to installed applications (useExtraRunners=false).
+[Containments][{p}][Applets][1]
+immutability=1
+plugin=org.kde.plasma.kicker
+
+[Containments][{p}][Applets][1][Configuration][General]
+icon={MENU_ICON}
+useCustomButtonImage=false
+limitDepth=true
+alphaSort=true
+appNameFormat=0
+showRecentApps=false
+showRecentDocs=false
+showRecentContacts=false
+favoritesPortedToKAstats=true
+useExtraRunners=false
+
+# Pinned task manager: LibreWolf, Kitty, Dolphin.
+[Containments][{p}][Applets][2]
+immutability=1
+plugin=org.kde.plasma.icontasks
+
+[Containments][{p}][Applets][2][Configuration][General]
+launchers={launchers}
+
+# Digital clock at the right end.
+[Containments][{p}][Applets][3]
+immutability=1
+plugin=org.kde.plasma.digitalclock
 """
+
+
+# --- 3b. ~/.config/plasmashellrc (panel pinned, not floating) ---------------
+def plasmashellrc() -> str:
+    """Pin the bottom panel (NOT floating). The float/pin toggle is NOT in
+    appletsrc -- plasma-workspace writes it to plasmashellrc under
+    [PlasmaViews][Panel <containment-id>] as an int (0 = pinned, 1 = floating).
+    The Panel id MUST match PANEL_CONTAINMENT_ID in appletsrc or the pin is
+    silently ignored. Shipped to the live home and /etc/skel."""
+    return f"""\
+[PlasmaViews][Panel {PANEL_CONTAINMENT_ID}]
+floating=0
+"""
+
+
+# --- 3c. ~/.config/kdeglobals (Breeze Dark global theme) --------------------
+def kdeglobals() -> str:
+    """Set the global theme to Breeze Dark for a fresh profile. The look-and-feel
+    package + color scheme are what darken the whole session; the icon theme and
+    widget style are seeded too so nothing falls back to a light default before the
+    LnF fully applies. Shipped to the live home and /etc/skel."""
+    return """\
+[General]
+ColorScheme=BreezeDark
+Name=Breeze Dark
+
+[Icons]
+Theme=breeze-dark
+
+[KDE]
+LookAndFeelPackage=org.kde.breezedark.desktop
+widgetStyle=Breeze
+"""
+
+
+# --- 3d. ~/.config/krunnerrc (menu/search: installed applications only) ------
+def krunnerrc() -> str:
+    """Restrict search to INSTALLED APPLICATIONS only. Kicker's useExtraRunners=false
+    already limits its own search to the applications runner, but this is the
+    system-level belt: disable every KRunner plugin except the applications
+    (krunner_services) runner, so neither the menu search nor Alt-Space surfaces
+    files, bookmarks, shell commands, web shortcuts, etc. Shipped to live home and
+    /etc/skel."""
+    disabled = [
+        "baloosearch", "krunner_bookmarksrunner", "krunner_recentdocuments",
+        "krunner_locations", "krunner_places", "krunner_shell", "krunner_kill2",
+        "krunner_powerdevil", "krunner_sessions", "krunner_calculator",
+        "krunner_unitconverter", "krunner_dictionary", "krunner_webshortcuts",
+        "krunner_windows", "krunner_appstream", "krunner_activities",
+        "krunner_charrunner", "krunner_katesessions", "krunner_konsoleprofiles",
+    ]
+    lines = ["[Plugins]", "krunner_servicesEnabled=true"]
+    lines += [f"{name}Enabled=false" for name in disabled]
+    return "\n".join(lines) + "\n"
 
 
 # --- 4. ~/.config/ksplashrc -------------------------------------------------
@@ -421,6 +588,24 @@ PLAN = [
     {
         "builder": ksplashrc,
         "dest": f"{HOME}/.config/ksplashrc",
+        "mode": _CONF,
+        "owner": "home",
+    },
+    {
+        "builder": plasmashellrc,
+        "dest": f"{HOME}/.config/plasmashellrc",
+        "mode": _CONF,
+        "owner": "home",
+    },
+    {
+        "builder": kdeglobals,
+        "dest": f"{HOME}/.config/kdeglobals",
+        "mode": _CONF,
+        "owner": "home",
+    },
+    {
+        "builder": krunnerrc,
+        "dest": f"{HOME}/.config/krunnerrc",
         "mode": _CONF,
         "owner": "home",
     },

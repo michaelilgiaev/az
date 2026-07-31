@@ -21,10 +21,10 @@ from azarch.configuration import desktop
 
 # --- PLAN mode/owner/dest table --------------------------------------------
 
-def test_plan_has_exactly_eight_entries():
+def test_plan_has_exactly_eleven_entries():
     # steps.py iterates PLAN; a dropped/extra entry silently un-emits a file.
-    # (8 = the original 7 + the ~/Desktop installer launcher.)
-    assert len(desktop.PLAN) == 8
+    # (11 = original 7 + ~/Desktop launcher + plasmashellrc + kdeglobals + krunnerrc.)
+    assert len(desktop.PLAN) == 11
 
 
 def test_plan_entries_have_the_four_declared_keys():
@@ -158,8 +158,8 @@ def test_home_owner_gid_is_autologin_group():
 
 # --- emit_plan(): PLAN + bash_profile, without mutating PLAN ----------------
 
-def test_emit_plan_length_is_nine():
-    assert len(desktop.emit_plan()) == 9
+def test_emit_plan_length_is_twelve():
+    assert len(desktop.emit_plan()) == 12
 
 
 def test_emit_plan_prefix_is_plan():
@@ -186,7 +186,7 @@ def test_emit_plan_does_not_mutate_module_plan():
     before = len(desktop.PLAN)
     desktop.emit_plan()
     desktop.emit_plan()
-    assert len(desktop.PLAN) == before == 8
+    assert len(desktop.PLAN) == before == 11
 
 
 # --- xinitrc: Plasma X11 session, no flash ----------------------------------
@@ -435,3 +435,140 @@ def test_all_builders_return_nonempty_str():
         content = entry["builder"]()
         assert isinstance(content, str)
         assert content.strip(), entry["dest"]
+
+
+# --- KDE panel / menu / theme / wallpapers (tasks: pinned panel, Breeze Dark,
+#     generic menu icon, no tray/peek, flat app menu, pinned apps, wallpapers) ---
+
+import configparser as _configparser
+import json as _json
+
+
+def _parse_ini(text: str) -> _configparser.ConfigParser:
+    # Plasma config files are INI-ish with [Group][Sub] section names; ConfigParser
+    # reads them fine for key/value assertions (it treats the whole bracket run as
+    # one section name, which is exactly what we want to look up).
+    cp = _configparser.ConfigParser(strict=False, interpolation=None)
+    cp.optionxform = str  # keep key case (Plasma keys are case-sensitive)
+    cp.read_string(text)
+    return cp
+
+
+def test_appletsrc_has_desktop_and_panel_containments():
+    cp = _parse_ini(desktop.plasma_appletsrc())
+    d, p = desktop.DESKTOP_CONTAINMENT_ID, desktop.PANEL_CONTAINMENT_ID
+    assert cp[f"Containments][{d}"]["wallpaperplugin"] == "org.kde.image"
+    assert cp[f"Containments][{p}"]["plugin"] == "org.kde.panel"
+    # bottom panel: formfactor=2 (horizontal), location=4 (bottom)
+    assert cp[f"Containments][{p}"]["formfactor"] == "2"
+    assert cp[f"Containments][{p}"]["location"] == "4"
+
+
+def test_wallpaper_seeded_in_nested_image_group():
+    cp = _parse_ini(desktop.plasma_appletsrc())
+    d = desktop.DESKTOP_CONTAINMENT_ID
+    grp = f"Containments][{d}][Wallpaper][org.kde.image][General"
+    assert cp[grp]["Image"] == f"file://{desktop.WALLPAPER_DEST}"
+
+
+def test_panel_uses_kicker_not_kickoff():
+    # Kicker (no user header, flattenable) -- NOT kickoff (which cannot hide tabs/
+    # categories/user header).
+    body = desktop.plasma_appletsrc()
+    assert "org.kde.plasma.kicker" in body
+    assert "org.kde.plasma.kickoff" not in body
+
+
+def test_kicker_is_flat_alpha_apps_only_search_generic_icon():
+    cp = _parse_ini(desktop.plasma_appletsrc())
+    p = desktop.PANEL_CONTAINMENT_ID
+    kcfg = f"Containments][{p}][Applets][1][Configuration][General"
+    assert cp[kcfg]["icon"] == desktop.MENU_ICON          # generic, not the KDE logo
+    assert cp[kcfg]["icon"] != "start-here-kde"
+    assert cp[kcfg]["limitDepth"] == "true"               # flatten categories
+    assert cp[kcfg]["alphaSort"] == "true"                # alphabetical list
+    assert cp[kcfg]["useExtraRunners"] == "false"         # search = installed apps only
+    assert cp[kcfg]["showRecentApps"] == "false"
+    assert cp[kcfg]["showRecentDocs"] == "false"
+
+
+def test_panel_pins_librewolf_kitty_dolphin_in_order():
+    cp = _parse_ini(desktop.plasma_appletsrc())
+    p = desktop.PANEL_CONTAINMENT_ID
+    tcfg = f"Containments][{p}][Applets][2][Configuration][General"
+    launchers = cp[tcfg]["launchers"]
+    assert launchers == (
+        "applications:librewolf.desktop,"
+        "applications:kitty.desktop,"
+        "applications:org.kde.dolphin.desktop"
+    )
+    # icontasks is the pinned task manager applet.
+    assert cp[f"Containments][{p}][Applets][2"]["plugin"] == "org.kde.plasma.icontasks"
+
+
+def test_panel_has_no_systemtray_or_peek_at_desktop():
+    # "Status and Notifications" arrow == systemtray; "Peek at Desktop" == showdesktop.
+    # Both are removed by simply not appearing as applets.
+    body = desktop.plasma_appletsrc()
+    assert "org.kde.plasma.systemtray" not in body
+    assert "org.kde.plasma.showdesktop" not in body
+    assert "org.kde.plasma.minimizeall" not in body
+
+
+def test_panel_pinned_not_floating_matches_containment_id():
+    cp = _parse_ini(desktop.plasmashellrc())
+    grp = f"PlasmaViews][Panel {desktop.PANEL_CONTAINMENT_ID}"
+    assert cp[grp]["floating"] == "0"      # 0 = pinned
+
+
+def test_global_theme_is_breeze_dark():
+    cp = _parse_ini(desktop.kdeglobals())
+    assert cp["KDE"]["LookAndFeelPackage"] == "org.kde.breezedark.desktop"
+    assert cp["General"]["ColorScheme"] == "BreezeDark"
+    assert cp["Icons"]["Theme"] == "breeze-dark"
+
+
+def test_krunner_search_is_applications_only():
+    cp = _parse_ini(desktop.krunnerrc())
+    plugins = cp["Plugins"]
+    assert plugins["krunner_servicesEnabled"] == "true"   # applications runner ON
+    # A representative set of non-app runners must be OFF.
+    for off in ("baloosearchEnabled", "krunner_bookmarksrunnerEnabled",
+                "krunner_shellEnabled", "krunner_webshortcutsEnabled"):
+        assert plugins[off] == "false"
+
+
+def test_new_plasma_config_files_are_home_owned_conf():
+    by_builder = {e["builder"].__name__: e for e in desktop.PLAN}
+    for name in ("plasmashellrc", "kdeglobals", "krunnerrc"):
+        assert by_builder[name]["mode"] == 0o644
+        assert by_builder[name]["owner"] == "home"
+        assert by_builder[name]["dest"] == f"{desktop.HOME}/.config/{name}"
+
+
+# --- wallpaper KPackages (years + decades; Waterfall/Next removed) ----------
+
+def test_two_wallpaper_packages_named_years_and_decades():
+    ids = [p["id"] for p in desktop.WALLPAPER_PACKAGES]
+    assert ids == ["years", "decades"]
+
+
+def test_wallpaper_metadata_json_is_valid_and_named():
+    for wp_id in ("years", "decades"):
+        meta = _json.loads(desktop.wallpaper_metadata_json(wp_id))
+        assert meta["KPlugin"]["Id"] == wp_id
+        assert meta["KPlugin"]["Name"] == wp_id      # grid label
+        assert meta["KPlugin"]["Authors"]            # non-empty
+
+
+def test_wallpaper_package_assets_exist():
+    from azarch import paths
+    for pkg in desktop.WALLPAPER_PACKAGES:
+        assert (paths.ASSETSDIR / pkg["asset"]).exists(), pkg["asset"]
+
+
+def test_stock_next_wallpaper_removed_in_customize():
+    from azarch.configuration import system
+    # The grid must show only the azarch wallpapers, so the bundled Plasma "Next"
+    # wallpaper is deleted in the post-pacstrap hook.
+    assert "rm -rf /usr/share/wallpapers/Next" in system.CUSTOMIZE_AIROOTFS
