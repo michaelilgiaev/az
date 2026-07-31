@@ -319,6 +319,13 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
     # absolute path) both resolve it. unpackfs copies it onto the installed target.
     emit.copy_asset(desktop.WALLPAPER_ASSET,
                     airootfs / desktop.WALLPAPER_DEST.lstrip("/"), mode=0o644)
+    # Installer launcher icon ("Az'" app tile). Copied to BOTH /usr/share/pixmaps
+    # and the hicolor 256x256 apps dir so the Desktop/menu/autostart .desktop files
+    # (Icon=azarch-installer) resolve it regardless of which path the icon loader
+    # consults, with no theme-cache rebuild needed. Root-owned system paths.
+    for icon_dest in (desktop.INSTALLER_ICON_PIXMAP, desktop.INSTALLER_ICON_HICOLOR):
+        emit.copy_asset(desktop.INSTALLER_ICON_ASSET,
+                        airootfs / icon_dest.lstrip("/"), mode=0o644)
     # re-assert ownership of the live user's tree (new files were added under it).
     subprocess.run(_sudo() + ["chown", "-R", "1000:998", str(home)], check=False)
 

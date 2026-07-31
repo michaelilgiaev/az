@@ -21,9 +21,10 @@ from azarch.configuration import desktop
 
 # --- PLAN mode/owner/dest table --------------------------------------------
 
-def test_plan_has_exactly_seven_entries():
+def test_plan_has_exactly_eight_entries():
     # steps.py iterates PLAN; a dropped/extra entry silently un-emits a file.
-    assert len(desktop.PLAN) == 7
+    # (8 = the original 7 + the ~/Desktop installer launcher.)
+    assert len(desktop.PLAN) == 8
 
 
 def test_plan_entries_have_the_four_declared_keys():
@@ -59,6 +60,9 @@ def test_scripts_are_exec_configs_are_conf():
     assert by_builder["ksplashrc"]["mode"] == 0o644
     assert by_builder["autostart_install_desktop"]["mode"] == 0o644
     assert by_builder["install_menu_desktop"]["mode"] == 0o644
+    # The Desktop launcher is the exception: it must be EXECUTABLE so Plasma runs it
+    # on double-click without the untrusted-.desktop prompt.
+    assert by_builder["desktop_installer_launcher"]["mode"] == 0o755
 
 
 def test_install_wrapper_entry_is_root_owned_exec():
@@ -94,6 +98,50 @@ def test_root_owned_dests_are_wrapper_cli_and_menu_launcher():
     }
 
 
+def test_desktop_launcher_is_on_the_desktop_executable_and_home_owned():
+    # The live-session "Azarch Installer" launcher must land in ~/Desktop, be
+    # executable (0o755, so Plasma trusts it), and be handed to the live user.
+    entry = next(
+        e for e in desktop.PLAN
+        if e["dest"] == f"{desktop.HOME}/Desktop/azarch-install.desktop"
+    )
+    assert entry["builder"] is desktop.desktop_installer_launcher
+    assert entry["mode"] == 0o755
+    assert entry["owner"] == "home"
+
+
+def test_desktop_launcher_content_names_installer_and_wrapper_and_icon():
+    body = desktop.desktop_installer_launcher()
+    assert "[Desktop Entry]" in body
+    assert "Name=Azarch Installer" in body
+    assert f"Exec={desktop.INSTALL_WRAPPER_PATH}" in body
+    assert f"Icon={desktop.INSTALLER_ICON_NAME}" in body
+    assert "Type=Application" in body
+
+
+def test_installer_launchers_all_use_the_azarch_icon():
+    # Desktop, application-menu, and autostart launchers must all reference the
+    # "Az'" installer icon (not the old generic system-software-install).
+    for body in (
+        desktop.desktop_installer_launcher(),
+        desktop.install_menu_desktop(),
+        desktop.autostart_install_desktop(),
+    ):
+        assert f"Icon={desktop.INSTALLER_ICON_NAME}" in body
+        assert "system-software-install" not in body
+        assert "Name=Azarch Installer" in body
+
+
+def test_installer_icon_paths_are_standard_system_locations():
+    # The icon is installed to /usr/share/pixmaps and hicolor 256x256 apps so the
+    # basename Icon= resolves; both must be absolute system paths.
+    assert desktop.INSTALLER_ICON_PIXMAP == "/usr/share/pixmaps/azarch-installer.png"
+    assert desktop.INSTALLER_ICON_HICOLOR == (
+        "/usr/share/icons/hicolor/256x256/apps/azarch-installer.png"
+    )
+    assert desktop.INSTALLER_ICON_ASSET == "logo/azarch_installer_icon.png"
+
+
 def test_home_owned_dests_live_under_home():
     for entry in desktop.PLAN:
         if entry["owner"] == "home":
@@ -110,14 +158,14 @@ def test_home_owner_gid_is_autologin_group():
 
 # --- emit_plan(): PLAN + bash_profile, without mutating PLAN ----------------
 
-def test_emit_plan_length_is_eight():
-    assert len(desktop.emit_plan()) == 8
+def test_emit_plan_length_is_nine():
+    assert len(desktop.emit_plan()) == 9
 
 
 def test_emit_plan_prefix_is_plan():
-    # First seven entries are exactly PLAN (same dict objects), the bash_profile is
+    # The first entries are exactly PLAN (same dict objects), the bash_profile is
     # appended last.
-    assert desktop.emit_plan()[:7] == desktop.PLAN
+    assert desktop.emit_plan()[:len(desktop.PLAN)] == desktop.PLAN
 
 
 def test_emit_plan_last_entry_is_bash_profile():
@@ -138,7 +186,7 @@ def test_emit_plan_does_not_mutate_module_plan():
     before = len(desktop.PLAN)
     desktop.emit_plan()
     desktop.emit_plan()
-    assert len(desktop.PLAN) == before == 7
+    assert len(desktop.PLAN) == before == 8
 
 
 # --- xinitrc: Plasma X11 session, no flash ----------------------------------
