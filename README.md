@@ -65,14 +65,14 @@ Plain-text raw dump of every component.
      <tr><td>
 
      - Replace `<DEVICE>` with your USB device. 
-     - Replace `<DATE>` with the date on your downloaded ISO.
+     - Replace `<ISO_TYPE>` with the desired ISO.
 
      </td></tr>
      </tbody>
      </table>
 
      ```bash
-     sudo dd if=azarch-<DATE>-x86_64.iso of=/dev/<DEVICE> bs=4M status=progress && sync
+     sudo dd if=azarch-<ISO_TYPE>-x86_64.iso of=/dev/<DEVICE> bs=4M status=progress && sync
      ```
 
 3. **Boot from USB**  

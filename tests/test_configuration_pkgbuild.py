@@ -32,11 +32,34 @@ Pure string logic -- no filesystem, no network, no makepkg invoked.
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
 
 from azarch.configuration import pkgbuild
 
 
 _HEX = re.compile(r"\A[0-9a-fA-F]+\Z")
+
+# Repo root (tests/ is one level down). Used to locate the vendored, extracted
+# calamares source the defaults patch is authored against.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _find_calamares_src() -> Path | None:
+    """Locate an extracted calamares-<ver> source tree under cache/ (the makepkg
+    build scratch), or None if it isn't present in this checkout."""
+    base = _REPO_ROOT / "cache" / "makepkg" / "calamares"
+    if not base.is_dir():
+        return None
+    hits = list(base.glob(f"**/calamares-{pkgbuild.CALAMARES_VERSION}"))
+    # Want the directory that actually contains src/modules (the source root).
+    for h in hits:
+        if (h / "src" / "modules").is_dir():
+            return h
+    return None
 
 
 # --- pinned upstream constants ---------------------------------------------
@@ -144,7 +167,9 @@ def test_librewolf_src_shares_pkgver_and_lwver():
 def test_calamares_pkgver_and_sha():
     s = pkgbuild.pkgbuild_calamares()
     assert "pkgver=3.4.2" in s
-    assert ("sha256sums=('%s')" % pkgbuild.CALAMARES_SHA256) in s
+    # The tarball hash is pinned; the shipped-in-repo patch is SKIP (a local file,
+    # matched by position to the second source() entry).
+    assert ("sha256sums=('%s' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
 
 
 def test_calamares_pkgver_var_survives_brace_collapse():
@@ -153,6 +178,145 @@ def test_calamares_pkgver_var_survives_brace_collapse():
     s = pkgbuild.pkgbuild_calamares()
     assert "${pkgver}" in s
     assert "calamares-${pkgver}.tar.gz" in s
+
+
+# --- calamares source patch (installer UI defaults) ------------------------
+
+def test_calamares_pkgbuild_references_patch_in_source_and_prepare():
+    # The patch must be a source() entry (so makepkg stages it) AND actually applied
+    # in prepare(); a patch present but never applied would silently do nothing.
+    s = pkgbuild.pkgbuild_calamares()
+    name = pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME
+    assert ("'%s'" % name) in s                       # listed in source=()
+    assert "prepare() {" in s
+    assert ("patch -p1 < \"$srcdir/%s\"" % name) in s  # applied, -p1, from srcdir
+
+
+def test_calamares_patch_skip_aligned_after_tarball_hash():
+    # sha256sums matches source() by POSITION: real tarball hash first, then SKIP
+    # for the local patch file. Exactly one SKIP (only the patch is a local file).
+    s = pkgbuild.pkgbuild_calamares()
+    assert ("sha256sums=('%s' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
+    assert s.count("'SKIP'") == 1
+
+
+def test_calamares_patch_name_is_a_patch_file():
+    assert pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME.endswith(".patch")
+
+
+def test_calamares_patch_is_unified_diff_touching_both_files():
+    # The patch must be a -p1 unified diff (a/ b/ prefixes) that edits BOTH the
+    # keyboard group-switcher model (Alt+Shift default) and the users hostname
+    # config (fixed default hostname). Missing either file means one of the two
+    # requested defaults was dropped.
+    p = pkgbuild.calamares_defaults_patch()
+    assert "--- a/src/modules/keyboard/KeyboardLayoutModel.cpp" in p
+    assert "+++ b/src/modules/keyboard/KeyboardLayoutModel.cpp" in p
+    assert "--- a/src/modules/users/Config.cpp" in p
+    assert "+++ b/src/modules/users/Config.cpp" in p
+    # Hunk headers present (so `patch` has something to locate).
+    assert p.count("@@") >= 4  # two hunks => two "@@ ... @@" markers (2 "@@" each)
+
+
+def test_calamares_patch_keyboard_selects_alt_shift_toggle():
+    # THE Alt+Shift default: the added code must select the group-switcher entry
+    # whose xkb id is alt_shift_toggle. Only added ('+') lines are the change.
+    p = pkgbuild.calamares_defaults_patch()
+    added = [ln[1:] for ln in p.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
+    body = "\n".join(added)
+    assert "alt_shift_toggle" in body
+    assert "setCurrentIndex(" in body
+
+
+def test_calamares_patch_hostname_seeds_and_marks_custom():
+    # THE fixed-hostname default: the added code seeds the hostname from the
+    # template once and routes it through setHostName (which sets m_customHostName,
+    # taking the field off the name-derived auto-update path).
+    p = pkgbuild.calamares_defaults_patch()
+    added = [ln[1:] for ln in p.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
+    body = "\n".join(added)
+    assert "makeHostnameSuggestion(" in body
+    assert "setHostName(" in body
+
+
+def test_calamares_patch_emitted_with_recipe():
+    # recipe_dirs must actually emit the patch content under the recipe's filename,
+    # in BOTH tiers (calamares is built the same way in each).
+    for tier in (False, True):
+        files = dict(pkgbuild.recipe_dirs(tier))["calamares"]
+        assert files[pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME] == (
+            pkgbuild.calamares_defaults_patch()
+        )
+
+
+def test_calamares_patch_context_lines_have_leading_space():
+    # A unified-diff context line MUST start with a single space (blank context
+    # lines are exactly " "). If an editor stripped those, `patch` would choke.
+    # Assert every non-header line is a valid diff body line.
+    p = pkgbuild.calamares_defaults_patch()
+    for ln in p.splitlines():
+        if ln.startswith(("--- ", "+++ ", "@@ ")):
+            continue
+        assert ln[:1] in (" ", "+", "-"), repr(ln)
+    # And there is at least one space-only context line (the blank source lines),
+    # proving they survived as " " and not "".
+    assert " " in p.splitlines()
+
+
+def test_calamares_defaults_patch_applies_to_pinned_source():
+    # THE integration guard: the patch must apply cleanly to the real, pinned
+    # calamares source with the exact command the PKGBUILD runs (`patch -p1`).
+    # This catches context drift on a version bump -- the failure mode where the
+    # customization silently vanishes because the hunks no longer match.
+    src = _find_calamares_src()
+    if src is None:
+        pytest.skip("extracted calamares source not present under cache/ (CI checkout)")
+    if shutil.which("patch") is None:
+        pytest.skip("`patch` not available on this host")
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as td:
+        work = Path(td)
+        # Copy only the two files the patch touches, preserving their paths.
+        for rel in (
+            "src/modules/keyboard/KeyboardLayoutModel.cpp",
+            "src/modules/users/Config.cpp",
+        ):
+            dst = work / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src / rel, dst)
+
+        patch_text = pkgbuild.calamares_defaults_patch()
+        # Dry-run first (pure check), then a real apply (proves the result is
+        # writable and the offsets are exact, not fuzz-matched).
+        dry = subprocess.run(
+            ["patch", "-p1", "--dry-run"],
+            input=patch_text,
+            text=True,
+            cwd=work,
+            capture_output=True,
+            timeout=30,
+        )
+        assert dry.returncode == 0, f"dry-run failed:\n{dry.stdout}\n{dry.stderr}"
+
+        real = subprocess.run(
+            ["patch", "-p1"],
+            input=patch_text,
+            text=True,
+            cwd=work,
+            capture_output=True,
+            timeout=30,
+        )
+        assert real.returncode == 0, f"apply failed:\n{real.stdout}\n{real.stderr}"
+
+        # The two behaviours actually landed in the patched source.
+        kbd = (work / "src/modules/keyboard/KeyboardLayoutModel.cpp").read_text()
+        assert "alt_shift_toggle" in kbd
+        assert "setCurrentIndex(" in kbd
+        users = (work / "src/modules/users/Config.cpp").read_text()
+        assert "makeHostnameSuggestion(" in users
+        assert "setHostName( seededHostname )" in users
 
 
 # --- brace-doubling invariant across every generator -----------------------
@@ -204,13 +368,17 @@ def test_overrides_disables_sanitize_on_shutdown():
 
 def test_recipe_dirs_default_tier():
     # DEFAULT tier: calamares first (Arch dropped extra/calamares, so it must be
-    # built here now), then librewolf. calamares carries only its PKGBUILD; the
-    # librewolf dir carries PKGBUILD + two companion files, and its PKGBUILD is the
-    # repackage recipe (no bsys6 make targets).
+    # built here now), then librewolf. calamares carries its PKGBUILD + the source
+    # patch that sets the installer UI defaults; the librewolf dir carries PKGBUILD +
+    # two companion files, and its PKGBUILD is the repackage recipe (no bsys6 make
+    # targets).
     dirs = pkgbuild.recipe_dirs(False)
     names = [name for name, _ in dirs]
     assert names == ["calamares", "librewolf"]
-    assert set(dict(dirs)["calamares"]) == {"PKGBUILD"}
+    assert set(dict(dirs)["calamares"]) == {
+        "PKGBUILD",
+        pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME,
+    }
     files = dict(dirs)["librewolf"]
     assert set(files) == {"PKGBUILD", "librewolf.desktop", "librewolf.overrides.cfg"}
     assert "make fetch" not in files["PKGBUILD"]
@@ -223,7 +391,10 @@ def test_recipe_dirs_full_tier():
     names = [name for name, _ in dirs]
     assert names == ["calamares", "librewolf"]
     assert dirs[0][0] == "calamares"
-    assert set(dict(dirs)["calamares"]) == {"PKGBUILD"}
+    assert set(dict(dirs)["calamares"]) == {
+        "PKGBUILD",
+        pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME,
+    }
     assert "make fetch" in dict(dirs)["librewolf"]["PKGBUILD"]
 
 

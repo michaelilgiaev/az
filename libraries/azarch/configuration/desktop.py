@@ -535,7 +535,7 @@ def autostart_install_desktop() -> str:
     return """\
 [Desktop Entry]
 Type=Application
-Name=Azarch Installer
+Name=Az'arch Linux Installer
 Comment=Launch the Az'arch Linux installer
 Exec=""" + INSTALL_WRAPPER_PATH + """
 Icon=""" + INSTALLER_ICON_NAME + """
@@ -554,7 +554,7 @@ def install_menu_desktop() -> str:
     return """\
 [Desktop Entry]
 Type=Application
-Name=Azarch Installer
+Name=Az'arch Linux Installer
 GenericName=System Installer
 Comment=Install Az'arch Linux to disk
 Exec=""" + INSTALL_WRAPPER_PATH + """
@@ -567,7 +567,7 @@ Keywords=install;calamares;setup;
 
 # --- 6b. ~/Desktop/azarch-install.desktop (live-session Desktop launcher) ----
 def desktop_installer_launcher() -> str:
-    """A double-clickable "Azarch Installer" launcher that sits ON the live-session
+    """A double-clickable "Az'arch Linux Installer" launcher that sits ON the live-session
     Desktop, so the installer is one obvious icon away even after the autostart
     window is closed. Uses the same privileged wrapper and the "Az'" app icon.
 
@@ -590,7 +590,7 @@ def desktop_installer_launcher() -> str:
     return """\
 [Desktop Entry]
 Type=Application
-Name=Azarch Installer
+Name=Az'arch Linux Installer
 GenericName=System Installer
 Comment=Install Az'arch Linux to disk
 Exec=""" + INSTALL_WRAPPER_PATH + """

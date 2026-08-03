@@ -373,12 +373,24 @@ reuseHome: true
 
 # Let the user pick the hostname on the users page, seeded with this template.
 # writeHostsFile keeps /etc/hosts in sync with the chosen name.
+#
+# `template: "azarch"` is a LITERAL (no ${...} macros), so Calamares' hostname
+# suggestion always expands to exactly "azarch" no matter what the user types in
+# the Full Name / Login fields. Combined with our calamares source patch
+# (azarch-calamares-defaults.patch), which seeds this template as the INITIAL
+# hostname at module load AND marks it "custom" so the auto-derive path is
+# skipped, the "What is the name of this computer?" field shows "azarch" by
+# default and stays "azarch" as the other inputs change. (Upstream default is
+# "${first}-${product}", which recomputes the hostname on every name keystroke --
+# that reactive default is exactly what the patch/template override disables.)
 setHostname:
     location: EtcFile
     writeHostsFile: true
+    template: "azarch"
 hostname:
     location: EtcFile
     writeHostsFile: true
+    template: "azarch"
 
 # Password hashing for the created accounts.
 userShell: /bin/bash

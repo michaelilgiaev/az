@@ -69,7 +69,7 @@ FILE_PERMISSIONS = {
     # Calamares never auto-launches. THIS is what breaks the live installer.
     "/usr/local/bin/azarch-install": "0:0:755",
     "/usr/local/bin/azarch": "0:0:755",
-    # The live-session Desktop "Azarch Installer" launcher. Same archiso mode-
+    # The live-session Desktop "Az'arch Linux Installer" launcher. Same archiso mode-
     # normalization as azarch-install above: steps.py emits it 0755, but the squashfs
     # ships it 0644 unless pinned here. A 0644 (non-executable) .desktop on the Desktop
     # is UNTRUSTED to KDE -- KDesktopFile::isAuthorizedDesktopFile() returns false for a

@@ -100,7 +100,7 @@ def test_root_owned_dests_are_wrapper_cli_and_menu_launcher():
 
 
 def test_desktop_launcher_is_on_the_desktop_executable_and_home_owned():
-    # The live-session "Azarch Installer" launcher must land in ~/Desktop, be
+    # The live-session "Az'arch Linux Installer" launcher must land in ~/Desktop, be
     # executable (0o755, so Plasma trusts it), and be handed to the live user.
     entry = next(
         e for e in desktop.PLAN
@@ -114,7 +114,7 @@ def test_desktop_launcher_is_on_the_desktop_executable_and_home_owned():
 def test_desktop_launcher_content_names_installer_and_wrapper_and_icon():
     body = desktop.desktop_installer_launcher()
     assert "[Desktop Entry]" in body
-    assert "Name=Azarch Installer" in body
+    assert "Name=Az'arch Linux Installer" in body
     assert f"Exec={desktop.INSTALL_WRAPPER_PATH}" in body
     assert f"Icon={desktop.INSTALLER_ICON_NAME}" in body
     assert "Type=Application" in body
@@ -130,7 +130,7 @@ def test_installer_launchers_all_use_the_azarch_icon():
     ):
         assert f"Icon={desktop.INSTALLER_ICON_NAME}" in body
         assert "system-software-install" not in body
-        assert "Name=Azarch Installer" in body
+        assert "Name=Az'arch Linux Installer" in body
 
 
 def test_installer_icon_paths_are_standard_system_locations():

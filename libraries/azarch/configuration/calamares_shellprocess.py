@@ -24,7 +24,7 @@ from __future__ import annotations
 # the account being removed.
 LIVE_USER = "main"
 
-# The live session ships an "Azarch Installer" launcher ON the Desktop and a Plasma
+# The live session ships an "Az'arch Linux Installer" launcher ON the Desktop and a Plasma
 # autostart entry that opens Calamares once at login. The OFFLINE install copies the
 # live /home/main VERBATIM via unpackfs (and reuseHome:true keeps it), so WITHOUT the
 # cleanup below the INSTALLED system would still carry the installer icon on its
@@ -45,7 +45,7 @@ INSTALLER_SKEL_AUTOSTART = "/etc/skel/.config/autostart/azarch-install.desktop"
 
 def _installer_cleanup_command() -> str:
     """A single shellprocess command (target chroot) that removes the live-session
-    installer artifacts so the INSTALLED system has no "Azarch Installer" Desktop icon
+    installer artifacts so the INSTALLED system has no "Az'arch Linux Installer" Desktop icon
     and does not auto-launch Calamares at login. Deletes the Desktop launcher + the
     Plasma autostart entry from the reused /home/main AND from /etc/skel. `set -e` with
     plain `rm -f` (a no-op on an absent path) -- there is nothing here that can
@@ -363,7 +363,7 @@ def shellprocess_conf() -> str:
     would leave /boot empty or the archiso preset in place and the install would die
     obscurely later at `initcpio`, so it should stop here with a clear failure.
 
-    3. Remove the live-session installer artifacts (the Desktop "Azarch Installer"
+    3. Remove the live-session installer artifacts (the Desktop "Az'arch Linux Installer"
        launcher + the Plasma autostart entry, from the reused /home/main and from
        /etc/skel) so the INSTALLED system has no installer icon on its Desktop and
        does not re-open Calamares at every login. This is load-bearing for the

@@ -966,6 +966,21 @@ def test_users_reuse_home_true():
     assert d["doAutologin"] is False
 
 
+def test_users_hostname_template_is_literal_azarch():
+    # "What is the name of this computer?" defaults to "azarch" and must NOT change
+    # as the Full Name / Login fields change. Calamares reads the hostname suggestion
+    # from the top-level `hostname` submap's `template`. A LITERAL "azarch" (no
+    # ${...} macros) expands to exactly "azarch" for any user input; the paired
+    # calamares source patch seeds it as the initial value and freezes it. If a macro
+    # ever crept into this template the hostname would go reactive again, so pin it.
+    d = yaml.safe_load(calamares.users_conf())
+    assert d["hostname"]["template"] == "azarch"
+    assert "$" not in d["hostname"]["template"]  # no ${first}/${product}/... macros
+    # The (dead but historically-present) setHostname mirror carries it too, so the
+    # two never drift.
+    assert d["setHostname"]["template"] == "azarch"
+
+
 # --- locale.conf timezone default -------------------------------------------
 
 def test_locale_conf_defaults_to_asia_jerusalem():
