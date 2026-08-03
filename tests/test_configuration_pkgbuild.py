@@ -34,6 +34,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -43,22 +44,31 @@ from azarch.configuration import pkgbuild
 
 _HEX = re.compile(r"\A[0-9a-fA-F]+\Z")
 
-# Repo root (tests/ is one level down). Used to locate the vendored, extracted
-# calamares source the defaults patch is authored against.
+# Repo root (tests/ is one level down). Used to locate the vendored, pinned
+# calamares tarball the defaults patch is authored against.
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
-def _find_calamares_src() -> Path | None:
-    """Locate an extracted calamares-<ver> source tree under cache/ (the makepkg
-    build scratch), or None if it isn't present in this checkout."""
+def _find_calamares_tarball() -> Path | None:
+    """Locate the pinned calamares-<ver>.tar.gz under cache/ (the makepkg source
+    cache), or None if it isn't present in this checkout.
+
+    The patch is authored against PRISTINE upstream source, so the integration
+    guard must read from the tarball -- NOT the extracted build scratch under
+    .build/. makepkg runs the patch in-place during prepare(), so any local
+    build leaves that scratch tree already-patched; dry-running the patch against
+    it then trips "Reversed (or previously applied) patch detected!" and the test
+    false-fails. The .src/ tarball is exactly what makepkg downloads and is the
+    only trustworthy pristine copy on disk."""
     base = _REPO_ROOT / "cache" / "makepkg" / "calamares"
     if not base.is_dir():
         return None
-    hits = list(base.glob(f"**/calamares-{pkgbuild.CALAMARES_VERSION}"))
-    # Want the directory that actually contains src/modules (the source root).
-    for h in hits:
-        if (h / "src" / "modules").is_dir():
-            return h
+    # makepkg stores the fetched tarball under .src/; fall back to a wider glob
+    # in case the cache layout differs, but never match extracted trees.
+    name = f"calamares-{pkgbuild.CALAMARES_VERSION}.tar.gz"
+    for cand in (base / ".src" / name, *base.glob(f"**/{name}")):
+        if cand.is_file():
+            return cand
     return None
 
 
@@ -268,24 +278,46 @@ def test_calamares_defaults_patch_applies_to_pinned_source():
     # calamares source with the exact command the PKGBUILD runs (`patch -p1`).
     # This catches context drift on a version bump -- the failure mode where the
     # customization silently vanishes because the hunks no longer match.
-    src = _find_calamares_src()
-    if src is None:
-        pytest.skip("extracted calamares source not present under cache/ (CI checkout)")
+    #
+    # Source the two files from the PRISTINE tarball, not the .build/ scratch:
+    # makepkg patches the scratch in place during prepare(), so reading it back
+    # would test the patch against already-patched source (see
+    # _find_calamares_tarball for the full rationale).
+    tarball = _find_calamares_tarball()
+    if tarball is None:
+        pytest.skip("pinned calamares tarball not present under cache/ (CI checkout)")
     if shutil.which("patch") is None:
         pytest.skip("`patch` not available on this host")
 
     import tempfile
 
+    # The two files the patch touches, as stored inside the tarball (prefixed by
+    # the calamares-<ver>/ top-level directory the archive unpacks into).
+    rels = (
+        "src/modules/keyboard/KeyboardLayoutModel.cpp",
+        "src/modules/users/Config.cpp",
+    )
+    top = f"calamares-{pkgbuild.CALAMARES_VERSION}"
+
     with tempfile.TemporaryDirectory() as td:
         work = Path(td)
-        # Copy only the two files the patch touches, preserving their paths.
-        for rel in (
-            "src/modules/keyboard/KeyboardLayoutModel.cpp",
-            "src/modules/users/Config.cpp",
-        ):
-            dst = work / rel
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src / rel, dst)
+        # Extract only the two files pristine, dropping the top-level dir so the
+        # -p1 a/src/... paths line up when patch runs from `work`.
+        with tarfile.open(tarball, "r:gz") as tf:
+            for rel in rels:
+                member = tf.getmember(f"{top}/{rel}")
+                fobj = tf.extractfile(member)
+                assert fobj is not None, f"missing {rel} in tarball"
+                dst = work / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_bytes(fobj.read())
+
+        # Guard against silently testing already-patched source: the pristine
+        # files must NOT yet contain the additions the patch introduces.
+        pristine_kbd = (work / rels[0]).read_text()
+        pristine_users = (work / rels[1]).read_text()
+        assert "alt_shift_toggle" not in pristine_kbd
+        assert "seededHostname" not in pristine_users
 
         patch_text = pkgbuild.calamares_defaults_patch()
         # Dry-run first (pure check), then a real apply (proves the result is
