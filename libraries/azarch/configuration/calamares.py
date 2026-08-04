@@ -73,11 +73,9 @@ from .calamares_shellprocess import (  # noqa: F401  (re-exported for the public
     LIVE_USER,
     STOCK_LINUX_PRESET,
     _boot_desparsify_command,
-    _lc_time_command,
     _mkinitcpio_reset_command,
     shellprocess_conf,
     shellprocess_desparsify_conf,
-    shellprocess_lctime_conf,
 )
 
 # The branding component directory name (under branding/) and product identity.
@@ -130,13 +128,6 @@ instances:
 - id: desparse
   module: shellprocess
   config: shellprocess-desparse.conf
-# Third shellprocess instance: force LC_TIME=en_GB.UTF-8 (d/m/y dates) in the target
-# AFTER localecfg overwrites /etc/locale.conf. Its config is shellprocess-lctime.conf
-# (see the `config:` key note above -- a typo would silently re-run the DEFAULT
-# shellprocess.conf and the date format would stay m/d/y).
-- id: lctime
-  module: shellprocess
-  config: shellprocess-lctime.conf
 
 # The ordered install sequence. `show` phases render UI pages; `exec` phases do
 # the actual work with a progress bar. Only modules with a configuration below (or that
@@ -175,11 +166,6 @@ sequence:
   - locale
   - keyboard
   - localecfg
-  # Force LC_TIME=en_GB.UTF-8 (day/month/year dates) in the target, re-asserting it
-  # AFTER localecfg overwrites /etc/locale.conf with the locale page's m/d/y en_US
-  # values. Second shellprocess instance (shellprocess@lctime); its configuration is
-  # modules/shellprocess-lctime.conf (see instances:). Must run after localecfg.
-  - shellprocess@lctime
   - users
   - networkcfg
   - hwclock
@@ -554,33 +540,40 @@ localeConfMappings:
 
 # --- 6c2. modules/keyboard.conf --------------------------------------------
 def keyboard_conf() -> str:
-    """Pin the installer keyboard to the live system's layout (English/"us") and
-    DISABLE the locale-based auto-guess.
+    """Keyboard page: English ("us") is always the active layout; when the user
+    picks a NON-English region on the Location page, the region's native layout is
+    added as a switchable SECOND (Alt+Shift), live in the installer and persisted to
+    the target. This is driven by the Az'arch region-keyboard SOURCE PATCH
+    (configuration/pkgbuild.calamares_region_keyboard_patch), enabled by the
+    `regionSecondLayout: true` key below.
 
-    THE BUG this fixes: with no keyboard.conf, Calamares' keyboard module runs
-    with its default `guessLayout: true`. On the Keyboard page it first detects the
-    live system's current xkb layout -- which Az'arch's setup-locale.sh pins to
-    "us" -- but then `guessLocaleKeyboardLayout()` OVERRIDES that with a guess
-    derived from the locale/timezone. Az'arch defaults the region to Asia/Jerusalem
-    (locale.conf), so the guess resolves to Israel -> **Hebrew**, which is what the
-    installer pre-selected (and its blank-key/no-letters preview came from). Verified
-    against the Calamares 3.4.2 keyboard Config.cpp:
-      * `m_guessLayout = getBool(configurationMap, "guessLayout", true)` (default on)
-      * `guessLocaleKeyboardLayout()` early-returns `if (!m_guessLayout)` -- so
-        `guessLayout: false` keeps the DETECTED current layout ("us") as the default
-        instead of guessing Hebrew.
+    HOW IT WORKS (and why guessLayout is now TRUE, reversing the earlier fix):
+      * The patched locale module publishes the selected zone's ISO-3166 country
+        code to GlobalStorage as "locationCountry".
+      * On Keyboard-page activation, the patched keyboard module's
+        guessRegionKeyboardLayout() reads "locationCountry", maps it to the region's
+        xkb layout (its own table, covering Latin-script langs like Spanish/French
+        that upstream's non-ascii-layouts does NOT), makes the region layout the
+        PRIMARY with "us" force-added as the ADDITIONAL layout, and applies it live
+        -- so the emitted order is "us,<region>" (English first/active) and the
+        "Type here to test" box switches scripts on Alt+Shift. English-speaking
+        regions (US/GB/AU/...) get English only.
+      * `guessLayout: true` is REQUIRED for guessLocaleKeyboardLayout() (which the
+        patch extends) to run at all -- it early-returns when guessLayout is false.
+        The earlier "keep us, never guess" fix (guessLayout:false) is superseded:
+        the guess no longer produces a lone non-ASCII layout (the old Hebrew-only,
+        blank-key bug) because English is always force-kept as the primary/active
+        ASCII layout; the region language is only ever the SECOND, Alt+Shift layout.
 
-    We ALSO pin useLocale1:false so the module reads/writes the plain
-    /etc/X11/xorg.conf.d/00-keyboard.conf (the file setup-locale.sh already wrote
-    with "us") rather than going through systemd-localed -- consistent with the
-    English-only, no-auto-resolve policy in configuration/locale.py. The `configure`
-    block keeps kwin/gnome off: Az'arch runs Plasma on X11, which reads its
-    keyboard layout from the standard xkb xorg.conf.d file we manage directly, so
-    the module needs no KWin- or GNOME-specific keyboard integration.
+    Default region is Asia/Jerusalem (modules/locale.conf), so out of the box the
+    installer shows English + Hebrew with Alt+Shift. Move the region to
+    America/El_Salvador and it becomes English + Spanish; Asia/Riyadh -> English +
+    Arabic; an English-speaking region -> English only.
 
-    Language stays English-only and the region stays Asia/Jerusalem: this changes
-    ONLY the keyboard auto-guess, nothing else. Dynamic per-user resolution is the
-    deferred `azarch --resolve-*` work (issue #46), intentionally NOT done here."""
+    useLocale1:false keeps the module reading/writing the plain
+    /etc/X11/xorg.conf.d/00-keyboard.conf (Az'arch is Plasma/X11); the `configure`
+    block keeps kwin/gnome off (the layout is read from that xkb file directly, so
+    no KWin/GNOME keyboard integration is needed)."""
     return """\
 # Keyboard configuration for the Az'arch installer.
 ---
@@ -591,16 +584,24 @@ xOrgConfFileName: "/etc/X11/xorg.conf.d/00-keyboard.conf"
 convertedKeymapPath: "/usr/share/kbd/keymaps/xkb"
 
 # Manage the plain xorg.conf.d file directly instead of going through
-# systemd-localed. Az'arch is Plasma/X11 and setup-locale.sh already wrote
-# /etc/X11/xorg.conf.d/00-keyboard.conf with the "us" layout, so the module reads
-# that as the current layout and keeps it (see guessLayout below).
+# systemd-localed. Az'arch is Plasma/X11 and the layout is read from
+# /etc/X11/xorg.conf.d/00-keyboard.conf.
 useLocale1: false
 
-# DO NOT guess the layout from the locale/timezone. This is THE fix for the
-# installer auto-resolving to Hebrew from the Asia/Jerusalem default: false makes
-# the module keep the current OS keyboard layout ("us", set by setup-locale.sh) as
-# the default instead of deriving one from the region.
-guessLayout: false
+# Enable the locale/region guess. REQUIRED so the Az'arch region-keyboard patch's
+# guessRegionKeyboardLayout() runs (guessLocaleKeyboardLayout() early-returns when
+# this is false). It no longer auto-selects a lone Hebrew layout: English is always
+# force-kept as the primary/active layout and the region language is only ever the
+# switchable SECOND layout (see regionSecondLayout).
+guessLayout: true
+
+# Az'arch: region-driven second keyboard layout. When the user selects a non-English
+# region on the Location page, add that region's native xkb layout as a switchable
+# SECOND layout (English "us" stays first/active; group switch is Alt+Shift), applied
+# to the LIVE installer session and persisted to the target. English-speaking regions
+# get English only. Implemented by calamares_region_keyboard_patch(); this key is the
+# opt-in switch it reads (upstream/other distros default it to false).
+regionSecondLayout: true
 
 # Az'arch runs Plasma on X11, but the layout is read from the plain xkb
 # xorg.conf.d file we manage (useLocale1:false) -- so no KWin/GNOME keyboard
@@ -946,7 +947,6 @@ def emit_map() -> dict[str, str]:
         "modules/unpackfs.conf": unpackfs_conf(),
         "modules/shellprocess.conf": shellprocess_conf(),
         "modules/shellprocess-desparse.conf": shellprocess_desparsify_conf(),
-        "modules/shellprocess-lctime.conf": shellprocess_lctime_conf(),
         "modules/users.conf": users_conf(),
         "modules/packages.conf": packages_conf(),
         "modules/mount.conf": mount_conf(),

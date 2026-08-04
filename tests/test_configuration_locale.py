@@ -162,3 +162,72 @@ def test_setup_block_still_dollar_brace_clean():
     block = locale._detect_and_apply_locale_block()
     assert "{{" not in block
     assert "}}" not in block
+
+
+# --- Resolver country table (the `azarch --resolve-*` commands) --------------
+
+def test_resolver_table_rows_have_five_fields():
+    # Every row is CC|locale|layout|keymap|english; the guest CLI splits on '|' and
+    # relies on exactly five fields.
+    for line in locale.resolver_country_table_sh().splitlines():
+        parts = line.split("|")
+        assert len(parts) == 5, line
+
+
+def test_resolver_table_english_flag_is_one_or_zero():
+    for line in locale.resolver_country_table_sh().splitlines():
+        assert line.split("|")[4] in ("0", "1"), line
+
+
+def test_resolver_table_english_speaking_countries_are_english_only():
+    # English-speaking countries must be flagged english=1 AND map to the plain "us"
+    # layout/keymap (no second layout), matching "English speaking -> English only".
+    t = locale.RESOLVER_COUNTRY_TABLE
+    for cc in ("US", "GB", "AU", "NZ", "IE", "ZA", "CA"):
+        loc, layout, keymap, english = t[cc]
+        assert english is True, cc
+        assert layout == "us" and keymap == "us", cc
+
+
+def test_resolver_table_hebrew_layout_is_il_not_he():
+    # The xkb LAYOUT code for Hebrew is "il" (base.lst); "he" is only a keymap name.
+    # Getting this wrong makes setxkbmap fail and the second layout never appear.
+    loc, layout, keymap, english = locale.RESOLVER_COUNTRY_TABLE["IL"]
+    assert layout == "il"
+    assert english is False
+
+
+def test_resolver_table_arabic_uses_generic_ara_layout():
+    for cc in ("SA", "AE", "EG", "IQ"):
+        loc, layout, keymap, english = locale.RESOLVER_COUNTRY_TABLE[cc]
+        assert layout == "ara", cc
+        assert english is False
+
+
+def test_resolver_table_latin_american_spanish_uses_latam():
+    # El Salvador (and the rest of Latin America) must use the "latam" layout, not
+    # Spain's "es" -- the screenshot shows "español (El Salvador)".
+    loc, layout, keymap, english = locale.RESOLVER_COUNTRY_TABLE["SV"]
+    assert loc == "es_SV.UTF-8"
+    assert layout == "latam"
+    assert english is False
+
+
+def test_resolver_table_locales_are_utf8():
+    for cc, (loc, layout, keymap, english) in locale.RESOLVER_COUNTRY_TABLE.items():
+        assert loc.endswith(".UTF-8"), (cc, loc)
+
+
+def test_resolver_table_matches_calamares_patch_layout_codes():
+    # Single-source-of-truth guard: every non-English country's (layout, keymap) in
+    # the resolver table must also appear as a { "CC", "layout", "keymap" } row in
+    # the Calamares region-keyboard C++ patch, so the guest resolver and the
+    # installer never drift.
+    from azarch.configuration import pkgbuild
+
+    patch = pkgbuild.calamares_region_keyboard_patch()
+    for cc, (loc, layout, keymap, english) in locale.RESOLVER_COUNTRY_TABLE.items():
+        if english:
+            continue  # English countries are absent from the patch table by design
+        needle = '{ "%s", "%s", "%s" }' % (cc, layout, keymap)
+        assert needle in patch, f"{needle} missing from calamares region patch"

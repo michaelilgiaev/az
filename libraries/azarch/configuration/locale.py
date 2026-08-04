@@ -61,6 +61,145 @@ def _language_map_heredoc() -> str:
     return "\n".join(f"{cc}|{name}|{loc}" for cc, (name, loc) in LANGUAGE_MAP.items())
 
 
+# --- Resolver country table (the `azarch --resolve-*` guest commands) --------
+# The SINGLE SOURCE OF TRUTH for the guest-side resolver: ISO-3166 country code ->
+# (locale, xkb layout, console keymap, english?). This is a richer superset of
+# LANGUAGE_MAP -- it carries the xkb LAYOUT + console KEYMAP the resolver needs to
+# actually configure a second keyboard layout, and an explicit english flag so
+# English-speaking countries resolve to English ONLY (no second layout/locale),
+# matching PROMPT: "if the selected region is English speaking, then the machine
+# should only have English".
+#
+# It is kept CONSISTENT with the Calamares region-keyboard patch's own C++ table
+# (configuration/pkgbuild.calamares_region_keyboard_patch): the layout codes are
+# real /usr/share/X11/xkb/rules/base.lst identifiers (Hebrew is "il" NOT "he",
+# generic Arabic is "ara", Latin-American Spanish is "latam"). The resolver embeds
+# this as a shell table (resolver_country_table_sh) into the `azarch` CLI, so adding
+# a country here is a one-line edit that both the installer patch table and the
+# guest resolver should mirror.
+#
+# Fields: cc -> (locale, xkb_layout, vconsole_keymap, is_english)
+RESOLVER_COUNTRY_TABLE: dict[str, tuple[str, str, str, bool]] = {
+    # English-speaking -> English only (layout/keymap "us", is_english True).
+    "US": ("en_US.UTF-8", "us", "us", True),
+    "GB": ("en_GB.UTF-8", "us", "us", True),
+    "AU": ("en_AU.UTF-8", "us", "us", True),
+    "NZ": ("en_NZ.UTF-8", "us", "us", True),
+    "IE": ("en_IE.UTF-8", "us", "us", True),
+    "ZA": ("en_ZA.UTF-8", "us", "us", True),
+    "CA": ("en_CA.UTF-8", "us", "us", True),
+    # Spanish (Latin America uses the "latam" layout; Spain uses "es").
+    "SV": ("es_SV.UTF-8", "latam", "la-latin1", False),
+    "MX": ("es_MX.UTF-8", "latam", "la-latin1", False),
+    "AR": ("es_AR.UTF-8", "latam", "la-latin1", False),
+    "CO": ("es_CO.UTF-8", "latam", "la-latin1", False),
+    "CL": ("es_CL.UTF-8", "latam", "la-latin1", False),
+    "PE": ("es_PE.UTF-8", "latam", "la-latin1", False),
+    "VE": ("es_VE.UTF-8", "latam", "la-latin1", False),
+    "EC": ("es_EC.UTF-8", "latam", "la-latin1", False),
+    "GT": ("es_GT.UTF-8", "latam", "la-latin1", False),
+    "BO": ("es_BO.UTF-8", "latam", "la-latin1", False),
+    "CR": ("es_CR.UTF-8", "latam", "la-latin1", False),
+    "PY": ("es_PY.UTF-8", "latam", "la-latin1", False),
+    "PA": ("es_PA.UTF-8", "latam", "la-latin1", False),
+    "UY": ("es_UY.UTF-8", "latam", "la-latin1", False),
+    "HN": ("es_HN.UTF-8", "latam", "la-latin1", False),
+    "NI": ("es_NI.UTF-8", "latam", "la-latin1", False),
+    "DO": ("es_DO.UTF-8", "latam", "la-latin1", False),
+    "CU": ("es_CU.UTF-8", "latam", "la-latin1", False),
+    "ES": ("es_ES.UTF-8", "es", "es", False),
+    # Other Latin-script languages.
+    "FR": ("fr_FR.UTF-8", "fr", "fr", False),
+    "DE": ("de_DE.UTF-8", "de", "de", False),
+    "AT": ("de_AT.UTF-8", "de", "de", False),
+    "CH": ("de_CH.UTF-8", "ch", "de_CH-latin1", False),
+    "IT": ("it_IT.UTF-8", "it", "it", False),
+    "PT": ("pt_PT.UTF-8", "pt", "pt-latin1", False),
+    "BR": ("pt_BR.UTF-8", "br", "br-abnt2", False),
+    "NL": ("nl_NL.UTF-8", "nl", "nl", False),
+    "PL": ("pl_PL.UTF-8", "pl", "pl", False),
+    "SE": ("sv_SE.UTF-8", "se", "sv-latin1", False),
+    "NO": ("nb_NO.UTF-8", "no", "no-latin1", False),
+    "DK": ("da_DK.UTF-8", "dk", "dk-latin1", False),
+    "FI": ("fi_FI.UTF-8", "fi", "fi", False),
+    "CZ": ("cs_CZ.UTF-8", "cz", "cz-lat2", False),
+    "HU": ("hu_HU.UTF-8", "hu", "hu", False),
+    "TR": ("tr_TR.UTF-8", "tr", "trq", False),
+    "RO": ("ro_RO.UTF-8", "ro", "ro", False),
+    "HR": ("hr_HR.UTF-8", "hr", "croat", False),
+    "SK": ("sk_SK.UTF-8", "sk", "sk-qwerty", False),
+    "SI": ("sl_SI.UTF-8", "si", "slovene", False),
+    "EE": ("et_EE.UTF-8", "ee", "et", False),
+    "LV": ("lv_LV.UTF-8", "lv", "lv", False),
+    "LT": ("lt_LT.UTF-8", "lt", "lt", False),
+    "IS": ("is_IS.UTF-8", "is", "is-latin1", False),
+    # Vietnamese: the xkb "vn" layout is valid, but the kbd package ships NO "vn"
+    # console keymap, so the raw-TTY keymap falls back to "us" (Vietnamese input at
+    # the bare console needs an IME anyway; the X11/GUI layout stays "vn").
+    "VN": ("vi_VN.UTF-8", "vn", "us", False),
+    # Non-Latin scripts (the classic English-fallback cases). The xkb LAYOUT is the
+    # region's; the console KEYMAP is the region's ONLY when the kbd package actually
+    # ships one (il/ua/by/bg/rs/mk/gr/ge/jp exist), else it falls back to "us" -- a
+    # raw VT cannot render most of these scripts without a graphical IME, and an
+    # absent keymap would make systemd-vconsole-setup's `loadkeys` fail. (VERIFIED
+    # against the kbd package's /usr/share/kbd/keymaps.)
+    "IL": ("he_IL.UTF-8", "il", "il", False),
+    "RU": ("ru_RU.UTF-8", "ru", "ruwin_alt_sh-UTF-8", False),
+    "UA": ("uk_UA.UTF-8", "ua", "ua-utf", False),
+    "BY": ("be_BY.UTF-8", "by", "by", False),
+    "BG": ("bg_BG.UTF-8", "bg", "bg_bds-utf8", False),
+    "RS": ("sr_RS.UTF-8", "rs", "sr-cy", False),
+    "MK": ("mk_MK.UTF-8", "mk", "mk-utf", False),
+    "GR": ("el_GR.UTF-8", "gr", "gr", False),
+    "GE": ("ka_GE.UTF-8", "ge", "ge", False),
+    "AM": ("hy_AM.UTF-8", "am", "us", False),   # no "am" console keymap in kbd
+    "IR": ("fa_IR.UTF-8", "ir", "us", False),   # no "ir" console keymap in kbd
+    "PK": ("ur_PK.UTF-8", "pk", "us", False),   # no "pk" console keymap in kbd
+    "IN": ("hi_IN.UTF-8", "in", "us", False),   # no "in" console keymap in kbd
+    "TH": ("th_TH.UTF-8", "th", "us", False),   # no "th" console keymap in kbd
+    "KH": ("km_KH.UTF-8", "kh", "us", False),   # no "kh" console keymap in kbd
+    "LA": ("lo_LA.UTF-8", "la", "us", False),   # no bare "la" console keymap in kbd
+    "MM": ("my_MM.UTF-8", "mm", "us", False),   # no "mm" console keymap in kbd
+    "LK": ("si_LK.UTF-8", "lk", "us", False),   # no "lk" console keymap in kbd
+    "JP": ("ja_JP.UTF-8", "jp", "jp106", False),
+    "KR": ("ko_KR.UTF-8", "kr", "us", False),   # no "kr" console keymap in kbd
+    "CN": ("zh_CN.UTF-8", "cn", "us", False),   # no "cn" console keymap in kbd
+    "TW": ("zh_TW.UTF-8", "tw", "us", False),   # no "tw" console keymap in kbd
+    "MN": ("mn_MN.UTF-8", "mn", "us", False),   # no "mn" console keymap in kbd
+    # Arabic-script (generic Arabic keyboard "ara" for all Arab states). The kbd
+    # package ships NO Arabic console keymap, so the raw-TTY keymap is "us" (the X11
+    # "ara" layout is unaffected -- Arabic at the bare console needs a graphical IME).
+    "SA": ("ar_SA.UTF-8", "ara", "us", False),
+    "AE": ("ar_AE.UTF-8", "ara", "us", False),
+    "EG": ("ar_EG.UTF-8", "ara", "us", False),
+    "IQ": ("ar_IQ.UTF-8", "ara", "us", False),
+    "JO": ("ar_JO.UTF-8", "ara", "us", False),
+    "KW": ("ar_KW.UTF-8", "ara", "us", False),
+    "LB": ("ar_LB.UTF-8", "ara", "us", False),
+    "LY": ("ar_LY.UTF-8", "ara", "us", False),
+    "OM": ("ar_OM.UTF-8", "ara", "us", False),
+    "QA": ("ar_QA.UTF-8", "ara", "us", False),
+    "SY": ("ar_SY.UTF-8", "ara", "us", False),
+    "YE": ("ar_YE.UTF-8", "ara", "us", False),
+    "BH": ("ar_BH.UTF-8", "ara", "us", False),
+    "DZ": ("ar_DZ.UTF-8", "ara", "us", False),
+    "MA": ("ar_MA.UTF-8", "ara", "us", False),
+    "TN": ("ar_TN.UTF-8", "ara", "us", False),
+    "SD": ("ar_SD.UTF-8", "ara", "us", False),
+}
+
+
+def resolver_country_table_sh() -> str:
+    """Render RESOLVER_COUNTRY_TABLE as ``CC|locale|layout|keymap|english`` lines for
+    the `azarch` CLI to embed and grep. `english` is the literal 1/0 the shell reads.
+    This is the data the guest resolver (`azarch --resolve-language`/`--resolve-region`)
+    maps an IP-geolocated country code onto."""
+    out = []
+    for cc, (loc, layout, keymap, english) in RESOLVER_COUNTRY_TABLE.items():
+        out.append(f"{cc}|{loc}|{layout}|{keymap}|{1 if english else 0}")
+    return "\n".join(out)
+
+
 # Az'arch default/only display language and keyboard. English everywhere; the
 # keymap is always "us" with no second layout and no group-toggle.
 DEFAULT_LANG = "en_US.UTF-8"

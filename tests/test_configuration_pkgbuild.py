@@ -177,9 +177,10 @@ def test_librewolf_src_shares_pkgver_and_lwver():
 def test_calamares_pkgver_and_sha():
     s = pkgbuild.pkgbuild_calamares()
     assert "pkgver=3.4.2" in s
-    # The tarball hash is pinned; the shipped-in-repo patch is SKIP (a local file,
-    # matched by position to the second source() entry).
-    assert ("sha256sums=('%s' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
+    # The tarball hash is pinned; the TWO shipped-in-repo patches (defaults +
+    # region-keyboard) are each SKIP (local files, matched by position to the
+    # second and third source() entries).
+    assert ("sha256sums=('%s' 'SKIP' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
 
 
 def test_calamares_pkgver_var_survives_brace_collapse():
@@ -204,10 +205,10 @@ def test_calamares_pkgbuild_references_patch_in_source_and_prepare():
 
 def test_calamares_patch_skip_aligned_after_tarball_hash():
     # sha256sums matches source() by POSITION: real tarball hash first, then SKIP
-    # for the local patch file. Exactly one SKIP (only the patch is a local file).
+    # for each local patch file. Exactly two SKIPs (the defaults + region patches).
     s = pkgbuild.pkgbuild_calamares()
-    assert ("sha256sums=('%s' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
-    assert s.count("'SKIP'") == 1
+    assert ("sha256sums=('%s' 'SKIP' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
+    assert s.count("'SKIP'") == 2
 
 
 def test_calamares_patch_name_is_a_patch_file():
@@ -351,6 +352,157 @@ def test_calamares_defaults_patch_applies_to_pinned_source():
         assert "setHostName( seededHostname )" in users
 
 
+# --- calamares source patch (region-driven keyboard) -----------------------
+
+def test_calamares_region_patch_name_is_a_patch_file():
+    assert pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME.endswith(".patch")
+    # Distinct from the defaults patch (two separate files applied in sequence).
+    assert (
+        pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME
+        != pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME
+    )
+
+
+def test_calamares_pkgbuild_references_region_patch_in_source_and_prepare():
+    # The region patch must be BOTH a source() entry and applied in prepare(); the
+    # defaults patch must still be too (both are applied, in order).
+    s = pkgbuild.pkgbuild_calamares()
+    name = pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME
+    assert ("'%s'" % name) in s
+    assert ("patch -p1 < \"$srcdir/%s\"" % name) in s
+    # Both patches present in source() -> now TWO local files -> two SKIPs.
+    assert ("sha256sums=('%s' 'SKIP' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
+    assert s.count("'SKIP'") == 2
+
+
+def test_calamares_region_patch_touches_keyboard_and_locale_modules():
+    # The feature spans three files: the keyboard module header + impl (the
+    # region->layout logic) and the locale module (publishing locationCountry to GS).
+    p = pkgbuild.calamares_region_keyboard_patch()
+    for f in (
+        "src/modules/keyboard/Config.h",
+        "src/modules/keyboard/Config.cpp",
+        "src/modules/locale/Config.cpp",
+    ):
+        assert ("--- a/%s" % f) in p
+        assert ("+++ b/%s" % f) in p
+
+
+def test_calamares_region_patch_locale_publishes_country_to_gs():
+    # The locale module must insert the selected zone's ISO-3166 country code into
+    # GlobalStorage under "locationCountry" -- the only clean country signal the
+    # keyboard module can key its layout table on.
+    p = pkgbuild.calamares_region_keyboard_patch()
+    added = [ln[1:] for ln in p.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
+    body = "\n".join(added)
+    assert "locationCountry" in body
+    assert "location->country()" in body
+
+
+def test_calamares_region_patch_keeps_english_first_and_alt_shift():
+    # The added logic must (a) read regionSecondLayout, (b) force "us" as the
+    # additional layout (English first/active in "us,<region>"), and (c) use
+    # grp:alt_shift_toggle as the switcher. Non-English scripts and Latin ones
+    # (Hebrew "il", Arabic "ara", Spanish "latam") must be in the country table.
+    p = pkgbuild.calamares_region_keyboard_patch()
+    added = [ln[1:] for ln in p.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
+    body = "\n".join(added)
+    assert "regionSecondLayout" in body
+    assert 'additionalLayout = QStringLiteral( "us" )' in body
+    assert "grp:alt_shift_toggle" in body
+    assert "guessRegionKeyboardLayout" in body
+    # Layout codes are the real base.lst identifiers (Hebrew is "il", not "he").
+    assert '"IL", "il"' in body
+    assert '"ara"' in body
+    assert '"latam"' in body
+    # And it must NOT map Hebrew to a bogus "he" layout code.
+    assert '"IL", "he"' not in body
+
+
+def test_calamares_region_patch_context_lines_have_leading_space():
+    # Same unified-diff hygiene as the defaults patch: every body line begins with
+    # exactly one of " ", "+", "-"; blank context lines survived as " ".
+    p = pkgbuild.calamares_region_keyboard_patch()
+    for ln in p.splitlines():
+        if ln.startswith(("--- ", "+++ ", "@@ ")):
+            continue
+        assert ln[:1] in (" ", "+", "-"), repr(ln)
+    assert " " in p.splitlines()
+
+
+def test_calamares_region_patch_emitted_with_recipe():
+    # recipe_dirs must emit the region patch under its filename in BOTH tiers.
+    for tier in (False, True):
+        files = dict(pkgbuild.recipe_dirs(tier))["calamares"]
+        assert files[pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME] == (
+            pkgbuild.calamares_region_keyboard_patch()
+        )
+
+
+def test_both_calamares_patches_apply_in_sequence_to_pinned_source():
+    # THE integration guard for the region feature: BOTH patches must apply cleanly,
+    # IN THE ORDER prepare() runs them (defaults first, then region), to the real
+    # pinned source. They touch disjoint files/regions, so this also proves they do
+    # not conflict. Catches context drift on a version bump for either patch.
+    tarball = _find_calamares_tarball()
+    if tarball is None:
+        pytest.skip("pinned calamares tarball not present under cache/ (CI checkout)")
+    if shutil.which("patch") is None:
+        pytest.skip("`patch` not available on this host")
+
+    import tempfile
+
+    # Union of every file the two patches touch, extracted pristine.
+    rels = (
+        "src/modules/keyboard/KeyboardLayoutModel.cpp",
+        "src/modules/users/Config.cpp",
+        "src/modules/keyboard/Config.h",
+        "src/modules/keyboard/Config.cpp",
+        "src/modules/locale/Config.cpp",
+    )
+    top = f"calamares-{pkgbuild.CALAMARES_VERSION}"
+
+    with tempfile.TemporaryDirectory() as td:
+        work = Path(td)
+        with tarfile.open(tarball, "r:gz") as tf:
+            for rel in rels:
+                member = tf.getmember(f"{top}/{rel}")
+                fobj = tf.extractfile(member)
+                assert fobj is not None, f"missing {rel} in tarball"
+                dst = work / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_bytes(fobj.read())
+
+        # Pristine guard: the region additions must not already be present.
+        assert "guessRegionKeyboardLayout" not in (work / "src/modules/keyboard/Config.cpp").read_text()
+        assert "locationCountry" not in (work / "src/modules/locale/Config.cpp").read_text()
+
+        # Apply defaults THEN region, exactly as prepare() does. Dry-run each first.
+        for patch_text in (
+            pkgbuild.calamares_defaults_patch(),
+            pkgbuild.calamares_region_keyboard_patch(),
+        ):
+            dry = subprocess.run(
+                ["patch", "-p1", "--dry-run"],
+                input=patch_text, text=True, cwd=work, capture_output=True, timeout=30,
+            )
+            assert dry.returncode == 0, f"dry-run failed:\n{dry.stdout}\n{dry.stderr}"
+            real = subprocess.run(
+                ["patch", "-p1"],
+                input=patch_text, text=True, cwd=work, capture_output=True, timeout=30,
+            )
+            assert real.returncode == 0, f"apply failed:\n{real.stdout}\n{real.stderr}"
+
+        # The region feature actually landed in the patched source.
+        kbd_cpp = (work / "src/modules/keyboard/Config.cpp").read_text()
+        assert "guessRegionKeyboardLayout" in kbd_cpp
+        assert "regionLayoutForCountry" in kbd_cpp
+        kbd_h = (work / "src/modules/keyboard/Config.h").read_text()
+        assert "m_regionSecondLayout" in kbd_h
+        loc = (work / "src/modules/locale/Config.cpp").read_text()
+        assert 'gs->insert( countryKey, location->country() )' in loc
+
+
 # --- brace-doubling invariant across every generator -----------------------
 
 def test_no_leftover_double_braces():
@@ -410,6 +562,7 @@ def test_recipe_dirs_default_tier():
     assert set(dict(dirs)["calamares"]) == {
         "PKGBUILD",
         pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME,
+        pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME,
     }
     files = dict(dirs)["librewolf"]
     assert set(files) == {"PKGBUILD", "librewolf.desktop", "librewolf.overrides.cfg"}
@@ -426,6 +579,7 @@ def test_recipe_dirs_full_tier():
     assert set(dict(dirs)["calamares"]) == {
         "PKGBUILD",
         pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME,
+        pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME,
     }
     assert "make fetch" in dict(dirs)["librewolf"]["PKGBUILD"]
 

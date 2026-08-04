@@ -16,6 +16,8 @@ baked in), and the privileged wrapper's `unset XDG_RUNTIME_DIR` before `exec sud
 
 from __future__ import annotations
 
+import pytest
+
 from azarch.configuration import desktop
 
 
@@ -381,6 +383,106 @@ def test_azarch_sshd_opens_firewall_before_starting_sshd():
     allow_idx = out.index("sudo ufw allow ssh")
     start_idx = out.index("sudo systemctl enable --now sshd")
     assert allow_idx < start_idx
+
+
+# --- azarch --resolve-* guest CLI (IP geolocation, user-chosen server) ------
+
+def test_azarch_resolve_subcommands_present_in_case_and_usage():
+    # All three resolvers must be real case branches AND advertised in usage.
+    out = desktop.azarch_sh()
+    for sub in ("--resolve-region", "--resolve-date-time", "--resolve-language"):
+        assert (sub + ")") in out                 # case branch
+        assert (sub + " ") in out or (sub + "\\n") in out  # usage line mentions it
+
+
+def test_azarch_resolve_offers_five_shuffled_servers():
+    # The user must be presented FIVE servers, shuffled, including the two called
+    # out in issue #46 (ipapi.co, ipquery.io). The prompt says 1-5.
+    out = desktop.azarch_sh()
+    assert "ipapi.co|" in out
+    assert "ipquery.io|" in out
+    servers = [ln for ln in out.splitlines() if "|http" in ln and ".co" in ln or "|http" in ln]
+    # Exactly five server definition lines in the servers heredoc.
+    server_lines = [ln for ln in out.splitlines() if "|http" in ln]
+    assert len(server_lines) == 5, server_lines
+    assert "shuf" in out                          # shuffled before display
+    assert "(1-5)" in out
+
+
+def test_azarch_resolve_requires_curl_and_jq():
+    # The resolvers ping the network with curl and parse JSON with jq; both are on
+    # the ISO. The script must guard on their presence with a clear error.
+    out = desktop.azarch_sh()
+    assert "command -v curl" in out
+    assert "command -v jq" in out
+
+
+def test_azarch_resolve_language_english_first_with_alt_shift():
+    # The applied keyboard must put English ("us") FIRST/active and the region
+    # layout SECOND, switched with Alt+Shift -- never the region layout alone.
+    out = desktop.azarch_sh()
+    assert 'xkb_layout="us,$layout"' in out
+    assert "grp:alt_shift_toggle" in out
+    # English-speaking regions get a lone "us" layout (English only).
+    assert 'xkb_layout="us"' in out
+
+
+def test_azarch_resolve_language_keeps_lang_english():
+    # Matching the installer: the display language stays English (LANG=en_US) and
+    # only the region FORMAT locale (LC_*) follows the country. The LC_* keys are
+    # written in a `for k in ...` loop over the format categories.
+    out = desktop.azarch_sh()
+    assert "LANG=en_US.UTF-8" in out
+    assert "for k in LC_NUMERIC LC_TIME LC_MONETARY LC_PAPER LC_MEASUREMENT" in out
+
+
+def test_azarch_resolve_region_does_both_timezone_and_language():
+    # --resolve-region must apply BOTH the timezone and the language from a single
+    # server query.
+    out = desktop.azarch_sh()
+    region_branch = out.split("--resolve-region)", 1)[1].split(";;", 1)[0]
+    assert "azarch_apply_timezone" in region_branch
+    assert "azarch_apply_language" in region_branch
+
+
+def test_azarch_resolve_date_time_sets_timezone_only():
+    out = desktop.azarch_sh()
+    dt_branch = out.split("--resolve-date-time)", 1)[1].split(";;", 1)[0]
+    assert "azarch_apply_timezone" in dt_branch
+    assert "azarch_apply_language" not in dt_branch
+
+
+def test_azarch_resolve_embeds_country_table_from_locale():
+    # The country->layout table is the single source of truth in configuration/locale;
+    # the CLI must embed exactly that rendering. Spot-check a few rows and that the
+    # Hebrew layout is the real "il" (not "he") and Latin-American Spanish is "latam".
+    from azarch.configuration import locale
+
+    out = desktop.azarch_sh()
+    table = locale.resolver_country_table_sh()
+    assert table in out
+    assert "IL|he_IL.UTF-8|il|il|0" in table
+    assert "SV|es_SV.UTF-8|latam|la-latin1|0" in table
+    assert "US|en_US.UTF-8|us|us|1" in table          # English-speaking flag = 1
+    # Arabic uses the "ara" xkb layout; the console keymap falls back to "us"
+    # (the kbd package ships no Arabic console keymap).
+    assert "SA|ar_SA.UTF-8|ara|us|0" in table
+
+
+def test_azarch_cli_is_posix_sh_syntax():
+    # The whole CLI (f-string with an embedded heredoc table) must be valid POSIX sh
+    # -- a stray unescaped brace from the f-string conversion would break it.
+    import shutil
+    import subprocess
+
+    if shutil.which("sh") is None:
+        pytest.skip("no /bin/sh to syntax-check with")
+    out = desktop.azarch_sh()
+    # No f-string artefacts leaked into the emitted script.
+    assert "{{" not in out
+    assert "}}" not in out
+    r = subprocess.run(["sh", "-n"], input=out, text=True, capture_output=True, timeout=30)
+    assert r.returncode == 0, f"sh -n rejected the CLI:\n{r.stderr}"
 
 
 # --- bash_profile tty1 guard ------------------------------------------------

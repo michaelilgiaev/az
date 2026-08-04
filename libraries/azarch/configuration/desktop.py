@@ -527,10 +527,12 @@ def plasma_localerc() -> str:
     without changing the display language. `useDetailedLocales=true` tells Plasma to
     honour the per-category [Formats] overrides rather than a single global locale.
 
-    This is the Plasma complement to the system-wide LC_TIME set in
-    configuration/locale (live) and the shellprocess@lctime Calamares step
-    (installed); all three use DEFAULT_TIME_LOCALE. Shipped to the live home and
-    /etc/skel so installed users inherit it."""
+    This is the Plasma complement to the system-wide LC_TIME set for the LIVE ISO in
+    configuration/locale; both use DEFAULT_TIME_LOCALE so the live desktop clock reads
+    d/m/y. (On a Calamares install the target's LC_* now follows the region the user
+    picked on the Location page -- the old forced-en_GB shellprocess step was removed
+    so the region's date/number locale survives; see configuration/calamares.) Shipped
+    to the live home and /etc/skel so live/default users inherit the d/m/y clock."""
     return f"""\
 [Formats]
 LC_TIME={_TIME_LOCALE}
@@ -687,7 +689,7 @@ AZARCH_BIN_PATH = "/usr/local/bin/azarch"
 
 def azarch_sh() -> str:
     """Guest-side CLI shipped on the live ISO (and the installed system via
-    /etc/skel or the installer copy). Only subcommand so far: --sshd-hypervisor.
+    /etc/skel or the installer copy). Subcommands:
 
     azarch --sshd-hypervisor
       Installs the host's public key from ~/shared/authorized_keys (staged
@@ -696,21 +698,207 @@ def azarch_sh() -> str:
       --sshd-hypervisor because it wires the guest sshd up for the hypervisor's
       forwarded host->guest SSH port; the host side is hypervisor.cfg's
       sshd_hypervisor toggle.)
+
+    azarch --resolve-region / --resolve-date-time / --resolve-language
+      The ONLY things that ping an external server to geolocate the machine and
+      update its region settings (everything else in Az'arch is static/user-chosen
+      -- the installer and boot never auto-resolve). Each presents a list of 5
+      SHUFFLED IP-geolocation servers; the user picks one, it is queried for the
+      country code + timezone, and the system is updated:
+        --resolve-date-time  set the timezone to match the IP.
+        --resolve-language   set the language to English + the region's language
+                             (English ONLY if the region is English-speaking), i.e.
+                             a second keyboard layout with Alt+Shift + the locale.
+        --resolve-region     do both.
+      The country -> (locale, keyboard layout) map is embedded from
+      configuration/locale.RESOLVER_COUNTRY_TABLE (the single source of truth).
     """
-    return """\
+    # Embed the resolver's country table (CC|locale|layout|keymap|english) so the
+    # shell can map an IP-geolocated country onto a locale + keyboard layout without
+    # any Python at runtime. Single source of truth: configuration/locale.
+    from .locale import resolver_country_table_sh  # noqa: E402  (kept next to its user)
+
+    country_table = resolver_country_table_sh()
+    return f"""\
 #!/bin/sh
 # azarch -- guest-side helper CLI.
 
 set -eu
 
-usage() {
+usage() {{
     printf 'Usage: azarch <command>\\n'
     printf '\\n'
     printf 'Commands:\\n'
     printf '  --sshd-hypervisor    Install host pubkey from ~/shared/authorized_keys and start sshd\\n'
-}
+    printf '  --resolve-region     Geolocate by IP (pick a server) and set BOTH timezone and language\\n'
+    printf '  --resolve-date-time  Geolocate by IP (pick a server) and set the timezone\\n'
+    printf '  --resolve-language   Geolocate by IP (pick a server) and set English + the region language\\n'
+}}
 
-cmd="${1:-}"
+# --- resolver: country -> locale + keyboard layout table --------------------
+# Embedded from configuration/locale.RESOLVER_COUNTRY_TABLE. Lines are
+# CC|locale|xkb_layout|vconsole_keymap|english(1/0). `english` 1 means the country
+# is English-speaking -> English ONLY (no second layout/locale).
+azarch_country_table() {{
+    cat <<'AZARCH_CC_EOF'
+{country_table}
+AZARCH_CC_EOF
+}}
+
+# The 5 IP-geolocation servers offered (shuffled before display). Each line is
+# LABEL|URL|COUNTRY_JQ|TZ_JQ -- the jq filters that pull the ISO-3166 country code
+# and the IANA timezone out of that server's JSON response. ipapi.co and ipquery.io
+# were called out in issue #46; the rest are well-known free equivalents.
+azarch_resolver_servers() {{
+    cat <<'AZARCH_SRV_EOF'
+ipapi.co|https://ipapi.co/json/|.country_code|.timezone
+ipquery.io|https://api.ipquery.io/?format=json|.location.country_code|.location.timezone
+ip-api.com|http://ip-api.com/json/|.countryCode|.timezone
+ipinfo.io|https://ipinfo.io/json|.country|.timezone
+ipwho.is|https://ipwho.is/|.country_code|.timezone
+AZARCH_SRV_EOF
+}}
+
+# Prompt the user to choose one of the 5 shuffled servers, query it, and echo the
+# resolved "COUNTRY TIMEZONE" (uppercased country). Returns non-zero on any failure
+# (no network, bad/empty response). Writes prompts/errors to stderr so stdout stays
+# just the result. Requires curl + jq (both shipped on the ISO).
+azarch_resolve_via_server() {{
+    if ! command -v curl >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+        printf 'azarch: curl and jq are required to resolve the region\\n' >&2
+        return 1
+    fi
+    # Shuffle the 5 servers (shuf if present, else awk-random) into a numbered menu.
+    shuffled=$(azarch_resolver_servers | {{ shuf 2>/dev/null || awk 'BEGIN{{srand()}}{{print rand()"\\t"$0}}' | sort | cut -f2-; }})
+    printf 'Pick a server to geolocate this machine (1-5):\\n' >&2
+    i=0
+    printf '%s\\n' "$shuffled" | while IFS='|' read -r label url cjq tjq; do
+        i=$((i + 1))
+        printf '  %d) %s\\n' "$i" "$label" >&2
+    done
+    printf 'Server number: ' >&2
+    read -r choice
+    case "$choice" in
+        1|2|3|4|5) : ;;
+        *) printf 'azarch: invalid selection %s\\n' "$choice" >&2; return 1 ;;
+    esac
+    line=$(printf '%s\\n' "$shuffled" | sed -n "${{choice}}p")
+    if [ -z "$line" ]; then
+        printf 'azarch: invalid selection\\n' >&2
+        return 1
+    fi
+    label=$(printf '%s' "$line" | cut -d'|' -f1)
+    url=$(printf '%s' "$line" | cut -d'|' -f2)
+    cjq=$(printf '%s' "$line" | cut -d'|' -f3)
+    tjq=$(printf '%s' "$line" | cut -d'|' -f4)
+    printf 'Querying %s ...\\n' "$label" >&2
+    json=$(curl -fsS --max-time 15 "$url" 2>/dev/null) || {{
+        printf 'azarch: could not reach %s\\n' "$label" >&2
+        return 1
+    }}
+    country=$(printf '%s' "$json" | jq -r "$cjq // empty" 2>/dev/null | tr '[:lower:]' '[:upper:]')
+    tz=$(printf '%s' "$json" | jq -r "$tjq // empty" 2>/dev/null)
+    if [ -z "$country" ] || [ -z "$tz" ]; then
+        printf 'azarch: %s did not return a country + timezone\\n' "$label" >&2
+        return 1
+    fi
+    printf '%s %s\\n' "$country" "$tz"
+}}
+
+# Apply a timezone to the running system (and, when systemd is present, via
+# timedatectl so the change is live). Falls back to the /etc/localtime symlink.
+azarch_apply_timezone() {{
+    tz="$1"
+    if [ ! -e "/usr/share/zoneinfo/$tz" ]; then
+        printf 'azarch: unknown timezone %s\\n' "$tz" >&2
+        return 1
+    fi
+    if command -v timedatectl >/dev/null 2>&1 && timedatectl set-timezone "$tz" 2>/dev/null; then
+        :
+    else
+        sudo ln -sf "/usr/share/zoneinfo/$tz" /etc/localtime
+    fi
+    printf 'Timezone set to %s\\n' "$tz"
+}}
+
+# Apply the language for a country code: English + the region's language as a second
+# keyboard layout (Alt+Shift) and the region format locale -- or English ONLY if the
+# country is English-speaking. Mirrors the Calamares region-keyboard behaviour.
+azarch_apply_language() {{
+    country="$1"
+    row=$(azarch_country_table | grep -i "^${{country}}|" | head -1 || true)
+    if [ -z "$row" ]; then
+        # Unknown/unsupported country -> English only (safe default).
+        printf 'azarch: no language mapping for %s; keeping English only\\n' "$country" >&2
+        loc="en_US.UTF-8"; layout="us"; keymap="us"; english=1
+    else
+        loc=$(printf '%s' "$row" | cut -d'|' -f2)
+        layout=$(printf '%s' "$row" | cut -d'|' -f3)
+        keymap=$(printf '%s' "$row" | cut -d'|' -f4)
+        english=$(printf '%s' "$row" | cut -d'|' -f5)
+    fi
+
+    # Enable + generate the needed locales (English always; the region locale too
+    # when non-English). LANG stays English (en_US) -- only the region format locale
+    # (LC_*) follows the country, matching the installer's "English UI + region
+    # numbers/dates" behaviour.
+    sudo sed -i 's/^#\\s*en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen 2>/dev/null || true
+    if [ "$english" = "0" ]; then
+        sudo sed -i "s/^#\\s*${{loc}} UTF-8/${{loc}} UTF-8/" /etc/locale.gen 2>/dev/null || true
+        grep -q "^${{loc}} UTF-8" /etc/locale.gen 2>/dev/null || printf '%s UTF-8\\n' "$loc" | sudo tee -a /etc/locale.gen >/dev/null
+    fi
+    sudo locale-gen >/dev/null 2>&1 || true
+
+    # /etc/locale.conf: English UI, region format locale (LC_*) when non-English.
+    {{
+        printf 'LANG=en_US.UTF-8\\n'
+        if [ "$english" = "0" ]; then
+            for k in LC_NUMERIC LC_TIME LC_MONETARY LC_PAPER LC_MEASUREMENT; do
+                printf '%s=%s\\n' "$k" "$loc"
+            done
+        fi
+    }} | sudo tee /etc/locale.conf >/dev/null
+
+    # Keyboard: English ("us") first/active; the region layout as a switchable
+    # SECOND (Alt+Shift) when non-English. English-speaking -> "us" only.
+    if [ "$english" = "0" ] && [ "$layout" != "us" ]; then
+        xkb_layout="us,$layout"
+        xkb_opts='    Option "XkbOptions" "grp:alt_shift_toggle"'
+        vconsole_map="$keymap"
+    else
+        xkb_layout="us"
+        xkb_opts=""
+        vconsole_map="us"
+    fi
+    sudo mkdir -p /etc/X11/xorg.conf.d
+    {{
+        printf 'Section "InputClass"\\n'
+        printf '    Identifier "system-keyboard"\\n'
+        printf '    MatchIsKeyboard "on"\\n'
+        printf '    Option "XkbLayout" "%s"\\n' "$xkb_layout"
+        [ -n "$xkb_opts" ] && printf '%s\\n' "$xkb_opts"
+        printf 'EndSection\\n'
+    }} | sudo tee /etc/X11/xorg.conf.d/00-keyboard.conf >/dev/null
+    printf 'KEYMAP=%s\\n' "$vconsole_map" | sudo tee /etc/vconsole.conf >/dev/null
+
+    # Apply the keyboard to the LIVE X11 session too (so it takes effect now, not
+    # just after re-login), when an X server + setxkbmap are available.
+    if [ -n "${{DISPLAY:-}}" ] && command -v setxkbmap >/dev/null 2>&1; then
+        if [ "$xkb_layout" = "us" ]; then
+            setxkbmap -layout us 2>/dev/null || true
+        else
+            setxkbmap -layout "$xkb_layout" -option grp:alt_shift_toggle 2>/dev/null || true
+        fi
+    fi
+
+    if [ "$english" = "0" ]; then
+        printf 'Language set to English + %s (Alt+Shift to switch layouts)\\n' "$layout"
+    else
+        printf 'Language set to English only\\n'
+    fi
+}}
+
+cmd="${{1:-}}"
 
 case "$cmd" in
     --sshd-hypervisor)
@@ -721,7 +909,7 @@ case "$cmd" in
         # out. $SUDO_USER is the invoking user under sudo; fall back to the current
         # user when run without sudo. Refuse a bare-root target: there is no home
         # pubkey login for root here (blank password, PermitRootLogin prohibit-pw).
-        TARGET_USER="${SUDO_USER:-$(id -un)}"
+        TARGET_USER="${{SUDO_USER:-$(id -un)}}"
         if [ "$TARGET_USER" = "root" ]; then
             printf 'azarch --sshd-hypervisor: run as a normal user via sudo (got root); cannot stage a login key for root\\n' >&2
             exit 1
@@ -735,10 +923,10 @@ case "$cmd" in
         KEY="$SHARED/authorized_keys"
         if ! mountpoint -q "$SHARED" 2>/dev/null; then
             mkdir -p "$SHARED"
-            sudo mount -t 9p -o trans=virtio,version=9p2000.L,msize=104857600 shared "$SHARED" || {
+            sudo mount -t 9p -o trans=virtio,version=9p2000.L,msize=104857600 shared "$SHARED" || {{
                 printf 'azarch --sshd-hypervisor: could not mount shared folder (is the VM running with shared_directory=true?)\\n' >&2
                 exit 1
-            }
+            }}
         fi
         if [ ! -f "$KEY" ]; then
             printf 'azarch --sshd-hypervisor: %s not found -- stage a host pubkey there first\\n' "$KEY" >&2
@@ -757,6 +945,30 @@ case "$cmd" in
         sudo ufw allow ssh
         sudo systemctl enable --now sshd
         printf 'sshd enabled and started -- ssh in as %s.\\n' "$TARGET_USER"
+        ;;
+    --resolve-date-time)
+        # Ping a user-picked server, set the timezone to match the IP.
+        result=$(azarch_resolve_via_server) || exit 1
+        country=$(printf '%s' "$result" | cut -d' ' -f1)
+        tz=$(printf '%s' "$result" | cut -d' ' -f2)
+        printf 'Resolved: country=%s timezone=%s\\n' "$country" "$tz"
+        azarch_apply_timezone "$tz"
+        ;;
+    --resolve-language)
+        # Ping a user-picked server, set English + the region's language.
+        result=$(azarch_resolve_via_server) || exit 1
+        country=$(printf '%s' "$result" | cut -d' ' -f1)
+        printf 'Resolved: country=%s\\n' "$country"
+        azarch_apply_language "$country"
+        ;;
+    --resolve-region)
+        # Ping a user-picked server ONCE and set BOTH timezone and language.
+        result=$(azarch_resolve_via_server) || exit 1
+        country=$(printf '%s' "$result" | cut -d' ' -f1)
+        tz=$(printf '%s' "$result" | cut -d' ' -f2)
+        printf 'Resolved: country=%s timezone=%s\\n' "$country" "$tz"
+        azarch_apply_timezone "$tz"
+        azarch_apply_language "$country"
         ;;
     -h|--help|help)
         usage

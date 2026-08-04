@@ -28,7 +28,6 @@ EXPECTED_FILES = {
     "modules/unpackfs.conf",
     "modules/shellprocess.conf",
     "modules/shellprocess-desparse.conf",
-    "modules/shellprocess-lctime.conf",
     "modules/users.conf",
     "modules/packages.conf",
     "modules/mount.conf",
@@ -70,7 +69,7 @@ def _settings_show_list() -> list:
 def test_emit_map_has_exactly_expected_files():
     m = calamares.emit_map()
     assert set(m) == EXPECTED_FILES
-    assert len(m) == len(EXPECTED_FILES) == 20
+    assert len(m) == len(EXPECTED_FILES) == 19
 
 
 def test_emit_map_values_are_nonempty_strings():
@@ -186,7 +185,6 @@ def test_instances_use_config_key_not_configuration():
     # And specifically: each custom instance must point at its own conf file.
     by_id = {i["id"]: i for i in instances}
     assert by_id["desparse"]["config"] == "shellprocess-desparse.conf"
-    assert by_id["lctime"]["config"] == "shellprocess-lctime.conf"
 
 
 def test_configured_modules_referenced_in_sequence():
@@ -957,94 +955,6 @@ def test_desparse_full_chain_yields_grub_readable_kernel_on_zstd_btrfs(tmp_path)
         subprocess.run(["umount", str(mnt)], capture_output=True)
 
 
-# --- shellprocess@lctime (d/m/y dates, Task 3) ------------------------------
-#
-# Calamares' localecfg OVERWRITES /etc/locale.conf from the locale page (en_US ==
-# m/d/y). To honour the user's "d/m/y dates" request the target's LC_TIME must be
-# RE-asserted after localecfg. This is a third shellprocess instance, and it has the
-# same failure modes as the desparse one -- so it gets the same style of guards:
-# right conf wired, resolves via `config:` (not the silent-default `configuration:`),
-# ordered after localecfg, and the command is `$`-free (Calamares macro-expander).
-
-def _lctime_cmd() -> str:
-    d = yaml.safe_load(calamares.shellprocess_lctime_conf())
-    assert len(d["script"]) == 1
-    return d["script"][0]
-
-
-def test_lctime_conf_schema_and_chroot():
-    d = yaml.safe_load(calamares.shellprocess_lctime_conf())
-    assert d["dontChroot"] is False          # runs in the target chroot
-    assert "script" in d
-
-
-def test_lctime_sets_lc_time_to_british_english():
-    # en_GB.UTF-8 == English but d/m/y. The command sets LC_TIME to it exactly once.
-    cmd = _lctime_cmd()
-    assert "LC_TIME=en_GB.UTF-8" in cmd
-    # Remove any existing LC_TIME line first, then append -> set exactly once.
-    assert "sed -i '/^LC_TIME=/d' /etc/locale.conf" in cmd
-    assert "printf 'LC_TIME=en_GB.UTF-8\\n' >> /etc/locale.conf" in cmd
-
-
-def test_lctime_generates_the_gb_locale():
-    # LC_TIME is inert unless en_GB.UTF-8 is generated: the command uncomments it in
-    # /etc/locale.gen and runs locale-gen.
-    cmd = _lctime_cmd()
-    assert "en_GB.UTF-8 UTF-8" in cmd
-    assert "locale-gen" in cmd
-
-
-def test_lctime_uses_no_shell_variables():
-    # Same Calamares macro-expander constraint: a bare `$WORD` aborts the whole job.
-    assert "$" not in _lctime_cmd()
-
-
-def test_lctime_is_fatal_on_failure():
-    # The user explicitly asked for d/m/y -> a real failure should surface (set -e,
-    # not "-" prefixed) rather than silently leave m/d/y.
-    cmd = calamares._lc_time_command()
-    assert not cmd.startswith("-")
-    assert cmd.startswith("set -e")
-
-
-def test_lctime_matches_system_time_locale():
-    # Single source of truth: the Calamares LC_TIME must equal the live/system one
-    # (configuration/locale.DEFAULT_TIME_LOCALE), or Calamares and the live ISO ship
-    # different date formats.
-    from azarch.configuration import locale
-    assert f"LC_TIME={locale.DEFAULT_TIME_LOCALE}" in calamares._lc_time_command()
-
-
-def test_lctime_declared_as_shellprocess_instance():
-    doc = yaml.safe_load(calamares.settings_conf())
-    insts = {i["id"]: i for i in doc.get("instances", [])}
-    assert "lctime" in insts
-    assert insts["lctime"]["module"] == "shellprocess"
-    assert insts["lctime"]["config"] == "shellprocess-lctime.conf"
-
-
-def test_lctime_conf_wired_to_right_path():
-    assert (calamares.emit_map()["modules/shellprocess-lctime.conf"]
-            == calamares.shellprocess_lctime_conf())
-
-
-def test_lctime_sequence_entry_resolves_to_the_lctime_conf_not_default():
-    # Same trap as desparse: shellprocess@lctime must resolve to shellprocess-lctime,
-    # not the silent-default shellprocess.conf.
-    assert _resolve_sequence_entry_to_conf("shellprocess@lctime") == "shellprocess-lctime"
-
-
-def test_lctime_runs_after_localecfg():
-    # LC_TIME must be re-asserted AFTER localecfg overwrites /etc/locale.conf.
-    execs = _settings_exec_list()
-    assert "localecfg" in execs
-    assert "shellprocess@lctime" in execs
-    assert execs.index("shellprocess@lctime") > execs.index("localecfg")
-    # And it lands before users (grouped with the other post-locale target fixups).
-    assert execs.index("shellprocess@lctime") < execs.index("users")
-
-
 # --- users.conf (reuse the surviving /home/main) ----------------------------
 
 def test_users_reuse_home_true():
@@ -1081,14 +991,17 @@ def test_locale_conf_defaults_to_asia_jerusalem():
 
 # --- keyboard.conf: no auto-resolve (the Hebrew-preselect fix) --------------
 
-def test_keyboard_conf_disables_layout_guess():
-    # THE fix for the installer auto-resolving the keyboard to Hebrew from the
-    # Asia/Jerusalem region default: guessLayout MUST be false so the module keeps
-    # the live system's current layout ("us", set by setup-locale.sh) instead of
-    # deriving one from the locale/timezone. (Verified against Calamares 3.4.2
-    # keyboard Config.cpp: guessLocaleKeyboardLayout() early-returns when false.)
+def test_keyboard_conf_enables_region_second_layout():
+    # Az'arch region-driven keyboard: when the user picks a non-English region on the
+    # Location page, the region's native layout is added as a switchable SECOND layout
+    # (English "us" stays first/active, Alt+Shift), live in the installer and persisted
+    # to the target. This needs guessLayout:true (guessLocaleKeyboardLayout(), which the
+    # region-keyboard source patch extends, early-returns when false) AND the opt-in
+    # regionSecondLayout:true the patch reads. English no longer resolves to a lone
+    # Hebrew layout: it is always force-kept as the primary/active ASCII layout.
     d = yaml.safe_load(calamares.keyboard_conf())
-    assert d["guessLayout"] is False
+    assert d["guessLayout"] is True
+    assert d["regionSecondLayout"] is True
 
 
 def test_keyboard_conf_uses_plain_xorg_not_locale1():
