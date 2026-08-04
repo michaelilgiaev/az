@@ -15,6 +15,8 @@ bytes so such a drift fails here instead of at boot.
 
 from __future__ import annotations
 
+import re
+
 from azarch.configuration import system
 
 
@@ -197,6 +199,71 @@ def test_syslinux_head_rebranded():
     # The releng head.cfg says `MENU TITLE Arch Linux`; ours overlays the brand.
     assert "MENU TITLE Az'arch Linux" in system.BOOT_BIOS_SYSLINUX_HEAD
     assert "MENU TITLE Arch Linux" not in system.BOOT_BIOS_SYSLINUX_HEAD
+
+
+def test_uefi_loader_suppresses_the_extra_efi_menu_rows():
+    # The whole point of overriding the releng loader.conf: hide the extra UEFI rows
+    # (EFI Shell / Reboot Into Firmware Interface) the first-boot screen shows beside
+    # our two Az'arch entries. Both suppressions must be present and set to `no`.
+    lines = system.BOOT_UEFI_LOADER.splitlines()
+    assert "auto-entries no" in lines  # drops auto EFI Shell + systemd-boot self-entry
+    assert "auto-firmware no" in lines  # drops "Reboot Into Firmware Interface"
+
+
+def test_uefi_loader_keeps_default_boot_target():
+    # Suppressing auto entries must NOT lose the explicit default -- the medium still
+    # needs to boot 01-archiso-linux.conf (our plain install entry) when skipped.
+    lines = system.BOOT_UEFI_LOADER.splitlines()
+    assert "default 01-archiso-linux.conf" in lines
+    assert any(l.startswith("timeout ") for l in lines)
+
+
+def test_uefi_loader_skips_the_menu():
+    # The user asked for the menu to be SKIPPED (boot straight in), not merely trimmed.
+    # systemd-boot `timeout 0` boots the default immediately with no menu drawn.
+    assert "timeout 0" in system.BOOT_UEFI_LOADER.splitlines()
+
+
+def test_uefi_loader_beep_off():
+    # releng ships `beep on`; the live medium should be silent. Guard the flip so a
+    # future copy-paste of the releng default doesn't quietly bring the beep back.
+    assert "beep off" in system.BOOT_UEFI_LOADER
+    assert "beep on" not in system.BOOT_UEFI_LOADER
+
+
+def test_bios_syslinux_sys_skips_the_menu():
+    # BIOS counterpart of the UEFI skip. syslinux `TIMEOUT 0` means wait FOREVER, so a
+    # skip is `TIMEOUT 1` (1/10s). Guard both: the value is 1 and NOT 0/150.
+    lines = system.BOOT_BIOS_SYSLINUX_SYS.splitlines()
+    assert "TIMEOUT 1" in lines
+    assert "TIMEOUT 0" not in lines  # would hang forever, not skip
+    assert "TIMEOUT 150" not in lines  # the releng 15s default
+
+
+def test_bios_syslinux_sys_keeps_includes_and_default():
+    # The overlay must keep the INCLUDE composition + DEFAULT so a forced-open menu
+    # still renders and the default entry still boots.
+    sys_cfg = system.BOOT_BIOS_SYSLINUX_SYS
+    assert re.search(r"^DEFAULT \S+", sys_cfg, re.M)
+    for inc in ("archiso_head.cfg", "archiso_sys-linux.cfg", "archiso_tail.cfg"):
+        assert f"INCLUDE {inc}" in sys_cfg
+
+
+def test_bios_syslinux_default_resolves_to_a_real_label():
+    # CRITICAL coupling: with TIMEOUT and no ONTIMEOUT, syslinux auto-boots the DEFAULT
+    # label. releng pairs `DEFAULT arch` with `LABEL arch`; our BOOT_BIOS_SYSLINUX
+    # renamed the labels (arch64/arch64speech), so `DEFAULT` here MUST name one of them
+    # -- a dangling DEFAULT means BIOS does NOT skip to the entry (it stalls on the
+    # menu / fails to auto-boot). This guards the exact bug where DEFAULT and LABEL drift.
+    default = re.search(r"^DEFAULT (\S+)", system.BOOT_BIOS_SYSLINUX_SYS, re.M).group(1)
+    labels = re.findall(r"^LABEL (\S+)", system.BOOT_BIOS_SYSLINUX, re.M)
+    assert default in labels, (
+        f"DEFAULT {default!r} in BOOT_BIOS_SYSLINUX_SYS does not match any LABEL in "
+        f"BOOT_BIOS_SYSLINUX ({labels}); BIOS auto-boot would target a nonexistent entry"
+    )
+    # And specifically the plain (non-speech) install entry, the BIOS counterpart of the
+    # UEFI default 01-archiso-linux.conf.
+    assert default == "arch64"
 
 
 # --- systemd units: the two must diverge on purpose -------------------------

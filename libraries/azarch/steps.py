@@ -107,17 +107,7 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
 
     # 4 -- Brand boot menus (systemd-boot + syslinux)
     bar.step("Brand boot menus (systemd-boot, syslinux)")
-    # Overwrite the releng UEFI entries in place (same filenames) rather than adding
-    # differently-named ones alongside them -- otherwise the menu shows BOTH the stock
-    # "Arch Linux install medium" entries AND ours, i.e. duplicated rows all reading
-    # "Arch Linux". Writing over 01-archiso-linux.conf / 02-archiso-speech-linux.conf
-    # replaces them with the rebranded Az'arch entries.
-    emit.write_text(W / "efiboot/loader/entries/01-archiso-linux.conf", system.BOOT_UEFI_LINUX)
-    emit.write_text(W / "efiboot/loader/entries/02-archiso-speech-linux.conf", system.BOOT_UEFI_SPEECH)
-    emit.write_text(W / "syslinux/archiso_sys-linux.cfg", system.BOOT_BIOS_SYSLINUX)
-    # Overlay the syslinux (BIOS) menu head so its `MENU TITLE` reads Az'arch instead
-    # of the releng default "Arch Linux".
-    emit.write_text(W / "syslinux/archiso_head.cfg", system.BOOT_BIOS_SYSLINUX_HEAD)
+    _brand_boot_menus(W)
 
     # 5 -- Stage pacstrap package manifest
     bar.step("Stage pacstrap package manifest")
@@ -570,6 +560,49 @@ def _copy_releng(W: Path) -> None:
     if not src.is_dir():
         raise SystemExit(f"[x] archiso releng profile not found at {src}; is archiso installed?")
     emit.copy_tree(src, W)
+
+
+def _brand_boot_menus(W: Path) -> None:
+    """Rebrand the copied releng boot menus (systemd-boot UEFI + syslinux BIOS) and
+    SKIP the first-boot menu -- boot straight into the default Az'arch entry.
+
+    Runs right after _copy_releng, over the releng files it laid down. The releng
+    profile is systemd-boot-only for UEFI (profiledef bootmodes list no `*.grub.*`),
+    so the systemd-boot loader here IS the first-boot menu the screenshot shows.
+
+    SKIP: the loader.conf `timeout 0` (UEFI) and archiso_sys.cfg `TIMEOUT 1` (BIOS)
+    make the default entry boot immediately with no menu drawn. The menu is still
+    reachable by holding a key during boot -- so it is a skip, not a removal -- and
+    the branding/trim below is what it shows IF forced open.
+
+    UEFI entries: overwrite 01/02 IN PLACE (same filenames) rather than adding
+    differently-named ones alongside -- otherwise the menu shows BOTH the stock
+    "Arch Linux install medium" rows AND ours (duplicated rows all reading "Arch
+    Linux"). Overwriting rebrands them to Az'arch.
+
+    The extra UEFI rows beside 01/02 -- gone so a forced-open menu is clean too -- go
+    via the loader.conf override + one deletion:
+      * "EFI Shell"          -- systemd-boot AUTO-discovers the shellx64.efi mkarchiso
+                                plants on the ESP; `auto-entries no` hides that (and
+                                systemd-boot's own self-entry).
+      * "Reboot Into Firmware Interface" -- systemd-boot AUTO-generates it; `auto-firmware
+                                no` hides it (still reachable with the `f` key).
+      * "Memtest86+"         -- NOT auto-discovered; it is the EXPLICIT releng entry
+                                03-archiso-memtest86+x64.conf, so auto-entries can't hide
+                                it -- we DELETE the .conf. `auto-entries no` leaves our
+                                explicit 01/02 untouched. missing_ok: a future releng may
+                                rename/drop it.
+    """
+    emit.write_text(W / "efiboot/loader/entries/01-archiso-linux.conf", system.BOOT_UEFI_LINUX)
+    emit.write_text(W / "efiboot/loader/entries/02-archiso-speech-linux.conf", system.BOOT_UEFI_SPEECH)
+    emit.write_text(W / "efiboot/loader/loader.conf", system.BOOT_UEFI_LOADER)
+    (W / "efiboot/loader/entries/03-archiso-memtest86+x64.conf").unlink(missing_ok=True)
+    # syslinux (BIOS): overlay the top-level archiso_sys.cfg (TIMEOUT 1 -> skip menu),
+    # rebrand the two boot labels, and rebrand the menu head's `MENU TITLE` (releng
+    # ships "Arch Linux"). BIOS syslinux has no auto-discovered extras to trim.
+    emit.write_text(W / "syslinux/archiso_sys.cfg", system.BOOT_BIOS_SYSLINUX_SYS)
+    emit.write_text(W / "syslinux/archiso_sys-linux.cfg", system.BOOT_BIOS_SYSLINUX)
+    emit.write_text(W / "syslinux/archiso_head.cfg", system.BOOT_BIOS_SYSLINUX_HEAD)
 
 
 def _emit_fastfetch(ea: Path, home: Path) -> None:

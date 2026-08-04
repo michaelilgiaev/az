@@ -85,6 +85,64 @@ def test_link_services_enables_sleep_policy(tmp_path):
     assert os.readlink(link) == "/etc/systemd/system/azarch-sleep-policy.service"
 
 
+def test_brand_boot_menus_writes_all_six_boot_files(tmp_path):
+    # BEHAVIORAL: _brand_boot_menus lays the rebranded systemd-boot + syslinux menus
+    # over a copied releng tree. Assert the exact six files land with our content.
+    from azarch.configuration import system
+
+    W = tmp_path
+    steps._brand_boot_menus(W)
+
+    e01 = W / "efiboot/loader/entries/01-archiso-linux.conf"
+    e02 = W / "efiboot/loader/entries/02-archiso-speech-linux.conf"
+    loader = W / "efiboot/loader/loader.conf"
+    syssys = W / "syslinux/archiso_sys.cfg"
+    syscfg = W / "syslinux/archiso_sys-linux.cfg"
+    syshead = W / "syslinux/archiso_head.cfg"
+
+    assert e01.read_text() == system.BOOT_UEFI_LINUX
+    assert e02.read_text() == system.BOOT_UEFI_SPEECH
+    assert loader.read_text() == system.BOOT_UEFI_LOADER
+    assert syssys.read_text() == system.BOOT_BIOS_SYSLINUX_SYS
+    assert syscfg.read_text() == system.BOOT_BIOS_SYSLINUX
+    assert syshead.read_text() == system.BOOT_BIOS_SYSLINUX_HEAD
+
+
+def test_brand_boot_menus_deletes_releng_memtest_entry(tmp_path):
+    # BEHAVIORAL + the crux of the "skip the EFI options" change: the releng Memtest86+
+    # entry copied by _copy_releng must be GONE afterwards, leaving only 01/02. (EFI
+    # Shell / firmware are auto entries suppressed by loader.conf, tested in
+    # test_configuration_system; here we prove the explicit memtest .conf is removed.)
+    W = tmp_path
+    entries = W / "efiboot/loader/entries"
+    entries.mkdir(parents=True)
+    memtest = entries / "03-archiso-memtest86+x64.conf"
+    memtest.write_text("title    Memtest86+\n")  # stand in for the releng file
+
+    steps._brand_boot_menus(W)
+
+    assert not memtest.exists(), "releng Memtest86+ entry must be deleted"
+    remaining = sorted(p.name for p in entries.glob("*.conf"))
+    assert remaining == ["01-archiso-linux.conf", "02-archiso-speech-linux.conf"]
+
+
+def test_brand_boot_menus_is_idempotent_without_memtest(tmp_path):
+    # The memtest deletion uses missing_ok=True so a future releng that renames/drops
+    # the entry (nothing to delete) does not crash the build. Running against a tree
+    # with no memtest entry must succeed and still write the two Az'arch entries.
+    W = tmp_path
+    steps._brand_boot_menus(W)  # no pre-existing entries dir at all
+    assert (W / "efiboot/loader/entries/01-archiso-linux.conf").exists()
+    assert not (W / "efiboot/loader/entries/03-archiso-memtest86+x64.conf").exists()
+
+
+def test_run_calls_brand_boot_menus():
+    # run()'s step 4 must delegate to the helper (guards against the inline block
+    # creeping back and diverging from the tested helper).
+    src = inspect.getsource(steps.run)
+    assert "_brand_boot_menus(W)" in src
+
+
 def test_step_weights_match_number_of_steps():
     # run() makes N literal bar.step() calls, but the final one is inside the
     # per-variant finalize loop and executes once per variant (both ISOs are built in

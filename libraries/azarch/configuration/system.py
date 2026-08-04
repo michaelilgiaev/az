@@ -197,6 +197,36 @@ initrd   /%INSTALL_DIR%/boot/x86_64/initramfs-linux.img
 options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% accessibility=on cow_spacesize=4G
 """
 
+# systemd-boot loader.conf. Overrides the releng default (timeout/default/beep only)
+# so the first-boot UEFI menu is SKIPPED entirely -- it boots straight into the
+# default Az'arch entry with no menu shown, which is what the user asked for.
+#
+# `timeout 0` (menu-force disabled): systemd-boot does NOT render the menu and boots
+# `default` immediately. The menu is still reachable by holding a key (Space) during
+# firmware->loader handoff, so this is a skip, not a permanent removal.
+#
+# The auto-entry suppressions stay so that IF the user does force the menu open, it
+# shows ONLY our two Az'arch entries -- none of the extra rows the earlier screenshot
+# had:
+#   * "EFI Shell"                     -- systemd-boot AUTO-discovers shell*.efi on the
+#                                        ESP (mkarchiso plants shellx64.efi at /); this
+#                                        auto entry (and systemd-boot's own self-entry)
+#                                        is what `auto-entries no` hides.
+#   * "Reboot Into Firmware Interface"-- systemd-boot AUTO-generates it when the firmware
+#                                        supports it; `auto-firmware no` hides it (it is
+#                                        still reachable with the `f` key).
+# The third extra row, "Memtest86+", is NOT auto-discovered -- it is the explicit
+# releng entry 03-archiso-memtest86+x64.conf, which steps.py deletes from the profile
+# (see step 4). `auto-entries no` does NOT touch our explicit 01/02 entries. `beep off`
+# because the releng `beep on` is a leftover we don't want on the live medium.
+BOOT_UEFI_LOADER = """\
+timeout 0
+default 01-archiso-linux.conf
+beep off
+auto-entries no
+auto-firmware no
+"""
+
 BOOT_BIOS_SYSLINUX = """\
 LABEL arch64
 TEXT HELP
@@ -253,6 +283,30 @@ MENU COLOR tabmsg       31;40   #30ffffff #00000000 std
 MENU CLEAR
 MENU IMMEDIATE
 """
+
+# syslinux top-level config (archiso_sys.cfg) -- the BIOS counterpart of the UEFI
+# loader.conf skip. releng ships this with `TIMEOUT 150` (15s menu wait); we overlay
+# it with `TIMEOUT 1` so BIOS boots the default entry effectively immediately too,
+# matching the UEFI `timeout 0` skip. (syslinux `TIMEOUT 0` means wait FOREVER -- the
+# opposite of a skip -- so `1` = 1/10s is the correct "boot now" value.) Kept
+# byte-faithful to releng's archiso_sys.cfg except the TIMEOUT value; the INCLUDE
+# lines must stay so the head/entries/tail still compose the menu when it is forced.
+BOOT_BIOS_SYSLINUX_SYS = """\
+INCLUDE archiso_head.cfg
+
+DEFAULT arch64
+TIMEOUT 1
+
+INCLUDE archiso_sys-linux.cfg
+
+INCLUDE archiso_tail.cfg
+"""
+# NOTE: `DEFAULT arch64` MUST name a LABEL that BOOT_BIOS_SYSLINUX defines. releng
+# pairs `DEFAULT arch` with its `LABEL arch`, but our BOOT_BIOS_SYSLINUX renamed the
+# labels to `arch64`/`arch64speech`, so the DEFAULT was retargeted to match. There is
+# no ONTIMEOUT, so the TIMEOUT-1 auto-boot resolves to this DEFAULT -- a dangling label
+# here would leave BIOS on the menu (or fail to auto-boot) instead of skipping. A test
+# (test_bios_syslinux_default_resolves_to_a_real_label) guards the pairing.
 
 # --- systemd units ----------------------------------------------------------
 # Two oneshot services baked into the LIVE ISO: setup-locale (auto-detect
