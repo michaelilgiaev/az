@@ -253,7 +253,7 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # source. Whatever is built is dropped into cache/pkgs/repo/, then we
     # RE-reconcile the index and RE-stage the repo into airootfs so mkarchiso's
     # pacstrap (and the on-disk installer) can install them.
-    bar.step("Build Az'arch's own packages (calamares, librewolf)")
+    bar.step("Build packages (calamares, librewolf)")
     makepkg.build_own_packages(offline, full_compile, bar.sub, bar.phase)
     bar.sub_done()
     bar._arm(); bar.draw()

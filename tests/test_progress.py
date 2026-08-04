@@ -69,22 +69,40 @@ def test_init_starts_at_zero(steps_log):
     assert bar.label == ""
 
 
-# --- _layout: fill/percent width math -------------------------------------
+# --- _layout: the BAR line (line 2) fill/percent width math ----------------
+# The pinned display is TWO left-aligned rows: line 1 is the step label
+# (_step_line), line 2 is the bar + percent + stopwatch (_layout). _layout no
+# longer carries the label -- the whole width after the pct/clock fields is the
+# bar itself, left-aligned.
 
-def test_layout_bar_fill_at_80cols(steps_log):
-    # done_weight=5 of total_weight=10 -> exactly 50%. At cols=80 the pct field is
-    # "  50% " (6 cols) and the live stopwatch field is "[0s] " (5 cols) -> 11 cols
-    # reserved. The bar gets 45% of the remaining 69 -> 31 cells, and 50% of 31
-    # rounds down to 15 filled / 16 empty.
+def _strip_ansi(text: str) -> str:
+    import re
+    return re.sub(r"\033\[[0-9;]*m", "", text)
+
+
+def test_layout_is_bar_line_without_label(steps_log):
+    # The bar line must NOT contain the step label -- that lives on line 1 now.
+    bar = make_bar(steps_log, [0, 10])
+    bar.label = "Build packages"
+    out = bar._layout(80)
+    assert "Build packages" not in out
+
+
+def test_layout_bar_is_about_half_the_width_at_80cols(steps_log):
+    # done_weight=5 of total_weight=10 -> exactly 50%. The bar is about HALF the
+    # terminal width (cols // 2), NOT the whole leftover row. At cols=80 that is 40
+    # cells; 50% of 40 is 20 filled / 20 empty. The pct/clock fields follow the bar
+    # and the rest of the row stays blank.
     bar = make_bar(steps_log, [0, 2, 3, 5])
     bar.done_weight = 5
     bar.cur_weight = 0
     bar.subfrac = 0
     out = bar._layout(80)
-    assert out.count("█") == 15   # filled block
-    assert out.count("░") == 16   # light shade
+    assert out.count("█") == 20   # filled block
+    assert out.count("░") == 20   # light shade
+    assert out.count("█") + out.count("░") == 40  # bar is ~half of the 80-col width
     assert " 50% " in out
-    assert "[0s] " in out          # live stopwatch field present
+    assert "[0s]" in out          # live stopwatch field present
 
 
 def test_layout_percent_string_is_three_wide(steps_log):
@@ -117,17 +135,81 @@ def test_layout_zero_total_weight_no_div_by_zero(steps_log):
 
 def test_layout_never_exceeds_cols_visible_width(steps_log):
     # The visible (non-escape) width is budgeted from cols up front; assert the
-    # printable characters never exceed the terminal width for a long label.
+    # printable characters never exceed the terminal width even in a narrow term.
     bar = make_bar(steps_log, [0, 10])
     bar.done_weight = 0
     bar.cur_weight = 10
     bar.subfrac = 500
-    bar.label = "a very long step label that would otherwise wrap the row entirely"
     out = bar._layout(40)
-    # strip the ANSI escape sequences to count only visible columns
-    import re
-    visible = re.sub(r"\033\[[0-9;]*m", "", out)
+    assert len(_strip_ansi(out)) <= 40
+
+
+def test_layout_width_holds_when_fixed_fields_exceed_cols(steps_log, monkeypatch):
+    # THE failure the pure-width tests miss: when the pct+clock fields alone are WIDER
+    # than the terminal (a very narrow term with a wide "[1h 04m 09s]" clock), the
+    # line must STILL not exceed cols -- the clock, then the percent, are dropped
+    # rather than overflowing and wrapping (which desyncs the pinned scroll region).
+    monkeypatch.setenv("_COMPILE_START", "1000")
+    bar = make_bar(steps_log, [0, 10])
+    bar.cur_weight = 10
+    bar.subfrac = 500
+    monkeypatch.setattr(progress.time, "time", lambda: 1000.0 + 3849)  # wide clock
+    for cols in (1, 4, 6, 8, 12, 20):
+        out = bar._layout(cols)
+        assert len(_strip_ansi(out)) <= cols, f"overflow at cols={cols}: {out!r}"
+
+
+# --- _step_line: the LABEL line (line 1) -----------------------------------
+
+def test_step_line_shows_label_left_aligned(steps_log):
+    # Line 1 is just the current step label, left-aligned (no leading pad).
+    bar = make_bar(steps_log, [0, 10])
+    bar.label = "Build packages"
+    out = bar._step_line(80)
+    assert _strip_ansi(out).startswith("Build packages")
+
+
+def test_step_line_empty_when_no_label(steps_log):
+    # Before the first step there is no label; line 1 renders empty (no glyphs).
+    bar = make_bar(steps_log, [0, 10])
+    assert _strip_ansi(bar._step_line(80)) == ""
+
+
+def test_step_line_clipped_to_width_with_ellipsis(steps_log):
+    # A label wider than the terminal is truncated with an ellipsis so line 1
+    # never wraps onto a second row (which would desync the 2-row scroll region).
+    bar = make_bar(steps_log, [0, 10])
+    bar.label = "x" * 200
+    out = bar._step_line(40)
+    visible = _strip_ansi(out)
     assert len(visible) <= 40
+    assert visible.endswith("…")
+
+
+def test_step_line_has_no_bar_glyphs_or_percent(steps_log):
+    # The bar/percent/clock belong to line 2 only; line 1 must carry none of them.
+    bar = make_bar(steps_log, [0, 10])
+    bar.label = "Mkarchiso"
+    out = bar._step_line(80)
+    assert "█" not in out and "░" not in out
+    assert "%" not in out
+    assert "[0s]" not in out
+
+
+# --- _lines: the two rows together -----------------------------------------
+
+def test_lines_returns_step_line_then_bar_line(steps_log):
+    # _lines(cols) returns (line1, line2) = (step label, bar). Both must fit cols.
+    bar = make_bar(steps_log, [0, 10])
+    bar.label = "Build packages"
+    bar.done_weight = 0
+    bar.cur_weight = 10
+    bar.subfrac = 500
+    line1, line2 = bar._lines(80)
+    assert _strip_ansi(line1).startswith("Build packages")
+    assert ("█" in line2 or "░" in line2) and "%" in line2
+    assert len(_strip_ansi(line1)) <= 80
+    assert len(_strip_ansi(line2)) <= 80
 
 
 # --- _clip: off-by-one truncation boundary --------------------------------
@@ -233,6 +315,112 @@ def test_phase_writes_indented_subcheckpoint(steps_log):
     bar.cleanup()
     contents = steps_log.read_text(encoding="utf-8")
     assert "    -> downloading\n" in contents
+
+
+# --- TTY path: two-row scroll region + placement escapes -------------------
+# These drive the ACTUAL pinned-display escape sequences (which the pure _layout/
+# _step_line tests never exercise): the DECSTBM scroll region must reserve the
+# BOTTOM TWO rows, draw() must paint line 1 and line 2 on two DISTINCT rows, and
+# the tiny-terminal cases must never emit a row-0 / negative-row escape.
+
+def _tty_bar(steps_log, weights, rows, cols):
+    """A ProgressBar wired to a captured 'terminal' at a fixed (cols, rows), forced
+    into TTY mode. Returns (bar, term) where term.getvalue() is everything painted."""
+    bar = ProgressBar(weights, tty=True)
+    term = io.StringIO()
+    bar.term = term
+    bar._size = lambda: (cols, rows)  # type: ignore[method-assign]
+    return bar, term
+
+
+def test_arm_reserves_bottom_two_rows_scroll_region(steps_log):
+    # On a 24-row terminal the scroll region must be rows 1..22 (reserving 23 & 24
+    # for the two pinned lines): the DECSTBM escape is exactly "\033[1;22r".
+    bar, term = _tty_bar(steps_log, [0, 10], rows=24, cols=80)
+    bar._arm()
+    assert "\033[1;22r" in term.getvalue()
+    # cursor is homed to the bottom of the scroll region (row 22), not the screen bottom.
+    assert "\033[22;1H" in term.getvalue()
+
+
+def test_draw_paints_two_distinct_rows(steps_log):
+    # draw() must place line 1 (step label) on row 23 and line 2 (bar) on row 24 --
+    # two DIFFERENT rows. A regression that painted both on one row (or swapped them)
+    # would fail here. Assert both cursor-move+clear+content escapes are present and
+    # that line 1 carries the label while line 2 carries the bar/percent.
+    bar, term = _tty_bar(steps_log, [0, 10], rows=24, cols=80)
+    bar.step("Build packages")
+    bar.sub(500)
+    out = term.getvalue()
+    # line 1 at row 23: cursor move, clear, then the (bold) label.
+    assert "\033[23;1H\033[K" in out
+    # line 2 at row 24: cursor move, clear, then the bar/percent.
+    assert "\033[24;1H\033[K" in out
+    # The label appears after the row-23 move; the bar/percent after the row-24 move.
+    seg23 = out.split("\033[23;1H\033[K", 1)[1]
+    assert "Build packages" in seg23.split("\033[24;1H", 1)[0]
+    seg24 = out.split("\033[24;1H\033[K", 1)[1]
+    assert ("█" in seg24 or "░" in seg24) and "%" in seg24
+
+
+def test_draw_line1_row_is_directly_above_line2_row(steps_log):
+    # The two pinned rows must be adjacent (line1 == line2 - 1) so they read as a
+    # single two-line block just above the scrolling output.
+    bar, term = _tty_bar(steps_log, [0, 10], rows=40, cols=100)
+    bar.step("Mkarchiso")
+    out = term.getvalue()
+    assert "\033[39;1H\033[K" in out   # line 1 on row 39
+    assert "\033[40;1H\033[K" in out   # line 2 on row 40 (adjacent, bottom row)
+
+
+import pytest
+
+
+@pytest.mark.parametrize("rows", [1, 2, 3])
+def test_tiny_terminal_never_emits_row_zero_or_negative(steps_log, rows):
+    # On a 1-, 2-, or 3-row terminal the row math must stay valid: NO "\033[0;..H"
+    # (row 0) and no negative row may ever be written by arm/draw/finalize/cleanup.
+    # A bare rows-1 / rows-2 would emit "\033[0;1H" at rows<=2 and corrupt the screen.
+    bar, term = _tty_bar(steps_log, [0, 10], rows=rows, cols=40)
+    bar.init()
+    bar.step("x")
+    bar.sub(500)
+    bar.finalize()
+    bar.cleanup()
+    out = term.getvalue()
+    import re
+    # Every cursor-position escape "\033[<row>;<col>H" must have row >= 1.
+    for m in re.finditer(r"\033\[(\d+);\d+H", out):
+        assert int(m.group(1)) >= 1, f"row {m.group(1)} at rows={rows}: {out!r}"
+    # And the DECSTBM region top must be >= 1 too.
+    for m in re.finditer(r"\033\[1;(\d+)r", out):
+        assert int(m.group(1)) >= 1
+
+
+def test_cleanup_clears_both_pinned_rows_on_tty(steps_log):
+    # cleanup() must clear BOTH pinned rows (23 and 24 on a 24-row term) then unpin.
+    bar, term = _tty_bar(steps_log, [0, 10], rows=24, cols=80)
+    bar.step("Build")
+    term.truncate(0); term.seek(0)   # drop the step()'s paint; capture only cleanup
+    bar.cleanup()
+    out = term.getvalue()
+    assert "\033[23;1H\033[K" in out   # clear line 1
+    assert "\033[24;1H\033[K" in out   # clear line 2
+    assert "\033[r" in out             # unpin the scroll region
+
+
+def test_finalize_tty_scrolls_two_lines(steps_log):
+    # On a TTY, finalize() unpins then scrolls BOTH lines out permanently: a step
+    # label line followed by a full bar line (each cleared with \r\033[K, ending \n).
+    bar, term = _tty_bar(steps_log, [0, 10], rows=24, cols=80)
+    bar.step("Done step")
+    term.truncate(0); term.seek(0)
+    bar.finalize()
+    out = term.getvalue()
+    assert "\033[r" in out                       # unpin first
+    assert "Done step" in out                    # the step label line
+    assert ("█" in out or "░" in out)            # the bar line
+    assert out.count("\n") >= 2                   # two lines scrolled out
 
 
 # --- finalize(): non-TTY ASCII completion bar -----------------------------
@@ -364,19 +552,16 @@ def test_layout_stopwatch_advances_between_draws(steps_log, monkeypatch):
 
 
 def test_layout_visible_width_holds_with_wide_clock(steps_log, monkeypatch):
-    # A wide stopwatch ("[1h 04m 09s] ") must still be budgeted so the printable
-    # width never exceeds cols (otherwise the bar wraps and unsticks the region).
+    # A wide stopwatch ("[1h 04m 09s]") must still be budgeted so the bar line's
+    # printable width never exceeds cols (otherwise it wraps and unsticks the region).
     monkeypatch.setenv("_COMPILE_START", "1000")
     bar = make_bar(steps_log, [0, 10])
     bar.cur_weight = 10
     bar.subfrac = 500
-    bar.label = "a long step label that competes with a wide clock for the row"
     monkeypatch.setattr(progress.time, "time", lambda: 1000.0 + 3849)
     out = bar._layout(60)
-    import re
-    visible = re.sub(r"\033\[[0-9;]*m", "", out)
     assert "[1h 04m 09s]" in out
-    assert len(visible) <= 60
+    assert len(_strip_ansi(out)) <= 60
 
 
 def test_start_clock_noop_on_non_tty(steps_log):
