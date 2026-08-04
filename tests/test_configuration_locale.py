@@ -49,6 +49,43 @@ def test_setup_locale_sh_is_a_bash_script_with_completion_marker():
     assert "touch /var/log/.locale_set" in sh
 
 
+def test_setup_locale_sh_is_live_iso_only_guarded():
+    # REGRESSION (post-install locale/timezone clobber): the live oneshot is enabled
+    # in multi-user.target.wants and the OFFLINE Calamares install rsyncs the live
+    # rootfs verbatim, so BOTH the enable-symlink and this script land on the target.
+    # Without the /run/archiso guard it re-runs on every INSTALLED-system boot and
+    # overwrites the locale/keyboard/timezone Calamares persisted. The guard must be
+    # a hard early-exit on a non-live system.
+    sh = locale.setup_locale_sh()
+    # /run/archiso exists only on the live archiso medium; absent on an installed disk.
+    assert "/run/archiso" in sh
+    assert "if [ ! -d /run/archiso ]; then" in sh
+    # It must EXIT (no-op) when not live, not merely warn.
+    guard = sh.split("/run/archiso", 1)[1].split("fi", 1)[0]
+    assert "exit 0" in guard
+
+
+def test_setup_locale_guard_runs_before_any_locale_write():
+    # The guard has to short-circuit BEFORE the locale-application block, or it would
+    # still clobber /etc/locale.conf etc. on the installed system. Assert the
+    # /run/archiso check precedes the first thing the static block writes.
+    sh = locale.setup_locale_sh()
+    guard_pos = sh.index("/run/archiso")
+    # locale-gen and the locale.conf write are the load-bearing mutations.
+    assert guard_pos < sh.index("locale-gen")
+    assert guard_pos < sh.index("/etc/locale.conf")
+    assert guard_pos < sh.index("/etc/X11/xorg.conf.d/00-keyboard.conf")
+
+
+def test_shared_locale_block_has_no_live_guard():
+    # The /run/archiso guard belongs ONLY to the live oneshot, NOT the shared block:
+    # installer.py's chroot_setup_sh() runs the shared block inside the target chroot
+    # (arch-chroot /mnt) where /run/archiso is intentionally absent -- guarding the
+    # shared block there would wrongly skip locale setup during that install path.
+    block = locale._detect_and_apply_locale_block()
+    assert "/run/archiso" not in block
+
+
 def test_us_maps_to_english():
     assert locale.LANGUAGE_MAP["US"] == ("English", "en_US.UTF-8")
 

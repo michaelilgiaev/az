@@ -272,9 +272,40 @@ hwclock --systohc"""
 
 
 def setup_locale_sh() -> str:
-    """The live-ISO oneshot: apply the static locale, then mark complete."""
+    """The live-ISO oneshot: apply the static live-session locale, then mark complete.
+
+    LIVE-ISO ONLY (the load-bearing guard): this script sets the LIVE session's
+    English/us/Jerusalem baseline before Calamares runs. It is enabled via
+    locale-setup.service in multi-user.target.wants, and the OFFLINE Calamares
+    install rsyncs the live rootfs VERBATIM (unpackfs) -- so BOTH the service
+    enable-symlink AND this script land on the installed target unchanged. Without
+    the guard below it would therefore re-run on EVERY boot of the INSTALLED system
+    and overwrite /etc/locale.conf, /etc/vconsole.conf and
+    /etc/X11/xorg.conf.d/00-keyboard.conf back to the static English-only "us" +
+    Asia/Jerusalem values -- clobbering exactly the locale/keyboard/timezone the user
+    chose in the Calamares Location/Keyboard pages (verified: a Russian install came
+    up English-only "us" post-boot, with a stray ru_RU.UTF-8 left in locale.gen and
+    /var/log/.locale_set freshly timestamped). PROMPT: the installed system MUST keep
+    exactly what the installer set, and only `azarch --resolve-*` may ever change it.
+
+    The archiso live medium mounts a tmpfs at /run/archiso (its boot/cow overlay);
+    an installed system has no such path. So `[ -d /run/archiso ]` is the definitive
+    "am I the live ISO?" test: TRUE on the live medium (apply the baseline), FALSE on
+    the installed disk (no-op, leave Calamares' choices untouched). This is a hard
+    guard, not belt-and-suspenders -- it is the whole fix for the post-install
+    locale/timezone clobber. (The installer.py archinstall path does NOT use this
+    script; it calls _detect_and_apply_locale_block() directly inside the target
+    chroot, where /run/archiso is intentionally absent -- so this guard must live
+    HERE, in the live oneshot, and NOT in the shared block.)"""
     return f"""\
 #!/bin/bash
+
+# LIVE-ISO ONLY: no-op on an installed system so we never overwrite the
+# locale/keyboard/timezone Calamares persisted (see the docstring). /run/archiso
+# exists only on the live archiso medium.
+if [ ! -d /run/archiso ]; then
+    exit 0
+fi
 
 {_detect_and_apply_locale_block()}
 
