@@ -108,6 +108,64 @@ def test_grub_install_both_branches():
     assert 'grub-install --target=i386-pc "$disk"' in s
 
 
+# --- grub auto-boot first option (Task 4, shell-installer path) -------------
+
+def test_chroot_setup_configures_grub_auto_boot():
+    # The shell installer must set the same auto-boot-first-entry policy the
+    # Calamares path does, BEFORE grub-mkconfig reads /etc/default/grub.
+    s = installer.chroot_setup_sh()
+    assert "set_grub_default GRUB_DEFAULT 0" in s        # first entry
+    assert "set_grub_default GRUB_TIMEOUT 0" in s        # no wait
+    assert "set_grub_default GRUB_TIMEOUT_STYLE hidden" in s
+    # It must run before grub-mkconfig regenerates grub.cfg, or the change is unused.
+    assert s.index("set_grub_default GRUB_TIMEOUT 0") < s.index("grub-mkconfig -o /boot/grub/grub.cfg")
+
+
+def test_chroot_setup_grub_default_helper_is_idempotent(tmp_path):
+    # BEHAVIORAL: the set_grub_default helper must (a) REWRITE an existing key
+    # (commented or not) and (b) APPEND a missing key, leaving each set exactly once.
+    # Extract the helper definition + its three invocations from the emitted script
+    # (a contiguous block: `set_grub_default() { ... }` immediately followed by the
+    # three `set_grub_default ...` calls) and run it against a stock-like grub file.
+    import re
+    import subprocess
+
+    s = installer.chroot_setup_sh()
+    start = s.index("set_grub_default() {")
+    end = s.index("\n\ngrub-mkconfig -o /boot/grub/grub.cfg")
+    block = s[start:end]                       # def + the three calls
+    assert "set_grub_default GRUB_TIMEOUT_STYLE hidden" in block
+
+    grub = tmp_path / "grub"
+    # Stock-ish: GRUB_DEFAULT present (non-zero, to prove rewrite), GRUB_TIMEOUT
+    # present, GRUB_TIMEOUT_STYLE COMMENTED (to prove the commented branch), plus an
+    # unrelated line that must be preserved.
+    grub.write_text(
+        "GRUB_DEFAULT=saved\n"
+        "GRUB_TIMEOUT=5\n"
+        "#GRUB_TIMEOUT_STYLE=menu\n"
+        'GRUB_CMDLINE_LINUX_DEFAULT="quiet"\n'
+    )
+    sandboxed = block.replace("/etc/default/grub", str(grub))
+    # Run TWICE to prove idempotency (a second pass must not duplicate any line).
+    res = subprocess.run(["bash", "-c", "set -e\n" + sandboxed + "\n" + sandboxed],
+                         capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+    out = grub.read_text()
+    # Exactly one of each key, all carrying the auto-boot values.
+    assert len(re.findall(r"(?m)^GRUB_DEFAULT=", out)) == 1
+    assert len(re.findall(r"(?m)^GRUB_TIMEOUT=", out)) == 1
+    assert len(re.findall(r"(?m)^GRUB_TIMEOUT_STYLE=", out)) == 1
+    assert "GRUB_DEFAULT=0" in out
+    assert "GRUB_TIMEOUT=0" in out
+    assert "GRUB_TIMEOUT_STYLE=hidden" in out
+    # The old saved/5/commented values must be gone.
+    assert "GRUB_DEFAULT=saved" not in out
+    assert "GRUB_TIMEOUT=5" not in out
+    # The unrelated line is preserved.
+    assert 'GRUB_CMDLINE_LINUX_DEFAULT="quiet"' in out
+
+
 # --- installer_sh: ANSI codes, fdisk keystrokes, partition suffixes --------
 
 def test_installer_sh_ansi_escape_sequences():

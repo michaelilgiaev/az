@@ -332,6 +332,85 @@ script:
 """
 
 
+# --- LC_TIME (d/m/y date format) fixup for the Calamares path ---------------
+# The user wants dates as day/month/year, not the en_US month/day/year default. We
+# set LC_TIME=en_GB.UTF-8 (English, but d/m/y) system-wide. The live ISO already
+# does this in configuration/locale._detect_and_apply_locale_block (it writes
+# /etc/locale.conf), but Calamares' `localecfg` module OVERWRITES /etc/locale.conf
+# wholesale from the locale page -- it sets every LC_* (including LC_TIME) to the
+# ONE chosen locale (en_US.UTF-8 by default), clobbering the live value. So on the
+# Calamares path we must RE-assert LC_TIME in the target AFTER localecfg runs. This
+# shellprocess instance (shellprocess@lctime in settings.conf) does exactly that,
+# scheduled right after `localecfg`.
+#
+# The single source of truth for the locale is configuration/locale.DEFAULT_TIME_LOCALE;
+# imported here so the Calamares and live paths can never drift.
+from .locale import DEFAULT_TIME_LOCALE  # noqa: E402  (kept next to its user)
+
+# The en_GB.UTF-8 line as it appears (commented) in a stock Arch /etc/locale.gen.
+_TIME_LOCALE_GEN_LINE = f"{DEFAULT_TIME_LOCALE} UTF-8"
+_TARGET_LOCALE_CONF = "/etc/locale.conf"
+_TARGET_LOCALE_GEN = "/etc/locale.gen"
+
+
+def _lc_time_command() -> str:
+    """A single shellprocess command (target chroot) that forces the system date
+    format to day/month/year by setting LC_TIME=en_GB.UTF-8 in the target's
+    /etc/locale.conf -- re-asserting it AFTER Calamares' localecfg overwrote the file
+    with the locale page's (en_US, m/d/y) values. Steps:
+
+      1. Ensure en_GB.UTF-8 is enabled in /etc/locale.gen and generated (LC_TIME is
+         inert unless the locale exists). `sed` uncomments the stock line; if the
+         line is absent entirely (a non-stock locale.gen) it is appended.
+      2. Drop any existing LC_TIME= line, then append LC_TIME=en_GB.UTF-8, so the
+         key is set exactly once regardless of what localecfg wrote.
+
+    CRITICAL -- no `$` anywhere (same rule as _mkinitcpio_reset_command): Calamares
+    macro-expands `$WORD` before the shell runs and ABORTS the whole job on an
+    unknown one. This command uses only fixed literals, sed patterns (which need no
+    `$`), and printf -- no shell variables / `$(...)`. `set -e` makes a real failure
+    (e.g. locale-gen error) stop the install rather than silently ship m/d/y dates."""
+    return (
+        "set -e\n"
+        # 1. enable + generate en_GB.UTF-8 (idempotent: uncomment if present, else append).
+        f"sed -i 's/^#\\s*{_TIME_LOCALE_GEN_LINE}/{_TIME_LOCALE_GEN_LINE}/' {_TARGET_LOCALE_GEN}\n"
+        f"grep -q '^{_TIME_LOCALE_GEN_LINE}' {_TARGET_LOCALE_GEN} || echo '{_TIME_LOCALE_GEN_LINE}' >> {_TARGET_LOCALE_GEN}\n"
+        "locale-gen\n"
+        # 2. set LC_TIME exactly once (remove any prior line localecfg wrote, then append).
+        f"sed -i '/^LC_TIME=/d' {_TARGET_LOCALE_CONF}\n"
+        f"printf 'LC_TIME={DEFAULT_TIME_LOCALE}\\n' >> {_TARGET_LOCALE_CONF}"
+    )
+
+
+def shellprocess_lctime_conf() -> str:
+    """Third `shellprocess` instance (shellprocess@lctime in settings.conf),
+    scheduled RIGHT AFTER `localecfg` in the exec sequence. It forces the target's
+    date format to day/month/year by setting LC_TIME=en_GB.UTF-8 in
+    /etc/locale.conf (and generating that locale), re-asserting it after localecfg
+    overwrote the file with the locale page's m/d/y en_US values. See
+    _lc_time_command for the full rationale and the no-`$` constraint.
+
+    NOT prefixed "-" (uses `set -e`): the user explicitly asked for d/m/y dates, so a
+    real failure (locale-gen error, unwritable locale.conf) should surface rather
+    than silently leaving m/d/y."""
+    cmd = _lc_time_command()
+    block = "\n".join("        " + line for line in cmd.splitlines())
+    return f"""\
+# Force day/month/year dates on the installed system (runs in the target chroot,
+# AFTER localecfg): set LC_TIME=en_GB.UTF-8 in /etc/locale.conf and generate that
+# locale. Calamares' localecfg overwrites /etc/locale.conf from the locale page
+# (en_US == m/d/y), so LC_TIME must be re-asserted here. Uses NO `$` (Calamares
+# macro-expands $WORD and aborts on an unknown one -- see calamares_shellprocess.py).
+---
+dontChroot: false
+timeout: 120
+verbose: true
+script:
+    - |
+{block}
+"""
+
+
 def shellprocess_conf() -> str:
     """Two pre-`users` / pre-`initcpio` fixups the OFFLINE (copy-the-live-rootfs)
     install needs, run INSIDE the target chroot (dontChroot: false) after unpackfs:

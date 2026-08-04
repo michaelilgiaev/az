@@ -247,6 +247,23 @@ else
   grub-install --target=i386-pc "$disk"
 fi
 
+# Auto-boot the FIRST menu entry with no wait (matches the Calamares grubcfg path).
+# GRUB_DEFAULT=0 selects the first generated entry, GRUB_TIMEOUT=0 boots it
+# immediately, and GRUB_TIMEOUT_STYLE=hidden shows no menu (hold SHIFT/ESC to
+# reveal it). Rewrite the key if present, else append it, so this is idempotent
+# regardless of the stock /etc/default/grub the `grub` package shipped.
+set_grub_default() {{
+  key="$1"; val="$2"
+  if grep -q "^#\\?${{key}}=" /etc/default/grub; then
+    sed -i "s|^#\\?${{key}}=.*|${{key}}=${{val}}|" /etc/default/grub
+  else
+    echo "${{key}}=${{val}}" >> /etc/default/grub
+  fi
+}}
+set_grub_default GRUB_DEFAULT 0
+set_grub_default GRUB_TIMEOUT 0
+set_grub_default GRUB_TIMEOUT_STYLE hidden
+
 grub-mkconfig -o /boot/grub/grub.cfg
 
 systemctl enable NetworkManager

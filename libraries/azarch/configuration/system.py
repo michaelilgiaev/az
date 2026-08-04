@@ -289,6 +289,173 @@ RemainAfterExit=true
 WantedBy=multi-user.target
 """
 
+# --- Power management: lid / power button (STATIC logind drop-in) -----------
+# A systemd-logind drop-in shipped root-owned under airootfs/etc, so it governs
+# BOTH the live ISO (bare console + Plasma) AND the installed system -- the OFFLINE
+# Calamares install rsyncs the live rootfs verbatim via unpackfs, so an /etc file
+# on the medium lands on the target unchanged (no separate installer step needed).
+#
+# The user's requests:
+#   * Closing the laptop lid does NOTHING (HandleLidSwitch=ignore, and the
+#     external-power / docked variants too, so it is ignored regardless of AC or
+#     dock state -- otherwise logind would still suspend on lid-close when on
+#     battery, the default).
+#   * The POWER BUTTON shuts the machine down cleanly (HandlePowerKey=poweroff,
+#     which is systemd's default, pinned here so it is explicit and cannot drift).
+#
+# The idle-suspend policy (PC vs laptop, AC-aware) is NOT here: it depends on
+# runtime chassis/AC state, so it is written dynamically by SLEEP_POLICY_SCRIPT
+# into a SEPARATE drop-in (20-azarch-sleep.conf) and does not collide with this
+# static file (10-*, lower number, both are merged by logind).
+LOGIND_POWER_DROPIN = """\
+# Az'arch power/lid/button policy (static half). Idle-suspend (PC vs laptop) is
+# written separately by azarch-sleep-policy at 20-azarch-sleep.conf.
+[Login]
+# Closing the lid does nothing, on battery OR AC OR docked (default would suspend).
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+HandleLidSwitchDocked=ignore
+# The power button shuts the machine down (clean poweroff). This is also systemd's
+# default; pinned explicitly so it is unambiguous.
+HandlePowerKey=poweroff
+"""
+
+
+# --- Power management: PC-vs-laptop idle-sleep policy (DYNAMIC) --------------
+# The user's request:
+#   * PC (no battery)                 -> NEVER sleep.
+#   * Laptop, unplugged (on battery)  -> sleep after 15 minutes idle.
+#   * Laptop, plugged in (on AC)      -> NEVER sleep.
+#
+# This depends on RUNTIME state (is a battery present? is AC online?), so it cannot
+# be a static file. A tiny script decides the policy and writes it into a logind
+# drop-in, then reloads logind (SIGHUP re-reads its config -- no session kill). It
+# runs once at boot AND on every AC-adapter hotplug (the udev rule below triggers
+# the same service), so unplugging the charger arms the 15-minute idle timer and
+# plugging it back in disarms it, live.
+#
+# WHY logind IdleAction (not PowerDevil): logind is the single idle manager that
+# works on BOTH the bare-console live ISO and the installed Plasma desktop, and it
+# is DE-independent -- exactly the deterministic behaviour the request describes.
+# IdleActionSec=900 == 15 minutes.
+#
+# Detection:
+#   * "laptop" == at least one /sys/class/power_supply/* of type "Battery". This is
+#     the reliable runtime signal (DMI chassis type via hostnamectl is frequently
+#     wrong/unset on real hardware and in VMs); a battery is what actually makes
+#     "sleep on battery" meaningful.
+#   * "on AC" == at least one supply of type "Mains" with online == 1.
+# The two enumerations are plain shell globs over sysfs -- no `$(...)` gymnastics --
+# and the script is defensive (missing files, no supplies at all -> treated as PC).
+SLEEP_POLICY_DROPIN_PATH = "/etc/systemd/logind.conf.d/20-azarch-sleep.conf"
+SLEEP_POLICY_IDLE_SECONDS = 900  # 15 minutes
+
+SLEEP_POLICY_SCRIPT = f"""\
+#!/bin/bash
+# azarch-sleep-policy -- auto-detect PC vs laptop and set the idle-sleep policy.
+#
+#   PC (no battery)                -> never sleep   (IdleAction=ignore)
+#   laptop on battery (unplugged)  -> sleep in 15m  (IdleAction=suspend, {SLEEP_POLICY_IDLE_SECONDS}s)
+#   laptop on AC (plugged in)      -> never sleep   (IdleAction=ignore)
+#
+# Writes {SLEEP_POLICY_DROPIN_PATH} and reloads systemd-logind so the change is
+# live. Invoked at boot and by a udev rule on AC-adapter changes (plug/unplug).
+set -u
+
+DROPIN="{SLEEP_POLICY_DROPIN_PATH}"
+IDLE_SECS={SLEEP_POLICY_IDLE_SECONDS}
+SUPPLY=/sys/class/power_supply
+
+has_battery() {{
+    local ps t
+    for ps in "$SUPPLY"/*; do
+        [ -r "$ps/type" ] || continue
+        t=$(cat "$ps/type" 2>/dev/null)
+        [ "$t" = "Battery" ] && return 0
+    done
+    return 1
+}}
+
+on_ac() {{
+    # True if any Mains (AC adapter) supply reports online == 1. A machine with a
+    # battery but no Mains entry (or all Mains offline) counts as unplugged.
+    local ps t online
+    for ps in "$SUPPLY"/*; do
+        [ -r "$ps/type" ] || continue
+        t=$(cat "$ps/type" 2>/dev/null)
+        [ "$t" = "Mains" ] || continue
+        online=$(cat "$ps/online" 2>/dev/null)
+        [ "$online" = "1" ] && return 0
+    done
+    return 1
+}}
+
+# Decide the action. Default: never sleep (covers PC and laptop-on-AC).
+action="ignore"
+secs=0
+if has_battery && ! on_ac; then
+    # Laptop, unplugged -> suspend after the idle delay.
+    action="suspend"
+    secs="$IDLE_SECS"
+fi
+
+mkdir -p "$(dirname "$DROPIN")"
+cat > "$DROPIN" <<EOF
+# Generated by azarch-sleep-policy (do not edit; regenerated at boot and on
+# AC-adapter change). PC/laptop-on-AC -> ignore; laptop-on-battery -> suspend 15m.
+[Login]
+IdleAction=$action
+IdleActionSec=$secs
+EOF
+
+# Re-read logind config live (SIGHUP); harmless if logind is not up yet (boot
+# ordering already places us After it, and the udev-triggered runs are post-boot).
+systemctl reload systemd-logind 2>/dev/null || true
+"""
+
+# The systemd unit that runs the sleep-policy script. Type=oneshot, run at boot
+# (WantedBy multi-user.target) AND pulled by the udev rule on AC changes. It orders
+# After systemd-logind so the reload lands on a running logind at boot; the
+# udev-triggered invocations happen well after boot, when logind is already up.
+SLEEP_POLICY_SERVICE = """\
+[Unit]
+Description=Az'arch PC/laptop idle-sleep policy (auto-detect battery + AC)
+After=systemd-logind.service
+Wants=systemd-logind.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/azarch-sleep-policy
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+# udev rule: re-run the policy whenever an AC adapter (power_supply of type Mains)
+# changes -- i.e. the charger is plugged in or unplugged. Matched on the power_supply
+# subsystem and POWER_SUPPLY_TYPE=="Mains" so only AC plug/unplug (not battery-level
+# ticks) retriggers it.
+#
+# We `RUN systemctl --no-block restart` rather than `ENV{SYSTEMD_WANTS}+=...`:
+# plug/unplug fires an ACTION=="change" uevent on the SAME, already-active Mains
+# `.device` unit, and systemd only acts on a device's `Wants=` when it FIRST becomes
+# active -- a `Wants=` re-added on an already-active device is IGNORED
+# (systemd.device(5): "will not act on them if they are added to devices that are
+# already active"). So SYSTEMD_WANTS would run the oneshot once at boot and never
+# again on plug/unplug -- the timer would never re-arm. `systemctl restart` runs the
+# oneshot unconditionally every time (even from its normal inactive/dead state, since
+# RemainAfterExit=no), so the policy is genuinely re-evaluated on each AC change.
+# `--no-block` returns immediately so udev event processing is never stalled by the
+# (fast, self-terminating) oneshot -- the "RUN can't do a long/settling task"
+# constraint does not apply because we only kick a unit asynchronously, we do not run
+# the work inline. Absolute systemctl path (udev RUN has a minimal PATH).
+SLEEP_POLICY_UDEV_RULE = """\
+# Re-evaluate the Az'arch idle-sleep policy when the AC adapter is plugged/unplugged.
+SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_TYPE}=="Mains", ACTION=="change", RUN+="/usr/bin/systemctl --no-block restart azarch-sleep-policy.service"
+"""
+
+
 # --- sshd-hypervisor variant only -------------------------------------------
 # Baked into the `azarch-sshd` ISO ONLY (steps.py emits + enables it only when
 # variant == "sshd"). It runs `azarch --sshd-hypervisor` automatically at boot --

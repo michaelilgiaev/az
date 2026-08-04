@@ -66,6 +66,15 @@ def _language_map_heredoc() -> str:
 DEFAULT_LANG = "en_US.UTF-8"
 DEFAULT_KEYMAP = "us"
 
+# Date/time formatting locale (LC_TIME), kept SEPARATE from the display language so
+# the UI stays US English while DATES read day/month/year. en_US.UTF-8 formats dates
+# month/day/year (e.g. 08/03/2026); en_GB.UTF-8 is English but formats them
+# day/month/year (e.g. 03/08/2026). Setting LC_TIME to en_GB.UTF-8 flips the whole
+# system's date order to d/m/y (the user's "modify timedate from m/d/y to d/m/y"
+# request) without changing the language of anything else. The Plasma clock is
+# aligned separately via configuration/desktop.plasma_localerc (same LC_TIME).
+DEFAULT_TIME_LOCALE = "en_GB.UTF-8"
+
 # Az'arch default (and, since auto-resolve was removed, ONLY) timezone. Dynamic
 # geo detection is deferred to `azarch --resolve-date-time` (issue #46).
 DEFAULT_TIMEZONE = "Asia/Jerusalem"
@@ -82,20 +91,26 @@ DEFAULT_TIMEZONE = "Asia/Jerusalem"
 # reimplemented as the user-invoked `azarch --resolve-*` commands, issue #46.)
 def _detect_and_apply_locale_block() -> str:
     return f"""\
-# Static locale: English display language, English-only ("us") keyboard, and the
-# Asia/Jerusalem timezone. Nothing here is auto-resolved from the network -- the
-# dynamic resolver lives in the `azarch --resolve-*` commands (issue #46).
+# Static locale: English display language, English-only ("us") keyboard, the
+# Asia/Jerusalem timezone, and a day/month/year date format (LC_TIME=en_GB.UTF-8).
+# Nothing here is auto-resolved from the network -- the dynamic resolver lives in
+# the `azarch --resolve-*` commands (issue #46).
 PRIMARY_LANG="{DEFAULT_LANG}"
 PRIMARY_KB="{DEFAULT_KEYMAP}"
+# Date/time locale: English but d/m/y instead of the m/d/y en_US default.
+TIME_LANG="{DEFAULT_TIME_LOCALE}"
 
-# Enable the single (English) locale.
+# Enable the display locale AND the d/m/y date locale in locale.gen so BOTH are
+# built by locale-gen (LC_TIME=en_GB.UTF-8 is inert unless en_GB.UTF-8 is generated).
 sed -i "s/^#\\?\\s*$PRIMARY_LANG/$PRIMARY_LANG/" /etc/locale.gen
+sed -i "s/^#\\?\\s*$TIME_LANG/$TIME_LANG/" /etc/locale.gen
 
 # Generate locales
 locale-gen
 
-# Set system locale
+# Set system locale: US English UI, but dates in day/month/year (LC_TIME).
 echo "LANG=$PRIMARY_LANG" > /etc/locale.conf
+echo "LC_TIME=$TIME_LANG" >> /etc/locale.conf
 
 # Set console keyboard (English-only)
 echo "KEYMAP=$PRIMARY_KB" > /etc/vconsole.conf

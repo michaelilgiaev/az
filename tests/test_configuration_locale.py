@@ -121,3 +121,44 @@ def test_setup_locale_single_shebang_and_marker():
     out = locale.setup_locale_sh()
     assert out.count("#!/bin/bash") == 1
     assert out.count("touch /var/log/.locale_set") == 1
+
+
+# --- LC_TIME: day/month/year dates (Task 3) ---------------------------------
+
+def test_time_locale_is_british_english_dmy():
+    # LC_TIME=en_GB.UTF-8 is English but formats dates day/month/year (vs the en_US
+    # month/day/year default) -- the user's "modify timedate from m/d/y to d/m/y".
+    assert locale.DEFAULT_TIME_LOCALE == "en_GB.UTF-8"
+
+
+def test_setup_block_sets_lc_time_separately_from_lang():
+    # The UI language stays US English (LANG=en_US.UTF-8) while ONLY the date order
+    # changes via LC_TIME. Both must be written to /etc/locale.conf.
+    block = locale._detect_and_apply_locale_block()
+    assert 'TIME_LANG="en_GB.UTF-8"' in block
+    assert 'echo "LANG=$PRIMARY_LANG" > /etc/locale.conf' in block          # UI language
+    assert 'echo "LC_TIME=$TIME_LANG" >> /etc/locale.conf' in block         # date order
+    # LANG must NOT be changed to the GB locale (only LC_TIME differs).
+    assert locale.DEFAULT_LANG == "en_US.UTF-8"
+
+
+def test_setup_block_generates_the_time_locale():
+    # LC_TIME=en_GB.UTF-8 is inert unless en_GB.UTF-8 is generated, so the block must
+    # uncomment it in /etc/locale.gen before locale-gen runs.
+    block = locale._detect_and_apply_locale_block()
+    assert 'sed -i "s/^#\\?\\s*$TIME_LANG/$TIME_LANG/" /etc/locale.gen' in block
+    # Both the primary and the time locale's uncomment-sed lines must run before the
+    # `locale-gen` COMMAND (newline-anchored so a mention of "locale-gen" in a comment
+    # does not match). Both seds enable a locale in /etc/locale.gen.
+    gen_cmd = block.index("\nlocale-gen\n")
+    assert block.index('sed -i "s/^#\\?\\s*$PRIMARY_LANG/$PRIMARY_LANG/"') < gen_cmd
+    assert block.index('sed -i "s/^#\\?\\s*$TIME_LANG/$TIME_LANG/"') < gen_cmd
+    # And LC_TIME is written to locale.conf AFTER locale-gen.
+    assert block.index('echo "LC_TIME=$TIME_LANG"') > gen_cmd
+
+
+def test_setup_block_still_dollar_brace_clean():
+    # The f-string additions must not leave doubled braces in the emitted bash.
+    block = locale._detect_and_apply_locale_block()
+    assert "{{" not in block
+    assert "}}" not in block

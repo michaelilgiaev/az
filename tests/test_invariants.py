@@ -95,17 +95,19 @@ def test_every_config_emitter_returns_nonempty_str(label, fn):
 
 def test_emitter_family_covers_all_config_modules():
     # Sanity check that the parametrized family did not silently shrink to a
-    # handful of entries -- the whole point is breadth. 19 calamares files (14 base
+    # handful of entries -- the whole point is breadth. 20 calamares files (14 base
     # + shellprocess.conf that clears the live `main` account + keyboard.conf that
     # pins the layout and disables auto-guess + shellprocess-desparse.conf that
-    # de-sparsifies /boot so GRUB can read the kernel + finished.conf that adds the
+    # de-sparsifies /boot so GRUB can read the kernel + shellprocess-lctime.conf that
+    # forces d/m/y dates (LC_TIME) after localecfg + finished.conf that adds the
     # Restart-now option + luksbootkeyfile.conf that embeds the LUKS keyfile so the
-    # encrypted root is not prompted for twice at boot) + 13 desktop builders
-    # (emit_plan: the 12 PLAN entries -- xinitrc, appletsrc, ksplashrc, plasmashellrc,
-    # kdeglobals, krunnerrc, kxkbrc, autostart + menu + Desktop installer launchers, the
-    # install wrapper, the azarch CLI -- plus the appended bash_profile) +
+    # encrypted root is not prompted for twice at boot) + 15 desktop builders
+    # (emit_plan: the 14 PLAN entries -- xinitrc, appletsrc, ksplashrc, plasmashellrc,
+    # kdeglobals, krunnerrc, kxkbrc, plasma-localerc (d/m/y clock), powermanagementprofilesrc
+    # (PC/laptop sleep), autostart + menu + Desktop installer launchers, the install
+    # wrapper, the azarch CLI -- plus the appended bash_profile) +
     # 6 installer + locale + profile + 4 pacman + 5 pkgbuild.
-    assert len(_EMITTERS) == 19 + 13 + 6 + 1 + 1 + 4 + 5
+    assert len(_EMITTERS) == 20 + 15 + 6 + 1 + 1 + 4 + 5
 
 
 def test_recipe_dir_contents_are_nonempty_str_both_tiers():

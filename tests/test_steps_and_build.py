@@ -38,6 +38,53 @@ def test_run_installs_ckbcomp_into_usr_bin():
     assert 'usr/bin/ckbcomp' in src
 
 
+# --- power management emission + enablement (Tasks 1 & 2) -------------------
+
+def test_run_calls_emit_power():
+    # run() must emit the power-management files (lid/button + PC/laptop idle sleep).
+    src = inspect.getsource(steps.run)
+    assert "_emit_power(airootfs)" in src
+
+
+def test_emit_power_writes_all_four_artifacts(tmp_path):
+    # BEHAVIORAL: _emit_power lays down the four root-owned power files under a fresh
+    # airootfs -- the static logind drop-in, the sleep-policy script (executable), its
+    # service, and the udev rule. These reach the installed system via unpackfs.
+    from azarch.configuration import system
+
+    airootfs = tmp_path / "airootfs"
+    steps._emit_power(airootfs)
+
+    dropin = airootfs / "etc/systemd/logind.conf.d/10-azarch-power.conf"
+    script = airootfs / "usr/local/bin/azarch-sleep-policy"
+    service = airootfs / "etc/systemd/system/azarch-sleep-policy.service"
+    udev = airootfs / "etc/udev/rules.d/99-azarch-sleep-policy.rules"
+
+    assert dropin.read_text() == system.LOGIND_POWER_DROPIN
+    assert script.read_text() == system.SLEEP_POLICY_SCRIPT
+    assert service.read_text() == system.SLEEP_POLICY_SERVICE
+    assert udev.read_text() == system.SLEEP_POLICY_UDEV_RULE
+    # The policy script must be executable (a service ExecStart on a non-exec file
+    # would fail to run).
+    import os
+    import stat
+    assert os.stat(script).st_mode & stat.S_IXUSR
+
+
+def test_link_services_enables_sleep_policy(tmp_path):
+    # BEHAVIORAL: _link_services must create the multi-user.target.wants symlink that
+    # enables azarch-sleep-policy.service on boot (both ISOs + installed system).
+    airootfs = tmp_path / "airootfs"
+    (airootfs / "etc/systemd/system").mkdir(parents=True)
+    steps._link_services(airootfs)
+
+    link = (airootfs / "etc/systemd/system/multi-user.target.wants"
+            / "azarch-sleep-policy.service")
+    assert link.is_symlink()
+    import os
+    assert os.readlink(link) == "/etc/systemd/system/azarch-sleep-policy.service"
+
+
 def test_step_weights_match_number_of_steps():
     # run() makes N literal bar.step() calls, but the final one is inside the
     # per-variant finalize loop and executes once per variant (both ISOs are built in

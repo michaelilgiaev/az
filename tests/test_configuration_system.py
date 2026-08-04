@@ -222,3 +222,123 @@ def test_pkgs_service_diverges_from_locale():
     assert "ConditionPathExists=/root/azarch/setup-pkgs.sh" in s
     assert "RemainAfterExit=true" in s
 
+
+# --- Power management: lid / power button (static logind drop-in) -----------
+
+def _parse_ini(text: str) -> dict:
+    """Parse a simple [Section] key=value INI (logind drop-in) into
+    {section: {key: value}}. Good enough for the small drop-ins here."""
+    out: dict = {}
+    section = None
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1]
+            out.setdefault(section, {})
+        elif "=" in line and section is not None:
+            k, v = line.split("=", 1)
+            out[section][k.strip()] = v.strip()
+    return out
+
+
+def test_logind_power_dropin_lid_does_nothing():
+    # The user asked: closing the lid does NOTHING. All three lid keys must be
+    # ignore -- otherwise logind still suspends on lid-close when on battery/docked.
+    d = _parse_ini(system.LOGIND_POWER_DROPIN)
+    login = d["Login"]
+    assert login["HandleLidSwitch"] == "ignore"
+    assert login["HandleLidSwitchExternalPower"] == "ignore"
+    assert login["HandleLidSwitchDocked"] == "ignore"
+
+
+def test_logind_power_dropin_power_button_shuts_down():
+    # The user asked: the power button SHUTS DOWN.
+    d = _parse_ini(system.LOGIND_POWER_DROPIN)
+    assert d["Login"]["HandlePowerKey"] == "poweroff"
+
+
+def test_logind_power_dropin_is_login_section():
+    # logind drop-ins are read from the [Login] group; a wrong header makes every
+    # key silently ignored.
+    d = _parse_ini(system.LOGIND_POWER_DROPIN)
+    assert set(d) == {"Login"}
+
+
+# --- Power management: PC-vs-laptop idle-sleep policy (dynamic) --------------
+
+def test_sleep_policy_idle_is_fifteen_minutes():
+    # 15 minutes == 900 seconds, per the request.
+    assert system.SLEEP_POLICY_IDLE_SECONDS == 900
+
+
+def test_sleep_policy_dropin_path_is_separate_from_static():
+    # The dynamic idle drop-in must be a DIFFERENT file from the static lid/button
+    # one (10-*), so the two never clobber each other; 20-* sorts after 10-*.
+    assert system.SLEEP_POLICY_DROPIN_PATH == "/etc/systemd/logind.conf.d/20-azarch-sleep.conf"
+
+
+def test_sleep_policy_script_is_bash_with_battery_and_ac_detection():
+    s = system.SLEEP_POLICY_SCRIPT
+    assert s.startswith("#!/bin/bash")
+    # Reads sysfs power_supply to detect battery presence and AC state.
+    assert "/sys/class/power_supply" in s
+    assert 'has_battery' in s
+    assert 'on_ac' in s
+    assert '"Battery"' in s
+    assert '"Mains"' in s
+
+
+def test_sleep_policy_script_encodes_the_three_cases():
+    # The decision table: only "laptop AND unplugged" -> suspend; everything else
+    # (PC, or laptop on AC) -> ignore (never sleep).
+    s = system.SLEEP_POLICY_SCRIPT
+    assert 'action="ignore"' in s            # default: never sleep
+    assert 'if has_battery && ! on_ac; then' in s
+    assert 'action="suspend"' in s           # the one sleeping case
+    # It writes IdleAction/IdleActionSec into the drop-in and reloads logind live.
+    assert "IdleAction=$action" in s
+    assert "IdleActionSec=$secs" in s
+    assert system.SLEEP_POLICY_DROPIN_PATH in s
+    assert "systemctl reload systemd-logind" in s
+
+
+def test_sleep_policy_script_uses_the_idle_seconds_constant():
+    # The 15-minute value in the script must come from the constant (single source).
+    s = system.SLEEP_POLICY_SCRIPT
+    assert f"IDLE_SECS={system.SLEEP_POLICY_IDLE_SECONDS}" in s
+
+
+def test_sleep_policy_service_is_oneshot_after_logind():
+    s = system.SLEEP_POLICY_SERVICE
+    assert "Type=oneshot" in s
+    assert "ExecStart=/usr/local/bin/azarch-sleep-policy" in s
+    # Ordered after logind so the boot-time reload lands on a running logind.
+    assert "After=systemd-logind.service" in s
+    assert "WantedBy=multi-user.target" in s
+
+
+def test_sleep_policy_udev_rule_retriggers_on_ac_change():
+    # The rule must re-run the policy service ONLY on AC-adapter (Mains) change --
+    # not on every battery-level tick.
+    r = system.SLEEP_POLICY_UDEV_RULE
+    assert 'SUBSYSTEM=="power_supply"' in r
+    assert 'ENV{POWER_SUPPLY_TYPE}=="Mains"' in r
+    assert 'ACTION=="change"' in r
+
+
+def test_sleep_policy_udev_rule_uses_restart_not_systemd_wants():
+    # REGRESSION GUARD (adversary-found bug): SYSTEMD_WANTS added on a `change` event
+    # is IGNORED for an already-active .device unit (systemd only acts on Wants= at
+    # first activation), so the oneshot would run once at boot and NEVER re-arm on
+    # plug/unplug. The rule must instead `systemctl restart` the oneshot (runs it
+    # unconditionally every time) with --no-block (never stall udev).
+    r = system.SLEEP_POLICY_UDEV_RULE
+    assert 'RUN+="/usr/bin/systemctl --no-block restart azarch-sleep-policy.service"' in r
+    # The broken mechanism must be gone.
+    assert "SYSTEMD_WANTS" not in r
+    # `restart` (not `start`) so a oneshot in inactive/dead state is re-run each time.
+    assert "restart" in r
+    assert "--no-block" in r
+

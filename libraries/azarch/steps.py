@@ -200,6 +200,15 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     emit.write_text(airootfs / "etc/sudoers.d/00-rootpw", system.SUDOERS_ROOTPW, mode=0o440)
     emit.write_text(airootfs / "etc/sudoers.d/00-main", system.SUDOERS_MAIN, mode=0o440)
     emit.write_text(airootfs / "etc/sudoers.d/00-secure-path", system.SUDOERS_SECURE_PATH, mode=0o440)
+    # Power management (lid/button + PC-vs-laptop idle sleep), folded into this
+    # unit/policy step so the STEP_WEIGHTS milestone-count invariant is untouched.
+    # All root-owned under /etc + /usr/local/bin, so the OFFLINE Calamares install
+    # (unpackfs rsyncs the live rootfs) carries them onto the installed system with
+    # no separate installer step. The lid/power-button drop-in is STATIC; the
+    # idle-sleep policy is a script+service+udev-rule that decides PC vs laptop and
+    # AC state at runtime (see configuration/system.py). The service enable-symlink is
+    # added in _link_services alongside the other multi-user oneshots.
+    _emit_power(airootfs)
 
     # 10 -- Emit installer payload.
     # The first-boot script/service/conf. profiledef.sh (archiso metadata at the
@@ -341,6 +350,43 @@ def _emit_calamares(airootfs: Path) -> None:
     base = airootfs / "etc/calamares"
     for rel, content in calamares.emit_map().items():
         emit.write_text(base / rel, content)
+
+
+def _emit_power(airootfs: Path) -> None:
+    """Emit the power-management files (lid/power-button + PC-vs-laptop idle sleep).
+
+    Four root-owned artifacts, all under /etc or /usr/local/bin, so the OFFLINE
+    Calamares install (unpackfs rsyncs the live rootfs) carries them onto the
+    installed system unchanged -- and they also govern the live ISO:
+
+      1. STATIC logind drop-in (10-azarch-power.conf): lid does nothing, power
+         button powers off. A plain /etc file, effective immediately at boot.
+      2. The azarch-sleep-policy script (/usr/local/bin, 0755): decides PC vs laptop
+         (battery present?) and AC state at RUNTIME and writes the idle-sleep
+         drop-in (20-azarch-sleep.conf), then reloads logind.
+      3. Its systemd service (azarch-sleep-policy.service): runs the script at boot;
+         the enable-symlink is added in _link_services.
+      4. Its udev rule: re-runs the service on AC-adapter plug/unplug so the
+         15-minute idle timer arms/disarms live.
+
+    The dynamic 20-*.conf is NOT emitted here -- the script generates it on the
+    running system (its value depends on live hardware state, so baking a fixed one
+    would be wrong)."""
+    emit.write_text(
+        airootfs / "etc/systemd/logind.conf.d/10-azarch-power.conf",
+        system.LOGIND_POWER_DROPIN,
+    )
+    emit.write_exec(
+        airootfs / "usr/local/bin/azarch-sleep-policy", system.SLEEP_POLICY_SCRIPT
+    )
+    emit.write_text(
+        airootfs / "etc/systemd/system/azarch-sleep-policy.service",
+        system.SLEEP_POLICY_SERVICE,
+    )
+    emit.write_text(
+        airootfs / "etc/udev/rules.d/99-azarch-sleep-policy.rules",
+        system.SLEEP_POLICY_UDEV_RULE,
+    )
 
 
 def _emit_tty1_autologin(airootfs: Path) -> None:
@@ -555,6 +601,12 @@ def _link_services(airootfs: Path) -> None:
         emit.link(f"/usr/lib/systemd/system/{svc}", base / f"multi-user.target.wants/{svc}")
     emit.link("/etc/systemd/system/locale-setup.service", base / "multi-user.target.wants/locale-setup.service")
     emit.link("/etc/systemd/system/pkgs-setup.service", base / "multi-user.target.wants/pkgs-setup.service")
+    # PC-vs-laptop idle-sleep policy oneshot: enabled on BOTH ISOs (and, via unpackfs,
+    # the installed system). Runs azarch-sleep-policy at boot to write the idle
+    # drop-in for the detected chassis/AC state; the udev rule re-runs it on plug/
+    # unplug. See _emit_power / configuration/system.py.
+    emit.link("/etc/systemd/system/azarch-sleep-policy.service",
+              base / "multi-user.target.wants/azarch-sleep-policy.service")
 
 
 def _switch_offline(W: Path, conf: str, localrepo: Path) -> None:

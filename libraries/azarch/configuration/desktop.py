@@ -507,6 +507,86 @@ SwitchMode=Global
 """
 
 
+# --- 3f. ~/.config/plasma-localerc (Plasma date format: d/m/y) --------------
+# The date/time locale Plasma uses to FORMAT the digital clock + calendar, kept
+# equal to the system LC_TIME (configuration/locale.DEFAULT_TIME_LOCALE) so the KDE
+# clock reads day/month/year like the rest of the system. Imported so the two never
+# drift.
+from .locale import DEFAULT_TIME_LOCALE as _TIME_LOCALE  # noqa: E402
+
+
+def plasma_localerc() -> str:
+    """Set the Plasma per-session date/time format to day/month/year, matching the
+    system LC_TIME (en_GB.UTF-8) so the panel's digital clock and calendar show
+    dates as d/m/y (the user's "modify timedate from m/d/y to d/m/y" request) --
+    not the en_US m/d/y default.
+
+    Plasma's regional-formats KCM writes ~/.config/plasma-localerc; the digital
+    clock reads its date/time format from the [Formats] group's LC_TIME. Setting
+    LC_TIME=en_GB.UTF-8 there (English, but d/m/y) flips the clock's date order
+    without changing the display language. `useDetailedLocales=true` tells Plasma to
+    honour the per-category [Formats] overrides rather than a single global locale.
+
+    This is the Plasma complement to the system-wide LC_TIME set in
+    configuration/locale (live) and the shellprocess@lctime Calamares step
+    (installed); all three use DEFAULT_TIME_LOCALE. Shipped to the live home and
+    /etc/skel so installed users inherit it."""
+    return f"""\
+[Formats]
+LC_TIME={_TIME_LOCALE}
+useDetailedLocales=true
+"""
+
+
+# --- 3g. ~/.config/powermanagementprofilesrc (PowerDevil sleep policy) ------
+# Idle-suspend delay on battery, in MILLISECONDS. PowerDevil's SuspendSession
+# subgroup uses ms; 15 minutes == 900000. Kept equal (in minutes) to the logind
+# IdleActionSec the console policy uses (configuration/system.SLEEP_POLICY_IDLE_SECONDS),
+# so Plasma and the bare console agree on the 15-minute laptop-on-battery timeout.
+POWERDEVIL_BATTERY_IDLE_MS = 900000  # 15 minutes
+
+# PowerDevil "suspend to RAM" action id in the SuspendSession subgroup. Plasma's
+# powerdevil maps suspendType 1 -> ToRamMode (normal sleep/suspend). We use that so
+# "sleep" means suspend-to-RAM, matching the user's request.
+_POWERDEVIL_SUSPEND_TO_RAM = 1
+
+
+def powermanagementprofilesrc() -> str:
+    """PowerDevil per-profile power policy for the INSTALLED Plasma desktop, aligning
+    KDE's own power manager with the user's PC-vs-laptop sleep request:
+
+      * AC profile (plugged in, and the ONLY active profile on a desktop PC that has
+        no battery) -> NO SuspendSession group at all == never auto-suspend. This is
+        exactly "PC never sleeps" and "laptop plugged in never sleeps".
+      * Battery profile (laptop, unplugged) -> SuspendSession after 15 minutes idle,
+        suspend-to-RAM == "laptop unplugged sleeps after 15 minutes".
+
+    PowerDevil auto-detects the chassis: on a battery-less PC the Battery profile is
+    never activated (there is no battery to be on), so only the suspend-free AC
+    profile ever applies -> the PC never sleeps without any explicit chassis check
+    here. On a laptop, unplugging switches PowerDevil to the Battery profile (15-min
+    suspend) and plugging in switches back to the AC profile (no suspend), live.
+
+    This is the Plasma-session complement to the DE-independent logind IdleAction
+    policy (configuration/system.SLEEP_POLICY_SCRIPT), which covers the bare console /
+    live ISO; both encode the same 15-minute-on-battery / never-on-AC rule so the
+    behaviour is identical whether or not Plasma is running. Lid-close and the power
+    button are handled by the logind drop-in (configuration/system.LOGIND_POWER_DROPIN),
+    not here. Shipped to the live home and /etc/skel (so installed users inherit it).
+
+    Format (Plasma 6 powerdevil): profile groups [AC] and [Battery]; the idle-suspend
+    action is the nested [<profile>][SuspendSession] subgroup with idleTime (ms) and
+    suspendType (1 == suspend-to-RAM). Omitting SuspendSession under a profile means
+    that profile performs no idle suspend."""
+    return f"""\
+[AC]
+
+[Battery][SuspendSession]
+idleTime={POWERDEVIL_BATTERY_IDLE_MS}
+suspendType={_POWERDEVIL_SUSPEND_TO_RAM}
+"""
+
+
 # --- 4. ~/.config/ksplashrc -------------------------------------------------
 def ksplashrc() -> str:
     """Disable the Plasma startup splash (KSplash). `startplasma-x11` would
@@ -802,6 +882,22 @@ PLAN = [
     {
         "builder": kxkbrc,
         "dest": f"{HOME}/.config/kxkbrc",
+        "mode": _CONF,
+        "owner": "home",
+    },
+    {
+        # Plasma date format: day/month/year in the clock/calendar (matches system
+        # LC_TIME). The user's "modify timedate from m/d/y to d/m/y" request.
+        "builder": plasma_localerc,
+        "dest": f"{HOME}/.config/plasma-localerc",
+        "mode": _CONF,
+        "owner": "home",
+    },
+    {
+        # PowerDevil sleep policy: never suspend on AC/PC, suspend after 15 min on
+        # battery (laptop unplugged). Plasma-session complement to the logind policy.
+        "builder": powermanagementprofilesrc,
+        "dest": f"{HOME}/.config/powermanagementprofilesrc",
         "mode": _CONF,
         "owner": "home",
     },

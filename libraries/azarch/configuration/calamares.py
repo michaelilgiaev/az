@@ -73,9 +73,11 @@ from .calamares_shellprocess import (  # noqa: F401  (re-exported for the public
     LIVE_USER,
     STOCK_LINUX_PRESET,
     _boot_desparsify_command,
+    _lc_time_command,
     _mkinitcpio_reset_command,
     shellprocess_conf,
     shellprocess_desparsify_conf,
+    shellprocess_lctime_conf,
 )
 
 # The branding component directory name (under branding/) and product identity.
@@ -128,6 +130,13 @@ instances:
 - id: desparse
   module: shellprocess
   config: shellprocess-desparse.conf
+# Third shellprocess instance: force LC_TIME=en_GB.UTF-8 (d/m/y dates) in the target
+# AFTER localecfg overwrites /etc/locale.conf. Its config is shellprocess-lctime.conf
+# (see the `config:` key note above -- a typo would silently re-run the DEFAULT
+# shellprocess.conf and the date format would stay m/d/y).
+- id: lctime
+  module: shellprocess
+  config: shellprocess-lctime.conf
 
 # The ordered install sequence. `show` phases render UI pages; `exec` phases do
 # the actual work with a progress bar. Only modules with a configuration below (or that
@@ -166,6 +175,11 @@ sequence:
   - locale
   - keyboard
   - localecfg
+  # Force LC_TIME=en_GB.UTF-8 (day/month/year dates) in the target, re-asserting it
+  # AFTER localecfg overwrites /etc/locale.conf with the locale page's m/d/y en_US
+  # values. Second shellprocess instance (shellprocess@lctime); its configuration is
+  # modules/shellprocess-lctime.conf (see instances:). Must run after localecfg.
+  - shellprocess@lctime
   - users
   - networkcfg
   - hwclock
@@ -678,7 +692,17 @@ luks2Hash: default
 def grubcfg_conf() -> str:
     """Write /etc/default/grub before the bootloader module runs grub-install +
     grub-mkconfig. Enables cryptodisk so a LUKS-encrypted root can be unlocked
-    by GRUB at boot."""
+    by GRUB at boot, and boots straight into the first menu entry with no wait.
+
+    AUTO-BOOT the first option (the user's request "GRUB automatically goes into
+    the first option during boot"):
+      * GRUB_DEFAULT: 0        -- select the FIRST generated menu entry. (Was
+        "saved", which boots whatever grub-reboot/last-boot recorded -- a moving
+        target with no GRUB_SAVEDEFAULT set; pinning 0 always picks the top entry.)
+      * GRUB_TIMEOUT: 0        -- do not wait; boot the default immediately.
+      * GRUB_TIMEOUT_STYLE: "hidden" -- show no menu at all before booting (with a
+        0 timeout "menu" would still flash the list for a frame; "hidden" goes
+        straight in, and the user can still hold SHIFT/ESC to reveal the menu)."""
     return """\
 # /etc/default/grub contents written before grub-install / grub-mkconfig.
 ---
@@ -687,10 +711,11 @@ overwrite: true
 # Key/value pairs merged into /etc/default/grub. Schema requires GRUB_TIMEOUT and
 # GRUB_DEFAULT. GRUB_ENABLE_CRYPTODISK is set automatically by the module when a
 # crypt device is present, but we set it explicitly too (harmless).
+# GRUB_DEFAULT 0 + GRUB_TIMEOUT 0 + hidden style == boot the first entry at once.
 defaults:
-    GRUB_TIMEOUT: 5
-    GRUB_DEFAULT: "saved"
-    GRUB_TIMEOUT_STYLE: "menu"
+    GRUB_TIMEOUT: 0
+    GRUB_DEFAULT: 0
+    GRUB_TIMEOUT_STYLE: "hidden"
     GRUB_DISTRIBUTOR: "Az'arch Linux"
     GRUB_ENABLE_CRYPTODISK: "y"
 
@@ -921,6 +946,7 @@ def emit_map() -> dict[str, str]:
         "modules/unpackfs.conf": unpackfs_conf(),
         "modules/shellprocess.conf": shellprocess_conf(),
         "modules/shellprocess-desparse.conf": shellprocess_desparsify_conf(),
+        "modules/shellprocess-lctime.conf": shellprocess_lctime_conf(),
         "modules/users.conf": users_conf(),
         "modules/packages.conf": packages_conf(),
         "modules/mount.conf": mount_conf(),

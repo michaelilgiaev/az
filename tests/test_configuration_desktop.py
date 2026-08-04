@@ -21,11 +21,12 @@ from azarch.configuration import desktop
 
 # --- PLAN mode/owner/dest table --------------------------------------------
 
-def test_plan_has_exactly_twelve_entries():
+def test_plan_has_exactly_fourteen_entries():
     # steps.py iterates PLAN; a dropped/extra entry silently un-emits a file.
-    # (12 = original 7 + ~/Desktop launcher + plasmashellrc + kdeglobals + krunnerrc
-    #  + kxkbrc keyboard-layouts.)
-    assert len(desktop.PLAN) == 12
+    # (14 = original 7 + ~/Desktop launcher + plasmashellrc + kdeglobals + krunnerrc
+    #  + kxkbrc keyboard-layouts + plasma-localerc (d/m/y clock) +
+    #  powermanagementprofilesrc (PC/laptop sleep policy).)
+    assert len(desktop.PLAN) == 14
 
 
 def test_plan_entries_have_the_four_declared_keys():
@@ -159,8 +160,9 @@ def test_home_owner_gid_is_autologin_group():
 
 # --- emit_plan(): PLAN + bash_profile, without mutating PLAN ----------------
 
-def test_emit_plan_length_is_thirteen():
-    assert len(desktop.emit_plan()) == 13
+def test_emit_plan_length_is_fifteen():
+    # 14 PLAN entries + the appended .bash_profile.
+    assert len(desktop.emit_plan()) == 15
 
 
 def test_emit_plan_prefix_is_plan():
@@ -183,11 +185,11 @@ def test_bash_profile_dest_is_home_bash_profile():
 
 def test_emit_plan_does_not_mutate_module_plan():
     # steps.py may call emit_plan() more than once; it must not grow PLAN each call
-    # (PLAN + [x] builds a new list, so the constant stays at seven).
+    # (PLAN + [x] builds a new list, so the constant stays fixed).
     before = len(desktop.PLAN)
     desktop.emit_plan()
     desktop.emit_plan()
-    assert len(desktop.PLAN) == before == 12
+    assert len(desktop.PLAN) == before == 14
 
 
 # --- xinitrc: Plasma X11 session, no flash ----------------------------------
@@ -709,3 +711,87 @@ def test_stock_next_wallpaper_removed_in_customize():
     # The grid must show only the azarch wallpapers, so the bundled Plasma "Next"
     # wallpaper is deleted in the post-pacstrap hook.
     assert "rm -rf /usr/share/wallpapers/Next" in system.CUSTOMIZE_AIROOTFS
+
+
+# --- Plasma date format: day/month/year (Task 3) ----------------------------
+
+def test_plasma_localerc_sets_dmy_time_locale():
+    # The KDE clock/calendar formats dates via plasma-localerc [Formats] LC_TIME.
+    # en_GB.UTF-8 is English but d/m/y (vs en_US m/d/y) -- the user's request.
+    s = desktop.plasma_localerc()
+    assert "[Formats]" in s
+    assert "LC_TIME=en_GB.UTF-8" in s
+    # useDetailedLocales makes Plasma honour the per-category LC_TIME override.
+    assert "useDetailedLocales=true" in s
+
+
+def test_plasma_localerc_matches_system_lc_time():
+    # Single source of truth: the Plasma clock locale must equal the system LC_TIME
+    # (configuration/locale.DEFAULT_TIME_LOCALE), or the clock and `date` disagree.
+    from azarch.configuration import locale
+    assert desktop._TIME_LOCALE == locale.DEFAULT_TIME_LOCALE
+    assert f"LC_TIME={locale.DEFAULT_TIME_LOCALE}" in desktop.plasma_localerc()
+
+
+def test_plasma_localerc_in_plan_as_home_conf():
+    entry = next(e for e in desktop.PLAN
+                 if e["dest"] == f"{desktop.HOME}/.config/plasma-localerc")
+    assert entry["mode"] == 0o644
+    assert entry["owner"] == "home"
+
+
+# --- PowerDevil sleep policy: PC/laptop (Task 1) ----------------------------
+
+# NOTE: keep this DISTINCT from the module-level _parse_ini above (which returns a
+# ConfigParser and normalises [a][b] headers): here we want the RAW "[a][b]" header
+# string as the key so a missing/extra SuspendSession subgroup is directly visible.
+def _parse_kv_sections(text: str) -> dict:
+    out: dict = {}
+    section = None
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line
+            out.setdefault(section, {})
+        elif "=" in line and section is not None:
+            k, v = line.split("=", 1)
+            out[section][k.strip()] = v.strip()
+    return out
+
+
+def test_powerdevil_ac_never_suspends():
+    # AC profile (plugged in, and the ONLY profile on a battery-less PC) must have
+    # NO SuspendSession -> never auto-suspend. This is "PC never sleeps" AND
+    # "laptop plugged in never sleeps".
+    s = desktop.powermanagementprofilesrc()
+    d = _parse_kv_sections(s)
+    assert "[AC]" in d
+    # No AC SuspendSession group at all.
+    assert "[AC][SuspendSession]" not in s
+    assert "[AC][SuspendSession]" not in d
+
+
+def test_powerdevil_battery_suspends_after_fifteen_minutes():
+    # Battery profile (laptop unplugged) -> suspend after 15 min (900000 ms).
+    s = desktop.powermanagementprofilesrc()
+    d = _parse_kv_sections(s)
+    assert "[Battery][SuspendSession]" in d
+    grp = d["[Battery][SuspendSession]"]
+    assert grp["idleTime"] == str(desktop.POWERDEVIL_BATTERY_IDLE_MS)
+    assert grp["suspendType"] == "1"           # suspend-to-RAM
+
+
+def test_powerdevil_timeout_matches_logind_seconds():
+    # The Plasma (ms) and console-logind (s) 15-minute timeouts must agree, or a
+    # laptop sleeps at two different times depending on whether Plasma is running.
+    from azarch.configuration import system
+    assert desktop.POWERDEVIL_BATTERY_IDLE_MS == system.SLEEP_POLICY_IDLE_SECONDS * 1000
+
+
+def test_powermanagementprofilesrc_in_plan_as_home_conf():
+    entry = next(e for e in desktop.PLAN
+                 if e["dest"] == f"{desktop.HOME}/.config/powermanagementprofilesrc")
+    assert entry["mode"] == 0o644
+    assert entry["owner"] == "home"
