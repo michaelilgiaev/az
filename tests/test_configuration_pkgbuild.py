@@ -419,6 +419,68 @@ def test_calamares_region_patch_keeps_english_first_and_alt_shift():
     assert '"IL", "he"' not in body
 
 
+def test_calamares_region_patch_reguesses_on_every_activate():
+    # BUG (installer keyboard does not follow the region): the stock keyboard guess
+    # early-returns unless m_state==State::Initial, so after the first Keyboard visit
+    # (state becomes UserSelected) changing the region on the Location page and
+    # returning never re-derives the layout. The patch must relax that gate for the
+    # region path so it re-runs on every activation. The gate condition must gain the
+    # `&& !m_regionSecondLayout` clause (region path bypasses the Initial-only gate).
+    p = pkgbuild.calamares_region_keyboard_patch()
+    added = [ln[1:] for ln in p.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
+    body = "\n".join(added)
+    assert "( m_state != State::Initial && !m_regionSecondLayout ) || !m_guessLayout" in body
+    # And the ORIGINAL Initial-only gate must be REMOVED (a "-" line), not left behind
+    # (else the region path would still early-return on the second visit).
+    removed = [ln[1:] for ln in p.splitlines() if ln.startswith("-") and not ln.startswith("---")]
+    assert "    if ( m_state != State::Initial || !m_guessLayout )" in removed
+
+
+def test_calamares_region_patch_preserves_hand_picked_layout_on_revisit():
+    # Re-running the region guess on every Keyboard activation (the BUG 2 gate fix) must
+    # NOT clobber a layout the user hand-picked when they revisit the page WITHOUT
+    # changing the region. The patch must capture whether the user had already selected
+    # (m_state==UserSelected) before the scoped assignment resets it, thread it into
+    # guessRegionKeyboardLayout(bool), and short-circuit when the region is unchanged
+    # (country == m_regionGuessedCountry). Without this, revisiting Keyboard overwrites
+    # a hand-picked primary layout back to the region layout every time.
+    p = pkgbuild.calamares_region_keyboard_patch()
+    added = [ln[1:] for ln in p.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
+    body = "\n".join(added)
+    # Entry-state captured before the scoped assignment resets m_state.
+    assert "const bool azUserHadSelected = ( m_state == State::UserSelected )" in body
+    # Threaded into the region guess.
+    assert "guessRegionKeyboardLayout( azUserHadSelected )" in body
+    assert "void guessRegionKeyboardLayout( bool userHadSelected )" in body \
+        or "Config::guessRegionKeyboardLayout( bool userHadSelected )" in body
+    # The preserve guard: user hand-picked AND region unchanged -> return without reselecting.
+    assert "userHadSelected && !m_regionGuessedCountry.isEmpty() && country == m_regionGuessedCountry" in body
+    # And it must record the guessed country so a later same-region revisit is detected.
+    assert "m_regionGuessedCountry = country;" in body
+
+
+def test_calamares_region_patch_falls_back_to_zone_for_default_region():
+    # BUG corollary: on the FIRST Keyboard activation GlobalStorage "locationCountry"
+    # may not be populated yet (the locale module writes it on location-change /
+    # finalize), which would make the default Asia/Jerusalem resolve to English-only
+    # instead of us,il. The patch must fall back to the published "locationZone" via a
+    # countryForZone() table, and the default Jerusalem MUST map to IL.
+    p = pkgbuild.calamares_region_keyboard_patch()
+    added = [ln[1:] for ln in p.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
+    body = "\n".join(added)
+    assert "countryForZone" in body
+    assert "locationZone" in body
+    # Default region -> IL so out-of-the-box stays us,il.
+    assert '{ "Jerusalem", "IL" }' in body
+    # A couple of representative non-default zones the PROMPT calls out.
+    assert '{ "El_Salvador", "SV" }' in body
+    assert '{ "Riyadh", "SA" }' in body
+    # The read must be a MUTABLE QString (so the empty-country fallback can reassign it),
+    # not the old `const QString country`.
+    assert "const QString country = gs->value" not in body
+    assert 'QString country = gs->value( QStringLiteral( "locationCountry" ) )' in body
+
+
 def test_calamares_region_patch_context_lines_have_leading_space():
     # Same unified-diff hygiene as the defaults patch: every body line begins with
     # exactly one of " ", "+", "-"; blank context lines survived as " ".

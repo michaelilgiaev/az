@@ -392,6 +392,35 @@ def test_installer_cleanup_command_uses_no_shell_variables_and_rm_f():
             assert line.startswith("rm -f "), line
 
 
+def test_shellprocess_removes_fixed_kxkbrc_so_region_keyboard_survives():
+    # BUG (post-install keyboard reverts to US+Hebrew regardless of region): the live
+    # session ships a FIXED us,il Plasma keyboard config at ~/.config/kxkbrc (+ /etc/skel),
+    # and the OFFLINE install copies /home/main VERBATIM (reuseHome). On the installed
+    # Plasma session kded reads ~/.config/kxkbrc as AUTHORITATIVE and overrides the
+    # region-correct /etc/X11/xorg.conf.d/00-keyboard.conf Calamares wrote -- so every
+    # install comes up us,il no matter the region. The cleanup step must DELETE the
+    # target's kxkbrc (home + skel) so the region keyboard governs. The live ISO keeps
+    # its own kxkbrc; only the installed copy is removed here (target chroot).
+    from azarch.configuration import calamares_shellprocess as csp
+    d = yaml.safe_load(calamares.shellprocess_conf())
+    cmd = _installer_cleanup_command(d["script"])
+    assert f"rm -f {csp.INSTALLED_KXKBRC}" in cmd
+    assert f"rm -f {csp.INSTALLED_SKEL_KXKBRC}" in cmd
+    # The paths are the reused-home + skel Plasma keyboard config specifically.
+    assert csp.INSTALLED_KXKBRC == "/home/main/.config/kxkbrc"
+    assert csp.INSTALLED_SKEL_KXKBRC == "/etc/skel/.config/kxkbrc"
+
+
+def test_shellprocess_kxkbrc_removal_targets_the_shipped_file():
+    # Guard against drift: the file the cleanup deletes MUST be the exact path
+    # configuration/desktop.py ships kxkbrc to (the live home). If desktop.py's dest
+    # ever moves, this catches it so the clobber-fix keeps targeting the real file.
+    from azarch.configuration import calamares_shellprocess as csp
+    from azarch.configuration import desktop
+    by_builder = {e["builder"].__name__: e for e in desktop.emit_plan()}
+    assert by_builder["kxkbrc"]["dest"] == csp.INSTALLED_KXKBRC
+
+
 # --- shellprocess.conf: the archiso mkinitcpio fix (kernel + preset) --------
 
 def _mkinitcpio_reset_command(script: list) -> str:

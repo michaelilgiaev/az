@@ -493,7 +493,17 @@ def kxkbrc() -> str:
       * DisplayNames=US,HE    -- the labels the applet shows for each layout.
       * Options=grp:alt_shift_toggle -- Alt+Shift cycles layouts.
       * SwitchMode=Global     -- one active layout for the whole session (not per-window).
-    Shipped to the live home and /etc/skel."""
+    Shipped to the live home and /etc/skel.
+
+    LIVE-SESSION ONLY: this fixed us,il is correct for the live medium's default
+    (Asia/Jerusalem) desktop, but on a Calamares INSTALL it must NOT survive -- the
+    OFFLINE install copies /home/main verbatim (unpackfs/reuseHome), and on the
+    installed Plasma session kded reads ~/.config/kxkbrc as AUTHORITATIVE, overriding
+    the region-correct /etc/X11/xorg.conf.d/00-keyboard.conf Calamares wrote for the
+    user's chosen region (so every install would come up us,il regardless of region).
+    The Calamares shellprocess step therefore DELETES this file (home + skel) on the
+    target so the region keyboard governs -- see configuration/calamares_shellprocess.
+    INSTALLED_KXKBRC. (The archinstall path is English-only "us" and unaffected.)"""
     codes = ",".join(l["code"] for l in KEYBOARD_LAYOUTS)
     labels = ",".join(l["label"] for l in KEYBOARD_LAYOUTS)
     return f"""\

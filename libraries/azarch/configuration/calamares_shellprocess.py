@@ -42,6 +42,27 @@ INSTALLER_AUTOSTART_ENTRY = (
 INSTALLER_SKEL_LAUNCHER = "/etc/skel/Desktop/azarch-install.desktop"
 INSTALLER_SKEL_AUTOSTART = "/etc/skel/.config/autostart/azarch-install.desktop"
 
+# The live session ships a FIXED Plasma keyboard-layout config (us,il == US+Hebrew)
+# at ~/.config/kxkbrc AND /etc/skel/.config/kxkbrc (configuration/desktop.kxkbrc), so
+# the LIVE desktop's panel applet switches US<->HE from first login. But the OFFLINE
+# install copies /home/main VERBATIM via unpackfs, so that fixed kxkbrc lands on the
+# INSTALLED system too -- and on a running Plasma session the KDED keyboard module
+# reads ~/.config/kxkbrc as AUTHORITATIVE (its `[Layout] Use=true` makes kded push
+# LayoutList=us,il via setxkbmap at session start), OVERRIDING the region-correct
+# /etc/X11/xorg.conf.d/00-keyboard.conf that Calamares' keyboard module wrote for the
+# region the user picked on the Location page. Result (the bug): every installed
+# system comes up US+Hebrew regardless of region -- an El_Salvador install that should
+# be us,latam, a Riyadh install that should be us,ara, all revert to us,il.
+#
+# The fix: DELETE the target's kxkbrc (home + skel) in this post-unpackfs chroot step.
+# With no kxkbrc, Plasma does not override the X server layout, so the region-correct
+# 00-keyboard.conf governs on the installed system (verified: the shipped Plasma 6
+# kded keyboard module fetches its layout groups from the X server and only runs
+# setxkbmap under its ConfigureLayouts gate, which an absent kxkbrc leaves off). The
+# LIVE ISO keeps its us,il kxkbrc untouched -- only the installed copy is removed.
+INSTALLED_KXKBRC = f"/home/{LIVE_USER}/.config/kxkbrc"
+INSTALLED_SKEL_KXKBRC = "/etc/skel/.config/kxkbrc"
+
 
 def _installer_cleanup_command() -> str:
     """A single shellprocess command (target chroot) that removes the live-session
@@ -50,13 +71,22 @@ def _installer_cleanup_command() -> str:
     Plasma autostart entry from the reused /home/main AND from /etc/skel. `set -e` with
     plain `rm -f` (a no-op on an absent path) -- there is nothing here that can
     legitimately fail, and NO `$` (Calamares macro-expands $WORD and aborts on an
-    unknown one -- see _mkinitcpio_reset_command), so only fixed paths are used."""
+    unknown one -- see _mkinitcpio_reset_command), so only fixed paths are used.
+
+    ALSO deletes the fixed us,il Plasma keyboard config (kxkbrc) copied from the live
+    /home/main + /etc/skel: on the installed Plasma session kded reads it as
+    authoritative and would clobber the region keyboard Calamares wrote to
+    /etc/X11/xorg.conf.d/00-keyboard.conf, so every install would come up US+Hebrew
+    regardless of region. Removing it lets the region-correct 00-keyboard.conf govern.
+    See the INSTALLED_KXKBRC comment above."""
     return (
         "set -e\n"
         f"rm -f {INSTALLER_DESKTOP_LAUNCHER}\n"
         f"rm -f {INSTALLER_AUTOSTART_ENTRY}\n"
         f"rm -f {INSTALLER_SKEL_LAUNCHER}\n"
-        f"rm -f {INSTALLER_SKEL_AUTOSTART}"
+        f"rm -f {INSTALLER_SKEL_AUTOSTART}\n"
+        f"rm -f {INSTALLED_KXKBRC}\n"
+        f"rm -f {INSTALLED_SKEL_KXKBRC}"
     )
 
 # The OFFLINE install copies the live archiso rootfs verbatim via unpackfs, which
