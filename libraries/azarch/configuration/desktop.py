@@ -261,6 +261,17 @@ KEYBOARD_LAYOUTS = [
 ]
 KEYBOARD_TOGGLE = "grp:alt_shift_toggle"
 
+# The keyboard-layout applet's display mode. It exposes exactly ONE config key,
+# `displayStyle` (0 = Label/text, 1 = Flag, 2 = LabelOverFlag). In text (Label) mode the
+# "US"/"HE" label hangs LOW and looks tilted: the applet centers the text line-box with Qt
+# AlignVCenter, which centers the whole line box (including descender space) rather than the
+# visible caps, so the letters sit below the tray icons at ANY panel height/scale (this is
+# intrinsic to text mode, not a fractional-scaling bug -- scale here is 100%). Flag mode
+# renders a flag ICON instead (icons use anchors.fill and center correctly), so it sits
+# vertically centered with the other tray icons. Value 1 = Flag -> the US layout shows a
+# centered USA flag (screenshot-verified on the live VM; the user specifically likes it).
+KEYBOARD_DISPLAY_STYLE = 1  # 1 = Flag (centered icon), fixes the low-hanging text label
+
 
 # Fixed applet ids in the panel. 1 = menu, 2 = task manager, 3 = expanding spacer,
 # then the standalone status applets (PANEL_STATUS_APPLETS) at 4.., then the digital
@@ -325,14 +336,22 @@ def plasma_appletsrc() -> str:
         str(i) for i in [_MENU_ID, _TASKS_ID, _SPACER_ID, *status_ids, clock_id]
     )
     # One block per standalone status applet (keyboard-layout, device-notifier, ...).
-    status_blocks = "\n".join(
-        f"""\
-[Containments][{p}][Applets][{status_ids[i]}]
-immutability=1
-plugin={item}
-"""
-        for i, item in enumerate(PANEL_STATUS_APPLETS)
-    )
+    # The keyboard-layout applet additionally gets a [Configuration][General] block
+    # pinning displayStyle=Flag (KEYBOARD_DISPLAY_STYLE) so it shows a centered flag
+    # icon instead of the low-hanging "US"/"HE" text label (see KEYBOARD_DISPLAY_STYLE).
+    _block_parts = []
+    for i, item in enumerate(PANEL_STATUS_APPLETS):
+        _block_parts.append(
+            f"[Containments][{p}][Applets][{status_ids[i]}]\n"
+            f"immutability=1\n"
+            f"plugin={item}\n"
+        )
+        if item == "org.kde.plasma.keyboardlayout":
+            _block_parts.append(
+                f"[Containments][{p}][Applets][{status_ids[i]}][Configuration][General]\n"
+                f"displayStyle={KEYBOARD_DISPLAY_STYLE}\n"
+            )
+    status_blocks = "\n".join(_block_parts)
     return f"""\
 [Containments][{d}]
 activityId=
@@ -402,8 +421,12 @@ plugin=org.kde.plasma.digitalclock
 
 
 # Bottom panel height in pixels. Plasma 6's default panel is 44 px; the user asked to
-# make the bottom bar bigger (an initial 2x/88 looked too tall in the VM, so the
-# settled-on value is 55 -- a clearly-larger-but-not-gigantic bar, verified live).
+# make the bottom bar bigger. This ALSO sizes the left launcher/task icons: on Plasma
+# there is no independent icon-size key for the kickoff launcher + icontasks manager --
+# their icons are the panel thickness minus small margins, so a taller panel = bigger
+# left icons. The settled-on value is 60 (an initial 2x/88 looked too tall in the VM;
+# 55 was an intermediate value, then bumped to 60 for ~10% bigger left icons -- both
+# verified live via ffmpeg x11grab screenshots).
 #
 # CRUCIAL Plasma-6 quirk (verified against plasma-workspace shell/panelview.cpp AND
 # empirically in a booted VM): the panel HEIGHT key `thickness` is read from the
@@ -412,7 +435,7 @@ plugin=org.kde.plasma.digitalclock
 # thickness in the flat group (the obvious place) is SILENTLY IGNORED -- the panel
 # stays 44 px. So floating goes flat, thickness goes under [Defaults].
 PANEL_DEFAULT_THICKNESS = 44
-PANEL_THICKNESS = 55   # taller than the 44 px default, verified in a booted VM
+PANEL_THICKNESS = 60   # taller than the 44 px default (bigger left icons), verified live
 
 
 # --- 3b. ~/.config/plasmashellrc (panel pinned, not floating) ---------------
@@ -427,8 +450,10 @@ def plasmashellrc() -> str:
         live: the panel stayed 44 px until the key moved under [Defaults]).
 
     The Panel id MUST match PANEL_CONTAINMENT_ID in appletsrc or the keys are ignored.
-    thickness=55 makes the bottom bar taller than the 44 px default, per the user's
-    "make it bigger" request. Shipped to the live home and /etc/skel."""
+    thickness=60 makes the bottom bar taller than the 44 px default (and the left
+    launcher/task icons ~10% bigger, since their size tracks the panel height), per the
+    user's "make it bigger / bigger left icons" request. Shipped to the live home and
+    /etc/skel."""
     return f"""\
 [PlasmaViews][Panel {PANEL_CONTAINMENT_ID}]
 floating=0
@@ -550,52 +575,155 @@ useDetailedLocales=true
 """
 
 
-# --- 3g. ~/.config/powermanagementprofilesrc (PowerDevil sleep policy) ------
-# Idle-suspend delay on battery, in MILLISECONDS. PowerDevil's SuspendSession
-# subgroup uses ms; 15 minutes == 900000. Kept equal (in minutes) to the logind
-# IdleActionSec the console policy uses (configuration/system.SLEEP_POLICY_IDLE_SECONDS),
+# --- 3g. ~/.config/powerdevilrc (PowerDevil power policy, Plasma 6 schema) ---
+# Idle-suspend delay on battery, in SECONDS. Plasma 6's PowerDevil profile schema
+# (PowerDevilProfileSettings.kcfg -> kcfgfile "powerdevilrc") uses the key
+# AutoSuspendIdleTimeoutSec in SECONDS -- NOT the old Plasma-5
+# [SuspendSession] idleTime in milliseconds. 15 minutes == 900. Kept equal to the
+# logind IdleActionSec the console policy uses (configuration/system.SLEEP_POLICY_IDLE_SECONDS),
 # so Plasma and the bare console agree on the 15-minute laptop-on-battery timeout.
-POWERDEVIL_BATTERY_IDLE_MS = 900000  # 15 minutes
+POWERDEVIL_BATTERY_IDLE_SECONDS = 900  # 15 minutes
 
-# PowerDevil "suspend to RAM" action id in the SuspendSession subgroup. Plasma's
-# powerdevil maps suspendType 1 -> ToRamMode (normal sleep/suspend). We use that so
-# "sleep" means suspend-to-RAM, matching the user's request.
-_POWERDEVIL_SUSPEND_TO_RAM = 1
+# PowerDevil action enum values (daemon/powerdevilenums.h, verified against
+# powerdevil 6.7.4): NoAction=0, Sleep=1 (suspend-to-RAM), Hibernate=2, Shutdown=8.
+# Shared by AutoSuspendAction / PowerButtonAction / PowerDownAction (all UInt).
+_POWERDEVIL_NO_ACTION = 0        # never / do nothing
+_POWERDEVIL_SLEEP = 1            # suspend-to-RAM
+_POWERDEVIL_SHUTDOWN = 8         # clean poweroff
+
+# IMPORTANT (Plasma 6 vs Plasma 5): the file that PowerDevil 6 actually reads for
+# live per-profile policy is `powerdevilrc` (PowerDevilProfileSettings.kcfg declares
+# <kcfgfile name="powerdevilrc">). The old `powermanagementprofilesrc` is read ONCE by
+# daemon/powerdevilmigrateconfig.cpp for a one-shot Plasma-5 -> 6 migration and then
+# ignored for policy. Its subgroup schema ([<profile>][SuspendSession] with idleTime in
+# ms, suspendType) is the DEAD Plasma-5 format. Shipping only that file silently does
+# nothing on a fresh Plasma-6 install (and worse: an EMPTY [AC] group is skipped by the
+# migrator, so AC falls to PowerDevil-6 defaults = suspend-on-AC + screen-off, the exact
+# OPPOSITE of "PC never sleeps"). So the real settings go in `powerdevilrc` below, and
+# powermanagement_migration_flag() ships the migration-done flag so a first-boot
+# migration can never re-run and layer stale deltas onto our hand-written powerdevilrc.
 
 
-def powermanagementprofilesrc() -> str:
-    """PowerDevil per-profile power policy for the INSTALLED Plasma desktop, aligning
-    KDE's own power manager with the user's PC-vs-laptop sleep request:
+def powerdevilrc() -> str:
+    """PowerDevil per-profile power policy for the INSTALLED Plasma desktop (Plasma 6
+    `powerdevilrc` schema), aligning KDE's own power manager with the user's requests
+    (PROMPT.md sections 1-3) and the PC-vs-laptop sleep rule:
 
-      * AC profile (plugged in, and the ONLY active profile on a desktop PC that has
-        no battery) -> NO SuspendSession group at all == never auto-suspend. This is
-        exactly "PC never sleeps" and "laptop plugged in never sleeps".
-      * Battery profile (laptop, unplugged) -> SuspendSession after 15 minutes idle,
-        suspend-to-RAM == "laptop unplugged sleeps after 15 minutes".
+      * AC profile (plugged in, and the ONLY active profile on a desktop PC with no
+        battery):
+          - Display -> TurnOffDisplayWhenIdle=false: the screen NEVER turns off on AC.
+            This key DEFAULTS TO TRUE in Plasma 6, so omitting it would blank the screen
+            (~5-10 min default) -- it MUST be written false explicitly (PROMPT.md #1).
+          - SuspendAndShutdown -> AutoSuspendAction=0 (NoAction): never idle-suspend on
+            AC. Unlike the old schema, omitting this does NOT mean "never" -- the Plasma-6
+            default idle-suspends on AC, so 0 is written explicitly (PROMPT.md #3).
+          - SuspendAndShutdown -> PowerButtonAction=8 (Shutdown): the power button does a
+            clean poweroff (PROMPT.md #2). PowerDevil block-inhibits logind's
+            handle-power-key, so in a Plasma session THIS key -- not the logind drop-in --
+            governs the button; the logind HandlePowerKey=poweroff (system.py) still
+            covers the bare console / non-Plasma case.
+          - SuspendAndShutdown -> PowerDownAction=0 (NoAction): pinned off for safety
+            (its default is the logout-prompt); matches the VM's applied config.
+        Net: "PC never sleeps", "laptop plugged in never sleeps", screen never blanks.
+
+      * Battery profile (laptop, unplugged):
+          - Display -> DimDisplayWhenIdle=false + TurnOffDisplayWhenIdle=false: do not
+            dim or blank on battery either (matches the applied VM config).
+          - SuspendAndShutdown -> AutoSuspendAction=1 (Sleep) + AutoSuspendIdleTimeoutSec
+            =900 (SECONDS): suspend-to-RAM after 15 minutes idle == "laptop unplugged
+            sleeps after 15 minutes".
+          - PowerButtonAction=8: the power button shuts down on battery too (deliberate
+            parity with AC, rather than leaving the Plasma-6 logout-prompt default).
 
     PowerDevil auto-detects the chassis: on a battery-less PC the Battery profile is
-    never activated (there is no battery to be on), so only the suspend-free AC
-    profile ever applies -> the PC never sleeps without any explicit chassis check
-    here. On a laptop, unplugging switches PowerDevil to the Battery profile (15-min
-    suspend) and plugging in switches back to the AC profile (no suspend), live.
+    never activated (there is no battery to be on), so only the AC profile ever applies
+    -> the PC never sleeps without any explicit chassis check here. On a laptop,
+    unplugging switches PowerDevil to the Battery profile (15-min suspend) and plugging
+    in switches back to the AC profile (no suspend), live.
 
-    This is the Plasma-session complement to the DE-independent logind IdleAction
-    policy (configuration/system.SLEEP_POLICY_SCRIPT), which covers the bare console /
-    live ISO; both encode the same 15-minute-on-battery / never-on-AC rule so the
-    behaviour is identical whether or not Plasma is running. Lid-close and the power
-    button are handled by the logind drop-in (configuration/system.LOGIND_POWER_DROPIN),
-    not here. Shipped to the live home and /etc/skel (so installed users inherit it).
+    This is the Plasma-session complement to the DE-independent logind IdleAction policy
+    (configuration/system.SLEEP_POLICY_SCRIPT), which covers the bare console / live ISO;
+    both encode the same 15-minute-on-battery / never-on-AC rule so behaviour is identical
+    whether or not Plasma is running. Shipped to the live home and /etc/skel (so installed
+    users inherit it).
 
-    Format (Plasma 6 powerdevil): profile groups [AC] and [Battery]; the idle-suspend
-    action is the nested [<profile>][SuspendSession] subgroup with idleTime (ms) and
-    suspendType (1 == suspend-to-RAM). Omitting SuspendSession under a profile means
-    that profile performs no idle suspend."""
+    Schema note (Plasma 6): on-disk headers are [<profile>][Display] and
+    [<profile>][SuspendAndShutdown] with PascalCase keys; the profile id is literally
+    AC / Battery. Verified against powerdevil 6.7.4 (PowerDevilProfileSettings.kcfg,
+    daemon/powerdevilenums.h) AND read back from the live VM's applied ~/.config/powerdevilrc."""
     return f"""\
-[AC]
+[AC][Display]
+TurnOffDisplayWhenIdle=false
 
-[Battery][SuspendSession]
-idleTime={POWERDEVIL_BATTERY_IDLE_MS}
-suspendType={_POWERDEVIL_SUSPEND_TO_RAM}
+[AC][SuspendAndShutdown]
+AutoSuspendAction={_POWERDEVIL_NO_ACTION}
+PowerButtonAction={_POWERDEVIL_SHUTDOWN}
+PowerDownAction={_POWERDEVIL_NO_ACTION}
+
+[Battery][Display]
+DimDisplayWhenIdle=false
+TurnOffDisplayWhenIdle=false
+
+[Battery][SuspendAndShutdown]
+AutoSuspendAction={_POWERDEVIL_SLEEP}
+AutoSuspendIdleTimeoutSec={POWERDEVIL_BATTERY_IDLE_SECONDS}
+PowerButtonAction={_POWERDEVIL_SHUTDOWN}
+PowerDownAction={_POWERDEVIL_NO_ACTION}
+"""
+
+
+# --- 3g-bis. ~/.config/powermanagementprofilesrc (migration-done flag only) --
+def powermanagement_migration_flag() -> str:
+    """Ship `powermanagementprofilesrc` containing ONLY the Plasma-5 -> 6
+    migration-done flag, so PowerDevil's one-shot migrator never runs on first boot.
+
+    Why this is needed as a BELT for powerdevilrc: PowerDevil calls migrateProfilesConfig()
+    on every daemon start; it is gated solely by `if migrationGroup.hasKey("Migrated
+    ProfilesToPlasma6") return;`. If that flag is ABSENT on a fresh install, the migrator
+    runs -- and although with no old profile groups it writes nothing (so it would not, in
+    fact, clobber our hand-written powerdevilrc), shipping the flag makes the outcome
+    independent of that reasoning and of any future stray old-schema file: the migrator is
+    a guaranteed no-op. Value string is exactly what a migrated system records
+    (verified on the live VM: `[Migration] MigratedProfilesToPlasma6=powerdevilrc`).
+
+    This file therefore carries NO power policy at all (that lives in powerdevilrc); it is
+    purely the migration guard. Shipped to the live home and /etc/skel."""
+    return """\
+[Migration]
+MigratedProfilesToPlasma6=powerdevilrc
+"""
+
+
+# --- 3h. ~/.config/kscreenlockerrc (disable screen auto-lock) ---------------
+def kscreenlockerrc() -> str:
+    """Disable KDE's automatic screen locker.
+
+    This is a DIFFERENT subsystem from PowerDevil and was the ACTUAL cause of the
+    screen "going to sleep" (PROMPT.md #4): the KScreenLocker daemon defaults to
+    auto-lock ON at 5 minutes, and locking BLANKS the display -- so even with
+    PowerDevil's screen-off disabled and idle-suspend off, the screen still went black
+    after ~5 min. It is NOT a real suspend (proven via journalctl: zero
+    "Entering sleep"/"Starting Suspend" events); it is the locker blanking the screen.
+    KScreenLocker reads ~/.config/kscreenlockerrc; when that file is ABSENT, KDE uses
+    its built-in default (auto-lock ON, 5 min), so the fix is to SHIP the file with
+    auto-lock turned off.
+
+    Keys (KScreenLocker [Daemon] group):
+      * Autolock=false     -- do not auto-lock the session at all.
+      * Timeout=0          -- belt: zero-minute timeout (no idle lock) even if Autolock
+                              were re-enabled.
+      * LockOnResume=false -- do not force a lock screen after resume/wake.
+
+    Three independent KDE subsystems can black the screen -- PowerDevil "Turn off
+    screen" (Display), PowerDevil idle-suspend (SuspendAndShutdown), and this screen
+    LOCKER -- and fixing one does not fix the others; all three are handled (powerdevilrc
+    + this file). Shipped to the live home and /etc/skel so live/default users inherit
+    a lock-free desktop."""
+    return """\
+[Daemon]
+Autolock=false
+LockOnResume=false
+Timeout=0
 """
 
 
@@ -1116,10 +1244,29 @@ PLAN = [
         "owner": "home",
     },
     {
-        # PowerDevil sleep policy: never suspend on AC/PC, suspend after 15 min on
-        # battery (laptop unplugged). Plasma-session complement to the logind policy.
-        "builder": powermanagementprofilesrc,
+        # PowerDevil power policy (Plasma 6 `powerdevilrc` schema): never suspend or
+        # blank the screen on AC/PC, suspend after 15 min on battery (laptop unplugged),
+        # power button = Shut Down. Plasma-session complement to the logind policy.
+        "builder": powerdevilrc,
+        "dest": f"{HOME}/.config/powerdevilrc",
+        "mode": _CONF,
+        "owner": "home",
+    },
+    {
+        # Migration-done flag ONLY (no policy): stops PowerDevil's one-shot Plasma-5 ->
+        # 6 migrator from ever running on first boot, so it can never layer stale deltas
+        # onto the hand-written powerdevilrc above.
+        "builder": powermanagement_migration_flag,
         "dest": f"{HOME}/.config/powermanagementprofilesrc",
+        "mode": _CONF,
+        "owner": "home",
+    },
+    {
+        # Disable KDE's automatic screen locker -- the ACTUAL cause of the ~5-min screen
+        # blank (a locker default, separate from PowerDevil). Without this file KDE
+        # auto-locks at 5 min and blanks the display.
+        "builder": kscreenlockerrc,
+        "dest": f"{HOME}/.config/kscreenlockerrc",
         "mode": _CONF,
         "owner": "home",
     },

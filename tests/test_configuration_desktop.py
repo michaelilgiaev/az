@@ -23,12 +23,13 @@ from azarch.configuration import desktop
 
 # --- PLAN mode/owner/dest table --------------------------------------------
 
-def test_plan_has_exactly_fourteen_entries():
+def test_plan_has_exactly_sixteen_entries():
     # steps.py iterates PLAN; a dropped/extra entry silently un-emits a file.
-    # (14 = original 7 + ~/Desktop launcher + plasmashellrc + kdeglobals + krunnerrc
-    #  + kxkbrc keyboard-layouts + plasma-localerc (d/m/y clock) +
-    #  powermanagementprofilesrc (PC/laptop sleep policy).)
-    assert len(desktop.PLAN) == 14
+    # (16 = original 7 + ~/Desktop launcher + plasmashellrc + kdeglobals + krunnerrc
+    #  + kxkbrc keyboard-layouts + plasma-localerc (d/m/y clock) + powerdevilrc
+    #  (PC/laptop sleep policy, Plasma-6 schema) + powermanagementprofilesrc migration
+    #  flag + kscreenlockerrc (disable auto-lock).)
+    assert len(desktop.PLAN) == 16
 
 
 def test_plan_entries_have_the_four_declared_keys():
@@ -162,9 +163,9 @@ def test_home_owner_gid_is_autologin_group():
 
 # --- emit_plan(): PLAN + bash_profile, without mutating PLAN ----------------
 
-def test_emit_plan_length_is_fifteen():
-    # 14 PLAN entries + the appended .bash_profile.
-    assert len(desktop.emit_plan()) == 15
+def test_emit_plan_length_is_seventeen():
+    # 16 PLAN entries + the appended .bash_profile.
+    assert len(desktop.emit_plan()) == 17
 
 
 def test_emit_plan_prefix_is_plan():
@@ -191,7 +192,7 @@ def test_emit_plan_does_not_mutate_module_plan():
     before = len(desktop.PLAN)
     desktop.emit_plan()
     desktop.emit_plan()
-    assert len(desktop.PLAN) == before == 14
+    assert len(desktop.PLAN) == before == 16
 
 
 # --- xinitrc: Plasma X11 session, no flash ----------------------------------
@@ -742,12 +743,14 @@ def test_panel_pinned_not_floating_matches_containment_id():
 
 
 def test_panel_thickness_is_larger_than_default_in_defaults_group():
-    # The user asked for a bigger bottom bar; settled on 55 px (verified live -- 88
-    # looked too tall). CRUCIAL Plasma-6 quirk: `thickness` is read from the NESTED
+    # The user asked for a bigger bottom bar / bigger left icons; settled on 60 px
+    # (verified live -- 88 looked too tall, 55 was an intermediate value, 60 gives the
+    # ~10%-bigger left launcher/task icons since their size tracks the panel height).
+    # CRUCIAL Plasma-6 quirk: `thickness` is read from the NESTED
     # [PlasmaViews][Panel <id>][Defaults] subgroup, NOT the flat group (a flat
     # thickness= is silently ignored). `floating` stays in the flat group.
     assert desktop.PANEL_DEFAULT_THICKNESS == 44
-    assert desktop.PANEL_THICKNESS == 55
+    assert desktop.PANEL_THICKNESS == 60
     assert desktop.PANEL_THICKNESS > desktop.PANEL_DEFAULT_THICKNESS
     out = desktop.plasmashellrc()
     cp = _parse_ini(out)
@@ -863,37 +866,134 @@ def _parse_kv_sections(text: str) -> dict:
     return out
 
 
-def test_powerdevil_ac_never_suspends():
-    # AC profile (plugged in, and the ONLY profile on a battery-less PC) must have
-    # NO SuspendSession -> never auto-suspend. This is "PC never sleeps" AND
-    # "laptop plugged in never sleeps".
-    s = desktop.powermanagementprofilesrc()
+def test_powerdevil_action_enum_values():
+    # The action enum (daemon/powerdevilenums.h, powerdevil 6.7.4): 0=NoAction,
+    # 1=Sleep(suspend-to-RAM), 8=Shutdown. A drift here silently changes what the
+    # AC/Battery profiles do.
+    assert desktop._POWERDEVIL_NO_ACTION == 0
+    assert desktop._POWERDEVIL_SLEEP == 1
+    assert desktop._POWERDEVIL_SHUTDOWN == 8
+
+
+def test_powerdevil_ac_never_suspends_and_never_blanks():
+    # AC profile (plugged in, and the ONLY profile on a battery-less PC): the screen
+    # NEVER turns off and the session NEVER idle-suspends. Plasma-6 schema: both are
+    # EXPLICIT keys (TurnOffDisplayWhenIdle defaults TRUE, AutoSuspendAction defaults to
+    # suspend), so omission would NOT disable them -- they must be written 0/false.
+    s = desktop.powerdevilrc()
     d = _parse_kv_sections(s)
-    assert "[AC]" in d
-    # No AC SuspendSession group at all.
+    assert d["[AC][Display]"]["TurnOffDisplayWhenIdle"] == "false"   # screen never off
+    ac = d["[AC][SuspendAndShutdown]"]
+    assert ac["AutoSuspendAction"] == "0"       # 0 = NoAction -> never idle-suspend
+    # The dead Plasma-5 subgroup must NOT appear (that schema is ignored by PowerDevil 6).
     assert "[AC][SuspendSession]" not in s
-    assert "[AC][SuspendSession]" not in d
+
+
+def test_powerdevil_power_button_is_shutdown():
+    # Power button -> Shut Down (PROMPT.md #2). PowerDevil 6 block-inhibits logind's
+    # handle-power-key, so in a Plasma session THIS key governs the button; value 8 =
+    # Shutdown. PowerDownAction pinned 0 (NoAction) for safety (its default is a logout
+    # prompt).
+    d = _parse_kv_sections(desktop.powerdevilrc())
+    ac = d["[AC][SuspendAndShutdown]"]
+    assert ac["PowerButtonAction"] == "8"       # 8 = Shutdown
+    assert ac["PowerDownAction"] == "0"         # 0 = NoAction (pinned off)
 
 
 def test_powerdevil_battery_suspends_after_fifteen_minutes():
-    # Battery profile (laptop unplugged) -> suspend after 15 min (900000 ms).
-    s = desktop.powermanagementprofilesrc()
-    d = _parse_kv_sections(s)
-    assert "[Battery][SuspendSession]" in d
-    grp = d["[Battery][SuspendSession]"]
-    assert grp["idleTime"] == str(desktop.POWERDEVIL_BATTERY_IDLE_MS)
-    assert grp["suspendType"] == "1"           # suspend-to-RAM
+    # Battery profile (laptop unplugged) -> suspend-to-RAM after 15 min. Plasma-6 schema:
+    # AutoSuspendAction=1 (Sleep) + AutoSuspendIdleTimeoutSec in SECONDS (900), NOT the
+    # old idleTime in ms. The screen must also not dim/blank on battery.
+    d = _parse_kv_sections(desktop.powerdevilrc())
+    bd = d["[Battery][Display]"]
+    assert bd["DimDisplayWhenIdle"] == "false"
+    assert bd["TurnOffDisplayWhenIdle"] == "false"
+    bs = d["[Battery][SuspendAndShutdown]"]
+    assert bs["AutoSuspendAction"] == "1"       # 1 = Sleep (suspend-to-RAM)
+    assert bs["AutoSuspendIdleTimeoutSec"] == str(desktop.POWERDEVIL_BATTERY_IDLE_SECONDS)
+    assert bs["PowerButtonAction"] == "8"       # power button shuts down on battery too
 
 
 def test_powerdevil_timeout_matches_logind_seconds():
-    # The Plasma (ms) and console-logind (s) 15-minute timeouts must agree, or a
-    # laptop sleeps at two different times depending on whether Plasma is running.
+    # The Plasma and console-logind 15-minute timeouts must agree (both in SECONDS now),
+    # or a laptop sleeps at two different times depending on whether Plasma is running.
     from azarch.configuration import system
-    assert desktop.POWERDEVIL_BATTERY_IDLE_MS == system.SLEEP_POLICY_IDLE_SECONDS * 1000
+    assert desktop.POWERDEVIL_BATTERY_IDLE_SECONDS == system.SLEEP_POLICY_IDLE_SECONDS
 
 
-def test_powermanagementprofilesrc_in_plan_as_home_conf():
+def test_powerdevil_uses_new_schema_not_dead_plasma5_file():
+    # REGRESSION GUARD: PowerDevil 6 reads `powerdevilrc` (PowerDevilProfileSettings.kcfg
+    # kcfgfile). The old `powermanagementprofilesrc` policy schema is ignored (migration
+    # only). The policy MUST be in powerdevilrc, and powerdevilrc must NOT use the dead
+    # Plasma-5 [SuspendSession]/idleTime/suspendType keys.
     entry = next(e for e in desktop.PLAN
-                 if e["dest"] == f"{desktop.HOME}/.config/powermanagementprofilesrc")
+                 if e["dest"] == f"{desktop.HOME}/.config/powerdevilrc")
+    assert entry["builder"] is desktop.powerdevilrc
     assert entry["mode"] == 0o644
     assert entry["owner"] == "home"
+    s = desktop.powerdevilrc()
+    for dead in ("SuspendSession", "idleTime", "suspendType"):
+        assert dead not in s, dead
+
+
+def test_powermanagementprofilesrc_is_migration_flag_only():
+    # The old file is shipped with ONLY the migration-done flag (no policy), so
+    # PowerDevil's one-shot Plasma-5 -> 6 migrator can never run on first boot and layer
+    # stale deltas onto the hand-written powerdevilrc.
+    s = desktop.powermanagement_migration_flag()
+    d = _parse_kv_sections(s)
+    assert d == {"[Migration]": {"MigratedProfilesToPlasma6": "powerdevilrc"}}
+    # No power-policy groups leaked into this file.
+    assert "SuspendSession" not in s
+    assert "SuspendAndShutdown" not in s
+    assert "[AC]" not in s
+    entry = next(e for e in desktop.PLAN
+                 if e["dest"] == f"{desktop.HOME}/.config/powermanagementprofilesrc")
+    assert entry["builder"] is desktop.powermanagement_migration_flag
+    assert entry["mode"] == 0o644
+    assert entry["owner"] == "home"
+
+
+# --- KDE screen locker disabled (PROMPT.md #4: the actual "sleep" culprit) ---
+
+def test_kscreenlockerrc_disables_autolock():
+    # The KScreenLocker daemon defaults to auto-lock ON at 5 min and BLANKS the display
+    # -- the real cause of the screen "going to sleep". Ship the file with auto-lock off.
+    cp = _parse_ini(desktop.kscreenlockerrc())
+    daemon = cp["Daemon"]
+    assert daemon["Autolock"] == "false"       # no idle auto-lock at all
+    assert daemon["Timeout"] == "0"            # belt: zero-minute idle-lock timeout
+    assert daemon["LockOnResume"] == "false"   # no forced lock on wake/resume
+
+
+def test_kscreenlockerrc_in_plan_as_home_conf():
+    entry = next(e for e in desktop.PLAN
+                 if e["dest"] == f"{desktop.HOME}/.config/kscreenlockerrc")
+    assert entry["builder"] is desktop.kscreenlockerrc
+    assert entry["mode"] == 0o644
+    assert entry["owner"] == "home"
+
+
+# --- Keyboard-layout applet: Flag mode (PROMPT.md #5b: fix low-hanging label) -
+
+def test_keyboard_layout_applet_uses_flag_display_style():
+    # The keyboard-layout applet's "US"/"HE" TEXT label hangs low (Qt AlignVCenter
+    # centers the line-box, not the caps). Flag mode (displayStyle=1) shows a centered
+    # flag ICON instead. The applet is the FIRST (leftmost) status applet, id 4.
+    assert desktop.KEYBOARD_DISPLAY_STYLE == 1     # 1 = Flag
+    assert desktop.PANEL_STATUS_APPLETS[0] == "org.kde.plasma.keyboardlayout"
+    cp = _parse_ini(desktop.plasma_appletsrc())
+    p = desktop.PANEL_CONTAINMENT_ID
+    # Status applets start at id 4 (_STATUS_ID_BASE); keyboard-layout is index 0 -> id 4.
+    kb_id = 4
+    assert cp[f"Containments][{p}][Applets][{kb_id}"]["plugin"] == "org.kde.plasma.keyboardlayout"
+    cfg = f"Containments][{p}][Applets][{kb_id}][Configuration][General"
+    assert cp[cfg]["displayStyle"] == str(desktop.KEYBOARD_DISPLAY_STYLE)
+
+
+def test_keyboard_flag_config_only_on_keyboard_applet():
+    # Only the keyboard-layout applet gets a displayStyle config; the other status
+    # applets (device-notifier, brightness, network, volume) must NOT carry it.
+    body = desktop.plasma_appletsrc()
+    # Exactly one displayStyle assignment in the whole appletsrc.
+    assert body.count("displayStyle=") == 1
