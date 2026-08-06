@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import os
 import pwd
+import re
 import shutil
 import subprocess
 import sys
@@ -68,6 +69,85 @@ def produced_names(full_compile: bool) -> tuple[str, ...]:
 
 class MakepkgError(RuntimeError):
     pass
+
+
+# --- retry-hardened source downloads ----------------------------------------
+# makepkg fetches source=() tarballs with curl via /etc/makepkg.conf's DLAGENTS.
+# Arch's stock https agent is:
+#     curl -qgb "" -fLC - --retry 3 --retry-delay 3 -o %o %u
+# It HAS --retry 3, yet a real build still died fetching the calamares tarball:
+#     curl: (92) HTTP/2 stream 1 reset by server (error 0x8 CANCEL)
+# two failure modes the stock agent does NOT recover from:
+#   1. A mid-stream HTTP/2 stream reset (0x8 CANCEL) AFTER bytes have flowed is a
+#      *transfer* error, and plain --retry only retries connection-time / transient
+#      HTTP-status failures -- so it gives up instead of retrying. --retry-all-errors
+#      makes curl retry ANY error, including that reset.
+#   2. The log showed the transfer crawling (105 KB/s and dropping) for 45s before
+#      the server cut it: a stall that slow never trips a retry because the socket
+#      never actually dies. --speed-time 30 --speed-limit 1024 aborts a transfer
+#      that stays under 1 KB/s for 30s, turning a slow-crawl-to-death into a fast
+#      failure that --retry-all-errors then retries against (possibly) a better path.
+# We inject these flags into curl-based DLAGENTS by rewriting the system config into
+# a repo-local makepkg.conf and pointing makepkg at it with --config. Every other
+# setting (CFLAGS, PACKAGER, compression, ...) is preserved verbatim; only DLAGENTS
+# curl lines are hardened. rsync/scp/file agents are left untouched.
+_RETRY_FLAGS = ("--retry", "5", "--retry-delay", "3", "--retry-all-errors",
+                "--speed-time", "30", "--speed-limit", "1024")
+
+
+def _harden_dlagents(conf_text: str) -> str:
+    """Return `conf_text` (a makepkg.conf) with network curl DLAGENTS entries given
+    retry/stall-recovery flags. Pure string transform, unit-tested.
+
+    A DLAGENTS entry looks like `  'https::/usr/bin/curl -qg... -o %o %u'`. For every
+    such line whose agent shells out to curl over a NETWORK protocol (http/https/ftp;
+    the local `file::` copy is skipped -- retry/speed flags are meaningless for it),
+    we:
+      1. strip any curl retry/speed flags the stock line already carries
+         (--retry[-delay|-all-errors], --speed-time, --speed-limit and their values),
+         so ours are authoritative and curl doesn't see a duplicate --retry whose last
+         value would silently win; then
+      2. insert _RETRY_FLAGS immediately after the `curl` token.
+    Idempotent: re-hardening an already-hardened line strips our own flags in step 1
+    and re-adds the identical set in step 2, so output is stable. Non-curl agents
+    (rsync, scp), the file:: agent, and every non-DLAGENTS line pass through
+    byte-for-byte."""
+    flags = " ".join(_RETRY_FLAGS)
+    # Matches ` --retry 5`, ` --retry-delay 3`, ` --retry-all-errors`,
+    # ` --speed-time 30`, ` --speed-limit 1024` -- the flag plus its value if any.
+    strip_re = re.compile(
+        r"\s+--(?:retry(?:-delay|-all-errors)?|speed-(?:time|limit))(?:\s+\d+)?")
+    # The protocol prefix of the agent this line defines -- the token just before the
+    # first `::`, ignoring leading `DLAGENTS=(`, quotes and whitespace. Only network
+    # curl transfers get hardened; the local `file::` copy (and rsync/scp/vcs) do not.
+    NET = {"http", "https", "ftp", "ftps"}
+    proto_re = re.compile(r"(?:DLAGENTS\s*=\s*\()?\s*['\"]?([a-z]+)::")
+    out = []
+    for line in conf_text.splitlines(keepends=True):
+        m = proto_re.match(line.lstrip())
+        proto = m.group(1) if m else None
+        if proto in NET and "curl" in line:
+            line = strip_re.sub("", line)              # step 1: drop pre-existing ones
+            line = re.sub(r"(/curl\b|(?<![\w/])curl\b)",  # step 2: insert ours once
+                          lambda mm: f"{mm.group(0)} {flags}", line, count=1)
+        out.append(line)
+    return "".join(out)
+
+
+def _write_hardened_conf(recipe_dir: Path, system_conf: Path = Path("/etc/makepkg.conf")) -> Path | None:
+    """Materialise a retry-hardened makepkg.conf next to the recipe and return its
+    path, or None if the system config can't be read (then makepkg just uses its own
+    default and we lose only the extra resilience, not the build). The written file
+    is `source`-free: we harden the FULL system config in place so makepkg needs no
+    include and behaves identically save for the tougher DLAGENTS."""
+    try:
+        text = system_conf.read_text()
+    except OSError:
+        return None
+    hardened = _harden_dlagents(text)
+    dest = recipe_dir / "makepkg.hardened.conf"
+    dest.write_text(hardened)
+    return dest
 
 
 def _sudo() -> list[str]:
@@ -362,6 +442,15 @@ def _makepkg_one(builder: str, recipe_dir: Path, offline: bool = False) -> None:
     if offline:
         cmd += ["--holdver", "--noextract", "--nocheck"]
     env = dict(os.environ)
+    # Point makepkg at a retry-hardened copy of the system makepkg.conf so a flaky
+    # source download (mid-stream HTTP/2 reset, slow-crawl stall) is retried instead
+    # of aborting the whole build (see _harden_dlagents). Written into recipe_dir,
+    # which is chowned to the builder below, so the unprivileged makepkg can read it.
+    # On the offline rerun no source is fetched, but passing --config is harmless
+    # (makepkg reads the same settings) so we do it unconditionally for one code path.
+    hardened_conf = _write_hardened_conf(recipe_dir)
+    if hardened_conf is not None:
+        cmd += ["--config", str(hardened_conf)]
     if offline:
         env["AZARCH_OFFLINE"] = "1"  # recipe build() skips `make fetch` when set
     # Keep makepkg's build/cache under the scratch dir, not the builder's $HOME,
