@@ -165,6 +165,14 @@ def test_librewolf_src_runs_bsys6_make_targets():
     assert "make package" in s
 
 
+def test_librewolf_src_make_build_caps_jobs():
+    # `make build` alone lets Firefox's build spawn one job per core and pin the
+    # whole machine. It must carry the -j cap fed via AZARCH_JOBS (exported by
+    # azarch.makepkg), defaulting to 1 when the var is unset.
+    s = pkgbuild.pkgbuild_librewolf_src()
+    assert 'make build -j"${AZARCH_JOBS:-1}"' in s
+
+
 def test_librewolf_src_shares_pkgver_and_lwver():
     # The from-source recipe uses the SAME version split as the repackage one.
     s = pkgbuild.pkgbuild_librewolf_src()
@@ -189,6 +197,15 @@ def test_calamares_pkgver_var_survives_brace_collapse():
     s = pkgbuild.pkgbuild_calamares()
     assert "${pkgver}" in s
     assert "calamares-${pkgver}.tar.gz" in s
+
+
+def test_calamares_cmake_build_caps_jobs():
+    # `cmake --build build` auto-detects every core and pins the machine. It must
+    # carry the -j cap fed via AZARCH_JOBS (exported by azarch.makepkg), defaulting
+    # to 1 when unset. The brace pair in the recipe f-string must also have
+    # collapsed to a single ${...} shell expansion.
+    s = pkgbuild.pkgbuild_calamares()
+    assert 'cmake --build build -j"${AZARCH_JOBS:-1}"' in s
 
 
 # --- calamares source patch (installer UI defaults) ------------------------

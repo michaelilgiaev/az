@@ -70,6 +70,72 @@ def test_produced_constant_matches_produced_names():
     assert makepkg.PRODUCED == makepkg.produced_names(full_compile=False)
 
 
+# --- compile parallelism cap (build_jobs) -----------------------------------
+# Regression guard: a build left every compiler (calamares' cmake, LibreWolf's
+# bsys6 make) auto-detecting the core count and pinned all 24 CPUs at 100% for the
+# whole compile, making the machine unusable. build_jobs is the single ceiling
+# _makepkg_one exports so no build system grabs every core. The reserve scales
+# with machine size (see makepkg's block comment), so these tests pin the shape at
+# every size AND the one non-negotiable safety invariant: never use ALL the cores.
+
+# --- THE "don't kill the PC" invariant --------------------------------------
+def test_build_jobs_never_uses_every_core():
+    # THE safety guarantee: on ANY machine with more than one core, the build must
+    # leave at least one core free so the desktop stays responsive -- it must never
+    # request a job per core (the bug that pinned all 24 CPUs at 100%). Swept across
+    # laptops, desktops, and big workstations. (A 1-core box is the sole exception:
+    # one job is unavoidable there.)
+    for cores in range(2, 257):
+        jobs = makepkg.build_jobs(cores=cores)
+        assert 1 <= jobs <= cores - 1, (
+            f"{cores} cores -> {jobs} jobs leaves no headroom (would pin the machine)"
+        )
+
+
+def test_build_jobs_single_core_uses_the_only_core():
+    # Degenerate case: with one core there is nothing to reserve, so one job.
+    assert makepkg.build_jobs(cores=1) == 1
+    # Zero/negative core counts should never crash or return < 1 (defensive).
+    assert makepkg.build_jobs(cores=0) == 1
+
+
+def test_build_jobs_small_hosts_leave_exactly_one_free():
+    # 2..SMALL_HOST_CORES: a laptop can't spare a whole fraction, so we leave
+    # exactly one core for the UI and use the rest -- never 100%, never idle.
+    for cores in range(2, makepkg.SMALL_HOST_CORES + 1):
+        assert makepkg.build_jobs(cores=cores) == cores - 1
+
+
+def test_build_jobs_large_hosts_reserve_a_fraction():
+    # Above the small-host cutoff the reserve scales with size (~15%, rounded up),
+    # so bigger machines leave MORE cores free in absolute terms. Pin the concrete
+    # expectations for representative rigs (job count / cores free):
+    assert makepkg.build_jobs(cores=5) == 4      # reserve ceil(0.75)=1  -> 1 free
+    assert makepkg.build_jobs(cores=8) == 6      # reserve ceil(1.20)=2  -> 2 free
+    assert makepkg.build_jobs(cores=12) == 10    # reserve ceil(1.80)=2  -> 2 free
+    assert makepkg.build_jobs(cores=16) == 13    # reserve ceil(2.40)=3  -> 3 free
+    assert makepkg.build_jobs(cores=24) == 20    # reserve ceil(3.60)=4  -> 4 free (reported host)
+    assert makepkg.build_jobs(cores=64) == 54    # reserve ceil(9.60)=10 -> 10 free
+    assert makepkg.build_jobs(cores=128) == 108  # reserve ceil(19.2)=20 -> 20 free
+
+
+def test_build_jobs_is_monotonic_in_cores():
+    # More cores must never mean fewer jobs -- a sanity check that the scaling has
+    # no dips as the machine grows.
+    prev = 0
+    for cores in range(1, 257):
+        jobs = makepkg.build_jobs(cores=cores)
+        assert jobs >= prev, f"{cores} cores gave {jobs} jobs, fewer than {prev}"
+        prev = jobs
+
+
+def test_build_jobs_defaults_to_live_cpu_count(monkeypatch):
+    # With no argument it reads the real (affinity-aware) core count so production
+    # code needs no wiring; the injectable arg is only for tests.
+    monkeypatch.setattr(makepkg, "_cpu_count", lambda: 24)
+    assert makepkg.build_jobs() == makepkg.build_jobs(cores=24) == 20
+
+
 def test_repo_has_all_true_when_every_name_present(tmp_path):
     (tmp_path / "librewolf-1.0-1-x86_64.pkg.tar.zst").write_text("")
     assert makepkg._repo_has_all(tmp_path, ("librewolf",)) is True

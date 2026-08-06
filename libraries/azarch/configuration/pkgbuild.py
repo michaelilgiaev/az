@@ -714,7 +714,10 @@ build() {{
     -DBUILD_CRASH_REPORTING=OFF \\
     -DINSTALL_POLKIT=ON \\
     -DWEBVIEW_FORCE_WEBKIT=OFF
-  cmake --build build
+  # -j caps parallel compile jobs. cmake's Makefiles/Ninja generator otherwise
+  # auto-detects every core and pins the whole machine; AZARCH_JOBS is exported by
+  # azarch.makepkg._makepkg_one (= cores - reserved), defaulting to 1 if unset.
+  cmake --build build -j"${{AZARCH_JOBS:-1}}"
 }}
 
 package() {{
@@ -951,7 +954,10 @@ build() {{
   # back online. On the normal online run AZARCH_OFFLINE is unset and `make fetch`
   # populates the tree as before.
   if [[ -z "${{AZARCH_OFFLINE:-}}" ]]; then make fetch; fi
-  make build
+  # -j caps parallel compile jobs so the Firefox build (bsys6 -> mach) does not
+  # pin every core for hours. AZARCH_JOBS is exported by azarch.makepkg (= cores -
+  # reserved); it defaults to 1 if unset so an isolated recipe run stays safe.
+  make build -j"${{AZARCH_JOBS:-1}}"
   make package
 }}
 

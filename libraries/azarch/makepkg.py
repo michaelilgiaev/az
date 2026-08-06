@@ -28,6 +28,7 @@ if they are not -- exactly like the rest of the cache-first design.
 
 from __future__ import annotations
 
+import math
 import os
 import pwd
 import re
@@ -69,6 +70,64 @@ def produced_names(full_compile: bool) -> tuple[str, ...]:
 
 class MakepkgError(RuntimeError):
     pass
+
+
+# --- compile parallelism cap ------------------------------------------------
+# Every compiler this stage drives (calamares' cmake, LibreWolf/Firefox's bsys6
+# make, and any raw `make` in a recipe) auto-detects the core count and, left
+# alone, spawns ONE job per logical CPU. On a 24-thread host that pins all 24
+# cores at 100% for the whole (multi-minute-to-multi-hour) compile and makes the
+# machine unusable. Nothing upstream pins a job count: the archlinux:latest
+# container ships MAKEFLAGS commented out, so makepkg passes no -j and each build
+# system falls back to its own nproc default.
+#
+# build_jobs() decides ONE job count for the whole stage; _makepkg_one exports it
+# as MAKEFLAGS/NPROC/AZARCH_JOBS so every build system obeys the same ceiling.
+#
+# The reserve SCALES with machine size instead of a flat count, because a flat
+# reserve is wrong at both ends: "cores - 4" starves a 4-core laptop (1 job) yet
+# barely dents a 64-core workstation. Rule, in order:
+#   * 1 core   -> 1 job. Nothing to spare; a 1-job build is unavoidable.
+#   * 2..SMALL_HOST_CORES cores -> leave exactly 1 free. Small machines can't
+#     spare a whole fraction, but must never run at 100% (that is the "killed my
+#     PC" case), so we always hand back one core for the UI.
+#   * larger   -> use ~RESERVE_FRACTION less than all cores (round the reserve UP
+#     so headroom grows with size): 8->7, 12->10, 24->20, 64->55. Big machines
+#     thus leave more cores free in absolute terms, small ones stay productive.
+# The result is always in [1, cores-1] for cores>=2, and exactly 1 for cores==1
+# -- i.e. at least one core is ALWAYS left free unless the machine has only one.
+SMALL_HOST_CORES = 4        # at/below this, reserve just a single core
+RESERVE_FRACTION = 0.15     # above it, keep ~15% of cores free (ceil)
+
+
+def _cpu_count() -> int:
+    """Logical CPUs usable by this process. Prefers the affinity mask so a
+    cgroup/`--cpuset-cpus` limit inside Docker is respected; falls back to the
+    machine total. Mirrors estimate._cores so both reason about the same count."""
+    try:
+        return len(os.sched_getaffinity(0))  # type: ignore[attr-defined]
+    except (AttributeError, OSError):
+        return os.cpu_count() or 1
+
+
+def build_jobs(cores: int | None = None) -> int:
+    """Number of parallel compile jobs to allow, scaled to the machine size (see
+    the block comment above). This is the ONE place the cap is decided; _makepkg_one
+    exports it as MAKEFLAGS/NPROC/AZARCH_JOBS so every build system (make,
+    cmake --build, Firefox's bsys6 make) obeys the same ceiling instead of grabbing
+    all cores. `cores` is injectable for testing; it defaults to the live count.
+
+    Invariant: returns 1 on a 1-core box, otherwise a value in [1, cores-1] -- at
+    least one core is ALWAYS left free so the machine stays usable during a build."""
+    if cores is None:
+        cores = _cpu_count()
+    cores = max(1, cores)
+    if cores == 1:
+        return 1
+    if cores <= SMALL_HOST_CORES:
+        return cores - 1                      # leave exactly one core free
+    reserve = math.ceil(cores * RESERVE_FRACTION)  # >=1 here since cores>SMALL_HOST_CORES
+    return max(1, cores - reserve)
 
 
 # --- retry-hardened source downloads ----------------------------------------
@@ -453,6 +512,21 @@ def _makepkg_one(builder: str, recipe_dir: Path, offline: bool = False) -> None:
         cmd += ["--config", str(hardened_conf)]
     if offline:
         env["AZARCH_OFFLINE"] = "1"  # recipe build() skips `make fetch` when set
+    # Cap compile parallelism so a build does not pin every core (see build_jobs).
+    # Three env vars because the compilers pick up the limit three different ways:
+    #   MAKEFLAGS  -> GNU make (and cmake's Makefiles generator / Firefox's mach,
+    #                 which both forward it) sees `-j N`;
+    #   NPROC      -> makepkg's own core-count knob, used by some check()/build()
+    #                 helpers and honoured by makepkg when computing defaults;
+    #   AZARCH_JOBS-> the explicit `-j"${AZARCH_JOBS:-1}"` our recipes append to
+    #                 `cmake --build` / `make build`, which is the belt-and-braces
+    #                 guarantee for build systems (Ninja, cargo) that ignore
+    #                 MAKEFLAGS. Default of 1 in the recipe keeps them safe even if
+    #                 this var somehow doesn't propagate.
+    jobs = build_jobs()
+    env["MAKEFLAGS"] = f"-j{jobs}"
+    env["NPROC"] = str(jobs)
+    env["AZARCH_JOBS"] = str(jobs)
     # Keep makepkg's build/cache under the scratch dir, not the builder's $HOME,
     # so a root build doesn't scatter files and offline reruns are clean.
     env["PKGDEST"] = str(recipe_dir)
@@ -475,7 +549,11 @@ def _makepkg_one(builder: str, recipe_dir: Path, offline: bool = False) -> None:
         # Re-exec as the builder, preserving the makepkg env vars. AZARCH_OFFLINE is
         # only present in env on the offline path, so the online envargs list is
         # unchanged (the key is simply absent).
-        keys = ("PKGDEST", "SRCDEST", "BUILDDIR")
+        # MAKEFLAGS/NPROC/AZARCH_JOBS carry the parallelism cap (build_jobs); they
+        # MUST be forwarded across the sudo -u builder re-exec or the root/container
+        # build -- the very path that saturates all cores -- would drop the cap and
+        # each compiler would fall back to its all-cores default again.
+        keys = ("PKGDEST", "SRCDEST", "BUILDDIR", "MAKEFLAGS", "NPROC", "AZARCH_JOBS")
         if offline:
             keys += ("AZARCH_OFFLINE",)
         envargs = [f"{k}={env[k]}" for k in keys]
