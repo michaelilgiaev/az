@@ -41,7 +41,7 @@ DESKTOP_DEST="$DESKTOP_DEST_DIR/azarch-application-menu.desktop"
 # Panel config (per-user) + the panel containment id (2 = bottom panel).
 APPLETSRC="$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc"
 PANEL_ID="2"
-ICON_NAME="applications-all"
+ICON_NAME="application-menu"
 # The org.kde.plasma.icon backing .desktop (its localPath). We create this real
 # Type=Application launcher ourselves so the applet does NOT bake a Type=Link/
 # Icon=unknown wrapper (the "paper icon that launches nothing" bug). Per-user file.

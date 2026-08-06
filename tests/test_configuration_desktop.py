@@ -23,14 +23,15 @@ from azarch.configuration import desktop
 
 # --- PLAN mode/owner/dest table --------------------------------------------
 
-def test_plan_has_exactly_seventeen_entries():
+def test_plan_has_exactly_nineteen_entries():
     # steps.py iterates PLAN; a dropped/extra entry silently un-emits a file.
-    # (17 = original 7 + ~/Desktop launcher + plasmashellrc + kdeglobals + krunnerrc
+    # (19 = original 7 + ~/Desktop launcher + plasmashellrc + kdeglobals + krunnerrc
     #  + kxkbrc keyboard-layouts + plasma-localerc (d/m/y clock) + powerdevilrc
     #  (PC/laptop sleep policy, Plasma-6 schema) + powermanagementprofilesrc migration
-    #  flag + kscreenlockerrc (disable auto-lock) + the org.kde.plasma.icon menu
-    #  backing .desktop under ~/.local/share/plasma_icons -- the paper-icon fix.)
-    assert len(desktop.PLAN) == 17
+    #  flag + kscreenlockerrc (disable auto-lock) + klaunchrc (no launch feedback)
+    #  + kwinrc (no window animation) + the org.kde.plasma.icon menu backing
+    #  .desktop under ~/.local/share/plasma_icons -- the paper-icon fix.)
+    assert len(desktop.PLAN) == 19
 
 
 def test_plan_entries_have_the_four_declared_keys():
@@ -164,9 +165,9 @@ def test_home_owner_gid_is_autologin_group():
 
 # --- emit_plan(): PLAN + bash_profile, without mutating PLAN ----------------
 
-def test_emit_plan_length_is_eighteen():
-    # 17 PLAN entries + the appended .bash_profile.
-    assert len(desktop.emit_plan()) == 18
+def test_emit_plan_length_is_twenty():
+    # 19 PLAN entries + the appended .bash_profile.
+    assert len(desktop.emit_plan()) == 20
 
 
 def test_emit_plan_prefix_is_plan():
@@ -193,7 +194,7 @@ def test_emit_plan_does_not_mutate_module_plan():
     before = len(desktop.PLAN)
     desktop.emit_plan()
     desktop.emit_plan()
-    assert len(desktop.PLAN) == before == 17
+    assert len(desktop.PLAN) == before == 19
 
 
 # --- xinitrc: Plasma X11 session, no flash ----------------------------------
@@ -1000,6 +1001,41 @@ def test_kscreenlockerrc_in_plan_as_home_conf():
     entry = next(e for e in desktop.PLAN
                  if e["dest"] == f"{desktop.HOME}/.config/kscreenlockerrc")
     assert entry["builder"] is desktop.kscreenlockerrc
+    assert entry["mode"] == 0o644
+    assert entry["owner"] == "home"
+
+
+def test_klaunchrc_disables_launch_feedback():
+    # Clicking the menu icon must show NO bouncing/busy "loading" cursor or taskbar
+    # launch indicator -- the menu just appears.
+    cp = _parse_ini(desktop.klaunchrc())
+    assert cp["BusyCursorSettings"]["Bouncing"] == "false"
+    assert cp["BusyCursorSettings"]["Enabled"] == "false"
+    assert cp["FeedbackStyle"]["BusyCursor"] == "false"
+    assert cp["FeedbackStyle"]["TaskbarButton"] == "false"
+
+
+def test_klaunchrc_in_plan_as_home_conf():
+    entry = next(e for e in desktop.PLAN
+                 if e["dest"] == f"{desktop.HOME}/.config/klaunchrc")
+    assert entry["builder"] is desktop.klaunchrc
+    assert entry["mode"] == 0o644
+    assert entry["owner"] == "home"
+
+
+def test_kwinrc_disables_window_animations():
+    # The menu (and every window) must appear IMMEDIATELY -- no glide/scale/fade.
+    cp = _parse_ini(desktop.kwinrc())
+    plugins = cp["Plugins"]
+    assert plugins["fadeEnabled"] == "false"
+    assert plugins["glideEnabled"] == "false"
+    assert plugins["scaleEnabled"] == "false"
+
+
+def test_kwinrc_in_plan_as_home_conf():
+    entry = next(e for e in desktop.PLAN
+                 if e["dest"] == f"{desktop.HOME}/.config/kwinrc")
+    assert entry["builder"] is desktop.kwinrc
     assert entry["mode"] == 0o644
     assert entry["owner"] == "home"
 

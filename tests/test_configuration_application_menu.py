@@ -5,6 +5,11 @@ These pin the contract that (a) the three runtime files are emitted to the fixed
 system paths the panel icon expects, (b) the constants shared with
 configuration/desktop.py agree (a drift there = an icon that launches nothing),
 and (c) the emitted content is the real menu (Hello World) wired to the launcher.
+
+They also pin the menu's look/behaviour matching the live hypervisor: the window
+is borderless (overrideredirect, no titlebar buttons) and sized to Kickoff's
+popup, and the launcher is a single-instance TOGGLE (a second click closes it via
+a PID file) rather than a spawn-every-click opener.
 """
 
 from __future__ import annotations
@@ -61,3 +66,28 @@ def test_constants_match_desktop_module():
 def test_launcher_runs_the_menu_module():
     # The launcher must invoke the installed menu.py (so the icon opens our menu).
     assert am.MENU_PY_SYSTEM_PATH in am.launcher_sh()
+
+
+def test_menu_is_borderless_and_kickoff_sized():
+    # The menu must be chromeless (no titlebar/min/max/close) and sized to match
+    # Plasma's Kickoff popup, pinned bottom-right -- matching the live hypervisor.
+    src = am.menu_py()
+    assert "overrideredirect(True)" in src          # no window chrome
+    assert "kickoff_popup_size" in src              # size tracks Kickoff's popup
+    assert "popupWidth" in src and "popupHeight" in src
+    # Deliberately NOT grabbing focus / forcing topmost (that fights the desktop):
+    # neither Tk call is invoked on the window. (The strings appear only in the
+    # comments EXPLAINING their absence, so match the actual call forms.)
+    assert ".attributes(" not in src               # no -topmost via attributes()
+    assert "root.focus_force()" not in src         # no forced global focus grab
+
+
+def test_launcher_is_a_single_instance_toggle():
+    # A second click must CLOSE the menu, not open another: the launcher tracks a
+    # PID file and kills the live instance instead of stacking a new window.
+    src = am.launcher_sh()
+    assert "PID_FILE" in src                        # tracks the running instance
+    assert "azarch-application-menu.pid" in src
+    assert "XDG_RUNTIME_DIR" in src                 # PID file under the runtime dir
+    assert "kill -0" in src                         # is the recorded instance alive?
+    assert "kill " in src                           # close-on-second-click path

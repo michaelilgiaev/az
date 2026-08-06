@@ -44,9 +44,10 @@ MENU_DESKTOP_SYSTEM_PATH = (
     "/usr/local/share/applications/azarch-application-menu.desktop"
 )
 
-# The panel icon glyph (a Breeze grid icon, distinct from Kickoff's hamburger).
-# Kept here as the single source of truth; configuration/desktop.py imports it.
-MENU_ICON_NAME = "applications-all"
+# The panel icon glyph: the SAME "application-menu" hamburger Plasma's Kickoff
+# uses, so our icon is visually identical to it. Single source of truth;
+# configuration/desktop.py imports it.
+MENU_ICON_NAME = "application-menu"
 
 
 # --- Source files (in the repo) ---------------------------------------------

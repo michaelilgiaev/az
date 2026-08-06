@@ -816,6 +816,37 @@ Timeout=0
 """
 
 
+# --- 3j. ~/.config/klaunchrc (no launch-feedback "loading" animation) -------
+def klaunchrc() -> str:
+    """Disable launch feedback so clicking the Az'arch menu icon (or any launcher)
+    shows NO bouncing/busy "loading" cursor and no taskbar launch indicator -- the
+    menu just appears. KDE's klauncher reads ~/.config/klaunchrc; when ABSENT it
+    defaults launch feedback ON. Shipped to the live home and /etc/skel."""
+    return """\
+[BusyCursorSettings]
+Bouncing=false
+Enabled=false
+
+[FeedbackStyle]
+BusyCursor=false
+TaskbarButton=false
+"""
+
+
+# --- 3k. ~/.config/kwinrc (no window open/close animation -> instant menu) --
+def kwinrc() -> str:
+    """Disable KWin's window open/close animations so the Az'arch menu (and every
+    window) APPEARS IMMEDIATELY -- no glide/scale/fade in or out. KWin reads
+    ~/.config/kwinrc; the [Plugins] *Enabled keys switch the desktop-effect plugins
+    off. Shipped to the live home and /etc/skel."""
+    return """\
+[Plugins]
+fadeEnabled=false
+glideEnabled=false
+scaleEnabled=false
+"""
+
+
 # --- 4. ~/.config/ksplashrc -------------------------------------------------
 def ksplashrc() -> str:
     """Disable the Plasma startup splash (KSplash). `startplasma-x11` would
@@ -1372,6 +1403,22 @@ PLAN = [
         # auto-locks at 5 min and blanks the display.
         "builder": kscreenlockerrc,
         "dest": f"{HOME}/.config/kscreenlockerrc",
+        "mode": _CONF,
+        "owner": "home",
+    },
+    {
+        # No launch-feedback: clicking the menu icon shows no bouncing/busy cursor
+        # or taskbar "loading" indicator -- the menu just appears.
+        "builder": klaunchrc,
+        "dest": f"{HOME}/.config/klaunchrc",
+        "mode": _CONF,
+        "owner": "home",
+    },
+    {
+        # No window open/close animation: the menu (and every window) appears
+        # immediately -- no glide/scale/fade.
+        "builder": kwinrc,
+        "dest": f"{HOME}/.config/kwinrc",
         "mode": _CONF,
         "owner": "home",
     },

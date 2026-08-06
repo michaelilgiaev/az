@@ -53,7 +53,7 @@ plugin=org.kde.plasma.icontasks
 """
 
 _DESKTOP_PATH = "/usr/local/share/applications/azarch-application-menu.desktop"
-_ICON_NAME = "applications-all"
+_ICON_NAME = "application-menu"
 
 
 def _parse(text: str) -> configparser.ConfigParser:
