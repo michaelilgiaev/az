@@ -100,14 +100,15 @@ def test_emitter_family_covers_all_config_modules():
     # pins the layout and disables auto-guess + shellprocess-desparse.conf that
     # de-sparsifies /boot so GRUB can read the kernel + finished.conf that adds the
     # Restart-now option + luksbootkeyfile.conf that embeds the LUKS keyfile so the
-    # encrypted root is not prompted for twice at boot) + 17 desktop builders
-    # (emit_plan: the 16 PLAN entries -- xinitrc, appletsrc, ksplashrc, plasmashellrc,
-    # kdeglobals, krunnerrc, kxkbrc, plasma-localerc (d/m/y clock), powerdevilrc
-    # (PC/laptop sleep, Plasma-6 schema), powermanagementprofilesrc (migration flag),
-    # kscreenlockerrc (disable auto-lock), autostart + menu + Desktop installer
-    # launchers, the install wrapper, the azarch CLI -- plus the appended bash_profile) +
+    # encrypted root is not prompted for twice at boot) + 18 desktop builders
+    # (emit_plan: the 17 PLAN entries -- xinitrc, appletsrc, the org.kde.plasma.icon
+    # menu backing .desktop (paper-icon fix), ksplashrc, plasmashellrc, kdeglobals,
+    # krunnerrc, kxkbrc, plasma-localerc (d/m/y clock), powerdevilrc (PC/laptop sleep,
+    # Plasma-6 schema), powermanagementprofilesrc (migration flag), kscreenlockerrc
+    # (disable auto-lock), autostart + menu + Desktop installer launchers, the install
+    # wrapper, the azarch CLI -- plus the appended bash_profile) +
     # 6 installer + locale + profile + 4 pacman + 5 pkgbuild.
-    assert len(_EMITTERS) == 19 + 17 + 6 + 1 + 1 + 4 + 5
+    assert len(_EMITTERS) == 19 + 18 + 6 + 1 + 1 + 4 + 5
 
 
 def test_recipe_dir_contents_are_nonempty_str_both_tiers():

@@ -23,13 +23,14 @@ from azarch.configuration import desktop
 
 # --- PLAN mode/owner/dest table --------------------------------------------
 
-def test_plan_has_exactly_sixteen_entries():
+def test_plan_has_exactly_seventeen_entries():
     # steps.py iterates PLAN; a dropped/extra entry silently un-emits a file.
-    # (16 = original 7 + ~/Desktop launcher + plasmashellrc + kdeglobals + krunnerrc
+    # (17 = original 7 + ~/Desktop launcher + plasmashellrc + kdeglobals + krunnerrc
     #  + kxkbrc keyboard-layouts + plasma-localerc (d/m/y clock) + powerdevilrc
     #  (PC/laptop sleep policy, Plasma-6 schema) + powermanagementprofilesrc migration
-    #  flag + kscreenlockerrc (disable auto-lock).)
-    assert len(desktop.PLAN) == 16
+    #  flag + kscreenlockerrc (disable auto-lock) + the org.kde.plasma.icon menu
+    #  backing .desktop under ~/.local/share/plasma_icons -- the paper-icon fix.)
+    assert len(desktop.PLAN) == 17
 
 
 def test_plan_entries_have_the_four_declared_keys():
@@ -163,9 +164,9 @@ def test_home_owner_gid_is_autologin_group():
 
 # --- emit_plan(): PLAN + bash_profile, without mutating PLAN ----------------
 
-def test_emit_plan_length_is_seventeen():
-    # 16 PLAN entries + the appended .bash_profile.
-    assert len(desktop.emit_plan()) == 17
+def test_emit_plan_length_is_eighteen():
+    # 17 PLAN entries + the appended .bash_profile.
+    assert len(desktop.emit_plan()) == 18
 
 
 def test_emit_plan_prefix_is_plan():
@@ -192,7 +193,7 @@ def test_emit_plan_does_not_mutate_module_plan():
     before = len(desktop.PLAN)
     desktop.emit_plan()
     desktop.emit_plan()
-    assert len(desktop.PLAN) == before == 16
+    assert len(desktop.PLAN) == before == 17
 
 
 # --- xinitrc: Plasma X11 session, no flash ----------------------------------
@@ -721,8 +722,15 @@ def test_panel_applet_order_lists_menu_azmenu_tasks_spacer_status_clock():
     assert order[1] == str(desktop._AZ_MENU_ID)
     az = f"Containments][{p}][Applets][{desktop._AZ_MENU_ID}"
     assert cp[az]["plugin"] == "org.kde.plasma.icon"
-    assert cp[f"{az}][Configuration][General"]["url"] == desktop._AZ_MENU_DESKTOP_PATH
+    # url= MUST be a file:// URI (not a bare path): a bare path made the applet bake a
+    # Type=Link/Icon=unknown wrapper -- the paper-icon-launches-nothing bug.
+    assert cp[f"{az}][Configuration][General"]["url"] == f"file://{desktop._AZ_MENU_DESKTOP_PATH}"
     assert cp[f"{az}][Configuration][General"]["iconName"] == desktop._AZ_MENU_ICON_NAME
+    # localPath points at the backing .desktop WE ship, so the applet reads our real
+    # Type=Application launcher instead of generating a broken wrapper.
+    assert cp[f"{az}][Configuration"]["localPath"] == desktop._AZ_MENU_LOCAL_PATH
+    # The applet must NOT be immutable: a locked applet froze the broken backing file.
+    assert cp[az]["immutability"] == "0"
     # The spacer (id 3) must be an expanding panelspacer so the status icons+clock sit right.
     scfg = f"Containments][{p}][Applets][3][Configuration][General"
     assert cp[f"Containments][{p}][Applets][3"]["plugin"] == "org.kde.plasma.panelspacer"
@@ -1019,3 +1027,54 @@ def test_keyboard_flag_config_only_on_keyboard_applet():
     body = desktop.plasma_appletsrc()
     # Exactly one displayStyle assignment in the whole appletsrc.
     assert body.count("displayStyle=") == 1
+
+
+# --- Az'arch menu icon backing .desktop (THE paper-icon / launches-nothing fix) --
+
+def test_az_menu_icon_backing_is_a_real_application_launcher():
+    # THE BUG: org.kde.plasma.icon, given a bare url= path, bakes a
+    # Type=Link/Icon=unknown wrapper (a "paper icon" that opens a file location
+    # instead of Exec'ing) into ~/.local/share/plasma_icons. We ship that backing
+    # file ourselves as a real launcher: Type=Application, Exec=<installed launcher>,
+    # a resolvable Icon -- and crucially NOT Type=Link/URL/Icon=unknown.
+    body = desktop.az_menu_plasma_icon_backing()
+    cp = _parse_ini(body)
+    entry = cp["Desktop Entry"]
+    assert entry["Type"] == "Application"          # NOT Link
+    assert entry["Exec"] == desktop._app_menu.MENU_LAUNCHER_SYSTEM_PATH
+    assert entry["Icon"] == desktop._AZ_MENU_ICON_NAME
+    assert entry["Icon"] != "unknown"              # not the generic paper glyph
+    assert "Type=Link" not in body
+    assert "URL=" not in body
+
+
+def test_az_menu_icon_backing_matches_installed_desktop():
+    # Single source of truth: the applet backing file and the installed
+    # /usr/local/share/applications .desktop must be identical, so both the panel
+    # applet and the menu entry launch the same thing.
+    assert desktop.az_menu_plasma_icon_backing() == desktop._app_menu.menu_desktop()
+
+
+def test_az_menu_local_path_is_the_plasma_icons_backing_path():
+    # The localPath the appletsrc points at must be under ~/.local/share/plasma_icons
+    # (the dir org.kde.plasma.icon reads its backing file from).
+    assert desktop._AZ_MENU_LOCAL_PATH == (
+        f"{desktop.HOME}/.local/share/plasma_icons/azarch-application-menu.desktop"
+    )
+    # And the appletsrc's Configuration/localPath must equal it.
+    cp = _parse_ini(desktop.plasma_appletsrc())
+    p = desktop.PANEL_CONTAINMENT_ID
+    az = f"Containments][{p}][Applets][{desktop._AZ_MENU_ID}][Configuration"
+    assert cp[az]["localPath"] == desktop._AZ_MENU_LOCAL_PATH
+
+
+def test_az_menu_icon_backing_in_plan_as_home_exec():
+    # Emitted to the plasma_icons localPath, home-owned (the live user must read it).
+    # It MUST be 0o755 (EXECUTABLE), not 0o644: KDE treats a non-executable
+    # Type=Application desktop file as UNTRUSTED, so the panel icon's KIO click path
+    # pops a modal "not trusted" dialog and launches nothing. The exec bit is the
+    # trust signal. steps.py mirrors home-owned files into /etc/skel for installed users.
+    entry = next(e for e in desktop.PLAN if e["dest"] == desktop._AZ_MENU_LOCAL_PATH)
+    assert entry["builder"] is desktop.az_menu_plasma_icon_backing
+    assert entry["mode"] == 0o755
+    assert entry["owner"] == "home"

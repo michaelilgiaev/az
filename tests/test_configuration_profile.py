@@ -54,6 +54,19 @@ def test_ckbcomp_stays_executable():
     assert '["/usr/bin/ckbcomp"]="0:0:755"' in profile.profiledef_sh()
 
 
+def test_application_menu_launcher_stays_executable():
+    # Regression guard for the "panel icon does nothing" bug: the menu launcher the
+    # org.kde.plasma.icon backing .desktop Exec's must keep its 0755 through archiso's
+    # squashfs mode normalization. Without this pin it ships 0644 (non-executable), so
+    # clicking the icon runs a non-executable file and the menu never opens. The path
+    # must match application_menu.MENU_LAUNCHER_SYSTEM_PATH (the Exec target).
+    from azarch.configuration import application_menu
+    launcher = application_menu.MENU_LAUNCHER_SYSTEM_PATH
+    assert launcher == "/usr/local/bin/azarch-application-menu"
+    assert profile.FILE_PERMISSIONS[launcher] == "0:0:755"
+    assert f'["{launcher}"]="0:0:755"' in profile.profiledef_sh()
+
+
 def test_desktop_installer_launcher_stays_executable():
     # THE WARNING-BADGE FIX: KDE paints an "emblem-important" warning badge over a
     # Desktop .desktop launcher (and prompts on first launch) unless it is executable
@@ -72,6 +85,26 @@ def test_desktop_installer_launcher_stays_executable():
     sh = profile.profiledef_sh()
     assert '["/home/main/Desktop/azarch-install.desktop"]="1000:998:755"' in sh
     assert '["/etc/skel/Desktop/azarch-install.desktop"]="0:0:755"' in sh
+
+
+def test_menu_icon_backing_desktop_stays_executable():
+    # THE "noisy error, nothing pops up" FIX: the org.kde.plasma.icon backing
+    # .desktop (the applet's localPath) is a Type=Application launcher; KDE's
+    # isAuthorizedDesktopFile() treats a NON-executable one as UNTRUSTED, so the
+    # panel icon's KIO click path pops a modal "not trusted, execute?" dialog and
+    # launches nothing. archiso normalizes home files to 0644 unless pinned here, so
+    # without these pins the shipped ISO's icon does nothing on click. Both the
+    # live-user copy and the /etc/skel copy must be 0755 (executable = trusted). The
+    # path must match desktop._AZ_MENU_LOCAL_PATH (the localPath the appletsrc points at).
+    from azarch.configuration import desktop
+    live = desktop._AZ_MENU_LOCAL_PATH
+    assert live == "/home/main/.local/share/plasma_icons/azarch-application-menu.desktop"
+    skel = "/etc/skel/.local/share/plasma_icons/azarch-application-menu.desktop"
+    assert profile.FILE_PERMISSIONS[live] == "1000:998:755"
+    assert profile.FILE_PERMISSIONS[skel] == "0:0:755"
+    sh = profile.profiledef_sh()
+    assert f'["{live}"]="1000:998:755"' in sh
+    assert f'["{skel}"]="0:0:755"' in sh
 
 
 def test_secrets_locked_down():

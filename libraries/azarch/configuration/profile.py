@@ -69,6 +69,13 @@ FILE_PERMISSIONS = {
     # Calamares never auto-launches. THIS is what breaks the live installer.
     "/usr/local/bin/azarch-install": "0:0:755",
     "/usr/local/bin/azarch": "0:0:755",
+    # The Az'arch application-menu launcher the panel icon Exec's (via the
+    # org.kde.plasma.icon backing .desktop). SAME archiso mode-normalization as
+    # azarch-install above: application_menu.PLAN emits it 0755, but the squashfs
+    # ships it 0644 (non-executable) unless pinned here -- and then clicking the
+    # panel icon runs a non-executable file and the menu never opens (the other half
+    # of the "icon does nothing" bug, alongside the Type=Link backing-file fix).
+    "/usr/local/bin/azarch-application-menu": "0:0:755",
     # The live-session Desktop "Az'arch Linux Installer" launcher. Same archiso mode-
     # normalization as azarch-install above: steps.py emits it 0755, but the squashfs
     # ships it 0644 unless pinned here. A 0644 (non-executable) .desktop on the Desktop
@@ -82,6 +89,16 @@ FILE_PERMISSIONS = {
     # copy (root-owned; root-owned is ALSO trusted) are pinned.
     "/home/main/Desktop/azarch-install.desktop": "1000:998:755",
     "/etc/skel/Desktop/azarch-install.desktop": "0:0:755",
+    # The org.kde.plasma.icon backing .desktop for OUR menu applet (its localPath).
+    # SAME trust rule as the Desktop launcher above: KDE's
+    # KDesktopFile::isAuthorizedDesktopFile() treats a NON-executable Type=Application
+    # file as UNTRUSTED, so the panel icon's KIO click path pops a modal "not trusted,
+    # execute?" dialog (a "noisy error") and launches NOTHING. archiso normalizes home
+    # files to 0644 in the squashfs, so without these pins the icon does nothing on a
+    # fresh ISO. Pin both the live-user copy (1000:998) and the /etc/skel copy (root)
+    # to 0755 -> executable -> trusted -> launches on first click.
+    "/home/main/.local/share/plasma_icons/azarch-application-menu.desktop": "1000:998:755",
+    "/etc/skel/.local/share/plasma_icons/azarch-application-menu.desktop": "0:0:755",
     # Vendored ckbcomp (libraries/azarch/ckbcomp), a Python 3 port of the upstream
     # Perl ckbcomp. Same archiso mode-normalization as azarch-install above: without
     # an explicit 0755 here it ships 0644, Calamares' `QProcess::start("ckbcomp")`

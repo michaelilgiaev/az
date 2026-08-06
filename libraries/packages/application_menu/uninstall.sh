@@ -22,6 +22,8 @@ DESKTOP_DEST="/usr/local/share/applications/azarch-application-menu.desktop"
 
 APPLETSRC="$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc"
 PANEL_ID="2"
+# The org.kde.plasma.icon backing .desktop install.sh created (its localPath).
+ICON_LOCAL_PATH="$HOME/.local/share/plasma_icons/azarch-application-menu.desktop"
 
 echo "Uninstalling Az'arch application menu ..."
 
@@ -38,7 +40,9 @@ fi
 # --- 2. Remove installed files ----------------------------------------------
 sudo rm -f "$BIN_DEST" "$DESKTOP_DEST"
 sudo rm -rf "$LIB_DEST_DIR"
-echo "  removed launcher + menu module + .desktop"
+# The per-user backing .desktop the icon applet read (not root-owned).
+rm -f "$ICON_LOCAL_PATH"
+echo "  removed launcher + menu module + .desktop + panel-icon backing file"
 
 echo ""
 echo "Done. LOG OUT and back in (or reboot) so the icon leaves the panel."

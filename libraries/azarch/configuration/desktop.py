@@ -196,6 +196,13 @@ fi
 DESKTOP_CONTAINMENT_ID = 1
 PANEL_CONTAINMENT_ID = 2
 
+# Home directory of the live user; the overlay root for HOME-relative entries (used
+# by the PLAN below AND by the panel-icon backing-file paths in this section, so it
+# is defined here, before first use).
+HOME = "/home/main"
+# uid:gid for the live user tree (autologin group gid 998).
+HOME_OWNER = (1000, 998)
+
 # The three apps pinned to the bottom panel's task manager, in order. The .desktop
 # ids are the ones shipped on the installed system: LibreWolf -> librewolf.desktop,
 # Kitty -> kitty.desktop, Dolphin -> org.kde.dolphin.desktop (reverse-DNS).
@@ -298,6 +305,46 @@ from . import application_menu as _app_menu  # noqa: E402  (kept next to its use
 _AZ_MENU_APPLET_PLUGIN = "org.kde.plasma.icon"
 _AZ_MENU_ICON_NAME = _app_menu.MENU_ICON_NAME
 _AZ_MENU_DESKTOP_PATH = _app_menu.MENU_DESKTOP_SYSTEM_PATH
+
+# WHY WE PRE-CREATE THE ICON APPLET'S BACKING FILE (the "piece of paper that
+# launches nothing" bug):
+#
+# org.kde.plasma.icon does NOT read its configured .desktop directly. On first
+# paint it derives its OWN backing copy under ~/.local/share/plasma_icons/ and
+# reads THAT (recorded as the applet's Configuration/localPath). It only copies
+# the target verbatim (preserving Type=Application + Exec=) when it recognises the
+# configured url as a LOCAL .desktop file; otherwise it writes a generic
+#     [Desktop Entry]\nType=Link\nURL=<target>\nIcon=unknown
+# wrapper. A BARE path in url= (…/foo.desktop, no file:// scheme) parses to an
+# empty-scheme QUrl that misses the local-desktop-file test, so the applet took
+# the Link branch and baked, on the live VM:
+#     Type=Link, URL=…, Icon=unknown
+# Type=Link means a CLICK opens the file's location instead of Exec'ing the
+# launcher (nothing launches); Icon=unknown is the generic "piece of paper" glyph
+# (the icon the user saw). With immutability locking the applet and the wrong
+# backing file cached, Plasma never self-corrects.
+#
+# FIX: we ship the backing file OURSELVES at the exact localPath Plasma uses, with
+# the correct Type=Application + Exec= + Icon= (identical to the copy-branch
+# output), point Configuration/localPath at it, and give url= a proper file://
+# URI as a belt. The applet then reads our correct file and launches the menu with
+# the grid icon. (menu_desktop() below returns this same content for the standalone
+# installer, so both paths agree.)
+_AZ_MENU_LOCAL_DIR = f"{HOME}/.local/share/plasma_icons"
+_AZ_MENU_LOCAL_PATH = f"{_AZ_MENU_LOCAL_DIR}/azarch-application-menu.desktop"
+
+
+def az_menu_plasma_icon_backing() -> str:
+    """The org.kde.plasma.icon backing .desktop (localPath) for OUR menu applet.
+
+    This is what the applet reads to know what to launch and which icon to show.
+    It MUST be a real application launcher (Type=Application + Exec=), NOT the
+    Type=Link/Icon=unknown wrapper the applet generates from a bare url= (see the
+    _AZ_MENU_LOCAL_PATH note above -- that wrapper is exactly the "paper icon that
+    launches nothing" bug). Content mirrors the installed
+    azarch-application-menu.desktop (application_menu.menu_desktop()): Exec runs the
+    installed launcher, Icon is the grid glyph."""
+    return _app_menu.menu_desktop()
 
 
 def plasma_appletsrc() -> str:
@@ -418,12 +465,22 @@ showRecentDocs=false
 # right of Kickoff. Launches {_AZ_MENU_DESKTOP_PATH} (the installed .desktop, which
 # runs our Tkinter menu); shows a distinct grid glyph so it does not look like
 # Kickoff. See configuration/application_menu.py.
+#
+# localPath points at a backing .desktop WE ship (az_menu_plasma_icon_backing ->
+# ~/.local/share/plasma_icons/...), a real Type=Application launcher, so the applet
+# does NOT auto-generate a Type=Link/Icon=unknown wrapper (the "paper icon that
+# launches nothing" bug). url= carries a file:// URI (not a bare path) as a belt so
+# even a regenerating applet takes the copy branch. immutability=0: the applet must
+# be able to read/refresh its backing file (a locked applet froze the broken state).
 [Containments][{p}][Applets][{_AZ_MENU_ID}]
-immutability=1
+immutability=0
 plugin={_AZ_MENU_APPLET_PLUGIN}
 
+[Containments][{p}][Applets][{_AZ_MENU_ID}][Configuration]
+localPath={_AZ_MENU_LOCAL_PATH}
+
 [Containments][{p}][Applets][{_AZ_MENU_ID}][Configuration][General]
-url={_AZ_MENU_DESKTOP_PATH}
+url=file://{_AZ_MENU_DESKTOP_PATH}
 iconName={_AZ_MENU_ICON_NAME}
 
 # 2. Pinned task manager: LibreWolf, Kitty, Dolphin.
@@ -1213,10 +1270,8 @@ exec sudo -E calamares
 _EXEC = 0o755
 _CONF = 0o644
 
-# Home directory of the live user; the overlay root for HOME-relative entries.
-HOME = "/home/main"
-# uid:gid for the live user tree (autologin group gid 998).
-HOME_OWNER = (1000, 998)
+# (HOME / HOME_OWNER are defined at the top of the panel section above, before
+# their first use in the panel-icon backing paths.)
 
 # Each PLAN entry is a dict for readability in steps.py:
 #   builder: callable() -> str content
@@ -1235,6 +1290,24 @@ PLAN = [
         "builder": plasma_appletsrc,
         "dest": f"{HOME}/.config/plasma-org.kde.plasma.desktop-appletsrc",
         "mode": _CONF,
+        "owner": "home",
+    },
+    {
+        # Backing .desktop for OUR org.kde.plasma.icon menu applet, at the exact
+        # localPath the appletsrc points at. Shipping this real Type=Application
+        # launcher stops the applet from baking a Type=Link/Icon=unknown wrapper --
+        # the "paper icon" half of the bug. It MUST be EXECUTABLE (0o755), not 0o644:
+        # KDE's KDesktopFile::isAuthorizedDesktopFile() treats a NON-executable
+        # Type=Application desktop file as UNTRUSTED, so the applet's KIO click path
+        # pops a modal "this desktop entry is not trusted, execute?" dialog (the
+        # "noisy error") and launches NOTHING until confirmed. The exec bit is KDE's
+        # trust signal -> no dialog, launches on click. (archiso normalizes home-file
+        # modes to 0644 in the squashfs; the FILE_PERMISSIONS pin in profile.py keeps
+        # this 0755 -- same gotcha as the ~/Desktop installer launcher.) Home-owned;
+        # mirrored into /etc/skel for installed users.
+        "builder": az_menu_plasma_icon_backing,
+        "dest": _AZ_MENU_LOCAL_PATH,
+        "mode": _EXEC,
         "owner": "home",
     },
     {

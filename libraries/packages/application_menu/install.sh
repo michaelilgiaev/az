@@ -42,6 +42,10 @@ DESKTOP_DEST="$DESKTOP_DEST_DIR/azarch-application-menu.desktop"
 APPLETSRC="$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc"
 PANEL_ID="2"
 ICON_NAME="applications-all"
+# The org.kde.plasma.icon backing .desktop (its localPath). We create this real
+# Type=Application launcher ourselves so the applet does NOT bake a Type=Link/
+# Icon=unknown wrapper (the "paper icon that launches nothing" bug). Per-user file.
+ICON_LOCAL_PATH="$HOME/.local/share/plasma_icons/azarch-application-menu.desktop"
 
 echo "Installing Az'arch application menu ..."
 
@@ -64,9 +68,11 @@ if [ ! -f "$APPLETSRC" ]; then
     echo "  (Run this from within the Plasma session so the panel config exists.)"
 else
     cp -a "$APPLETSRC" "$APPLETSRC.azarch-menu.bak"
-    python3 "$PANEL_ICON_DEST" add "$APPLETSRC" "$PANEL_ID" "$DESKTOP_DEST" "$ICON_NAME"
-    # Verify the edit landed (icon applet present + in AppletOrder).
-    if grep -q "url=$DESKTOP_DEST" "$APPLETSRC"; then
+    python3 "$PANEL_ICON_DEST" add "$APPLETSRC" "$PANEL_ID" "$DESKTOP_DEST" \
+        "$ICON_NAME" "$ICON_LOCAL_PATH" "$BIN_DEST"
+    # Verify the edit landed (icon applet present + in AppletOrder). url= is written
+    # as a file:// URI (bypasses the Type=Link paper-icon bug), so match that form.
+    if grep -q "url=file://$DESKTOP_DEST" "$APPLETSRC"; then
         echo "  panel icon  -> inserted right of Kickoff (backup: $APPLETSRC.azarch-menu.bak)"
     else
         echo "  ERROR: panel icon insert did not take; restoring backup." >&2

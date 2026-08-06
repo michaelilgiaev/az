@@ -19,22 +19,73 @@ This is done in Python (not kwriteconfig6) because kwriteconfig6 escapes the
 nested `][` group syntax into a broken flat `[Foo\x5d\x5b..]` group (seen live);
 plain text surgery on the exact group headers is reliable and reversible.
 
+THE "PAPER ICON THAT LAUNCHES NOTHING" BUG: org.kde.plasma.icon does NOT read the
+configured .desktop directly. On first paint it derives its OWN backing copy under
+~/.local/share/plasma_icons/ and reads THAT (stored as the applet's
+[Configuration] localPath). It only copies the target verbatim (keeping
+Type=Application + Exec=) when it recognises the configured url as a LOCAL .desktop
+file; given a BARE path (…/foo.desktop, no file:// scheme) it takes the generic
+branch and writes a Type=Link / URL= / Icon=unknown wrapper -- which on click opens
+the file's location instead of Exec'ing (nothing launches) and shows the generic
+"piece of paper" glyph. So `add` PRE-CREATES that backing file itself as a real
+launcher and points localPath at it, writes url= as a file:// URI (belt), and
+leaves the applet immutability=0 so Plasma can refresh it.
+
 Usage:
-    panel_icon.py add    <appletsrc> <panel_id> <desktop_path> <icon_name>
+    panel_icon.py add    <appletsrc> <panel_id> <desktop_path> <icon_name> \\
+                         <backing_path> [<exec_path>]
     panel_icon.py remove <appletsrc> <panel_id>
 
 `add` is idempotent: if our icon applet (identified by the desktop_path in its
 url=) already exists, it is left as-is. `remove` deletes the applet stanza(s)
-and drops it from AppletOrder. Both rewrite the file in place.
+and drops it from AppletOrder. Both rewrite the file in place. `add` also writes
+<backing_path> (the plasma_icons localPath) as a Type=Application launcher whose
+Exec is <exec_path> (default: the installed azarch-application-menu launcher).
 """
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 
 
 PANEL_APPLET_ICON = "org.kde.plasma.icon"
+
+# Default Exec for the backing .desktop: the installed menu launcher (matches
+# configuration/application_menu.MENU_LAUNCHER_SYSTEM_PATH and install.sh's BIN_DEST).
+DEFAULT_MENU_LAUNCHER = "/usr/local/bin/azarch-application-menu"
+
+
+def _write_backing_desktop(backing_path: str, name: str, icon_name: str,
+                           exec_path: str) -> None:
+    """Create the org.kde.plasma.icon backing .desktop the applet reads via its
+    localPath. It MUST be a real launcher (Type=Application + Exec=), NOT the
+    Type=Link/Icon=unknown wrapper the applet would otherwise generate from a bare
+    url= (that wrapper is the paper-icon-launches-nothing bug). Parent dir is
+    created.
+
+    It MUST also be EXECUTABLE (0o755): KDE's isAuthorizedDesktopFile() treats a
+    NON-executable Type=Application file as UNTRUSTED, so the applet's KIO click path
+    pops a modal "this desktop entry is not trusted, execute?" dialog (a noisy error)
+    and launches nothing until confirmed. The exec bit is KDE's trust signal."""
+    parent = os.path.dirname(backing_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    content = (
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        f"Name={name}\n"
+        f"Comment={name}\n"
+        f"Exec={exec_path}\n"
+        f"Icon={icon_name}\n"
+        "Terminal=false\n"
+        "Categories=System;Utility;\n"
+    )
+    with open(backing_path, "w", encoding="utf-8") as fh:
+        fh.write(content)
+    # Executable = trusted to KDE (no "untrusted desktop entry" dialog on click).
+    os.chmod(backing_path, 0o755)
 
 
 def _general_header(panel_id: str) -> str:
@@ -121,7 +172,15 @@ def _our_icon_id(lines: list[str], panel_id: str, desktop_path: str) -> int | No
     return None
 
 
-def add(path: str, panel_id: str, desktop_path: str, icon_name: str) -> None:
+def add(path: str, panel_id: str, desktop_path: str, icon_name: str,
+        backing_path: str, exec_path: str = DEFAULT_MENU_LAUNCHER) -> None:
+    # Create the backing .desktop the applet reads (localPath) FIRST, as a real
+    # Type=Application launcher -- so the applet never bakes the Type=Link/Icon=
+    # unknown wrapper (the paper-icon-launches-nothing bug). Name/Comment come from
+    # the .desktop basename; Exec runs the installed launcher.
+    name = os.path.splitext(os.path.basename(desktop_path))[0]
+    _write_backing_desktop(backing_path, name, icon_name, exec_path)
+
     lines = _read(path)
 
     # Idempotent: already installed?
@@ -148,14 +207,22 @@ def add(path: str, panel_id: str, desktop_path: str, icon_name: str) -> None:
 
     # Append the applet stanzas at end of file (group order does not matter to
     # Plasma; AppletOrder controls on-screen position).
+    #   * immutability=0 so Plasma can refresh the applet's backing file.
+    #   * [Configuration] localPath -> the backing .desktop we just wrote, so the
+    #     applet reads our real launcher instead of generating a broken wrapper.
+    #   * url= is a file:// URI (NOT a bare path): a bare path triggers the
+    #     Type=Link/Icon=unknown branch -- the paper-icon bug.
     stanza = [
         "",
         _applet_header(panel_id, new_id),
-        "immutability=1",
+        "immutability=0",
         f"plugin={PANEL_APPLET_ICON}",
         "",
+        _applet_header(panel_id, new_id) + "[Configuration]",
+        f"localPath={backing_path}",
+        "",
         _applet_header(panel_id, new_id) + "[Configuration][General]",
-        f"url={desktop_path}",
+        f"url=file://{desktop_path}",
         f"iconName={icon_name}",
     ]
     lines.extend(stanza)
@@ -236,8 +303,9 @@ def main(argv: list[str]) -> int:
         print(__doc__)
         return 2
     action = argv[1]
-    if action == "add" and len(argv) == 6:
-        add(argv[2], argv[3], argv[4], argv[5])
+    # add <appletsrc> <panel_id> <desktop_path> <icon_name> <backing_path> [<exec_path>]
+    if action == "add" and len(argv) in (7, 8):
+        add(*argv[2:])
         return 0
     if action == "remove" and len(argv) == 4:
         remove(argv[2], argv[3])
