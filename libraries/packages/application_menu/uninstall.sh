@@ -1,0 +1,44 @@
+#!/bin/sh
+# uninstall.sh -- remove the Az'arch application menu and its PANEL ICON.
+#
+# Fully reverses install.sh:
+#   1. Remove our icon applet from the panel config (and from AppletOrder).
+#   2. Remove the .desktop, the launcher, the menu module + panel_icon helper.
+#
+# The panel returns to Kickoff / LibreWolf / Kitty / Dolphin as before. Like
+# install, this does NOT bounce plasmashell: LOG OUT and back in (or reboot) for
+# the icon to disappear from the running panel.
+#
+# Safe to run repeatedly / even if some pieces are already gone.
+
+set -eu
+
+export LC_ALL="${LC_ALL:-C.UTF-8}"
+
+BIN_DEST="/usr/local/bin/azarch-application-menu"
+LIB_DEST_DIR="/usr/local/lib/azarch-application-menu"
+PANEL_ICON="$LIB_DEST_DIR/panel_icon.py"
+DESKTOP_DEST="/usr/local/share/applications/azarch-application-menu.desktop"
+
+APPLETSRC="$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc"
+PANEL_ID="2"
+
+echo "Uninstalling Az'arch application menu ..."
+
+# --- 1. Remove the panel icon -----------------------------------------------
+# Use the installed helper if present; otherwise fall back to the project copy.
+HELPER="$PANEL_ICON"
+[ -f "$HELPER" ] || HELPER="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)/libraries/panel_icon.py"
+if [ -f "$APPLETSRC" ] && [ -f "$HELPER" ]; then
+    cp -a "$APPLETSRC" "$APPLETSRC.azarch-menu-uninstall.bak"
+    python3 "$HELPER" remove "$APPLETSRC" "$PANEL_ID"
+    echo "  removed panel icon (backup: $APPLETSRC.azarch-menu-uninstall.bak)"
+fi
+
+# --- 2. Remove installed files ----------------------------------------------
+sudo rm -f "$BIN_DEST" "$DESKTOP_DEST"
+sudo rm -rf "$LIB_DEST_DIR"
+echo "  removed launcher + menu module + .desktop"
+
+echo ""
+echo "Done. LOG OUT and back in (or reboot) so the icon leaves the panel."

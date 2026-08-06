@@ -3,7 +3,7 @@ specification_resolve -- turn the package manifest + the Arch DB universe into t
 dependency graph of the Az'arch distribution.
 
 Steps:
-  1. Load the explicit manifest (libraries/data/packages.x86_64).
+  1. Load the explicit manifest (libraries/packages/packages.x86_64).
   2. Resolve every entry to a concrete package, expanding groups (e.g. xorg)
      to their members and following `provides` for virtual deps.
   3. Walk the full transitive dependency closure from those roots.

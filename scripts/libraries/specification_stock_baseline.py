@@ -4,7 +4,7 @@ variable so it is not mistaken for an editable manifest.
 
 This is the ground truth for the "Stock Arch" edition in the specification: every package
 the official Arch install medium already pulls in. Az'arch builds on top of this
-list (libraries/data/packages.x86_64); anything in the final package set that is
+list (libraries/packages/packages.x86_64); anything in the final package set that is
 NOT reachable from this baseline is an "Az'arch Component".
 
 It lives here (a module, not a data file next to packages.x86_64) on purpose:

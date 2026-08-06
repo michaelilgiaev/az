@@ -1,0 +1,5 @@
+# No pip dependencies.
+#
+# The menu uses Tkinter, which ships in the Python standard library (backed by
+# the system `tk` package). Nothing is pip-installed, so this file is empty on
+# purpose and there is no venv/ to populate. Kept per the project layout.

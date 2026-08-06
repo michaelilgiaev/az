@@ -4,7 +4,7 @@ Mirrors the directory scheme the old compile.sh used, so the Docker bind mounts
 (cache/ output/ logs/) and the on-disk artifacts land in exactly the same places:
 
   REPODIR/                 repo root (where compile.sh lives)
-    libraries/data/        verbatim data files (packages.x86_64, big QML)
+    libraries/packages/    verbatim payload (packages.x86_64, application_menu/)
     cache/                 persistent download cache (git-ignored, survives builds)
       build/               WORKDIR on a NATIVE run: disposable mkarchiso scratch
       pkgs/                persistent package repo + synced DBs (the offline store)
@@ -30,7 +30,10 @@ REPODIR = Path(__file__).resolve().parents[2]
 PKGDIR = Path(__file__).resolve().parent  # libraries/azarch (this package)
 
 LIBDIR = REPODIR / "libraries"
-DATADIR = LIBDIR / "data"
+# Verbatim, author-maintained payload the build ships as-is: the package manifest
+# (packages.x86_64) and the Az'arch application-menu source tree. Formerly
+# libraries/data/; consolidated under libraries/packages/.
+PACKAGESDIR = LIBDIR / "packages"
 ASSETSDIR = REPODIR / "assets"
 
 # Vendored ckbcomp: a Python 3 port of the upstream Perl ckbcomp (byte-identical
@@ -85,7 +88,11 @@ FULL_LOG = LOGDIR / "full.log"
 STEPS_LOG = LOGDIR / "steps.log"
 
 # Verbatim data files.
-PACKAGES_FILE = DATADIR / "packages.x86_64"
+PACKAGES_FILE = PACKAGESDIR / "packages.x86_64"
+# The Az'arch application-menu source tree (Python + install/uninstall scripts),
+# copied verbatim into the live/installed system by steps.py. See
+# configuration/application_menu.py for how it is wired into the desktop.
+APPLICATION_MENU_DIR = PACKAGESDIR / "application_menu"
 
 # Inside the archiso profile tree, the airootfs root and the azarch payload dir
 # baked into the live/installed system.

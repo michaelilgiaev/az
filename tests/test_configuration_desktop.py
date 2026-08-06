@@ -698,21 +698,43 @@ def test_panel_status_applets_each_have_a_block_and_carry_internet_audio():
     assert "plugin=org.kde.plasma.volume" in body              # audio
 
 
-def test_panel_applet_order_lists_menu_tasks_spacer_status_clock():
-    # AppletOrder must be menu(1), tasks(2), spacer(3), the N status applets (4..),
-    # then the clock (last). A missing id silently drops that applet.
+def test_panel_applet_order_lists_menu_azmenu_tasks_spacer_status_clock():
+    # AppletOrder must be Kickoff(1), OUR Az'arch menu icon(11), tasks(2),
+    # spacer(3), the N status applets (4..), then the clock (last). A missing id
+    # silently drops that applet. Our menu icon sits between Kickoff and tasks
+    # (right of the Application Launcher, left of LibreWolf).
     cp = _parse_ini(desktop.plasma_appletsrc())
     p = desktop.PANEL_CONTAINMENT_ID
     n = len(desktop.PANEL_STATUS_APPLETS)
-    expected = ";".join(str(i) for i in range(1, 3 + n + 1 + 1))  # 1..(3+n+1)
+    status = list(range(4, 4 + n))
+    clock_id = 4 + n
+    expected = ";".join(
+        str(i)
+        for i in [desktop._MENU_ID, desktop._AZ_MENU_ID, desktop._TASKS_ID,
+                  desktop._SPACER_ID, *status, clock_id]
+    )
     assert cp[f"Containments][{p}][General"]["AppletOrder"] == expected
+    # Our menu icon (id 11) is an org.kde.plasma.icon pointing at the installed
+    # .desktop, positioned immediately after Kickoff in the order.
+    order = cp[f"Containments][{p}][General"]["AppletOrder"].split(";")
+    assert order[0] == str(desktop._MENU_ID)
+    assert order[1] == str(desktop._AZ_MENU_ID)
+    az = f"Containments][{p}][Applets][{desktop._AZ_MENU_ID}"
+    assert cp[az]["plugin"] == "org.kde.plasma.icon"
+    assert cp[f"{az}][Configuration][General"]["url"] == desktop._AZ_MENU_DESKTOP_PATH
+    assert cp[f"{az}][Configuration][General"]["iconName"] == desktop._AZ_MENU_ICON_NAME
     # The spacer (id 3) must be an expanding panelspacer so the status icons+clock sit right.
     scfg = f"Containments][{p}][Applets][3][Configuration][General"
     assert cp[f"Containments][{p}][Applets][3"]["plugin"] == "org.kde.plasma.panelspacer"
     assert cp[scfg]["expanding"] == "true"
-    # The clock is the LAST applet id and is the digital clock.
-    clock_id = 3 + n + 1
+    # The clock is the LAST of the standard applet ids and is the digital clock.
     assert cp[f"Containments][{p}][Applets][{clock_id}"]["plugin"] == "org.kde.plasma.digitalclock"
+    # Our menu icon id must NOT collide with any other applet id -- it is computed
+    # as one past the clock precisely so adding status applets can never clash.
+    all_ids = [desktop._MENU_ID, desktop._AZ_MENU_ID, desktop._TASKS_ID,
+               desktop._SPACER_ID, *status, clock_id]
+    assert len(all_ids) == len(set(all_ids)), f"applet id collision: {all_ids}"
+    assert desktop._AZ_MENU_ID == clock_id + 1
 
 
 def test_keyboard_layouts_us_and_hebrew_configured():

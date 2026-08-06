@@ -18,7 +18,17 @@ from pathlib import Path
 import signal
 
 from . import emit, logstream, makepkg, packages, paths
-from .configuration import calamares, desktop, fastfetch, installer, locale, pacman, profile, system
+from .configuration import (
+    application_menu,
+    calamares,
+    desktop,
+    fastfetch,
+    installer,
+    locale,
+    pacman,
+    profile,
+    system,
+)
 from .progress import ProgressBar
 
 # Weights: setup/emit steps carry real weight so the bar visibly advances through
@@ -331,6 +341,17 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
         emit.copy_asset(pkg["asset"], img, mode=0o644)
         # screenshot.png = the grid thumbnail (reuse the full image).
         emit.copy_asset(pkg["asset"], pkg_root / "contents" / "screenshot.png", mode=0o644)
+    # Az'arch application menu (OUR menu, shown right of Kickoff). Copy the three
+    # runtime files (menu.py, launcher, .desktop) to their fixed SYSTEM paths; the
+    # panel icon that launches them is baked into desktop.plasma_appletsrc above.
+    # Root-owned system paths -> the OFFLINE Calamares install rsyncs them onto the
+    # installed system with no separate step.
+    for entry in application_menu.emit_plan():
+        emit.write_text(
+            airootfs / entry["dest"].lstrip("/"),
+            entry["builder"](),
+            mode=entry["mode"],
+        )
     # re-assert ownership of the live user's tree (new files were added under it).
     subprocess.run(_sudo() + ["chown", "-R", "1000:998", str(home)], check=False)
 

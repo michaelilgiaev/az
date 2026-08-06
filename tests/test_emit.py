@@ -51,13 +51,13 @@ def test_write_exec_is_0755(tmp_path):
     assert _mode(p) == 0o755
 
 
-def test_copy_data_reads_from_datadir(tmp_path, monkeypatch):
-    # copy_data resolves its source against paths.DATADIR; point DATADIR at a fake
+def test_copy_data_reads_from_packagesdir(tmp_path, monkeypatch):
+    # copy_data resolves its source against paths.PACKAGESDIR; point it at a fake
     # source tree so no real data file is needed.
-    src_root = tmp_path / "data"
+    src_root = tmp_path / "packages"
     src_root.mkdir()
     (src_root / "thing.txt").write_text("payload")
-    monkeypatch.setattr(emit.paths, "DATADIR", src_root)
+    monkeypatch.setattr(emit.paths, "PACKAGESDIR", src_root)
 
     dest = tmp_path / "out" / "thing.txt"
     emit.copy_data("thing.txt", dest)
@@ -65,10 +65,10 @@ def test_copy_data_reads_from_datadir(tmp_path, monkeypatch):
 
 
 def test_copy_data_applies_mode_when_given(tmp_path, monkeypatch):
-    src_root = tmp_path / "data"
+    src_root = tmp_path / "packages"
     src_root.mkdir()
     (src_root / "s").write_text("x")
-    monkeypatch.setattr(emit.paths, "DATADIR", src_root)
+    monkeypatch.setattr(emit.paths, "PACKAGESDIR", src_root)
 
     dest = tmp_path / "s"
     emit.copy_data("s", dest, mode=0o755)

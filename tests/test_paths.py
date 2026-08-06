@@ -18,7 +18,7 @@ def test_repodir_is_repo_root():
 
 
 def test_static_dirs_are_under_repodir():
-    for d in (paths.LIBDIR, paths.DATADIR, paths.ASSETSDIR, paths.PKGDIR,
+    for d in (paths.LIBDIR, paths.PACKAGESDIR, paths.ASSETSDIR, paths.PKGDIR,
               paths.CACHEDIR, paths.BUILDDIR, paths.LOGDIR, paths.CKBCOMP_SRC):
         assert str(d).startswith(str(paths.REPODIR))
 
@@ -27,8 +27,12 @@ def test_ckbcomp_src_is_inside_package():
     assert paths.CKBCOMP_SRC == paths.REPODIR / "libraries" / "azarch" / "ckbcomp"
 
 
-def test_datadir_is_libraries_data():
-    assert paths.DATADIR == paths.REPODIR / "libraries" / "data"
+def test_packagesdir_is_libraries_packages():
+    assert paths.PACKAGESDIR == paths.REPODIR / "libraries" / "packages"
+
+
+def test_application_menu_dir_is_under_packages():
+    assert paths.APPLICATION_MENU_DIR == paths.PACKAGESDIR / "application_menu"
 
 
 def test_package_stores_compose_correctly():
@@ -42,7 +46,7 @@ def test_package_stores_compose_correctly():
 def test_log_paths():
     assert paths.FULL_LOG == paths.LOGDIR / "full.log"
     assert paths.STEPS_LOG == paths.LOGDIR / "steps.log"
-    assert paths.PACKAGES_FILE == paths.DATADIR / "packages.x86_64"
+    assert paths.PACKAGES_FILE == paths.PACKAGESDIR / "packages.x86_64"
 
 
 def _reload_with_dockerenv(monkeypatch, present: bool):

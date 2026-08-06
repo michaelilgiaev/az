@@ -20,7 +20,7 @@ Design constraints (match archiso/Plasma/Calamares reality):
     X11 window manager is kwin_x11 (package kwin-x11, listed explicitly in the
     manifest because it is only an optdepend of plasma-workspace). The Wayland
     kwin comes in via plasma-workspace but is unused here (we start the X11
-    session). See libraries/data/packages.x86_64.
+    session). See libraries/packages/packages.x86_64.
   * Calamares MUST run privileged. Plasma DOES ship polkit-kde-agent (pulled by
     plasma-desktop), so pkexec would work -- but the live medium has a
     passwordless-sudo `main` and passwordless root, so the simplest correct,
@@ -273,14 +273,31 @@ KEYBOARD_TOGGLE = "grp:alt_shift_toggle"
 KEYBOARD_DISPLAY_STYLE = 1  # 1 = Flag (centered icon), fixes the low-hanging text label
 
 
-# Fixed applet ids in the panel. 1 = menu, 2 = task manager, 3 = expanding spacer,
-# then the standalone status applets (PANEL_STATUS_APPLETS) at 4.., then the digital
-# clock last. Computed so a change to PANEL_STATUS_APPLETS keeps the clock id / order
-# correct.
+# Fixed applet ids in the panel. 1 = menu (Kickoff), 2 = task manager, 3 = expanding
+# spacer, then the standalone status applets (PANEL_STATUS_APPLETS) at 4.., then the
+# digital clock last (id = 4 + len(PANEL_STATUS_APPLETS)). Computed so a change to
+# PANEL_STATUS_APPLETS keeps the clock id / order correct.
 _MENU_ID = 1
 _TASKS_ID = 2
 _SPACER_ID = 3
 _STATUS_ID_BASE = 4
+
+# OUR Az'arch application-menu icon gets an id ONE PAST the highest existing applet
+# id (the clock), so it can never collide no matter how many status applets are
+# added later. With the shipped 5-applet status list the clock is id 9 and our menu
+# icon is id 10. AppletOrder (below) still places it between Kickoff and the task
+# manager (right of the Application Launcher, left of LibreWolf) regardless of its id.
+_AZ_MENU_ID = _STATUS_ID_BASE + len(PANEL_STATUS_APPLETS) + 1
+
+# The Az'arch application-menu icon applet (org.kde.plasma.icon). It launches our
+# menu via the installed launcher (see configuration/application_menu.py) and shows
+# a distinct grid glyph so it is visually separate from Kickoff's hamburger. Placed
+# to the RIGHT of Kickoff and LEFT of the LibreWolf task button (the user's request).
+from . import application_menu as _app_menu  # noqa: E402  (kept next to its user)
+
+_AZ_MENU_APPLET_PLUGIN = "org.kde.plasma.icon"
+_AZ_MENU_ICON_NAME = _app_menu.MENU_ICON_NAME
+_AZ_MENU_DESKTOP_PATH = _app_menu.MENU_DESKTOP_SYSTEM_PATH
 
 
 def plasma_appletsrc() -> str:
@@ -332,8 +349,11 @@ def plasma_appletsrc() -> str:
     # Status applets get ids 4, 5, ...; the clock is the id right after the last one.
     status_ids = [_STATUS_ID_BASE + i for i in range(len(PANEL_STATUS_APPLETS))]
     clock_id = _STATUS_ID_BASE + len(PANEL_STATUS_APPLETS)
+    # Our Az'arch menu icon (_AZ_MENU_ID) sits between Kickoff (_MENU_ID) and the
+    # task manager (_TASKS_ID) -> right of the Application Launcher, left of LibreWolf.
     applet_order = ";".join(
-        str(i) for i in [_MENU_ID, _TASKS_ID, _SPACER_ID, *status_ids, clock_id]
+        str(i)
+        for i in [_MENU_ID, _AZ_MENU_ID, _TASKS_ID, _SPACER_ID, *status_ids, clock_id]
     )
     # One block per standalone status applet (keyboard-layout, device-notifier, ...).
     # The keyboard-layout applet additionally gets a [Configuration][General] block
@@ -393,6 +413,18 @@ systemFavorites={system_favorites}
 showActionButtonCaptions=true
 showRecentApps=false
 showRecentDocs=false
+
+# 1b. Az'arch application menu icon (org.kde.plasma.icon): OUR menu, immediately
+# right of Kickoff. Launches {_AZ_MENU_DESKTOP_PATH} (the installed .desktop, which
+# runs our Tkinter menu); shows a distinct grid glyph so it does not look like
+# Kickoff. See configuration/application_menu.py.
+[Containments][{p}][Applets][{_AZ_MENU_ID}]
+immutability=1
+plugin={_AZ_MENU_APPLET_PLUGIN}
+
+[Containments][{p}][Applets][{_AZ_MENU_ID}][Configuration][General]
+url={_AZ_MENU_DESKTOP_PATH}
+iconName={_AZ_MENU_ICON_NAME}
 
 # 2. Pinned task manager: LibreWolf, Kitty, Dolphin.
 [Containments][{p}][Applets][{_TASKS_ID}]

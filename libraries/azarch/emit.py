@@ -37,8 +37,11 @@ def write_exec(path: Path, text: str) -> Path:
 
 
 def copy_data(rel: str, dest: Path, mode: int | None = None) -> Path:
-    """Copy a verbatim file from libraries/data/<rel> to dest."""
-    src = paths.DATADIR / rel
+    """Copy a verbatim file from libraries/packages/<rel> to dest.
+
+    (Historically libraries/data/; the tree was consolidated under
+    libraries/packages/. The function name is kept for call-site stability.)"""
+    src = paths.PACKAGESDIR / rel
     dest = Path(dest)
     _ensure_parent(dest)
     shutil.copy2(src, dest)

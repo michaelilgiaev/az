@@ -34,7 +34,7 @@ import specification_stock_baseline
 
 # scripts/libraries/ -> repo root is two levels up.
 REPO_ROOT = os.path.abspath(os.path.join(_SELF_DIR, "..", ".."))
-DEFAULT_MANIFEST = os.path.join(REPO_ROOT, "libraries", "data", "packages.x86_64")
+DEFAULT_MANIFEST = os.path.join(REPO_ROOT, "libraries", "packages", "packages.x86_64")
 # The stock archiso `releng` baseline (the ground truth for the "Stock Arch"
 # edition) lives in code as specification_stock_baseline.STOCK_PACKAGES, not as a data
 # file, so it is not mistaken for an editable manifest. --stock-manifest can

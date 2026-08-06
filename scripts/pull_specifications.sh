@@ -41,7 +41,7 @@
 #       --svg FILE      write the components graph SVG here (default: documentations/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg)
 #       --html FILE     write the interactive HTML map here (default: documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
 #       --fulltext FILE write the full component listing here (default: documentations/SPECIFICATIONS_COMPONENTS_FULL.txt)
-#   -m, --manifest FILE package manifest (default: libraries/data/packages.x86_64)
+#   -m, --manifest FILE package manifest (default: libraries/packages/packages.x86_64)
 #       --db-cache DIR  where to cache the Arch .db files (default: cache/specification-db)
 #       --mirror URL    Arch mirror base URL to fetch databases from
 #       --offline       reuse cached .db files; do not download

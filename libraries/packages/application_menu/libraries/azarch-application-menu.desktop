@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Az'arch Menu
+GenericName=Application Menu
+Comment=The Az'arch application menu
+Exec=/usr/local/bin/azarch-application-menu
+Icon=applications-all
+Terminal=false
+Categories=System;Utility;
+Keywords=menu;launcher;azarch;
