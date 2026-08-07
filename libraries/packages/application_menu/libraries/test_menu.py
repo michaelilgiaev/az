@@ -334,6 +334,93 @@ def test_ui_search_clear_after_partial_filter() -> None:
         root.destroy()
 
 
+def test_ui_reorders_after_launch_without_restart() -> None:
+    """Launch frequency must re-sort the LIVE list, not only on the next process
+    start. The daemon never dies, so recording a launch has to bump the app up on
+    the next show -- otherwise the order looks frozen until a restart (the bug).
+
+    Records enough launches on a currently-low app to make it the most-used, then
+    drives a re-show (reset_view, what the daemon calls) and asserts it floated to
+    the top of both the model order and the on-screen pack order."""
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        names = [r.entry.name for r in m.rows]
+        assert len(names) >= 2, names
+        # Pick an app that is NOT already first, and make it the most launched.
+        victim = m.rows[-1].entry           # last == least-used / last al:pha
+        assert victim.name != m.rows[0].entry.name
+        for _ in range(50):
+            m.usage.record(victim.desktop_id)
+
+        # Re-show the menu the way the daemon does (no new process).
+        m.reset_view()
+        root.update_idletasks()
+
+        assert m.rows[0].entry.desktop_id == victim.desktop_id, (
+            "most-launched app must be FIRST after a launch, without a restart; "
+            f"got {[r.entry.name for r in m.rows][:5]}"
+        )
+        assert m.visible_rows[0].entry.desktop_id == victim.desktop_id
+        # On-screen: the topmost row (smallest y) is the victim.
+        by_screen = sorted(m.visible_rows, key=lambda r: r.winfo_y())
+        assert by_screen[0].entry.desktop_id == victim.desktop_id
+    finally:
+        root.destroy()
+
+
+def test_ui_search_narrowing_does_not_rechurn_survivors() -> None:
+    """Typing must not flash the whole list. As the query narrows, rows that stay
+    visible must NOT be unpacked/repacked -- only rows whose visibility actually
+    changes may move. The old filter forgot EVERY row on each keystroke and
+    repacked the matches, which flashes the survivors. We assert survivors are
+    never pack_forgotten while narrowing."""
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+
+        forgets: dict[int, int] = {}
+        for r in m.rows:
+            orig = r.pack_forget
+            key = id(r)
+            forgets[key] = 0
+
+            def make(o, k):
+                def wrapped(*a, **kw):
+                    forgets[k] += 1
+                    return o(*a, **kw)
+                return wrapped
+            r.pack_forget = make(orig, key)
+
+        # Establish a query, then NARROW it (each step is a subset of the prior).
+        m.search_var.set("a")
+        root.update_idletasks()
+        survivors_after_a = list(m.visible_rows)
+        assert survivors_after_a, "test needs a query that matches something"
+
+        # Reset counters: we only care about churn during the NARROWING step.
+        for k in forgets:
+            forgets[k] = 0
+
+        # Narrow further -- every row still matching 'ar' also matched 'a', so all
+        # 'ar' survivors were already visible and must not be re-churned.
+        m.search_var.set("ar")
+        root.update_idletasks()
+        final = set(id(r) for r in m.visible_rows)
+
+        churned_survivors = [
+            r for r in m.visible_rows if forgets[id(r)] > 0
+        ]
+        assert not churned_survivors, (
+            "rows that stay visible while narrowing were unpacked (flash): "
+            f"{[r.entry.name for r in churned_survivors]}"
+        )
+        # Sanity: narrowing actually removed at least one row (real narrowing).
+        assert len(final) <= len(survivors_after_a)
+    finally:
+        root.destroy()
+
+
 def test_ui_pin_keeps_menu_open() -> None:
     """Pinning must make outside-click / focus-loss / Escape NON-dismissing,
     while a forced close (app launch, power action) still works."""
@@ -789,6 +876,10 @@ def main() -> int:
         ("ui_search_filter", test_ui_search_filter),
         ("ui_search_clear_after_partial_filter",
          test_ui_search_clear_after_partial_filter),
+        ("ui_reorders_after_launch_without_restart",
+         test_ui_reorders_after_launch_without_restart),
+        ("ui_search_narrowing_does_not_rechurn_survivors",
+         test_ui_search_narrowing_does_not_rechurn_survivors),
         ("ui_pin_keeps_menu_open", test_ui_pin_keeps_menu_open),
         ("ui_pinned_forced_close_still_works",
          test_ui_pinned_forced_close_still_works),

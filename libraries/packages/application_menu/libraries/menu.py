@@ -296,6 +296,10 @@ class AppMenu:
         self._update_placeholder()
         self._apply_filter(self.search_var.get())
 
+    def _matches(self, row, q: str) -> bool:
+        e = row.entry
+        return not q or q in e.name.casefold() or q in e.type_label.casefold()
+
     def _apply_filter(self, query: str) -> None:
         # The StringVar trace can fire during teardown; bail if the window is
         # already gone.
@@ -306,19 +310,42 @@ class AppMenu:
             return
         q = query.strip().casefold()
 
-        # Re-pack EVERY row from scratch in the canonical self.rows order so the
-        # list is always in the same order regardless of filter history. This is
-        # what fixes the "clear the search and the rows shuffle" bug: without the
-        # unconditional forget-then-repack, re-showing hidden rows appends them
-        # after rows that stayed visible, scrambling the order.
-        self.visible_rows = []
-        for row in self.rows:
-            row.pack_forget()
-        for row in self.rows:
-            e = row.entry
-            if not q or q in e.name.casefold() or q in e.type_label.casefold():
+        # DIFFERENTIAL re-pack: only touch rows whose visibility actually CHANGES.
+        # self.rows is kept in canonical order, so packing each newly-shown row
+        # BEFORE the next row that is already visible keeps the on-screen order
+        # canonical WITHOUT forgetting+repacking the rows that stay put. Forgetting
+        # every row on each keystroke (the old approach) is what made the list
+        # FLASH as the user typed; leaving survivors alone keeps typing clean while
+        # still fixing the clear-the-search reshuffle (order is enforced by the
+        # before= insert, not by a full teardown).
+        desired = [row for row in self.rows if self._matches(row, q)]
+        desired_set = set(id(r) for r in desired)
+
+        # 1) Hide rows that should no longer be visible.
+        for row in self.visible_rows:
+            if id(row) not in desired_set:
+                row.pack_forget()
+
+        # 2) Show/insert rows that should be visible, in canonical order. For a
+        #    row already packed, do nothing. For a newly-shown row, insert it just
+        #    before the next desired row that is ALREADY on screen so it lands in
+        #    the right slot; if none follows, pack at the end.
+        currently = set(id(r) for r in self.visible_rows)
+        for idx, row in enumerate(desired):
+            if id(row) in currently:
+                continue  # already visible and correctly ordered -> leave it
+            anchor = None
+            for later in desired[idx + 1:]:
+                if id(later) in currently:
+                    anchor = later
+                    break
+            if anchor is not None:
+                row.pack(fill="x", before=anchor)
+            else:
                 row.pack(fill="x")
-                self.visible_rows.append(row)
+            currently.add(id(row))
+
+        self.visible_rows = desired
 
         # Reset selection to the first visible row so Enter launches something.
         self.selected_index = 0 if self.visible_rows else -1
@@ -329,17 +356,53 @@ class AppMenu:
         for i, row in enumerate(self.visible_rows):
             row.set_selected(i == self.selected_index)
 
+    def resort(self) -> None:
+        """Re-order the list by the CURRENT launch counts (most-used first, then
+        A->Z). The daemon is a long-lived process, so a launch only bumps the
+        in-memory usage counter -- without this the visible order would stay
+        frozen until the process restarted (the 'sort only updates on restart'
+        bug). Called on each re-show so the just-launched app floats up next time.
+
+        Re-sorts self.all_apps and self.rows in lockstep, then re-applies the
+        CURRENT filter so both order and visibility stay correct regardless of an
+        active query. Safe to call standalone."""
+        if not self.rows:
+            # Rows not built yet -> just fix the model order; populate() will
+            # build in this order.
+            self.all_apps = self.usage.sorted_apps(self.all_apps)
+            return
+        order = {}
+        for i, entry in enumerate(self.usage.sorted_apps(self.all_apps)):
+            order[id(entry)] = i
+        self.all_apps.sort(key=lambda e: order[id(e)])
+        self.rows.sort(key=lambda r: order[id(r.entry)])
+        # Force a full re-pack in the new order: clear visible_rows so the
+        # differential filter treats every kept row as "newly shown" and packs it
+        # in the freshly-sorted self.rows sequence (otherwise rows already visible
+        # would be left in their OLD on-screen slots).
+        for row in self.rows:
+            row.pack_forget()
+        self.visible_rows = []
+        self._apply_filter(self.search_var.get())
+
     def reset_view(self) -> None:
         """Return the menu to its just-opened state: rows built, search cleared
         (which restores the canonical order and shows everything), list scrolled
         to the top with the first row selected. Called by the daemon each time it
         re-shows the window so a stale query/scroll from last time never lingers.
 
+        Also re-sorts by the latest launch counts (resort) so the app the user
+        just opened floats to the top on this open rather than only after a
+        restart.
+
         Fast path: if the search is ALREADY empty and every row is already shown
         (the usual reopen case -- last close cleared the query), skip the full
         forget-and-repack of every row and just reset the scroll + selection. The
         repack is only needed to undo a previous filter."""
         self.populate()  # no-op if rows already exist
+        # Re-order by the latest usage BEFORE deciding the fast path, so a launch
+        # since the last show is reflected now (not only after a restart).
+        self.resort()
         if self.search_var.get():
             # A query is lingering: clear it -> the trace repacks in canonical
             # order, resets selection and scroll.
