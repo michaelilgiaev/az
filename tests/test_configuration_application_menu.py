@@ -10,6 +10,17 @@ They also pin the menu's look/behaviour matching the live hypervisor: the window
 is borderless (overrideredirect, no titlebar buttons) and sized to Kickoff's
 popup, and the launcher is a single-instance TOGGLE (a second click closes it via
 a PID file) rather than a spawn-every-click opener.
+
+Two behaviours were ported from the live hypervisor and are pinned here (see
+test_menu_closes_on_outside_click and test_menu_highlights_panel_icon):
+  * The menu now dismisses like Plasma's Kickoff -- a global pointer grab
+    (grab_set_global) plus an outside-click hit-test, with <FocusOut> and Escape
+    backing it up, and the grab always released on close. This SUPERSEDES the
+    earlier "deliberately does NOT grab focus, closes only via the launcher
+    toggle" contract, which must not be re-asserted anywhere.
+  * A borderless Breeze-blue (#3daee9) HighlightBar pops in over the panel icon
+    while the menu is open and vanishes on close. It appears instantly, with NO
+    animation -- a guard asserts no animation helper is reintroduced.
 """
 
 from __future__ import annotations
@@ -75,11 +86,48 @@ def test_menu_is_borderless_and_kickoff_sized():
     assert "overrideredirect(True)" in src          # no window chrome
     assert "kickoff_popup_size" in src              # size tracks Kickoff's popup
     assert "popupWidth" in src and "popupHeight" in src
-    # Deliberately NOT grabbing focus / forcing topmost (that fights the desktop):
-    # neither Tk call is invoked on the window. (The strings appear only in the
-    # comments EXPLAINING their absence, so match the actual call forms.)
-    assert ".attributes(" not in src               # no -topmost via attributes()
-    assert "root.focus_force()" not in src         # no forced global focus grab
+    # NOTE: the earlier version of this menu deliberately did NOT grab focus and
+    # left dismissal to the launcher toggle. That contract was replaced by the
+    # Kickoff-style outside-click close (see test_menu_closes_on_outside_click),
+    # so this test no longer asserts the absence of a focus grab / -topmost.
+
+
+def test_menu_closes_on_outside_click():
+    # Ported behaviour #1: the menu dismisses like Plasma's Kickoff when anything
+    # outside it is pressed. This is a GLOBAL pointer grab (grab_set_global) plus a
+    # hit-test against the window bounds, backed by <FocusOut> and Escape.
+    src = am.menu_py()
+    assert "grab_set_global" in src                 # global pointer grab is taken
+    assert "on_button" in src                       # outside-click hit-test handler
+    assert 'bind_all("<Button>"' in src             # every press is fed to the test
+    assert '"<FocusOut>"' in src                    # focus-loss also closes it
+    assert '"<Escape>"' in src                      # Escape still dismisses
+    # The grab must ALWAYS be released on close, so it can never wedge the session.
+    assert "grab_release" in src
+
+
+def test_menu_highlights_panel_icon():
+    # Ported behaviour #2: a Breeze-blue highlight bar appears over the panel icon
+    # while the menu is open, matching Plasma's "active applet" indicator.
+    src = am.menu_py()
+    assert "#3daee9" in src                          # Breeze Dark selection color
+    assert "HIGHLIGHT_COLOR" in src                  # named accent color
+    assert "class HighlightBar" in src               # the bar is its own Toplevel
+    assert "az_highlight" in src                     # stashed on root, torn down on close
+    assert "HighlightBar(root" in src                # actually instantiated
+    assert ".show()" in src                          # the bar is shown while open
+
+
+def test_highlight_bar_is_not_animated():
+    # The bar was explicitly required to POP IN at full size -- no fade/grow. Guard
+    # against a future edit silently reintroducing an animation. show() must just
+    # place + deiconify the bar, never step a geometry over time.
+    src = am.menu_py()
+    assert "animate_in" not in src                   # the old fade helper is gone
+    assert "def _animate" not in src                 # no animation stepper method
+    assert "def _grow" not in src                    # nor a grow-over-time helper
+    # show() reveals the bar at full size in one shot.
+    assert "deiconify" in src
 
 
 def test_launcher_is_a_single_instance_toggle():
