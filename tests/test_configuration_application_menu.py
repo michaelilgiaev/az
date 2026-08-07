@@ -49,12 +49,13 @@ def test_launcher_is_executable_others_are_conf():
     assert modes[am.MENU_DESKTOP_SYSTEM_PATH] == 0o644
 
 
-def test_content_is_nonempty_and_is_the_hello_world_menu():
+def test_content_is_nonempty_and_is_the_tkinter_menu():
     for e in am.emit_plan():
         assert e["builder"]().strip(), f"empty content for {e['dest']}"
-    # The menu program is our Tkinter "Hello World" window.
-    assert "Hello World" in am.menu_py()
+    # The menu program is our real Tkinter menu (the "Hello World" stub is long
+    # gone -- menu.py is now the Kickoff-style launcher's orchestrator).
     assert "tkinter" in am.menu_py()
+    assert "def main" in am.menu_py()
 
 
 def test_desktop_entry_launches_the_installed_launcher():
@@ -109,24 +110,28 @@ def test_menu_closes_on_outside_click():
 def test_menu_highlights_panel_icon():
     # Ported behaviour #2: a Breeze-blue highlight bar appears over the panel icon
     # while the menu is open, matching Plasma's "active applet" indicator.
-    src = am.menu_py()
-    assert "#3daee9" in src                          # Breeze Dark selection color
-    assert "HIGHLIGHT_COLOR" in src                  # named accent color
-    assert "class HighlightBar" in src               # the bar is its own Toplevel
-    assert "az_highlight" in src                     # stashed on root, torn down on close
-    assert "HighlightBar(root" in src                # actually instantiated
-    assert ".show()" in src                          # the bar is shown while open
+    # menu.py was split into modules, so the bar's definition/colour now live in
+    # widgets.py + theme.py while menu.py instantiates it; assert against the whole
+    # menu package, not menu.py alone.
+    src = am.menu_package_source()
+    assert "#3daee9" in src                          # Breeze Dark selection color (theme.py)
+    assert "HIGHLIGHT_COLOR" in src                  # named accent color (theme.py)
+    assert "class HighlightBar" in src               # the bar is its own Toplevel (widgets.py)
+    assert "az_highlight" in src                     # stashed on root, torn down on close (menu.py)
+    assert "HighlightBar(root" in src                # actually instantiated (menu.py)
+    assert ".show()" in src                          # the bar is shown while open (menu.py)
 
 
 def test_highlight_bar_is_not_animated():
     # The bar was explicitly required to POP IN at full size -- no fade/grow. Guard
     # against a future edit silently reintroducing an animation. show() must just
-    # place + deiconify the bar, never step a geometry over time.
-    src = am.menu_py()
+    # place + deiconify the bar, never step a geometry over time. The HighlightBar
+    # now lives in widgets.py, so check the whole menu package.
+    src = am.menu_package_source()
     assert "animate_in" not in src                   # the old fade helper is gone
     assert "def _animate" not in src                 # no animation stepper method
     assert "def _grow" not in src                    # nor a grow-over-time helper
-    # show() reveals the bar at full size in one shot.
+    # show() reveals the bar at full size in one shot (deiconify, in widgets.py).
     assert "deiconify" in src
 
 

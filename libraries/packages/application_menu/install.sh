@@ -7,8 +7,12 @@
 # changes -- just our own icon.
 #
 # Steps:
-#   1. Install menu module   -> /usr/local/lib/azarch-application-menu/menu.py
-#      + panel_icon helper    -> /usr/local/lib/azarch-application-menu/panel_icon.py
+#   1. Install ALL menu modules -> /usr/local/lib/azarch-application-menu/*.py
+#      The menu is now a multi-module package (menu.py imports widgets/theme/
+#      apps/icons/usage/actions as flat siblings), so every module below MUST be
+#      installed or the menu crashes on launch:
+#        menu.py widgets.py theme.py apps.py icons.py usage.py actions.py
+#        test_menu.py + the panel_icon.py helper
 #   2. Install launcher       -> /usr/local/bin/azarch-application-menu   (0755)
 #   3. Install .desktop       -> /usr/local/share/applications/azarch-application-menu.desktop
 #   4. Insert an org.kde.plasma.icon applet in the panel (right of Kickoff),
@@ -38,6 +42,11 @@ PANEL_ICON_DEST="$LIB_DEST_DIR/panel_icon.py"
 DESKTOP_DEST_DIR="/usr/local/share/applications"
 DESKTOP_DEST="$DESKTOP_DEST_DIR/azarch-application-menu.desktop"
 
+# Every Python module that makes up the menu package. menu.py imports the others
+# as flat siblings, so ALL of these must be installed together (a loop over this
+# list keeps the installer from drifting out of sync with the package again).
+LIB_MODULES="menu.py widgets.py theme.py apps.py icons.py usage.py actions.py test_menu.py panel_icon.py"
+
 # Panel config (per-user) + the panel containment id (2 = bottom panel).
 APPLETSRC="$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc"
 PANEL_ID="2"
@@ -51,10 +60,15 @@ echo "Installing Az'arch application menu ..."
 
 # --- 1 + 2. Program files ---------------------------------------------------
 sudo install -d -m 755 "$LIB_DEST_DIR"
-sudo install -m 644 "$LIB_SRC/menu.py" "$MENU_PY_DEST"
-sudo install -m 644 "$LIB_SRC/panel_icon.py" "$PANEL_ICON_DEST"
+for _mod in $LIB_MODULES; do
+    if [ ! -f "$LIB_SRC/$_mod" ]; then
+        echo "  ERROR: source module missing: $LIB_SRC/$_mod" >&2
+        exit 1
+    fi
+    sudo install -m 644 "$LIB_SRC/$_mod" "$LIB_DEST_DIR/$_mod"
+    echo "  module      -> $LIB_DEST_DIR/$_mod"
+done
 sudo install -m 755 "$LIB_SRC/azarch-application-menu.sh" "$BIN_DEST"
-echo "  menu module -> $MENU_PY_DEST"
 echo "  launcher    -> $BIN_DEST"
 
 # --- 3. .desktop the icon applet points at ----------------------------------
