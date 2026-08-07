@@ -838,12 +838,26 @@ def kwinrc() -> str:
     """Disable KWin's window open/close animations so the Az'arch menu (and every
     window) APPEARS IMMEDIATELY -- no glide/scale/fade in or out. KWin reads
     ~/.config/kwinrc; the [Plugins] *Enabled keys switch the desktop-effect plugins
-    off. Shipped to the live home and /etc/skel."""
+    off. Shipped to the live home and /etc/skel.
+
+    WHY FIVE KEYS, NOT THREE (the menu pop-in fix): our Az'arch menu is an
+    override-redirect Tk window, and KWin classifies override-redirect windows as
+    POPUPS, not normal windows. The normal-window open/close animations (fade,
+    glide, scale) therefore never touched it -- its fade/slide came from the
+    dedicated POPUP effects instead: `fadingpopups` (the fade) and `slidingpopups`
+    (the slide). So disabling only fade/glide/scale left the menu still fading in.
+    Verified on the live Hypervisor: with the popup effects loaded the menu ramps
+    up over several frames (a fade); with fadingpopups + slidingpopups BOTH
+    disabled it is at full opacity on the very first frame (a pop-in), and qdbus
+    reports zero popup effects loaded. Hence both popup keys below, in addition to
+    the three normal-window keys."""
     return """\
 [Plugins]
 fadeEnabled=false
+fadingpopupsEnabled=false
 glideEnabled=false
 scaleEnabled=false
+slidingpopupsEnabled=false
 """
 
 

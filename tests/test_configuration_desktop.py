@@ -1025,11 +1025,18 @@ def test_klaunchrc_in_plan_as_home_conf():
 
 def test_kwinrc_disables_window_animations():
     # The menu (and every window) must appear IMMEDIATELY -- no glide/scale/fade.
+    # Our menu is an override-redirect Tk window, which KWin treats as a POPUP: its
+    # fade/slide comes from the POPUP effects (fadingpopups/slidingpopups), NOT the
+    # normal-window fade/glide/scale. So the popup effects must be disabled too, or
+    # the menu still fades in. All five *Enabled keys must be false.
     cp = _parse_ini(desktop.kwinrc())
     plugins = cp["Plugins"]
     assert plugins["fadeEnabled"] == "false"
     assert plugins["glideEnabled"] == "false"
     assert plugins["scaleEnabled"] == "false"
+    # POPUP effects (the actual pop-in fix for the override-redirect menu window).
+    assert plugins["fadingpopupsEnabled"] == "false"
+    assert plugins["slidingpopupsEnabled"] == "false"
 
 
 def test_kwinrc_in_plan_as_home_conf():
