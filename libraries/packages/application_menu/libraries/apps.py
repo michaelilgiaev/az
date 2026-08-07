@@ -276,6 +276,7 @@ class AppEntry:
     icon: str                # Icon= value (name or path), may be ""
     comment: str             # Comment= (kept, though the design uses type_label)
     desktop_id: str          # basename, used to de-dupe across dirs
+    startup_wmclass: str = ""  # StartupWMClass=, maps an X window back to here
 
     def sort_key(self) -> str:
         return self.name.casefold()
@@ -351,6 +352,7 @@ def _parse_desktop_file(path: str) -> AppEntry | None:
         icon=data.get("Icon", "").strip(),
         comment=data.get("Comment", "").strip(),
         desktop_id=os.path.basename(path),
+        startup_wmclass=data.get("StartupWMClass", "").strip(),
     )
 
 

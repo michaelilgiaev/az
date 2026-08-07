@@ -34,6 +34,8 @@ import tkinter as tk
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import menu as M  # noqa: E402
+from apps import scan_applications  # noqa: E402
+from winwatch import DesktopIndex, WindowWatcher  # noqa: E402
 
 
 RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
@@ -165,6 +167,28 @@ class Daemon:
             pass
         self.root.az_hide()               # ensure hidden/grab-released state
 
+        # --- system-wide "app opened" counting ----------------------------
+        # The menu is ordered most-USED first, and the spec is literal: an open
+        # is counted however the user launched the app, not only via our menu.
+        # This watcher polls the X11 window list and records one launch each
+        # time a new application WINDOW appears, into the SAME usage store the
+        # menu sorts by (root.az_menu.usage). It shares the menu's visible-app
+        # set so it never counts an app the menu hides. Best-effort: if it can't
+        # start (no xprop / odd WM), the menu still works, just without
+        # auto-counting.
+        self._watcher: WindowWatcher | None = None
+        try:
+            usage = self.root.az_menu.usage
+            self._watcher = WindowWatcher(
+                self.root,
+                usage,
+                index_provider=lambda: DesktopIndex(scan_applications()),
+                own_pid=os.getpid(),
+            )
+            self._watcher.start()
+        except Exception:
+            self._watcher = None
+
         # Self-pipe wakeup. CRITICAL: Tk blocks inside its C event loop, and a
         # pure-Python signal handler only runs when the interpreter regains
         # control -- which never happens while blocked, so a handler that wrote
@@ -273,6 +297,11 @@ class Daemon:
             self.show()
 
     def quit(self) -> None:
+        if self._watcher is not None:
+            try:
+                self._watcher.stop()
+            except Exception:
+                pass
         try:
             signal.set_wakeup_fd(self._old_wakeup)
         except (ValueError, OSError):

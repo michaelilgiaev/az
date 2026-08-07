@@ -73,6 +73,223 @@ def test_usage_corrupt_store_is_ignored(tmp: str) -> None:
     assert store2._counts == {}
 
 
+# --- pure-logic: system-wide "app opened" detection (winwatch) -------------
+import winwatch  # noqa: E402
+
+
+class _IdxEntry:
+    """Stand-in for AppEntry: the DesktopIndex only needs these fields."""
+
+    def __init__(self, desktop_id, exec_argv, startup_wmclass=""):
+        self.desktop_id = desktop_id
+        self.exec_argv = exec_argv
+        self.startup_wmclass = startup_wmclass
+
+
+class _CountingUsage:
+    """Records desktop ids like UsageStore.record, without touching disk."""
+
+    def __init__(self):
+        self.counts = {}
+
+    def record(self, desktop_id):
+        self.counts[desktop_id] = self.counts.get(desktop_id, 0) + 1
+
+    def count(self, desktop_id):
+        return self.counts.get(desktop_id, 0)
+
+
+def test_winwatch_parsers() -> None:
+    # WM_CLASS -> the two strings.
+    assert winwatch._parse_wm_class(
+        'WM_CLASS(STRING) = "dolphin", "dolphin"'
+    ) == ["dolphin", "dolphin"]
+    assert winwatch._parse_wm_class('WM_CLASS(STRING) = "VLC media", "vlc"') == [
+        "VLC media",
+        "vlc",
+    ]
+    # _NET_WM_PID -> int.
+    assert winwatch._parse_pid("_NET_WM_PID(CARDINAL) = 2292") == 2292
+    assert winwatch._parse_pid("_NET_WM_PID:  not found.") is None
+    # Window types -> atom list.
+    assert winwatch._parse_window_types(
+        "_NET_WM_WINDOW_TYPE(ATOM) = _NET_WM_WINDOW_TYPE_DOCK, "
+        "_NET_WM_WINDOW_TYPE_NORMAL"
+    ) == ["_NET_WM_WINDOW_TYPE_DOCK", "_NET_WM_WINDOW_TYPE_NORMAL"]
+    # Exec binary basename (skips env/VAR= wrappers, absolute paths, field codes).
+    assert winwatch._exec_binary("kitty") == "kitty"
+    assert winwatch._exec_binary("/usr/bin/vlc --started-from-file %U") == "vlc"
+    assert winwatch._exec_binary("env FOO=1 /usr/bin/env kitty") == "kitty"
+    assert winwatch._exec_binary("libreoffice --calc %U") == "libreoffice"
+
+
+def test_winwatch_index_resolution() -> None:
+    entries = [
+        # StartupWMClass present (authoritative).
+        _IdxEntry("org.kde.dolphin.desktop", ["dolphin", "%u"], "dolphin"),
+        _IdxEntry(
+            "libreoffice-calc.desktop",
+            ["libreoffice", "--calc"],
+            "libreoffice-calc",
+        ),
+        # No StartupWMClass -> must fall back to exec basename / id stem / pid.
+        _IdxEntry("kitty.desktop", ["kitty"]),
+        _IdxEntry("vlc.desktop", ["/usr/bin/vlc", "--started-from-file"]),
+        _IdxEntry("systemsettings.desktop", ["systemsettings"]),
+    ]
+    idx = winwatch.DesktopIndex(entries)
+
+    # 1) StartupWMClass wins.
+    assert idx.resolve(["dolphin", "dolphin"], None) == "org.kde.dolphin.desktop"
+    assert (
+        idx.resolve(["libreoffice-calc", "soffice"], None)
+        == "libreoffice-calc.desktop"
+    )
+    # 2) WM_CLASS matched to exec basename (kitty, vlc) or id stem, case-fold.
+    assert idx.resolve(["kitty", "kitty"], None) == "kitty.desktop"
+    assert idx.resolve(["vlc", "VLC"], None) == "vlc.desktop"
+    assert (
+        idx.resolve(["SystemSettings", "systemsettings"], None)
+        == "systemsettings.desktop"
+    )
+    # Reverse-DNS id: last component (dolphin) also resolves via id stem even
+    # without StartupWMClass -- but here StartupWMClass already covers it, so
+    # test id-stem via an app that only has it:
+    idx2 = winwatch.DesktopIndex(
+        [_IdxEntry("org.kde.konsole.desktop", ["konsole"])]
+    )
+    assert idx2.resolve(["konsole", "konsole"], None) == "org.kde.konsole.desktop"
+    # 3) Unknown window -> None (never miscount).
+    assert idx.resolve(["totally-unknown-xyz"], None) is None
+
+
+def _make_watcher(usage, index, monkey_props):
+    """Build a WindowWatcher whose X calls are faked. monkey_props maps a window
+    id -> the property dict _win_props would return. _client_list is driven by
+    the test setting watcher._fake_clients."""
+    import tkinter as tk
+
+    root = tk.Tk()
+    root.withdraw()
+    w = winwatch.WindowWatcher(
+        root, usage, index_provider=lambda: index, own_pid=999999
+    )
+    w._fake_clients = []
+    # Patch module-level X accessors for the duration of the test.
+    winwatch._client_list = lambda: list(w._fake_clients)
+    winwatch._win_props = lambda win: dict(monkey_props.get(win, {}))
+    return w, root
+
+
+def test_winwatch_counts_new_windows_and_dedups() -> None:
+    """A NEW normal window is counted once; raising an existing one is not; a
+    pre-existing window at start() is never counted; a multi-window burst from
+    one pid collapses to a single count; a panel/desktop window is ignored."""
+    import tkinter as tk
+
+    if not _have_display():
+        return  # needs Tk for the after-loop object; logic covered below too
+
+    usage = _CountingUsage()
+    idx = winwatch.DesktopIndex(
+        [
+            _IdxEntry("kitty.desktop", ["kitty"]),
+            _IdxEntry("org.kde.dolphin.desktop", ["dolphin"], "dolphin"),
+        ]
+    )
+    props = {
+        # kitty main window, pid 100, NORMAL.
+        "0x100": {
+            "wm_class": 'WM_CLASS(STRING) = "kitty", "kitty"',
+            "wm_pid": "_NET_WM_PID(CARDINAL) = 100",
+            "wm_types": "_NET_WM_WINDOW_TYPE(ATOM) = _NET_WM_WINDOW_TYPE_NORMAL",
+        },
+        # a SECOND kitty window, SAME pid 100 (burst) -> must NOT add a 2nd count.
+        "0x101": {
+            "wm_class": 'WM_CLASS(STRING) = "kitty", "kitty"',
+            "wm_pid": "_NET_WM_PID(CARDINAL) = 100",
+            "wm_types": "_NET_WM_WINDOW_TYPE(ATOM) = _NET_WM_WINDOW_TYPE_NORMAL",
+        },
+        # dolphin, different pid 200 -> a separate count.
+        "0x200": {
+            "wm_class": 'WM_CLASS(STRING) = "dolphin", "dolphin"',
+            "wm_pid": "_NET_WM_PID(CARDINAL) = 200",
+            "wm_types": "_NET_WM_WINDOW_TYPE(ATOM) = _NET_WM_WINDOW_TYPE_NORMAL",
+        },
+        # a panel (DOCK) -> never counted even though it maps to nothing anyway.
+        "0xdock": {
+            "wm_class": 'WM_CLASS(STRING) = "plasmashell", "plasmashell"',
+            "wm_pid": "_NET_WM_PID(CARDINAL) = 300",
+            "wm_types": "_NET_WM_WINDOW_TYPE(ATOM) = _NET_WM_WINDOW_TYPE_DOCK",
+        },
+    }
+    w, root = _make_watcher(usage, idx, props)
+    try:
+        # A window that already exists BEFORE we start must not be counted.
+        w._fake_clients = ["0xpre"]
+        w.start()  # primes _seen with 0xpre
+        assert usage.counts == {}
+
+        # kitty opens (one window).
+        w._fake_clients = ["0xpre", "0x100"]
+        w._scan_once()
+        assert usage.counts.get("kitty.desktop") == 1
+
+        # kitty opens a SECOND window on the same pid within the burst window.
+        w._tick += 1
+        w._fake_clients = ["0xpre", "0x100", "0x101"]
+        w._scan_once()
+        assert usage.counts.get("kitty.desktop") == 1, (
+            "same-pid burst must not double-count"
+        )
+
+        # The same window id re-appearing (raise/refocus) is not a new open.
+        w._tick += 1
+        w._scan_once()
+        assert usage.counts.get("kitty.desktop") == 1
+
+        # dolphin opens (different pid) -> separate count.
+        w._tick += 1
+        w._fake_clients = ["0xpre", "0x100", "0x101", "0x200"]
+        w._scan_once()
+        assert usage.counts.get("org.kde.dolphin.desktop") == 1
+
+        # A dock/panel window opens -> ignored.
+        w._tick += 1
+        w._fake_clients.append("0xdock")
+        w._scan_once()
+        assert "plasmashell" not in "".join(usage.counts)  # nothing plasma
+        assert set(usage.counts) == {"kitty.desktop", "org.kde.dolphin.desktop"}
+
+        # Closing kitty then reopening a NEW kitty process (new pid) counts again.
+        w._tick += 1
+        w._fake_clients = ["0xpre", "0x200"]  # kitty windows gone
+        w._scan_once()  # prune closed ids from _seen
+        w._tick += 1
+        props["0x102"] = {
+            "wm_class": 'WM_CLASS(STRING) = "kitty", "kitty"',
+            "wm_pid": "_NET_WM_PID(CARDINAL) = 400",  # new process
+            "wm_types": "_NET_WM_WINDOW_TYPE(ATOM) = _NET_WM_WINDOW_TYPE_NORMAL",
+        }
+        winwatch._win_props = lambda win: dict(props.get(win, {}))
+        w._fake_clients = ["0xpre", "0x200", "0x102"]
+        w._scan_once()
+        assert usage.counts.get("kitty.desktop") == 2, (
+            "a fresh launch (new pid) after close must count again"
+        )
+    finally:
+        # stop() cancels the pending after('_poll') so it never fires against a
+        # destroyed interpreter (Tk would print 'invalid command name ..._poll').
+        try:
+            w.stop()
+        except Exception:
+            pass
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
 # --- pure-logic: category typing ------------------------------------------
 def test_category_type_specific_wins() -> None:
     # WebBrowser (additional) beats Network (main).
@@ -828,6 +1045,10 @@ def main() -> int:
         ("category_type_generic_and_noise",
          test_category_type_generic_and_noise, ()),
         ("strip_field_codes", test_strip_field_codes, ()),
+        ("winwatch_parsers", test_winwatch_parsers, ()),
+        ("winwatch_index_resolution", test_winwatch_index_resolution, ()),
+        ("winwatch_counts_new_windows_and_dedups",
+         test_winwatch_counts_new_windows_and_dedups, ()),
     ]
     for name, fn, _ in logic_tests:
         total += 1

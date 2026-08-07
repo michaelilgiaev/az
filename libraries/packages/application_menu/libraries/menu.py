@@ -90,7 +90,9 @@ class AppMenu:
     """Builds and drives the menu content inside an already-created root window:
     the search row, the frequency-ordered scrollable application list, and the
     power row. Holds the app model + icon resolver + usage store and wires search
-    filtering, launching (which records usage), and the pin toggle."""
+    filtering, launching, and the pin toggle. (Launch *counting* lives in the
+    daemon's WindowWatcher, which records every real window-open -- see
+    winwatch.py -- so this menu's job is just to show and launch.)"""
 
     def __init__(self, root: tk.Tk, close_menu, on_pin_toggle) -> None:
         self.root = root
@@ -455,9 +457,14 @@ class AppMenu:
             self.visible_rows[self.selected_index].activate()
 
     def _activate_entry(self, entry: AppEntry) -> None:
-        # Record the launch BEFORE closing so the count is bumped even though the
-        # menu is about to be destroyed; next open reflects the new frequency.
-        self.usage.record(entry.desktop_id)
+        # Launch, then close. We do NOT bump the usage counter here: an "open" is
+        # counted uniformly by the daemon's WindowWatcher when the app's WINDOW
+        # actually appears -- so a launch from the taskbar, a desktop icon, a
+        # terminal or a file association counts exactly like one from this menu,
+        # and a click that fails to spawn anything is not miscounted. (When the
+        # menu runs without the daemon/watcher -- e.g. the non-persistent test
+        # harness -- no auto-count happens, which is why those tests record()
+        # directly.)
         actions.launch(entry.exec_argv)
         self.close_menu(force=True)
 

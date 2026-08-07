@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import configparser
 import io
+import os
 
 from azarch.configuration import application_menu as am
 from azarch.configuration import desktop
@@ -101,6 +102,21 @@ def test_emit_ships_editing_and_daemon_modules():
     assert am.MENU_DAEMON_PY_SYSTEM_PATH in dests
     # menu.py really does depend on editing (so shipping it is not optional).
     assert "import editing" in am.menu_py()
+
+
+def test_emit_ships_winwatch_module():
+    # The menu is ordered most-USED first, and an open is counted however the app
+    # was launched -- that counting lives in winwatch.py, which daemon.py imports
+    # (`from winwatch import ...`). So winwatch.py MUST be emitted into MENU_LIB_DIR
+    # too, else the built ISO ships a daemon that dies at launch with
+    # `ImportError: No module named 'winwatch'`. This guards the second manifest
+    # (MENU_MODULES) staying in lock-step with the standalone install.sh: the repo
+    # tests would otherwise stay GREEN while the image shipped a broken daemon.
+    dests = {os.path.basename(e["dest"]) for e in am.emit_plan()}
+    assert "winwatch.py" in dests
+    assert f"{am.MENU_LIB_DIR}/winwatch.py" in {e["dest"] for e in am.emit_plan()}
+    # daemon.py really does depend on winwatch (so shipping it is not optional).
+    assert "from winwatch import" in am.daemon_py()
 
 
 def test_menu_is_borderless_and_kickoff_sized():

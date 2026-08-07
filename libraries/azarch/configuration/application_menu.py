@@ -79,6 +79,7 @@ MENU_MODULES = [
     "widgets.py",
     "theme.py",
     "apps.py",
+    "winwatch.py",
     "icons.py",
     "usage.py",
     "actions.py",
