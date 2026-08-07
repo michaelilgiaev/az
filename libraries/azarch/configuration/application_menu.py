@@ -46,9 +46,18 @@ from .. import paths
 # standalone install.sh so both the baked-in build and a manual install agree.
 MENU_LIB_DIR = "/usr/local/lib/azarch-application-menu"
 MENU_PY_SYSTEM_PATH = f"{MENU_LIB_DIR}/menu.py"
+# The resident daemon the launcher signals (menu built once, kept hidden, so the
+# panel icon opens INSTANTLY). daemon.py imports menu.py; the launcher execs this.
+MENU_DAEMON_PY_SYSTEM_PATH = f"{MENU_LIB_DIR}/daemon.py"
 MENU_LAUNCHER_SYSTEM_PATH = "/usr/local/bin/azarch-application-menu"
 MENU_DESKTOP_SYSTEM_PATH = (
     "/usr/local/share/applications/azarch-application-menu.desktop"
+)
+# Per-user autostart entry that starts the resident daemon at login, so even the
+# FIRST panel-icon click is instant. Emitted by configuration/desktop.py (which
+# owns the per-user files + /etc/skel mirroring); content lives here.
+MENU_DAEMON_AUTOSTART_SYSTEM_PATH = (
+    "/home/main/.config/autostart/azarch-application-menu-daemon.desktop"
 )
 
 # The panel icon glyph: the SAME "application-menu" hamburger Plasma's Kickoff
@@ -59,10 +68,12 @@ MENU_ICON_NAME = "application-menu"
 
 # --- Source files (in the repo) ---------------------------------------------
 # The menu is a multi-module package: menu.py (the orchestrator) imports the other
-# modules as flat siblings (widgets/theme/apps/icons/usage/actions), and test_menu
-# rides along with them. ALL of these must land in MENU_LIB_DIR together or menu.py
-# crashes on launch with an ImportError. This list is the single source of truth
-# for what the build emits; keep it in lock-step with the standalone install.sh.
+# modules as flat siblings (widgets/theme/apps/icons/usage/actions/editing), and
+# daemon.py imports menu.py to keep it resident for instant open; test_menu rides
+# along with them. ALL of these must land in MENU_LIB_DIR together or menu.py (or
+# the daemon) crashes on launch with an ImportError. This list is the single source
+# of truth for what the build emits; keep it in lock-step with the standalone
+# install.sh.
 MENU_MODULES = [
     "menu.py",
     "widgets.py",
@@ -71,12 +82,15 @@ MENU_MODULES = [
     "icons.py",
     "usage.py",
     "actions.py",
+    "editing.py",
+    "daemon.py",
     "test_menu.py",
 ]
 
 # Relative paths under paths.APPLICATION_MENU_DIR for the non-module runtime files.
 _SRC_LAUNCHER = Path("libraries") / "azarch-application-menu.sh"
 _SRC_DESKTOP = Path("libraries") / "azarch-application-menu.desktop"
+_SRC_DAEMON_DESKTOP = Path("libraries") / "azarch-application-menu-daemon.desktop"
 
 
 def _read_source(rel: Path) -> str:
@@ -92,6 +106,12 @@ def _module_src(name: str) -> str:
 def menu_py() -> str:
     """The Tkinter menu orchestrator (verbatim from the source tree)."""
     return _module_src("menu.py")
+
+
+def daemon_py() -> str:
+    """The resident daemon that keeps the menu built + hidden for instant open
+    (verbatim from the source tree). It imports menu.py and drives its window."""
+    return _module_src("daemon.py")
 
 
 def menu_package_source() -> str:
@@ -112,6 +132,13 @@ def launcher_sh() -> str:
 def menu_desktop() -> str:
     """The .desktop the panel icon points at (verbatim from the source tree)."""
     return _read_source(_SRC_DESKTOP)
+
+
+def daemon_autostart_desktop() -> str:
+    """The per-user autostart .desktop that starts the resident daemon at login
+    (verbatim from the source tree). Emitted by configuration/desktop.py into
+    ~/.config/autostart so the daemon is up before the first panel-icon click."""
+    return _read_source(_SRC_DAEMON_DESKTOP)
 
 
 # --- Emit plan --------------------------------------------------------------

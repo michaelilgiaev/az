@@ -23,15 +23,16 @@ from azarch.configuration import desktop
 
 # --- PLAN mode/owner/dest table --------------------------------------------
 
-def test_plan_has_exactly_nineteen_entries():
+def test_plan_has_exactly_twenty_entries():
     # steps.py iterates PLAN; a dropped/extra entry silently un-emits a file.
-    # (19 = original 7 + ~/Desktop launcher + plasmashellrc + kdeglobals + krunnerrc
+    # (20 = original 7 + ~/Desktop launcher + plasmashellrc + kdeglobals + krunnerrc
     #  + kxkbrc keyboard-layouts + plasma-localerc (d/m/y clock) + powerdevilrc
     #  (PC/laptop sleep policy, Plasma-6 schema) + powermanagementprofilesrc migration
     #  flag + kscreenlockerrc (disable auto-lock) + klaunchrc (no launch feedback)
     #  + kwinrc (no window animation) + the org.kde.plasma.icon menu backing
-    #  .desktop under ~/.local/share/plasma_icons -- the paper-icon fix.)
-    assert len(desktop.PLAN) == 19
+    #  .desktop under ~/.local/share/plasma_icons -- the paper-icon fix -- + the
+    #  application-menu daemon autostart (~/.config/autostart, instant first open).)
+    assert len(desktop.PLAN) == 20
 
 
 def test_plan_entries_have_the_four_declared_keys():
@@ -66,6 +67,7 @@ def test_scripts_are_exec_configs_are_conf():
     assert by_builder["plasma_appletsrc"]["mode"] == 0o644
     assert by_builder["ksplashrc"]["mode"] == 0o644
     assert by_builder["autostart_install_desktop"]["mode"] == 0o644
+    assert by_builder["az_menu_daemon_autostart_desktop"]["mode"] == 0o644
     assert by_builder["install_menu_desktop"]["mode"] == 0o644
     # The Desktop launcher is the exception: it must be EXECUTABLE so Plasma runs it
     # on double-click without the untrusted-.desktop prompt.
@@ -165,9 +167,10 @@ def test_home_owner_gid_is_autologin_group():
 
 # --- emit_plan(): PLAN + bash_profile, without mutating PLAN ----------------
 
-def test_emit_plan_length_is_twenty():
-    # 19 PLAN entries + the appended .bash_profile.
-    assert len(desktop.emit_plan()) == 20
+def test_emit_plan_length_is_twenty_one():
+    # 20 PLAN entries + the appended .bash_profile. (The 20th PLAN entry is the
+    # application-menu daemon autostart, added alongside the daemon architecture.)
+    assert len(desktop.emit_plan()) == 21
 
 
 def test_emit_plan_prefix_is_plan():
@@ -194,7 +197,7 @@ def test_emit_plan_does_not_mutate_module_plan():
     before = len(desktop.PLAN)
     desktop.emit_plan()
     desktop.emit_plan()
-    assert len(desktop.PLAN) == before == 19
+    assert len(desktop.PLAN) == before == 20
 
 
 # --- xinitrc: Plasma X11 session, no flash ----------------------------------
@@ -274,6 +277,32 @@ def test_autostart_desktop_runs_in_phase_two():
     # Delay until the desktop/panel are ready so the installer window has a session
     # to map into.
     assert "X-KDE-autostart-phase=2" in desktop.autostart_install_desktop()
+
+
+def test_menu_daemon_autostart_entry_is_home_owned_conf():
+    # The application-menu daemon autostart lands in ~/.config/autostart, is plain
+    # data (0o644), and is handed to the live user (mirrored to /etc/skel for the
+    # installed user). It starts the daemon so the FIRST panel-icon click is instant.
+    entry = next(
+        e for e in desktop.PLAN
+        if e["dest"] == desktop._app_menu.MENU_DAEMON_AUTOSTART_SYSTEM_PATH
+    )
+    assert entry["builder"] is desktop.az_menu_daemon_autostart_desktop
+    assert entry["mode"] == 0o644
+    assert entry["owner"] == "home"
+    assert entry["dest"] == f"{desktop.HOME}/.config/autostart/azarch-application-menu-daemon.desktop"
+
+
+def test_menu_daemon_autostart_execs_the_installed_daemon():
+    # The autostart entry must launch the INSTALLED daemon.py (the one the build
+    # emits) in autostart phase 2, so it is resident before the first click. Single
+    # source of truth: content comes from application_menu.daemon_autostart_desktop().
+    out = desktop.az_menu_daemon_autostart_desktop()
+    assert out == desktop._app_menu.daemon_autostart_desktop()
+    assert out.splitlines()[0] == "[Desktop Entry]"
+    assert "Type=Application" in out
+    assert desktop._app_menu.MENU_DAEMON_PY_SYSTEM_PATH in out   # execs the installed daemon
+    assert "X-KDE-autostart-phase=2" in out
 
 
 def test_menu_launcher_execs_the_wrapper():

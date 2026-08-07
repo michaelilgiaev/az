@@ -900,6 +900,16 @@ NoDisplay=false
 """
 
 
+def az_menu_daemon_autostart_desktop() -> str:
+    """Plasma autostart entry that starts the Az'arch application-menu DAEMON at
+    login, so the resident menu is already built (and hidden) before the first
+    panel-icon click -- making even that first open instant. Content is owned by
+    configuration/application_menu.py (single source of truth for the menu); this
+    module just places it in ~/.config/autostart (and mirrors it into /etc/skel for
+    the installed user), the same way the installer autostart entry is handled."""
+    return _app_menu.daemon_autostart_desktop()
+
+
 # --- 6. /usr/share/applications/azarch-install.desktop ----------------------
 def install_menu_desktop() -> str:
     """A launcher in the application menu (Kickoff) so the installer can be
@@ -1353,6 +1363,17 @@ PLAN = [
         "builder": az_menu_plasma_icon_backing,
         "dest": _AZ_MENU_LOCAL_PATH,
         "mode": _EXEC,
+        "owner": "home",
+    },
+    {
+        # Autostart the resident application-menu daemon at login so the menu is
+        # pre-built (and hidden) before the first panel-icon click -- the "instant
+        # open" half of the daemon design. A plain data .desktop (0o644), home-owned
+        # and mirrored into /etc/skel so a Calamares-installed user gets it too. The
+        # daemon module + launcher it drives are shipped by application_menu.emit_plan().
+        "builder": az_menu_daemon_autostart_desktop,
+        "dest": _app_menu.MENU_DAEMON_AUTOSTART_SYSTEM_PATH,
+        "mode": _CONF,
         "owner": "home",
     },
     {

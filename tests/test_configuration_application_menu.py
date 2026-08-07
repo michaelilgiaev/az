@@ -75,9 +75,32 @@ def test_constants_match_desktop_module():
     assert desktop._AZ_MENU_ICON_NAME == am.MENU_ICON_NAME
 
 
-def test_launcher_runs_the_menu_module():
-    # The launcher must invoke the installed menu.py (so the icon opens our menu).
-    assert am.MENU_PY_SYSTEM_PATH in am.launcher_sh()
+def test_launcher_runs_the_daemon_which_runs_the_menu_module():
+    # The menu now runs as a resident DAEMON (built once, kept hidden) so the icon
+    # opens it INSTANTLY. The launcher therefore execs daemon.py -- NOT menu.py
+    # directly. This SUPERSEDES the earlier "launcher runs menu.py" contract, which
+    # must not be re-asserted. The icon still opens our menu, just indirectly:
+    #   launcher (azarch-application-menu.sh) -> daemon.py -> imports menu.py
+    src = am.launcher_sh()
+    # The launcher builds the daemon path as ${MENU_DIR}/daemon.py where MENU_DIR
+    # defaults to MENU_LIB_DIR -- i.e. it resolves to MENU_DAEMON_PY_SYSTEM_PATH.
+    # Assert both halves (the path is composed from a var, so it is not one literal).
+    assert am.MENU_LIB_DIR in src                              # default install dir
+    assert "daemon.py" in src                                  # ...runs daemon.py under it
+    assert am.MENU_DAEMON_PY_SYSTEM_PATH == f"{am.MENU_LIB_DIR}/daemon.py"
+    assert "import menu" in am.daemon_py()                     # daemon builds our menu
+
+
+def test_emit_ships_editing_and_daemon_modules():
+    # menu.py imports `editing`, and the launcher execs daemon.py -- so BOTH must be
+    # emitted into MENU_LIB_DIR, else the built ISO ships a menu.py that ImportErrors
+    # (editing) or a launcher that can't find its daemon. Regression guard for the
+    # daemon refactor drifting away from the build wiring.
+    dests = {e["dest"] for e in am.emit_plan()}
+    assert f"{am.MENU_LIB_DIR}/editing.py" in dests
+    assert am.MENU_DAEMON_PY_SYSTEM_PATH in dests
+    # menu.py really does depend on editing (so shipping it is not optional).
+    assert "import editing" in am.menu_py()
 
 
 def test_menu_is_borderless_and_kickoff_sized():

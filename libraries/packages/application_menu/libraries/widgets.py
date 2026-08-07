@@ -15,6 +15,8 @@ in ``theme.py`` and matched to ``rough-design.png``:
     render an "active" (pinned) state as a blue-outlined box.
   * :class:`PowerButton` -- a big bottom-bar session button (Breeze icon over/
     beside a label) that expands to share the bottom bar evenly.
+  * :class:`KickoffScrollBar` -- a canvas-drawn, arrow-less rounded scrollbar
+    that reproduces Plasma Kickoff's scrollbar exactly.
 """
 
 from __future__ import annotations
@@ -304,3 +306,161 @@ class PowerButton(tk.Frame):
     def _press(self, _e=None) -> None:
         if self._command is not None:
             self._command()
+
+
+# --- Kickoff-style scrollbar ----------------------------------------------
+class KickoffScrollBar(tk.Canvas):
+    """A pixel-faithful re-creation of Plasma Kickoff's scrollbar for a Tk
+    scrollable canvas -- because the classic Tk scrollbar (3D bevels + arrow
+    buttons) looks nothing like it.
+
+    Kickoff's scrollbar (Breeze desktop theme) is:
+      * ARROW-LESS -- just a slider, no up/down buttons.
+      * a single ROUNDED (pill) thumb, translucent light grey, ~6px wide.
+      * NO visible track at rest; on hover the thumb brightens and a faint
+        groove fades in behind it.
+      * hidden entirely when everything fits (nothing to scroll).
+
+    It is wired exactly like a tk.Scrollbar: pass ``command=canvas.yview`` and set
+    ``canvas.configure(yscrollcommand=self.set)``. Dragging the thumb (or pressing
+    the groove) scrolls the target; the thumb tracks the view fraction.
+    """
+
+    def __init__(self, master: tk.Widget, command) -> None:
+        super().__init__(
+            master, width=T.SCROLL_TRACK_WIDTH, highlightthickness=0,
+            borderwidth=0, bg=T.BG_COLOR, takefocus=0,
+        )
+        self._command = command          # canvas.yview
+        self._first = 0.0                # top of the view (fraction)
+        self._last = 1.0                 # bottom of the view (fraction)
+        self._hover = False
+        self._dragging = False
+        self._drag_dy = 0.0              # grab offset within the thumb
+
+        self.bind("<Configure>", lambda _e: self._redraw())
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+        self.bind("<Button-1>", self._on_press)
+        self.bind("<B1-Motion>", self._on_drag)
+        self.bind("<ButtonRelease-1>", self._on_release)
+
+    # -- scrollbar protocol (called by the canvas' yscrollcommand) ---------
+    def set(self, first, last) -> None:
+        """Receive the view fraction from the scrolled canvas and redraw. Hides
+        the whole scrollbar when the content fits (first==0 and last==1)."""
+        self._first = float(first)
+        self._last = float(last)
+        fits = self._first <= 0.0 and self._last >= 1.0
+        try:
+            if fits:
+                # Nothing to scroll -> take the scrollbar out of the layout, just
+                # like Kickoff hides it.
+                if self.winfo_manager():
+                    self.pack_forget()
+            else:
+                if not self.winfo_manager():
+                    self.pack(side="right", fill="y")
+        except tk.TclError:
+            pass
+        self._redraw()
+
+    # -- geometry ----------------------------------------------------------
+    def _thumb_span(self) -> tuple[int, int]:
+        """Pixel (top, bottom) of the thumb for the current view fraction,
+        clamped to a minimum grabbable length."""
+        h = max(1, self.winfo_height())
+        top = self._first * h
+        bot = self._last * h
+        if bot - top < T.SCROLL_THUMB_MIN:
+            mid = (top + bot) / 2
+            half = T.SCROLL_THUMB_MIN / 2
+            top = mid - half
+            bot = mid + half
+            if top < 0:
+                top, bot = 0, T.SCROLL_THUMB_MIN
+            if bot > h:
+                bot, top = h, h - T.SCROLL_THUMB_MIN
+        return int(round(top)), int(round(bot))
+
+    def _redraw(self) -> None:
+        try:
+            self.delete("all")
+        except tk.TclError:
+            return
+        # Fully scrollable check: if content fits, draw nothing.
+        if self._first <= 0.0 and self._last >= 1.0:
+            return
+
+        w = max(1, self.winfo_width())
+        thumb_w = T.SCROLL_THUMB_WIDTH
+        x0 = (w - thumb_w) / 2
+        x1 = x0 + thumb_w
+        r = thumb_w / 2                       # pill radius = half width
+        top, bot = self._thumb_span()
+
+        # Groove behind the thumb: hover-only, spanning the full track (like
+        # Kickoff's background-vertical fading in on hover).
+        if self._hover:
+            gh = max(1, self.winfo_height())
+            self.create_rectangle(
+                x0, r, x1, gh - r, width=0, fill=T.SCROLL_GROOVE_COLOR,
+            )
+            self.create_oval(x0, 0, x1, thumb_w, width=0,
+                             fill=T.SCROLL_GROOVE_COLOR)
+            self.create_oval(x0, gh - thumb_w, x1, gh, width=0,
+                             fill=T.SCROLL_GROOVE_COLOR)
+
+        color = T.SCROLL_THUMB_HOVER if (self._hover or self._dragging) \
+            else T.SCROLL_THUMB_COLOR
+
+        # Pill thumb: round cap + body + round cap (all one colour).
+        self.create_oval(x0, top, x1, top + thumb_w, width=0, fill=color)
+        self.create_rectangle(x0, top + r, x1, bot - r, width=0, fill=color)
+        self.create_oval(x0, bot - thumb_w, x1, bot, width=0, fill=color)
+
+    # -- interaction -------------------------------------------------------
+    def _on_enter(self, _e=None) -> None:
+        self._hover = True
+        self._redraw()
+
+    def _on_leave(self, _e=None) -> None:
+        self._hover = False
+        self._redraw()
+
+    def _hit_thumb(self, y: int) -> bool:
+        top, bot = self._thumb_span()
+        return top <= y <= bot
+
+    def _on_press(self, e) -> None:
+        top, bot = self._thumb_span()
+        if self._hit_thumb(e.y):
+            # Grab the thumb: remember where within it we grabbed.
+            self._dragging = True
+            self._drag_dy = e.y - top
+        else:
+            # Press on the empty track: jump so the thumb centres on the click,
+            # then start dragging from there.
+            self._dragging = True
+            self._drag_dy = (bot - top) / 2
+            self._scroll_to_pixel(e.y)
+        self._redraw()
+
+    def _on_drag(self, e) -> None:
+        if self._dragging:
+            self._scroll_to_pixel(e.y)
+
+    def _on_release(self, _e=None) -> None:
+        self._dragging = False
+        self._redraw()
+
+    def _scroll_to_pixel(self, y: int) -> None:
+        """Move the view so the thumb's top lands at (y - grab offset)."""
+        h = max(1, self.winfo_height())
+        thumb_len = self._last - self._first
+        new_top = (y - self._drag_dy) / h
+        new_top = max(0.0, min(1.0 - thumb_len, new_top))
+        try:
+            self._command("moveto", new_top)
+        except tk.TclError:
+            pass

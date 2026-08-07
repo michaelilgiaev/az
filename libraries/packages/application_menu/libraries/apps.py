@@ -354,6 +354,36 @@ def _parse_desktop_file(path: str) -> AppEntry | None:
     )
 
 
+# --- Apps hidden from OUR menu (not uninstalled) --------------------------
+# These applications stay installed and keep working; they are simply not shown
+# in the Az'arch menu (clutter / not useful here). Keyed on the .desktop
+# basename because that is stable across locales, unlike the display Name. The
+# Menu Editor (org.kde.kmenuedit) is deleted outright by the install path rather
+# than hidden here, but keeping it in the set is harmless belt-and-suspenders.
+HIDDEN_DESKTOP_IDS: frozenset[str] = frozenset(
+    {
+        "bssh.desktop",              # Avahi SSH Server Browser
+        "bvnc.desktop",              # Avahi VNC Server Browser
+        "avahi-discover.desktop",    # Avahi Zeroconf Browser
+        "azarch-install.desktop",    # Az'arch Linux Installer
+        "lstopo.desktop",            # Hardware Locality lstopo
+        "htop.desktop",              # Htop
+        "lftp.desktop",              # lftp
+        "cups.desktop",              # Manage Printing
+        "org.kde.kmenuedit.desktop", # Menu Editor (also deleted outright)
+        "assistant.desktop",         # Qt Assistant
+        "qdbusviewer.desktop",       # Qt D-Bus Viewer
+        "linguist.desktop",          # Qt Linguist
+        "qv4l2.desktop",             # Qt V4L2 test Utility
+        "qvidcap.desktop",           # Qt V4L2 video capture utility
+        "designer.desktop",          # Qt Widgets Designer
+        "stoken-gui.desktop",        # Software Token
+        "stoken-gui-small.desktop",  # Software Token (small)
+        "vim.desktop",               # Vim
+    }
+)
+
+
 def scan_applications(dirs: list[str] | None = None) -> list[AppEntry]:
     """Return all visible applications, de-duplicated by .desktop id and sorted
     alphabetically by display name.
@@ -361,6 +391,9 @@ def scan_applications(dirs: list[str] | None = None) -> list[AppEntry]:
     Later directories in the search path override earlier ones for the same
     .desktop id (per XDG precedence: XDG_DATA_HOME wins). We therefore walk in
     REVERSE precedence and keep the FIRST id we see.
+
+    Entries in HIDDEN_DESKTOP_IDS are skipped: they stay installed but are kept
+    out of our menu.
     """
     if dirs is None:
         dirs = _app_dirs()
@@ -378,6 +411,8 @@ def scan_applications(dirs: list[str] | None = None) -> list[AppEntry]:
                 continue
             if fn in by_id:
                 continue  # higher-precedence dir already provided this id
+            if fn in HIDDEN_DESKTOP_IDS:
+                continue  # hidden from our menu (still installed)
             entry = _parse_desktop_file(os.path.join(d, fn))
             if entry is not None:
                 by_id[fn] = entry

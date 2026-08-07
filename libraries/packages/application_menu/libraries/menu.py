@@ -55,11 +55,14 @@ import tkinter as tk
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import actions  # noqa: E402
+import editing  # noqa: E402
 import theme as T  # noqa: E402
 from apps import AppEntry, scan_applications  # noqa: E402
 from icons import IconResolver  # noqa: E402
 from usage import UsageStore  # noqa: E402
-from widgets import AppRow, HighlightBar, IconButton, PowerButton  # noqa: E402
+from widgets import (  # noqa: E402
+    AppRow, HighlightBar, IconButton, KickoffScrollBar, PowerButton,
+)
 
 
 # --- Geometry helper ------------------------------------------------------
@@ -122,10 +125,12 @@ class AppMenu:
         self._divider(inner)
         self._build_power_row(inner)
 
-        # Populate the list (already in canonical order) and focus the search.
-        self._populate(self.all_apps)
         self.search_var.trace_add("write", lambda *_: self._on_search())
-        self.root.after(40, self._focus_search)
+        # NOTE: the application rows are NOT built here. Building them loads a
+        # PhotoImage per app, which is by far the most expensive part of opening
+        # the menu; doing it synchronously would keep the whole window off-screen
+        # until every row existed (the visible delay the user hit). Instead the
+        # caller paints the chrome first, then calls populate() -- see main().
 
     def _divider(self, parent: tk.Widget) -> None:
         tk.Frame(parent, bg=T.DIVIDER_COLOR, height=1).pack(fill="x")
@@ -176,6 +181,13 @@ class AppMenu:
             highlightthickness=0, borderwidth=0,
         )
         self.search_entry.pack(fill="both", expand=True, ipady=6)
+        # Standard desktop text-editing (select-all, cut/copy/paste, undo/redo,
+        # word delete) so the search box behaves like any editor's input, not the
+        # emacs-ish Tk default. Keep the returned undo stack referenced so its
+        # var-trace survives.
+        self._search_undo = editing.enable_standard_editing(
+            self.search_entry, self.search_var
+        )
 
         self._placeholder_lbl = tk.Label(
             entry_wrap, text="Search...", bg=T.SURFACE_COLOR,
@@ -221,11 +233,11 @@ class AppMenu:
         )
         self.canvas.pack(side="left", fill="both", expand=True)
 
-        self.scrollbar = tk.Scrollbar(
-            wrap, orient="vertical", command=self.canvas.yview,
-            troughcolor=T.BG_COLOR, bg=T.SURFACE_COLOR, borderwidth=0,
-            highlightthickness=0, activebackground=T.HOVER_COLOR, width=10,
-        )
+        # EXACT Plasma Kickoff scrollbar: an arrow-less, canvas-drawn rounded
+        # thumb (see widgets.KickoffScrollBar) rather than the classic Tk
+        # scrollbar. It hides itself when the list fits and brightens on hover,
+        # matching Kickoff. It packs/unpacks itself on the right via set().
+        self.scrollbar = KickoffScrollBar(wrap, command=self.canvas.yview)
         self.scrollbar.pack(side="right", fill="y")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
 
@@ -256,14 +268,28 @@ class AppMenu:
     def _wheel_win(self, e) -> None:
         self.canvas.yview_scroll(-1 if e.delta > 0 else 1, "units")
 
-    def _populate(self, apps: list[AppEntry]) -> None:
-        """Build (once) all rows in canonical order; shown/hidden by the search
-        filter so we never rebuild widgets on each keystroke."""
-        for entry in apps:
+    def populate(self) -> None:
+        """Build all application rows in canonical order, then apply whatever is
+        currently typed in the search box. Idempotent: a second call is a no-op,
+        so main() and the tests can both invoke it without double-building.
+
+        This is deliberately NOT run during _build(): it loads a PhotoImage per
+        app (the bulk of the open cost). The window's chrome is painted first and
+        THEN this fills the list, so the menu appears instantly (see main())."""
+        if self.rows:
+            return
+        try:
+            if not self.root.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        for entry in self.all_apps:
             img = self.icons.load(entry.icon)
             row = AppRow(self.list_frame, entry, img, self._activate_entry)
             self.rows.append(row)
-        self._apply_filter("")
+        # Honour a query the user may have typed before the rows existed; falls
+        # back to the empty (show-all) filter otherwise.
+        self._apply_filter(self.search_var.get())
 
     # -- search filtering --------------------------------------------------
     def _on_search(self) -> None:
@@ -302,6 +328,35 @@ class AppMenu:
     def _refresh_selection(self) -> None:
         for i, row in enumerate(self.visible_rows):
             row.set_selected(i == self.selected_index)
+
+    def reset_view(self) -> None:
+        """Return the menu to its just-opened state: rows built, search cleared
+        (which restores the canonical order and shows everything), list scrolled
+        to the top with the first row selected. Called by the daemon each time it
+        re-shows the window so a stale query/scroll from last time never lingers.
+
+        Fast path: if the search is ALREADY empty and every row is already shown
+        (the usual reopen case -- last close cleared the query), skip the full
+        forget-and-repack of every row and just reset the scroll + selection. The
+        repack is only needed to undo a previous filter."""
+        self.populate()  # no-op if rows already exist
+        if self.search_var.get():
+            # A query is lingering: clear it -> the trace repacks in canonical
+            # order, resets selection and scroll.
+            self.search_var.set("")
+        elif len(self.visible_rows) != len(self.rows):
+            # No query but the list is filtered (e.g. reset called mid-filter):
+            # do the full repack.
+            self._apply_filter("")
+        else:
+            # Already showing everything in order -> cheap reset only.
+            self.selected_index = 0 if self.visible_rows else -1
+            self._refresh_selection()
+            try:
+                self.canvas.yview_moveto(0.0)
+            except tk.TclError:
+                pass
+        self._update_placeholder()
 
     # -- keyboard navigation ----------------------------------------------
     def move_selection(self, delta: int) -> None:
@@ -374,14 +429,19 @@ class AppMenu:
 
 
 # --- Window assembly ------------------------------------------------------
-def build_window() -> tk.Tk:
+def build_window(persistent: bool = False) -> tk.Tk:
     """Create and lay out the menu window WITHOUT entering the event loop, so it
     is unit-testable: a caller can build it, assert on it, and destroy it without
     ever calling mainloop().
 
     The returned root carries the highlight bar, the AppMenu content, the pin
     state and the close wiring; a test can inspect ``root.az_highlight``,
-    ``root.az_menu``, ``root.az_pinned`` and the bound events."""
+    ``root.az_menu``, ``root.az_pinned`` and the bound events.
+
+    persistent=True switches the window into DAEMON mode: closing (outside click,
+    Escape, focus loss, launching an app) HIDES the window (withdraw) instead of
+    destroying it, so the resident daemon can re-show it instantly. In that mode
+    the caller drives visibility with root.az_show() / root.az_hide()."""
     root = tk.Tk()
     root.title("Az'arch Menu")
 
@@ -430,6 +490,14 @@ def build_window() -> tk.Tk:
             pass
         return state["pinned"]
 
+    def _cancel_timers() -> None:
+        for tid in timers:
+            try:
+                root.after_cancel(tid)
+            except tk.TclError:
+                pass
+        timers.clear()
+
     def close_menu(*_a, force: bool = False) -> None:
         # A pinned menu ignores dismissal requests (outside click / focus loss /
         # Escape) UNLESS forced -- launching an app or a power action always
@@ -438,14 +506,15 @@ def build_window() -> tk.Tk:
             return
         if state["pinned"] and not force:
             return
+        # In PERSISTENT (daemon) mode we never destroy the window -- we just hide
+        # it so the next open is instant. hide_menu() is defined below; closures
+        # resolve names at call time so it is available by the time this runs.
+        if persistent:
+            hide_menu()
+            return
         state["closed"] = True
         # Cancel any pending deferred callbacks before tearing the window down.
-        for tid in timers:
-            try:
-                root.after_cancel(tid)
-            except tk.TclError:
-                pass
-        timers.clear()
+        _cancel_timers()
         try:
             root.grab_release()
         except tk.TclError:
@@ -511,19 +580,34 @@ def build_window() -> tk.Tk:
         THEN arm the focus-out backup (so the focus churn during open cannot
         self-close the menu).
 
-        arm() runs deferred (~30ms after open), so a very fast user could PIN the
-        menu in the gap before it fires. Pinning releases the global grab on
-        purpose (a pinned menu must not eat the whole desktop's clicks), so arm()
-        must NOT re-take that grab if we are already pinned -- otherwise it would
-        re-black-hole every desktop click with no click-outside escape (a
-        potential input wedge). Hence the pinned guard on the grab below."""
+        arm() is scheduled on after_idle so it fires the INSTANT the window is
+        mapped (no artificial delay -- the menu must open instantly). A very fast
+        user could still PIN the menu in the gap before it fires. Pinning releases
+        the global grab on purpose (a pinned menu must not eat the whole desktop's
+        clicks), so arm() must NOT re-take that grab if we are already pinned --
+        otherwise it would re-black-hole every desktop click with no
+        click-outside escape (a potential input wedge). Hence the pinned guard on
+        the grab below.
+
+        A global grab only works once the window is viewable; if after_idle beat
+        the map, reschedule ourselves a beat later rather than silently dropping
+        the grab (which would leave clicks-outside unable to dismiss the menu)."""
         if state["closed"]:
+            return
+        try:
+            viewable = bool(root.winfo_viewable())
+        except tk.TclError:
+            viewable = False
+        if not viewable:
+            _later(10, arm)
             return
         if not state["pinned"]:
             try:
                 root.grab_set_global()
             except tk.TclError:
-                pass
+                # Still not grabbable -> try again shortly instead of giving up.
+                _later(10, arm)
+                return
         try:
             root.focus_force()
         except tk.TclError:
@@ -543,21 +627,116 @@ def build_window() -> tk.Tk:
 
         _later(150, arm_focus_out)
 
+    def hide_menu() -> None:
+        """DAEMON mode: hide (withdraw) the window instead of destroying it, so
+        the next show is instant. Releases the grab, drops the highlight bar,
+        unbinds the focus-out backup, cancels timers, and marks the menu closed
+        so stray handlers no-op while hidden."""
+        state["closed"] = True
+        _cancel_timers()
+        try:
+            root.unbind("<FocusOut>")
+        except tk.TclError:
+            pass
+        try:
+            root.grab_release()
+        except tk.TclError:
+            pass
+        bar = getattr(root, "az_highlight", None)
+        if bar is not None:
+            bar.close()
+        try:
+            root.withdraw()
+        except tk.TclError:
+            pass
+
+    def show_menu() -> None:
+        """DAEMON mode: (re)show the pre-built window instantly. Resets the menu
+        to a clean state -- unpinned, search cleared, list scrolled to top and
+        the first row selected -- then maps it, raises it and arms the grab/focus/
+        highlight. Because the window and all rows already exist, this is
+        essentially instant (no build, no icon loading)."""
+        state["closed"] = False
+        state["pinned"] = False
+        root.az_pinned = False
+        # Rebuild the highlight bar (the previous hide destroyed it).
+        try:
+            root.az_highlight = HighlightBar(root, screen_w, screen_h)
+        except tk.TclError:
+            pass
+        # Clean slate: clear the query (repopulates the full list in order) and
+        # scroll back to the top.
+        try:
+            menu.reset_view()
+        except tk.TclError:
+            pass
+        try:
+            # Apply the bottom-right geometry BEFORE mapping. An overrideredirect
+            # window sits at X's default 0,0 origin until positioned, and on the
+            # very FIRST show it has never been mapped, so a deiconify() (MapWindow)
+            # issued before the move makes X map it VISIBLY at 0,0 and only then
+            # slide it into place -- the 'menu opens at the top-left on the first
+            # click' bug. Positioning first means the window is only ever mapped at
+            # the correct spot. (Re-shows also need this: a withdrawn override-
+            # redirect window forgets its position with no WM to remember it.)
+            root.geometry(f"{win_w}x{win_h}+{x}+{y}")
+            root.deiconify()
+            root.lift()
+        except tk.TclError:
+            pass
+        # Arm on the next idle so the grab/focus/highlight fire the instant the
+        # window is mapped (arm() reschedules itself if it beats the map).
+        try:
+            timers.append(root.after_idle(arm))
+        except tk.TclError:
+            pass
+
     root.az_highlight = HighlightBar(root, screen_w, screen_h)
-    _later(30, arm)
+    if persistent:
+        # Daemon mode: do NOT arm now. The window is built, then withdrawn by the
+        # daemon; arm()/grab happen on each show_menu().
+        pass
+    else:
+        # Fire arm() the instant the window is mapped (after_idle), not on a fixed
+        # timer -- part of making the menu open instantly. arm() reschedules
+        # itself if it somehow beats the map (see its viewable guard).
+        try:
+            timers.append(root.after_idle(arm))
+        except tk.TclError:
+            pass
 
     # Exposed for tests: the deferred-timer list and a direct close hook, so a
     # test can tear the window down cleanly (cancelling timers) instead of a
-    # bare destroy() that leaves after() callbacks dangling.
+    # bare destroy() that leaves after() callbacks dangling. az_populate lets a
+    # caller/test fill the (deferred) application rows explicitly. az_show/az_hide
+    # drive daemon-mode visibility.
     root.az_timers = timers
     root.az_close = close_menu
+    root.az_populate = menu.populate
+    root.az_show = show_menu
+    root.az_hide = hide_menu
 
     return root
 
 
 def main() -> None:
-    """Entry point: build the window and run the Tk event loop."""
+    """Entry point: build the window, paint it INSTANTLY, then fill the list.
+
+    The chrome (search box, empty list, power bar) is forced on screen first --
+    a cheap, fast paint -- and only then are the application rows built (loading
+    an icon each, the expensive part). So the menu window pops up instantly and
+    the rows fill in a beat later, instead of the whole thing hanging off-screen
+    until every icon has loaded."""
     root = build_window()
+    try:
+        # Force the chrome to actually map + render before we do the heavy work.
+        root.update_idletasks()
+        root.wait_visibility(root)  # block until the window is truly viewable
+        root.update()               # flush the expose so pixels hit the screen
+    except tk.TclError:
+        pass
+    # Window is visible now -> build the application rows.
+    root.az_menu.populate()
     root.mainloop()
 
 

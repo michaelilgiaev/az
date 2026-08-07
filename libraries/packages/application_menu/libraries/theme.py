@@ -58,6 +58,26 @@ SELECT_BORDER = "#3daee9"   # outline of the selected row
 SELECT_FILL = "#31383e"     # subtle fill inside a selected/hovered row
 SELECT_TEXT = "#ffffff"     # text on a selected row
 
+# --- Scrollbar (EXACT Plasma Kickoff match) -------------------------------
+# Kickoff's scrollbar (org.kde.plasma.components.ScrollBar over the Breeze
+# desktop theme, verified against the theme's scrollbar.svgz + ScrollBar.qml) is:
+#   * ARROW-LESS -- no up/down buttons (the QML checks for an "arrow-up" element
+#     that the Breeze theme does not ship).
+#   * a single ROUNDED (pill) slider thumb, ~6px wide, translucent light grey.
+#   * NO visible track at rest; on hover the thumb brightens AND a faint groove
+#     fades in behind it.
+#   * NO separator line (Breeze lacks the private-hint-show-separator element).
+# We reproduce it with a custom canvas widget (widgets.KickoffScrollBar). The
+# colours below are Breeze foreground (#fcfcfc) composited over the menu bg
+# (#2a2e32) at the alphas Breeze uses for the handle, so the result matches what
+# Kickoff paints.
+SCROLL_THUMB_WIDTH = 6            # px, pill thumb thickness (theme size hint)
+SCROLL_TRACK_WIDTH = 12          # px, total column the scrollbar occupies
+SCROLL_THUMB_COLOR = "#5c6166"   # rest thumb: #fcfcfc @ ~24% over #2a2e32
+SCROLL_THUMB_HOVER = "#93989c"   # hover/drag thumb: #fcfcfc @ ~50% over #2a2e32
+SCROLL_GROOVE_COLOR = "#33383d"  # faint groove behind thumb, hover-only
+SCROLL_THUMB_MIN = 32            # px, minimum thumb length so it stays grabbable
+
 # Icon sizes.
 ICON_SIZE = 40             # px, app-row icon edge
 POWER_ICON_SIZE = 22       # px, bottom power-button icon edge

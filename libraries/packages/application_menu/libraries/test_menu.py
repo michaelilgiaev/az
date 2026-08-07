@@ -170,6 +170,39 @@ def test_scan_dedup_and_sort(tmp: str) -> None:
     assert names == sorted(names, key=str.casefold)          # sorted
 
 
+def test_scan_hides_denylisted(tmp: str) -> None:
+    """Apps whose .desktop id is in HIDDEN_DESKTOP_IDS are kept out of the menu,
+    while everything else still shows. The files are NOT touched -- only the scan
+    skips them."""
+    d = os.path.join(tmp, "apps")
+    os.makedirs(d)
+    # One hidden id (Htop) and one that must survive.
+    for fn, name in (
+        ("htop.desktop", "Htop"),            # in HIDDEN_DESKTOP_IDS
+        ("kitty.desktop", "kitty"),          # must remain visible
+        ("vim.desktop", "Vim"),              # in HIDDEN_DESKTOP_IDS
+    ):
+        with open(os.path.join(d, fn), "w", encoding="utf-8") as f:
+            f.write(
+                f"[Desktop Entry]\nType=Application\nName={name}\n"
+                f"Exec={name.lower()}\nCategories=Utility;\n"
+            )
+    names = [a.name for a in apps.scan_applications([d])]
+    assert "kitty" in names
+    assert "Htop" not in names
+    assert "Vim" not in names
+    # And the constant covers every id the spec asked to hide.
+    for wanted in (
+        "bssh.desktop", "bvnc.desktop", "avahi-discover.desktop",
+        "azarch-install.desktop", "lstopo.desktop", "htop.desktop",
+        "lftp.desktop", "cups.desktop", "org.kde.kmenuedit.desktop",
+        "assistant.desktop", "qdbusviewer.desktop", "linguist.desktop",
+        "qv4l2.desktop", "qvidcap.desktop", "designer.desktop",
+        "stoken-gui.desktop", "stoken-gui-small.desktop", "vim.desktop",
+    ):
+        assert wanted in apps.HIDDEN_DESKTOP_IDS, wanted
+
+
 # --- UI smoke tests (need a display) --------------------------------------
 def _have_display() -> bool:
     return bool(os.environ.get("DISPLAY"))
@@ -180,9 +213,10 @@ def _build_testable_menu():
     scripted test can drive it without the window destroying itself when the
     (headless) update loop steals focus.
 
-    FocusOut is bound lazily inside arm() (after(30)+after(150)); rather than
-    race those timers we replace root.bind for the "<FocusOut>" sequence with a
-    no-op so it can never be armed, and drop the global button grab."""
+    FocusOut is bound lazily inside arm() (scheduled on after_idle, then an
+    after(150) backup); rather than race those timers we replace root.bind for
+    the "<FocusOut>" sequence with a no-op so it can never be armed, and drop the
+    global button grab."""
     import menu
     root = menu.build_window()
     _orig_bind = root.bind
@@ -199,6 +233,10 @@ def _build_testable_menu():
     root.update()
     root.update_idletasks()
     root.unbind("<FocusOut>")
+    # The application rows are built lazily (deferred out of build() so the menu
+    # opens instantly -- production paints the chrome then calls populate()). The
+    # tests expect a fully populated list, so build it now explicitly.
+    root.az_menu.populate()
     # Cancel any still-pending deferred callbacks (e.g. the after(150) that arms
     # focus-out) so a plain root.destroy() in a test's finally cannot leave an
     # after() command dangling -- Tk would otherwise print a spurious
@@ -467,6 +505,225 @@ def test_ui_power_buttons_wired(monkeypatch_actions) -> None:
             pass
 
 
+def test_ui_search_standard_editing() -> None:
+    """The REAL search box must support standard editor operations: select-all,
+    copy, cut, paste, undo and redo (like gedit). We drive the operations the key
+    bindings are wired to DIRECTLY (editing exposes them on the undo object) on
+    the actual menu's search entry, so the test is deterministic and does not
+    depend on synthetic key-event delivery (unreliable headless). We also confirm
+    the keys are bound to the entry."""
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        e = m.search_entry
+        var = m.search_var
+        ed = m._search_undo
+        e.focus_force()
+        root.update()
+
+        # The standard keys ARE bound on the real search entry.
+        for seq in ("<Control-a>", "<Control-c>", "<Control-x>", "<Control-v>",
+                    "<Control-z>", "<Control-y>", "<Control-BackSpace>"):
+            assert e.bind(seq), f"missing binding for {seq}"
+
+        # Start from a clean box.
+        var.set("")
+        ed.break_coalescing()
+        for ch in "hello world":
+            e.insert("insert", ch)
+            if ch == " ":
+                ed.break_coalescing()
+        root.update()
+        assert var.get() == "hello world", var.get()
+
+        # select-all
+        ed.select_all()
+        assert e.selection_present()
+        assert (e.index("sel.first"), e.index("sel.last")) == (0, 11)
+
+        # copy then paste at end -> duplicated
+        ed.copy()
+        assert root.clipboard_get() == "hello world"
+        e.icursor("end")
+        e.selection_clear()
+        ed.paste()
+        assert var.get() == "hello worldhello world"
+
+        # undo removes JUST the paste (its own step), not the prior typing
+        ed.undo()
+        assert var.get() == "hello world", var.get()
+        # redo restores it
+        ed.redo()
+        assert var.get() == "hello worldhello world"
+
+        # select-all + cut empties the box AND puts the whole selection on the
+        # clipboard (so a subsequent paste restores exactly what was cut).
+        ed.select_all()
+        ed.cut()
+        assert var.get() == "", var.get()
+        assert root.clipboard_get() == "hello worldhello world"
+        e.icursor("end")
+        ed.paste()
+        assert var.get() == "hello worldhello world", var.get()
+
+        # Ctrl+Backspace deletes the previous word (the trailing "world").
+        e.icursor("end")
+        ed.del_prev_word()
+        assert var.get() == "hello worldhello ", var.get()
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_ui_persistent_show_hide() -> None:
+    """Daemon mode: build_window(persistent=True) exposes az_show/az_hide that
+    hide (withdraw) the window instead of destroying it, so it can be re-shown.
+    A close (Escape/outside click) must HIDE, not destroy, when persistent."""
+    import menu
+    root = menu.build_window(persistent=True)
+    try:
+        root.withdraw()
+        root.az_populate()
+        root.update_idletasks()
+        # Neutralise self-closing bindings so the update loop can't tear it down.
+        root.unbind_all("<Button>")
+
+        # Show -> window becomes viewable and correctly positioned (not 0,0).
+        root.az_show()
+        root.update()
+        assert root.winfo_viewable(), "az_show should map the window"
+        # Geometry re-applied on show: not stuck at the 0,0 re-map default.
+        assert (root.winfo_rootx(), root.winfo_rooty()) != (0, 0), \
+            "show must re-apply the bottom-right geometry"
+
+        # A normal close in persistent mode HIDES (window survives, withdrawn).
+        root.az_close()
+        root.update()
+        assert root.winfo_exists(), "persistent close must NOT destroy"
+        assert not root.winfo_viewable(), "persistent close should withdraw"
+
+        # Re-show works again (proving it was hidden, not destroyed).
+        root.az_show()
+        root.update()
+        assert root.winfo_viewable(), "should re-show after hide"
+    finally:
+        for _tid in list(getattr(root, "az_timers", [])):
+            try:
+                root.after_cancel(_tid)
+            except Exception:
+                pass
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_ui_persistent_first_show_positions_before_map() -> None:
+    """First open must NOT flash at the top-left (0,0) corner.
+
+    An override-redirect window that has never been mapped sits at X's default
+    0,0 origin. If az_show() calls deiconify() (MapWindow) BEFORE re-applying the
+    bottom-right geometry, X maps it visibly at 0,0 and only then moves it -- the
+    'menu opens at top-left on the first click' bug. The position must be set
+    BEFORE the window is mapped, so geometry() must be called before deiconify().
+
+    Asserted by call ORDER (WM-timing-independent) rather than a post-map winfo_
+    sample, which races the Configure flush and hid this bug in the sibling test.
+    """
+    import menu
+    root = menu.build_window(persistent=True)
+    order: list[str] = []
+    real_geometry = root.geometry
+    real_deiconify = root.deiconify
+
+    def spy_geometry(*a, **k):
+        if a or k:  # a SET (not a query) -- ignore geometry() reads
+            order.append("geometry")
+        return real_geometry(*a, **k)
+
+    def spy_deiconify(*a, **k):
+        order.append("deiconify")
+        return real_deiconify(*a, **k)
+
+    try:
+        root.withdraw()
+        root.az_populate()
+        root.update_idletasks()
+        root.unbind_all("<Button>")
+        root.az_hide()  # withdrawn, never-mapped state == the real first show
+
+        root.geometry = spy_geometry
+        root.deiconify = spy_deiconify
+        root.az_show()
+
+        assert "deiconify" in order, "az_show must map the window"
+        assert "geometry" in order, "az_show must position the window"
+        assert order.index("geometry") < order.index("deiconify"), (
+            "first show maps at 0,0: geometry() must be applied BEFORE "
+            f"deiconify(), got order {order}"
+        )
+    finally:
+        root.geometry = real_geometry
+        root.deiconify = real_deiconify
+        for _tid in list(getattr(root, "az_timers", [])):
+            try:
+                root.after_cancel(_tid)
+            except Exception:
+                pass
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_ui_kickoff_scrollbar() -> None:
+    """The scrollbar is the custom Kickoff-style widget (not a tk.Scrollbar): it
+    exposes set(first, last), hides itself when content fits, draws a pill thumb
+    when it doesn't, and never draws arrows."""
+    import tkinter as tk
+    from widgets import KickoffScrollBar
+    root = tk.Tk()
+    root.geometry("40x400+700+300")
+    try:
+        moved = {"args": None}
+
+        def command(*a):
+            moved["args"] = a
+
+        sb = KickoffScrollBar(root, command=command)
+        sb.pack(side="right", fill="y")
+        root.update()
+
+        # It IS the custom widget (a Canvas), not a classic Tk scrollbar.
+        assert isinstance(sb, tk.Canvas)
+
+        # Content fits (0..1) -> scrollbar hides itself, draws nothing.
+        sb.set(0.0, 1.0)
+        root.update()
+        assert not sb.winfo_manager(), "scrollbar should hide when content fits"
+        assert not sb.find_all(), "no canvas items when content fits"
+
+        # Content overflows -> it re-packs and draws a thumb (>=1 canvas item),
+        # and there are NO arrow buttons (it is pure canvas drawing).
+        sb.set(0.0, 0.4)
+        root.update()
+        assert sb.winfo_manager(), "scrollbar should show when content overflows"
+        assert sb.find_all(), "thumb should be drawn when overflowing"
+
+        # Dragging issues a yview('moveto', frac) on the command.
+        sb._drag_dy = 0
+        sb._dragging = True
+        sb._scroll_to_pixel(100)
+        assert moved["args"] and moved["args"][0] == "moveto"
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
 # --- tiny test runner ------------------------------------------------------
 class _Recorder:
     def __init__(self) -> None:
@@ -498,6 +755,7 @@ def main() -> int:
     for name, fn in (
         ("parse_desktop_file", test_parse_desktop_file),
         ("scan_dedup_and_sort", test_scan_dedup_and_sort),
+        ("scan_hides_denylisted", test_scan_hides_denylisted),
         ("usage_record_persist_and_order",
          test_usage_record_persist_and_order),
         ("usage_corrupt_store_is_ignored", test_usage_corrupt_store_is_ignored),
@@ -538,6 +796,11 @@ def main() -> int:
          test_ui_pin_before_arm_does_not_re_grab),
         ("ui_power_buttons_use_breeze_icons",
          test_ui_power_buttons_use_breeze_icons),
+        ("ui_search_standard_editing", test_ui_search_standard_editing),
+        ("ui_persistent_show_hide", test_ui_persistent_show_hide),
+        ("ui_persistent_first_show_positions_before_map",
+         test_ui_persistent_first_show_positions_before_map),
+        ("ui_kickoff_scrollbar", test_ui_kickoff_scrollbar),
     ):
         total += 1
         try:
