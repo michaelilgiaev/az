@@ -910,6 +910,16 @@ def az_menu_daemon_autostart_desktop() -> str:
     return _app_menu.daemon_autostart_desktop()
 
 
+def az_menu_usage_seed_json() -> str:
+    """Seed launch-frequency store for OUR menu, fixing the STARTING top of the
+    list to System Settings, LibreWolf, kitty, Dolphin on a fresh profile (the menu
+    otherwise sorts alphabetically until the user has opened things). Content is
+    owned by configuration/application_menu.py; this module just places it under
+    ~/.local/share and mirrors it into /etc/skel for the installed user. It stays
+    dynamic: the daemon re-sorts as apps are opened."""
+    return _app_menu.usage_seed_json()
+
+
 # --- 6. /usr/share/applications/azarch-install.desktop ----------------------
 def install_menu_desktop() -> str:
     """A launcher in the application menu (Kickoff) so the installer can be
@@ -1373,6 +1383,17 @@ PLAN = [
         # daemon module + launcher it drives are shipped by application_menu.emit_plan().
         "builder": az_menu_daemon_autostart_desktop,
         "dest": _app_menu.MENU_DAEMON_AUTOSTART_SYSTEM_PATH,
+        "mode": _CONF,
+        "owner": "home",
+    },
+    {
+        # Seed OUR menu's launch-frequency store so a fresh profile opens with
+        # System Settings, LibreWolf, kitty, Dolphin at the top (it otherwise sorts
+        # alphabetically with no history). Home-owned data file (0o644), mirrored
+        # into /etc/skel so a Calamares-installed user inherits the same starting
+        # order. Fully dynamic afterwards -- the daemon re-sorts as apps are opened.
+        "builder": az_menu_usage_seed_json,
+        "dest": _app_menu.MENU_USAGE_SEED_SYSTEM_PATH,
         "mode": _CONF,
         "owner": "home",
     },

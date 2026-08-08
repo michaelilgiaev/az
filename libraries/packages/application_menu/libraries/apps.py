@@ -364,10 +364,12 @@ def _parse_desktop_file(path: str) -> AppEntry | None:
 # than hidden here, but keeping it in the set is harmless belt-and-suspenders.
 HIDDEN_DESKTOP_IDS: frozenset[str] = frozenset(
     {
+        "azarch-application-menu.desktop",  # Az'arch Menu (this menu itself)
         "bssh.desktop",              # Avahi SSH Server Browser
         "bvnc.desktop",              # Avahi VNC Server Browser
         "avahi-discover.desktop",    # Avahi Zeroconf Browser
         "azarch-install.desktop",    # Az'arch Linux Installer
+        "kdesystemsettings.desktop", # KDE System Settings (dupe of System Settings)
         "lstopo.desktop",            # Hardware Locality lstopo
         "htop.desktop",              # Htop
         "lftp.desktop",              # lftp

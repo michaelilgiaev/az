@@ -57,6 +57,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import actions  # noqa: E402
 import editing  # noqa: E402
 import theme as T  # noqa: E402
+import xfocus  # noqa: E402
 from applist import CanvasAppList  # noqa: E402
 from apps import AppEntry, scan_applications  # noqa: E402
 from icons import IconResolver  # noqa: E402
@@ -209,7 +210,11 @@ class AppMenu:
         self._focus_search()
 
     def _toggle_pin(self) -> None:
-        """Flip the pinned state and reflect it on the button + close logic."""
+        """Handle a pin-button press. Delegates to the window's pin_action, which
+        pins+focuses, re-focuses a pinned-but-dormant menu, or unpins (see its
+        docstring) and returns the resulting pinned state, then reflects that on the
+        button. A trailing focus_set covers the unpin branch (pin_action re-grabs the
+        keyboard there but does not itself move focus into the entry)."""
         pinned = self._on_pin_toggle()
         if self.pin_button is not None:
             self.pin_button.set_active(pinned)
@@ -400,7 +405,15 @@ def build_window(persistent: bool = False) -> tk.Tk:
     root.configure(bg=T.BG_COLOR)
 
     # --- Pin + close-on-outside-click, Kickoff style ----------------------
-    state = {"closed": False, "pinned": False}
+    # "capturing" tracks whether we currently hold the keyboard (the search box is
+    # live). It is True while the global grab is up (unpinned) or while a pinned
+    # menu has been focus-forced, and goes False the moment the user switches to
+    # another app (see _watch_active / on_focus_out). The pin button reads it to
+    # decide between re-grabbing focus and unpinning (see pin_action).
+    # "pin_active" is the _NET_ACTIVE_WINDOW id captured when a pinned menu grabbed
+    # focus; the active-window watcher compares against it to notice a switch-away.
+    state = {"closed": False, "pinned": False, "capturing": False,
+             "pin_active": 0}
     # Pending after() timer ids, cancelled on close so no deferred callback ever
     # runs against a destroyed interpreter (which Tk would report as a spurious
     # "invalid command name ...arm_focus_out" on stderr).
@@ -412,22 +425,99 @@ def build_window(persistent: bool = False) -> tk.Tk:
         except tk.TclError:
             pass
 
-    def toggle_pin() -> bool:
-        """Flip pinned; return the new pinned state (for the button to reflect).
+    def _watch_active() -> None:
+        """While the menu is PINNED and capturing, watch _NET_ACTIVE_WINDOW. The
+        instant it changes to a window other than the one that was active when we
+        grabbed focus, the user has switched to another application -> hand the X
+        keyboard to that window (so keystrokes go there, not our search box) and
+        stop capturing. The menu stays open and pinned; the search box goes dormant
+        until the user hovers back and presses the pin (pin_action re-grabs).
 
-        When becoming pinned we also drop the global pointer grab so clicks land
-        normally on other windows (a pinned menu must not eat the whole desktop's
-        input); when unpinning we re-take it so the next outside click dismisses.
-        """
-        state["pinned"] = not state["pinned"]
-        root.az_pinned = state["pinned"]
+        This is the reliable switch-away signal for an overrideredirect window: it
+        will not surrender a forced keyboard focus via <FocusOut>, a grab, lower(),
+        or even a real Alt+Tab -- but XSetInputFocus (in xfocus, via ctypes) does
+        move it, and _NET_ACTIVE_WINDOW changing is how we know to. Polls only while
+        pinned+capturing (a rare state), so the cost is negligible; reschedules
+        itself until that state ends."""
+        if state["closed"] or not state["pinned"] or not state["capturing"]:
+            return
+        now = xfocus.active_window()
+        base = state["pin_active"]
+        # A real switch: we HAD a valid baseline (base != 0) and the active window
+        # is now a different, valid window that is not ours. Requiring base != 0 (not
+        # just now != 0) keeps a momentary unreadable/zero _NET_ACTIVE_WINDOW -- at
+        # pin time or during a WM transition -- from reading as a false switch-away
+        # and dropping capture with no user action. Only a genuine active-window
+        # change ever stops the capture.
+        our_id = 0
         try:
-            if state["pinned"]:
-                root.grab_release()
-            else:
-                root.grab_set_global()
+            our_id = root.winfo_id()
         except tk.TclError:
             pass
+        if base and now and now != base and now != our_id:
+            xfocus.set_input_focus(now)   # keystrokes go to the newly-active app
+            state["capturing"] = False
+            return                        # stop watching until we re-grab
+        _later(150, _watch_active)
+
+    def _focus_window() -> None:
+        """Pull the X keyboard focus onto our (borderless) window and into the
+        search box, mark us capturing, and start watching for a switch-away. A
+        pinned menu holds NO global grab (so other windows stay clickable), which
+        means an overrideredirect window would otherwise never receive the keyboard
+        from the WM -- focus_force() is what makes the search box live while pinned,
+        and _watch_active() is what lets it go dormant again when the user leaves."""
+        try:
+            root.focus_force()
+        except tk.TclError:
+            pass
+        try:
+            root.az_menu._focus_search()
+        except (tk.TclError, AttributeError):
+            pass
+        state["capturing"] = True
+        # Remember which window was active as we take focus, so the watcher can tell
+        # when the user moves to a different one. (Our own override-redirect window
+        # is generally never _NET_ACTIVE_WINDOW, so this is some OTHER window; any
+        # change away from it means a genuine switch.)
+        state["pin_active"] = xfocus.active_window()
+        if state["pinned"]:
+            _later(150, _watch_active)
+
+    def pin_action() -> bool:
+        """Handle a press of the pin button; return the resulting pinned state so
+        the button can reflect it.
+
+        Three cases (this is what the spec's 'keep it pinned, hover back and press
+        to gain focus' asks for):
+          * NOT pinned      -> pin it AND grab keyboard focus. We drop the global
+            pointer grab (a pinned menu must not eat the whole desktop's clicks) and
+            instead focus_force the window so the search box keeps capturing.
+          * pinned, NOT capturing (focus had left -- the user alt-tabbed away and is
+            now hovering back and pressing pin) -> stay pinned, just RE-GRAB focus.
+          * pinned AND capturing -> unpin (this is how pinning is turned off): re-
+            take the global grab so the next outside click dismisses again.
+        """
+        if not state["pinned"]:
+            state["pinned"] = True
+            root.az_pinned = True
+            try:
+                root.grab_release()
+            except tk.TclError:
+                pass
+            _focus_window()
+        elif not state["capturing"]:
+            # Still pinned; the user is asking for focus back.
+            _focus_window()
+        else:
+            # Pinned and live -> turn pinning off.
+            state["pinned"] = False
+            root.az_pinned = False
+            try:
+                root.grab_set_global()
+            except tk.TclError:
+                pass
+            state["capturing"] = True
         return state["pinned"]
 
     def _cancel_timers() -> None:
@@ -479,21 +569,31 @@ def build_window(persistent: bool = False) -> tk.Tk:
             close_menu()
 
     def on_focus_out(_event: tk.Event) -> None:
-        """Close when focus genuinely leaves our application (the user activated
-        another window), NOT when focus merely moves between our own widgets, and
-        NOT when pinned. Deferred one tick so the internal focus churn on open
-        (force focus -> focus the search box) cannot self-close the menu."""
-        if state["closed"] or state["pinned"]:
+        """Focus genuinely left our application (the user activated another window /
+        alt-tabbed). NOT fired when focus merely moves between our own widgets.
+
+        Unpinned: dismiss, exactly like Kickoff. Pinned: do NOT dismiss (the whole
+        point of the pin) -- but stop capturing the keyboard, i.e. record that we no
+        longer hold focus so the search box goes dormant until the user hovers back
+        and presses the pin again (which re-grabs focus via pin_action). Deferred one
+        tick so the internal focus churn on open cannot self-trigger."""
+        if state["closed"]:
             return
 
         def check() -> None:
-            if state["closed"] or state["pinned"]:
+            if state["closed"]:
                 return
             try:
                 focused = root.focus_displayof()
             except (tk.TclError, KeyError):
                 focused = None
-            if focused is None:
+            if focused is not None:
+                return  # focus is still on one of our own widgets -> ignore
+            if state["pinned"]:
+                # Stay open, but the keyboard is gone -> stop capturing. The pin
+                # button will re-grab focus when pressed.
+                state["capturing"] = False
+            else:
                 close_menu()
 
         try:
@@ -501,8 +601,9 @@ def build_window(persistent: bool = False) -> tk.Tk:
         except tk.TclError:
             pass
 
-    # Build the menu content (search + app list + power row).
-    menu = AppMenu(root, close_menu, toggle_pin)
+    # Build the menu content (search + app list + power row). pin_action drives the
+    # pin button: pin+focus / re-focus-while-pinned / unpin (see its docstring).
+    menu = AppMenu(root, close_menu, pin_action)
     root.az_menu = menu
     root.az_pinned = False
 
@@ -553,6 +654,9 @@ def build_window(persistent: bool = False) -> tk.Tk:
         except tk.TclError:
             pass
         menu._focus_search()
+        # We now hold the keyboard (grab if unpinned, forced focus if pinned): the
+        # search box is live. on_focus_out clears this when focus leaves.
+        state["capturing"] = True
         bar = getattr(root, "az_highlight", None)
         if bar is not None:
             bar.show()
@@ -598,6 +702,8 @@ def build_window(persistent: bool = False) -> tk.Tk:
         essentially instant (no build, no icon loading)."""
         state["closed"] = False
         state["pinned"] = False
+        state["capturing"] = False  # arm() sets this True once the keyboard is ours
+        state["pin_active"] = 0
         root.az_pinned = False
         # Rebuild the highlight bar (the previous hide destroyed it).
         try:
@@ -655,6 +761,12 @@ def build_window(persistent: bool = False) -> tk.Tk:
     root.az_populate = menu.populate
     root.az_show = show_menu
     root.az_hide = hide_menu
+    # Introspection for tests: the pin/close state dict (closed/pinned/capturing)
+    # and the focus-out handler, so a test can drive the pinned "focus left ->
+    # stop capturing -> re-grab on pin" flow deterministically without relying on
+    # real (flaky, headless) X focus delivery.
+    root.az_state = state
+    root.az_on_focus_out = on_focus_out
 
     return root
 

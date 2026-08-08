@@ -23,16 +23,17 @@ from azarch.configuration import desktop
 
 # --- PLAN mode/owner/dest table --------------------------------------------
 
-def test_plan_has_exactly_twenty_entries():
+def test_plan_has_exactly_twentyone_entries():
     # steps.py iterates PLAN; a dropped/extra entry silently un-emits a file.
-    # (20 = original 7 + ~/Desktop launcher + plasmashellrc + kdeglobals + krunnerrc
+    # (21 = original 7 + ~/Desktop launcher + plasmashellrc + kdeglobals + krunnerrc
     #  + kxkbrc keyboard-layouts + plasma-localerc (d/m/y clock) + powerdevilrc
     #  (PC/laptop sleep policy, Plasma-6 schema) + powermanagementprofilesrc migration
     #  flag + kscreenlockerrc (disable auto-lock) + klaunchrc (no launch feedback)
     #  + kwinrc (no window animation) + the org.kde.plasma.icon menu backing
     #  .desktop under ~/.local/share/plasma_icons -- the paper-icon fix -- + the
-    #  application-menu daemon autostart (~/.config/autostart, instant first open).)
-    assert len(desktop.PLAN) == 20
+    #  application-menu daemon autostart (~/.config/autostart, instant first open)
+    #  + the application-menu usage.json seed (~/.local/share, default top-4 order).)
+    assert len(desktop.PLAN) == 21
 
 
 def test_plan_entries_have_the_four_declared_keys():
@@ -167,10 +168,11 @@ def test_home_owner_gid_is_autologin_group():
 
 # --- emit_plan(): PLAN + bash_profile, without mutating PLAN ----------------
 
-def test_emit_plan_length_is_twenty_one():
-    # 20 PLAN entries + the appended .bash_profile. (The 20th PLAN entry is the
-    # application-menu daemon autostart, added alongside the daemon architecture.)
-    assert len(desktop.emit_plan()) == 21
+def test_emit_plan_length_is_twentytwo():
+    # 21 PLAN entries + the appended .bash_profile. (The last PLAN additions are the
+    # application-menu daemon autostart and the usage.json seed that fixes the menu's
+    # default top-4 order on a fresh profile.)
+    assert len(desktop.emit_plan()) == 22
 
 
 def test_emit_plan_prefix_is_plan():
@@ -197,7 +199,7 @@ def test_emit_plan_does_not_mutate_module_plan():
     before = len(desktop.PLAN)
     desktop.emit_plan()
     desktop.emit_plan()
-    assert len(desktop.PLAN) == before == 20
+    assert len(desktop.PLAN) == before == 21
 
 
 # --- xinitrc: Plasma X11 session, no flash ----------------------------------

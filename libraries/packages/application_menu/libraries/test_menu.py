@@ -410,14 +410,18 @@ def test_scan_hides_denylisted(tmp: str) -> None:
     assert "Vim" not in names
     # And the constant covers every id the spec asked to hide.
     for wanted in (
-        "bssh.desktop", "bvnc.desktop", "avahi-discover.desktop",
-        "azarch-install.desktop", "lstopo.desktop", "htop.desktop",
+        "azarch-application-menu.desktop", "bssh.desktop", "bvnc.desktop",
+        "avahi-discover.desktop", "azarch-install.desktop",
+        "kdesystemsettings.desktop", "lstopo.desktop", "htop.desktop",
         "lftp.desktop", "cups.desktop", "org.kde.kmenuedit.desktop",
         "assistant.desktop", "qdbusviewer.desktop", "linguist.desktop",
         "qv4l2.desktop", "qvidcap.desktop", "designer.desktop",
         "stoken-gui.desktop", "stoken-gui-small.desktop", "vim.desktop",
     ):
         assert wanted in apps.HIDDEN_DESKTOP_IDS, wanted
+    # The Az'arch Menu itself and KDE's duplicate "KDE System Settings" are hidden,
+    # but the real "System Settings" (systemsettings.desktop) must STAY visible.
+    assert "systemsettings.desktop" not in apps.HIDDEN_DESKTOP_IDS
 
 
 # --- UI smoke tests (need a display) --------------------------------------
@@ -661,6 +665,93 @@ def test_ui_pin_keeps_menu_open() -> None:
             root.destroy()
         except Exception:
             pass
+
+
+def test_ui_pin_keeps_capturing_and_regrabs_on_press() -> None:
+    """The pin-focus spec, as a state machine:
+
+      1. Press pin (unpinned)         -> pinned AND capturing (search stays live).
+      2. User switches app (alt-tab)  -> still pinned, but NO longer capturing
+                                         (menu stays open, search goes dormant, and
+                                         the keyboard is handed to the new window).
+      3. Press pin (pinned, dormant)  -> STAYS pinned and re-grabs focus (this is
+                                         'hover back and press to gain focus'); it
+                                         must NOT unpin here.
+      4. Press pin (pinned, live)     -> unpins.
+
+    The switch-away in step 2 is what actually happens on the live WM: an override-
+    redirect window will not surrender a forced keyboard focus via <FocusOut> or a
+    grab, so the menu watches _NET_ACTIVE_WINDOW (xfocus.active_window) and, when it
+    changes to another window, hands X focus there (xfocus.set_input_focus) and stops
+    capturing. We drive that deterministically by faking xfocus: active_window()
+    returns a baseline while pinned, then a DIFFERENT id to simulate the user
+    switching apps, and set_input_focus() is recorded so we can assert the keyboard
+    was handed to that window.
+    """
+    import xfocus
+    _orig_active = xfocus.active_window
+    _orig_setfocus = xfocus.set_input_focus
+    handed_to = []
+    fake = {"active": 0x111}  # some other window is active while we're pinned
+    xfocus.active_window = lambda: fake["active"]
+    xfocus.set_input_focus = lambda win: (handed_to.append(win), True)[1]
+
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        st = root.az_state
+        # We start unpinned. (Initial capturing depends on whether arm() grabbed on
+        # this WM; the STATE MACHINE below is independent of that starting value.)
+        assert st["pinned"] is False
+
+        # 1. Pin -> pinned and capturing, button active, baseline active-window saved.
+        m._toggle_pin()
+        assert st["pinned"] is True, st
+        assert st["capturing"] is True, st
+        assert m.pin_button._active is True
+        assert st["pin_active"] == 0x111, st  # remembered who was active at pin time
+
+        # 2. User switches to another app: _NET_ACTIVE_WINDOW changes. The watcher
+        #    (already scheduled by _focus_window) must notice, hand the keyboard to
+        #    the new window, and stop capturing -- WITHOUT unpinning or closing.
+        fake["active"] = 0x222  # a different window is now active
+        root.after(400, root.quit)   # pump long enough for the 150ms watcher tick
+        root.mainloop()
+        assert st["pinned"] is True, "switching apps must NOT unpin a pinned menu"
+        assert st["capturing"] is False, "switching apps must stop capturing"
+        assert root.winfo_exists(), "pinned menu must stay open on switch-away"
+        assert 0x222 in handed_to, (
+            "the keyboard must be handed to the newly-active window, got %r"
+            % (handed_to,))
+
+        # 3. Press pin while pinned-but-dormant -> re-grab focus, STILL pinned.
+        m._toggle_pin()
+        assert st["pinned"] is True, "pressing pin while dormant must NOT unpin"
+        assert st["capturing"] is True, "pressing pin must re-grab focus"
+        assert m.pin_button._active is True
+
+        # 4. Press pin while pinned-and-live -> unpin.
+        m._toggle_pin()
+        assert st["pinned"] is False, "pressing pin while live must unpin"
+        assert m.pin_button._active is False
+    finally:
+        xfocus.active_window = _orig_active
+        xfocus.set_input_focus = _orig_setfocus
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_xfocus_helpers_are_crashproof() -> None:
+    """xfocus is best-effort: active_window() returns an int and set_input_focus()
+    returns a bool no matter what (missing libX11 / no display / bad window), so the
+    menu can call them freely without ever risking a crash."""
+    import xfocus
+    aw = xfocus.active_window()
+    assert isinstance(aw, int)               # a window id or 0, never an exception
+    assert xfocus.set_input_focus(0) is False  # falsy window -> no-op, False
+    assert isinstance(xfocus.set_input_focus(aw or 1), bool)
 
 
 def _is_destroyed(root) -> bool:
@@ -1047,6 +1138,7 @@ def main() -> int:
         ("winwatch_index_resolution", test_winwatch_index_resolution, ()),
         ("winwatch_counts_new_windows_and_dedups",
          test_winwatch_counts_new_windows_and_dedups, ()),
+        ("xfocus_helpers_are_crashproof", test_xfocus_helpers_are_crashproof, ()),
     ]
     for name, fn, _ in logic_tests:
         total += 1
@@ -1100,6 +1192,8 @@ def main() -> int:
         ("ui_search_filtering_never_churns_windows",
          test_ui_search_filtering_never_churns_windows),
         ("ui_pin_keeps_menu_open", test_ui_pin_keeps_menu_open),
+        ("ui_pin_keeps_capturing_and_regrabs_on_press",
+         test_ui_pin_keeps_capturing_and_regrabs_on_press),
         ("ui_pinned_forced_close_still_works",
          test_ui_pinned_forced_close_still_works),
         ("ui_pin_before_arm_does_not_re_grab",

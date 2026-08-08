@@ -60,6 +60,29 @@ MENU_DAEMON_AUTOSTART_SYSTEM_PATH = (
     "/home/main/.config/autostart/azarch-application-menu-daemon.desktop"
 )
 
+# Per-user seed for the launch-frequency store (usage.py's UsageStore file). The
+# menu orders apps most-launched first; on a FRESH profile there is no history, so
+# without this everything would sort alphabetically. Seeding a few counts fixes the
+# STARTING top of the list to the apps a new user wants first -- System Settings,
+# LibreWolf, kitty, Dolphin (descending) -- while leaving it fully dynamic: as the
+# user opens apps the WindowWatcher bumps these counts and the order re-sorts, so
+# the seed only decides the initial arrangement. Keyed by .desktop id (usage.py's
+# key); counts are spaced so the intended order is unambiguous. Emitted by
+# configuration/desktop.py as a home-owned file (mirrored into /etc/skel).
+MENU_USAGE_SEED_SYSTEM_PATH = (
+    "/home/main/.local/share/azarch-application-menu/usage.json"
+)
+
+# desktop_id -> starting launch count. Descending so order_key (-count, name) puts
+# them in exactly this order at the top of a fresh menu; the tail (everything else,
+# count 0) stays alphabetical.
+MENU_USAGE_SEED: dict[str, int] = {
+    "systemsettings.desktop": 4,     # System Settings
+    "librewolf.desktop": 3,          # LibreWolf
+    "kitty.desktop": 2,              # kitty
+    "org.kde.dolphin.desktop": 1,   # Dolphin
+}
+
 # The panel icon glyph: the SAME "application-menu" hamburger Plasma's Kickoff
 # uses, so our icon is visually identical to it. Single source of truth;
 # configuration/desktop.py imports it.
@@ -68,12 +91,12 @@ MENU_ICON_NAME = "application-menu"
 
 # --- Source files (in the repo) ---------------------------------------------
 # The menu is a multi-module package: menu.py (the orchestrator) imports the other
-# modules as flat siblings (applist/widgets/theme/apps/icons/usage/actions/editing),
-# and daemon.py imports menu.py to keep it resident for instant open; test_menu
-# rides along with them. ALL of these must land in MENU_LIB_DIR together or menu.py
-# (or the daemon) crashes on launch with an ImportError. This list is the single
-# source of truth for what the build emits; keep it in lock-step with the standalone
-# install.sh.
+# modules as flat siblings (applist/widgets/theme/apps/icons/usage/actions/editing/
+# xfocus), and daemon.py imports menu.py to keep it resident for instant open;
+# test_menu rides along with them. ALL of these must land in MENU_LIB_DIR together
+# or menu.py (or the daemon) crashes on launch with an ImportError. This list is the
+# single source of truth for what the build emits; keep it in lock-step with the
+# standalone install.sh.
 MENU_MODULES = [
     "menu.py",
     "applist.py",
@@ -85,6 +108,7 @@ MENU_MODULES = [
     "usage.py",
     "actions.py",
     "editing.py",
+    "xfocus.py",
     "daemon.py",
     "test_menu.py",
 ]
@@ -141,6 +165,20 @@ def daemon_autostart_desktop() -> str:
     (verbatim from the source tree). Emitted by configuration/desktop.py into
     ~/.config/autostart so the daemon is up before the first panel-icon click."""
     return _read_source(_SRC_DAEMON_DESKTOP)
+
+
+def usage_seed_json() -> str:
+    """The seed launch-frequency store (usage.json) that fixes the STARTING top of
+    the menu to System Settings, LibreWolf, kitty, Dolphin on a fresh profile.
+
+    Rendered in the SAME compact form usage.py's UsageStore._save writes (json.dump
+    with separators=(",", ":")) so the store reads it straight back (the emitter adds
+    a trailing newline, which json.load ignores). It stays fully dynamic afterwards:
+    the daemon's WindowWatcher bumps these counts on every real app-open and
+    re-sorts."""
+    import json
+
+    return json.dumps(MENU_USAGE_SEED, separators=(",", ":"))
 
 
 # --- Emit plan --------------------------------------------------------------

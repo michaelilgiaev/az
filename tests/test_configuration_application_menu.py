@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import configparser
 import io
+import json
 import os
 
 from azarch.configuration import application_menu as am
@@ -119,6 +120,18 @@ def test_emit_ships_winwatch_module():
     assert "from winwatch import" in am.daemon_py()
 
 
+def test_emit_ships_xfocus_module():
+    # The pinned menu hands the keyboard back to the newly-active app via xfocus.py
+    # (ctypes/libX11 XSetInputFocus), which menu.py imports (`import xfocus`). It MUST
+    # be emitted into MENU_LIB_DIR or the built ISO ships a menu.py that dies at launch
+    # with `ImportError: No module named 'xfocus'`. Same manifest-drift guard as
+    # winwatch: keep MENU_MODULES in lock-step with the standalone install.sh.
+    dests = {e["dest"] for e in am.emit_plan()}
+    assert f"{am.MENU_LIB_DIR}/xfocus.py" in dests
+    # menu.py really does depend on xfocus (so shipping it is not optional).
+    assert "import xfocus" in am.menu_py()
+
+
 def test_menu_is_borderless_and_kickoff_sized():
     # The menu must be chromeless (no titlebar/min/max/close) and sized to match
     # Plasma's Kickoff popup, pinned bottom-right -- matching the live hypervisor.
@@ -172,6 +185,42 @@ def test_highlight_bar_is_not_animated():
     assert "def _grow" not in src                    # nor a grow-over-time helper
     # show() reveals the bar at full size in one shot (deiconify, in widgets.py).
     assert "deiconify" in src
+
+
+def test_usage_seed_orders_the_default_top_four():
+    # A fresh profile has no launch history, so the menu would sort alphabetically.
+    # The seed store fixes the STARTING top four to System Settings, LibreWolf,
+    # kitty, Dolphin (descending), keyed by .desktop id. Parse it and assert the
+    # order the menu's sort (-count, name) would produce is exactly that.
+    seed = json.loads(am.usage_seed_json())
+    ranked = sorted(seed.items(), key=lambda kv: -kv[1])
+    assert [k for k, _ in ranked] == [
+        "systemsettings.desktop",
+        "librewolf.desktop",
+        "kitty.desktop",
+        "org.kde.dolphin.desktop",
+    ], ranked
+    # System Settings (kept) is seeded; KDE System Settings (hidden) is NOT -- it
+    # never appears, so seeding it would be meaningless.
+    assert "kdesystemsettings.desktop" not in seed
+
+
+def test_usage_seed_matches_usagestore_format_and_is_home_owned():
+    # The seed must be byte-for-byte what usage.py's UsageStore writes (compact
+    # json.dumps with separators (",", ":")), so the store reads it straight back.
+    seed_txt = am.usage_seed_json()
+    assert seed_txt == json.dumps(am.MENU_USAGE_SEED, separators=(",", ":"))
+    assert " " not in seed_txt  # compact form -> no spaces after ',' or ':'
+
+    # It is emitted as a per-user (home-owned) data file so a fresh profile inherits
+    # it (and steps.py mirrors it into /etc/skel for Calamares-installed users).
+    plan = {e["dest"]: e for e in desktop.emit_plan()}
+    assert am.MENU_USAGE_SEED_SYSTEM_PATH in plan, am.MENU_USAGE_SEED_SYSTEM_PATH
+    entry = plan[am.MENU_USAGE_SEED_SYSTEM_PATH]
+    assert entry["owner"] == "home"          # chowned 1000:998 + mirrored to skel
+    assert entry["mode"] == 0o644
+    assert entry["dest"].startswith(desktop.HOME + "/")  # under /home/main
+    assert entry["builder"]() == seed_txt
 
 
 def test_launcher_is_a_single_instance_toggle():
