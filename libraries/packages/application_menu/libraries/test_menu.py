@@ -743,6 +743,90 @@ def test_ui_pin_keeps_capturing_and_regrabs_on_press() -> None:
             pass
 
 
+def test_ui_pinned_claims_x_focus_onto_own_window() -> None:
+    """Regression for 'pin steals focus to KRunner'. VERIFIED on the live KWin
+    hypervisor: our override-redirect window is NEVER made the X input focus by
+    ``focus_force()`` alone -- with the menu open the real X input focus sits on the
+    Desktop/KRunner, and while UNPINNED only the global grab's keyboard capture keeps
+    the search box live. So the instant pinning releases that grab, keystrokes fall to
+    whatever X still focuses (KRunner on an idle session) unless the menu explicitly
+    grabs the real keyboard.
+
+    The ONE primitive that actually moves (and keeps) the X input focus on an
+    unmanaged window under KWin is ``XSetInputFocus`` targeting that window
+    (xfocus.set_input_focus(our_id)). This test pins the menu with a faked xfocus and
+    asserts the pin path calls set_input_focus with OUR OWN window id -- i.e. the menu
+    claims the keyboard for itself rather than merely calling focus_force() (which the
+    live WM ignores) and, worse, later handing focus AWAY via the active-window
+    watcher.
+
+    active_window() is faked to a STABLE value across the whole flow (modelling the
+    real WM: focus_force on our override-redirect window does not change
+    _NET_ACTIVE_WINDOW), so any set_input_focus we see is the fix claiming focus for
+    the menu, not the switch-away handler."""
+    import xfocus
+    _orig_active = xfocus.active_window
+    _orig_setfocus = xfocus.set_input_focus
+    focused = []                       # every window id set_input_focus is asked for
+    # A foreign window is "active" and stays active -- focus_force on our unmanaged
+    # window does NOT change _NET_ACTIVE_WINDOW on the real WM, so this never varies.
+    xfocus.active_window = lambda: 0xABC
+    xfocus.set_input_focus = lambda win: (focused.append(win), True)[1]
+
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        st = root.az_state
+        assert st["pinned"] is False
+
+        our_id = root.winfo_id()
+        # Pin. The menu must claim the REAL keyboard onto its own window (the only
+        # thing that works on KWin), not just focus_force() and hope.
+        m._toggle_pin()
+        assert st["pinned"] is True, st
+        assert our_id in focused, (
+            "pinning must claim X input focus onto our OWN window id (0x%x) via "
+            "XSetInputFocus -- focus_force() alone does not move focus off "
+            "KRunner/Desktop on KWin; set_input_focus was called with %r"
+            % (our_id, [hex(w) for w in focused]))
+        assert st["capturing"] is True, st
+
+        # And it must NOT immediately hand focus to the (unchanged) foreign active
+        # window -- that is the switch-away path, which must only fire on a real
+        # active-window CHANGE, never at pin time.
+        root.after(400, root.quit)     # pump past the 150ms watcher tick
+        root.mainloop()
+        assert 0xABC not in focused, (
+            "a stable active window must NOT trigger a switch-away hand-off; the "
+            "menu kept focus for itself only. focused=%r"
+            % ([hex(w) for w in focused],))
+        assert st["pinned"] is True and st["capturing"] is True, st
+
+        # Second reported symptom: clicking the search box while pinned-but-dormant
+        # must re-claim focus (Kickoff refocuses on click). Simulate dormancy, then a
+        # click on the entry, and assert the menu re-claimed X focus onto its own id.
+        st["capturing"] = False
+        focused.clear()
+        m._on_search_click()           # what the entry's <Button-1> binding fires
+        assert our_id in focused, (
+            "clicking the search box while pinned+dormant must re-claim X input "
+            "focus onto our own window id; set_input_focus got %r"
+            % ([hex(w) for w in focused],))
+        assert st["capturing"] is True, "click must restore capturing"
+    finally:
+        for _tid in list(getattr(root, "az_timers", [])):
+            try:
+                root.after_cancel(_tid)
+            except Exception:
+                pass
+        xfocus.active_window = _orig_active
+        xfocus.set_input_focus = _orig_setfocus
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
 def test_xfocus_helpers_are_crashproof() -> None:
     """xfocus is best-effort: active_window() returns an int and set_input_focus()
     returns a bool no matter what (missing libX11 / no display / bad window), so the
@@ -1194,6 +1278,8 @@ def main() -> int:
         ("ui_pin_keeps_menu_open", test_ui_pin_keeps_menu_open),
         ("ui_pin_keeps_capturing_and_regrabs_on_press",
          test_ui_pin_keeps_capturing_and_regrabs_on_press),
+        ("ui_pinned_claims_x_focus_onto_own_window",
+         test_ui_pinned_claims_x_focus_onto_own_window),
         ("ui_pinned_forced_close_still_works",
          test_ui_pinned_forced_close_still_works),
         ("ui_pin_before_arm_does_not_re_grab",

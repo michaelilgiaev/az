@@ -116,6 +116,11 @@ class AppMenu:
         self._populated = False
         self.search_var = tk.StringVar()
         self.pin_button: IconButton | None = None
+        # Optional hook the window sets after construction: called when the user
+        # CLICKS the search box, so a pinned-but-dormant menu can re-claim the X
+        # keyboard on the click (Kickoff refocuses its search box on click). It is a
+        # no-op unless pinned+not-capturing -- see build_window's _reclaim_focus.
+        self._on_focus_request = None
 
         self._build()
 
@@ -145,6 +150,19 @@ class AppMenu:
             self.search_entry.focus_set()
         except tk.TclError:
             pass
+
+    def _on_search_click(self, _e=None) -> None:
+        """A click landed on the search box. Put the Tk caret there and, if the
+        window gave us a focus-request hook, ask it to (re)claim the X keyboard --
+        this is what makes clicking the search box work while the menu is pinned but
+        dormant (the WM will not hand an unmanaged window focus on a click by itself).
+        The hook decides whether anything is needed (no-op unless pinned+dormant)."""
+        self._focus_search()
+        if self._on_focus_request is not None:
+            try:
+                self._on_focus_request()
+            except tk.TclError:
+                pass
 
     # -- top: search + settings(no-op) + pin -------------------------------
     def _build_search_row(self, parent: tk.Widget) -> None:
@@ -186,6 +204,10 @@ class AppMenu:
             highlightthickness=0, borderwidth=0,
         )
         self.search_entry.pack(fill="both", expand=True, ipady=6)
+        # A click in the entry re-claims focus while pinned+dormant (Kickoff-style),
+        # via the window's focus-request hook. add="+" so it runs ALONGSIDE Tk's own
+        # click handling (caret placement / selection), not instead of it.
+        self.search_entry.bind("<Button-1>", self._on_search_click, add="+")
         # Standard desktop text-editing (select-all, cut/copy/paste, undo/redo,
         # word delete) so the search box behaves like any editor's input, not the
         # emacs-ish Tk default. Keep the returned undo stack referenced so its
@@ -200,9 +222,7 @@ class AppMenu:
         )
         self._placeholder_lbl.place(in_=self.search_entry, x=2, rely=0.5,
                                     anchor="w")
-        self._placeholder_lbl.bind(
-            "<Button-1>", lambda _e: self.search_entry.focus_set()
-        )
+        self._placeholder_lbl.bind("<Button-1>", self._on_search_click)
         self._update_placeholder()
 
     def _noop(self) -> None:
@@ -461,14 +481,31 @@ def build_window(persistent: bool = False) -> tk.Tk:
         _later(150, _watch_active)
 
     def _focus_window() -> None:
-        """Pull the X keyboard focus onto our (borderless) window and into the
-        search box, mark us capturing, and start watching for a switch-away. A
-        pinned menu holds NO global grab (so other windows stay clickable), which
-        means an overrideredirect window would otherwise never receive the keyboard
-        from the WM -- focus_force() is what makes the search box live while pinned,
-        and _watch_active() is what lets it go dormant again when the user leaves."""
+        """Claim the X keyboard for our (borderless) window and put the caret in the
+        search box, mark us capturing, and start watching for a switch-away. A pinned
+        menu holds NO global grab (so other windows stay clickable), and an
+        overrideredirect window is NOT one the window manager will ever hand the
+        keyboard to on its own -- so we must take the real X input focus ourselves.
+
+        VERIFIED on the live KWin hypervisor: ``focus_force()`` alone does NOT move
+        the real X input focus onto this unmanaged window (with the menu open the
+        focus stays on the Desktop, and while unpinned only the global grab's keyboard
+        capture kept the search box live). The instant the pin released that grab,
+        keystrokes fell to whatever X still focused -- KRunner on an idle session --
+        which is the 'typing goes to KRunner after pin' bug. The one primitive that
+        DOES move (and keep) focus on an unmanaged window is ``XSetInputFocus``
+        targeting that window, i.e. xfocus.set_input_focus(our_id); KWin does not
+        steal it back. So we call that on our OWN window id and let Tk route the
+        keystrokes into the entry. focus_force() is kept as a harmless belt-and-braces
+        (it sets Tk's internal focus and covers WMs where it does work)."""
         try:
             root.focus_force()
+        except tk.TclError:
+            pass
+        # The real fix: push the X input focus onto our own window so the keyboard
+        # actually comes here (not to KRunner/Desktop) once the grab is gone.
+        try:
+            xfocus.set_input_focus(root.winfo_id())
         except tk.TclError:
             pass
         try:
@@ -601,9 +638,22 @@ def build_window(persistent: bool = False) -> tk.Tk:
         except tk.TclError:
             pass
 
+    def _reclaim_focus() -> None:
+        """Re-claim the X keyboard when the user CLICKS the search box while the menu
+        is pinned but dormant (they alt-tabbed away, then clicked back into the box).
+        Mirrors Kickoff, where clicking the search field refocuses it. No-op unless
+        pinned-and-not-capturing: while capturing we already hold the keyboard, and
+        while unpinned the global grab owns it, so neither needs re-claiming (and we
+        must not disturb the grab). Routes through _focus_window, which does the
+        XSetInputFocus-onto-our-window that actually works on KWin."""
+        if state["closed"] or not state["pinned"] or state["capturing"]:
+            return
+        _focus_window()
+
     # Build the menu content (search + app list + power row). pin_action drives the
     # pin button: pin+focus / re-focus-while-pinned / unpin (see its docstring).
     menu = AppMenu(root, close_menu, pin_action)
+    menu._on_focus_request = _reclaim_focus
     root.az_menu = menu
     root.az_pinned = False
 
