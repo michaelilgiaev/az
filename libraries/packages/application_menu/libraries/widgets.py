@@ -78,10 +78,19 @@ class Tooltip:
 
     Shows ``text`` in a small Breeze-styled popup the INSTANT the mouse enters the
     widget, and hides it the instant the mouse leaves (or on press / when the
-    widget goes away). There is NO dwell delay -- the hint tracks the pointer 1:1
-    so the greyed-out Settings button explains itself immediately on hover. Works
-    even on a DISABLED control (the button binds no hover-paint handlers, but we
-    bind our own <Enter>/<Leave> here so the hint still appears).
+    widget goes away). There is NO dwell delay -- the hint appears the moment the
+    pointer arrives. Works even on a DISABLED control (the button binds no
+    hover-paint handlers, but we bind our own <Enter>/<Leave> here so the hint
+    still appears).
+
+    Renders ONCE and STAYS PUT. It is bound to the button frame only (never a
+    second copy on the inner glyph label), and on <Leave> it re-checks -- by
+    pointer position (see :meth:`_pointer_still_inside`) -- whether the pointer is
+    still somewhere inside the box; a crossing between the frame and its own
+    descendants is ignored, so sliding the pointer around inside the box does NOT
+    tear the popup down and rebuild it (the old flicker). The popup only appears on
+    a real entry into the box and only disappears when the pointer genuinely leaves
+    the whole box subtree; to change it you must re-hover the box.
 
     Pure Tkinter, dependency-free and crash-proof, like the rest of the menu: the
     popup is an ``overrideredirect`` Toplevel (no window chrome), positioned just
@@ -93,16 +102,68 @@ class Tooltip:
         self._widget = widget
         self._text = text
         self._tip: tk.Toplevel | None = None
-        # Bind on the widget AND (if it has children, e.g. the icon label inside a
-        # button frame) so hovering the glyph counts too. add="+" keeps any
-        # existing bindings intact. <Enter> shows the hint immediately (no
-        # after()-based dwell) so it appears the moment the pointer arrives.
+        # Bind ONLY on the button frame (not also on the inner glyph label): the
+        # frame's <Enter>/<Leave> already cover the whole box, and a second binding
+        # on the label is exactly what made two popups fight and flicker as the
+        # pointer crossed from frame to glyph. add="+" keeps any existing bindings
+        # intact. <Enter> shows the hint immediately (no after()-based dwell).
         widget.bind("<Enter>", self._show, add="+")
         widget.bind("<Leave>", self._hide, add="+")
         widget.bind("<Button-1>", self._hide, add="+")
         widget.bind("<Destroy>", self._hide, add="+")
 
+    def _pointer_still_inside(self, event) -> bool:
+        """True when the pointer, at the moment of this <Leave>, is still over the
+        bound widget or one of its OWN descendants -- i.e. this <Leave> is just the
+        pointer crossing onto a child glyph, NOT a real exit of the whole box.
+
+        This is the crossing-detail check done positionally, because Tkinter's Event
+        does not expose the X ``NotifyInferior`` detail in every build (verified: the
+        Event here carries no ``detail`` attribute at all). ``winfo_containing`` asks
+        Tk which widget sits under the given root coordinate; we then walk that
+        widget's parent chain looking for our own widget.
+
+        CRUCIAL: the popup Toplevel is created as ``tk.Toplevel(self._widget)``, so in
+        Tk's hierarchy it is itself a DESCENDANT of the bound widget -- and it sits
+        directly below the button, right on the natural downward exit path. If we
+        naively walked to ``self._widget`` we would treat "pointer moved down onto the
+        floating hint" as "still inside the box" and NEVER hide it (the popup would
+        orphan and stick on screen forever). So the walk BAILS the moment it reaches
+        the popup (``self._tip``): landing on the hint is a genuine exit of the box,
+        return False and let it hide.
+
+        Coordinates may legitimately be NEGATIVE (a window above/left of the origin,
+        or a second monitor at negative coords), so we do not reject those. Only a
+        truly unreadable coordinate -- Tk reports x_root/y_root as the string "??" on
+        a synthetic crossing, which int() rejects -- or any Tk error makes us return
+        False, so a genuine leave still hides the tip and we never wedge the popup
+        open. This is what makes the hint render once and hold its place: crossing to
+        the inner icon does not tear it down, so it never flickers."""
+        if event is None:
+            return False
+        try:
+            # int() turns Tk's "??" (no usable coordinate) into a ValueError, caught
+            # below -> treated as a real leave. Genuine negative coords parse fine.
+            xr = int(getattr(event, "x_root", "??"))
+            yr = int(getattr(event, "y_root", "??"))
+            under = self._widget.winfo_containing(xr, yr)
+            tip = self._tip
+            while under is not None:
+                # Reached the floating hint itself -> the pointer left the box onto
+                # the popup; that is a real exit, so do NOT count it as inside.
+                if tip is not None and under is tip:
+                    return False
+                if under is self._widget:
+                    return True
+                under = getattr(under, "master", None)
+        except (tk.TclError, ValueError, TypeError):
+            return False
+        return False
+
     def _show(self, _e=None) -> None:
+        # Already showing -> leave the existing popup exactly where it is (a repeat
+        # <Enter> from crossing back off a child must not rebuild it: that rebuild
+        # was the flicker).
         if self._tip is not None:
             return
         try:
@@ -131,6 +192,13 @@ class Tooltip:
             self._tip = None
 
     def _hide(self, _e=None) -> None:
+        # Ignore a <Leave> that is really just the pointer moving onto one of our
+        # own children: the pointer is still inside the box, so the popup must
+        # persist. Only a genuine exit of the whole box tears it down. A press or
+        # <Destroy> passes no usable coordinate, so _pointer_still_inside returns
+        # False for those and they hide as intended.
+        if self._pointer_still_inside(_e):
+            return
         if self._tip is not None:
             try:
                 self._tip.destroy()
@@ -354,12 +422,13 @@ class IconButton(tk.Frame):
         # A hover tooltip (independent of the hover-paint above) is attached even
         # when the button is disabled -- e.g. the greyed-out Settings button tells
         # the user its screen is not built yet. Keep the Tooltip referenced so it
-        # is not garbage-collected. Attach it to both the frame and its glyph label
-        # so resting on the icon itself still triggers the hint.
+        # is not garbage-collected. ONE tooltip on the frame covers the whole box
+        # (the frame's <Enter>/<Leave> already fire for the glyph inside it); a
+        # second copy on the label is what used to make the hint flicker as the
+        # pointer crossed from frame to icon, so we no longer add one.
         self._tooltips: list[Tooltip] = []
         if tooltip:
             self._tooltips.append(Tooltip(self, tooltip))
-            self._tooltips.append(Tooltip(self._label, tooltip))
 
     def _fill(self, bg: str, border: str) -> None:
         try:

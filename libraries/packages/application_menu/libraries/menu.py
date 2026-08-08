@@ -557,15 +557,19 @@ def build_window(persistent: bool = False) -> tk.Tk:
         """Handle a press of the pin button; return the resulting pinned state so
         the button can reflect it.
 
-        Three cases (this is what the spec's 'keep it pinned, hover back and press
-        to gain focus' asks for):
-          * NOT pinned      -> pin it AND grab keyboard focus. We drop the global
-            pointer grab (a pinned menu must not eat the whole desktop's clicks) and
-            instead focus_force the window so the search box keeps capturing.
-          * pinned, NOT capturing (focus had left -- the user alt-tabbed away and is
-            now hovering back and pressing pin) -> stay pinned, just RE-GRAB focus.
-          * pinned AND capturing -> unpin (this is how pinning is turned off): re-
-            take the global grab so the next outside click dismisses again.
+        The pin button is a plain TOGGLE and never depends on focus -- pressing it
+        does exactly what its state says, in a single press:
+          * NOT pinned -> pin it AND grab keyboard focus. We drop the global pointer
+            grab (a pinned menu must not eat the whole desktop's clicks) and instead
+            focus the window so the search box keeps capturing.
+          * pinned (whether live OR dormant after an alt-tab away) -> UNPIN. We do
+            NOT make the user first press to reclaim focus and then press again to
+            unpin; one press on the pin always unpins. Re-take the global grab so the
+            next outside click dismisses again.
+
+        (Reclaiming focus on a dormant pinned menu still happens -- but through
+        CLICKING THE SEARCH BOX, via _reclaim_focus -- so waking the menu and toggling
+        the pin are separate, unsurprising gestures.)
         """
         if not state["pinned"]:
             state["pinned"] = True
@@ -575,11 +579,8 @@ def build_window(persistent: bool = False) -> tk.Tk:
             except tk.TclError:
                 pass
             _focus_window()
-        elif not state["capturing"]:
-            # Still pinned; the user is asking for focus back.
-            _focus_window()
         else:
-            # Pinned and live -> turn pinning off.
+            # Pinned (live or dormant) -> turn pinning off in one press.
             state["pinned"] = False
             root.az_pinned = False
             try:

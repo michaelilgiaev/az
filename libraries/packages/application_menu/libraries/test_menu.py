@@ -864,17 +864,25 @@ def test_ui_super_key_closes_and_respects_pin() -> None:
             pass
 
 
-def test_ui_pin_keeps_capturing_and_regrabs_on_press() -> None:
-    """The pin-focus spec, as a state machine:
+def test_ui_pin_is_a_focus_independent_toggle() -> None:
+    """The pin button is a plain toggle that NEVER needs a focus-priming press.
+
+    Regression for 'a pinned-but-dormant menu takes two pin presses to unpin (one to
+    gain focus, one to unpin)'. The pin now unpins in a SINGLE press regardless of
+    whether it currently holds the keyboard, as a state machine:
 
       1. Press pin (unpinned)         -> pinned AND capturing (search stays live).
       2. User switches app (alt-tab)  -> still pinned, but NO longer capturing
                                          (menu stays open, search goes dormant, and
                                          the keyboard is handed to the new window).
-      3. Press pin (pinned, dormant)  -> STAYS pinned and re-grabs focus (this is
-                                         'hover back and press to gain focus'); it
-                                         must NOT unpin here.
-      4. Press pin (pinned, live)     -> unpins.
+      3. Press pin (pinned, dormant)  -> UNPINS in ONE press (does NOT merely
+                                         re-grab focus and stay pinned).
+
+    Step 4 below re-pins and unpins again from the LIVE state to prove a live pinned
+    menu also unpins in one press -- so the button behaves identically no matter the
+    focus state. Waking a dormant pinned menu still works, but that is the search
+    box's job (test_ui_pinned_claims_x_focus_onto_own_window covers the click-to-
+    reclaim path); it is deliberately NOT bound to the pin button anymore.
 
     The switch-away in step 2 is what actually happens on the live WM: an override-
     redirect window will not surrender a forced keyboard focus via <FocusOut> or a
@@ -921,13 +929,19 @@ def test_ui_pin_keeps_capturing_and_regrabs_on_press() -> None:
             "the keyboard must be handed to the newly-active window, got %r"
             % (handed_to,))
 
-        # 3. Press pin while pinned-but-dormant -> re-grab focus, STILL pinned.
+        # 3. Press pin while pinned-but-dormant -> UNPINS in ONE press (the bug was
+        #    that this only re-grabbed focus and left the menu pinned, forcing a
+        #    second press to unpin).
         m._toggle_pin()
-        assert st["pinned"] is True, "pressing pin while dormant must NOT unpin"
-        assert st["capturing"] is True, "pressing pin must re-grab focus"
-        assert m.pin_button._active is True
+        assert st["pinned"] is False, (
+            "pressing pin while dormant must unpin in a single press, not merely "
+            "reclaim focus")
+        assert m.pin_button._active is False
 
-        # 4. Press pin while pinned-and-live -> unpin.
+        # 4. Re-pin, then press once more from the LIVE state -> unpins too, proving
+        #    the toggle is identical regardless of focus/capturing.
+        m._toggle_pin()
+        assert st["pinned"] is True and st["capturing"] is True, st
         m._toggle_pin()
         assert st["pinned"] is False, "pressing pin while live must unpin"
         assert m.pin_button._active is False
@@ -1600,6 +1614,129 @@ def test_ui_settings_tooltip_is_instant() -> None:
             pass
 
 
+def test_ui_settings_tooltip_renders_once_and_sticks() -> None:
+    """Fix #1: the Settings-button hint must render ONCE and hold its place -- it
+    must NOT tear down and rebuild as the pointer slides across the box (the old
+    flicker, caused by two tooltips fighting on the frame and its inner glyph, plus
+    frame<->child crossings hiding then re-showing the popup).
+
+    Two guarantees:
+
+      * Exactly ONE Tooltip is attached to the button (not a second copy on the
+        glyph label), so there is a single popup, never a pair swapping in and out.
+      * Once shown, a <Leave> whose pointer is STILL over the box (it merely crossed
+        onto the inner glyph) does nothing. Tkinter's Event exposes no X crossing
+        ``detail`` in every build, so the guard is positional: it re-reads where the
+        pointer is via winfo_containing. We drive that here by firing <Leave> on the
+        frame with x_root/y_root set to a point INSIDE the glyph label -- the same
+        signal a real frame->child crossing produces. The popup Toplevel must be the
+        SAME object throughout (identity unchanged == never rebuilt == no flicker);
+        a <Leave> whose coordinates fall OUTSIDE the box then tears it down.
+    """
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        btn = m.settings_button
+        tips = getattr(btn, "_tooltips", [])
+        assert len(tips) == 1, (
+            "the button must carry exactly ONE tooltip (a second copy on the glyph "
+            "is what made it flicker); got %d" % len(tips))
+        tip = tips[0]
+        root.update_idletasks()
+
+        # A point that lands squarely inside the inner glyph label (a child of the
+        # button frame) -- crossing here keeps the pointer inside the box subtree.
+        glyph = btn._label
+        inside_x = glyph.winfo_rootx() + max(1, glyph.winfo_width() // 2)
+        inside_y = glyph.winfo_rooty() + max(1, glyph.winfo_height() // 2)
+        # A point well outside the whole button but with valid (non-negative) root
+        # coords -- to the RIGHT of the button -- so this exercises the real
+        # "coordinate present, but not over us" branch, not the missing-coord one.
+        outside_x = btn.winfo_rootx() + btn.winfo_width() + 200
+        outside_y = btn.winfo_rooty() + max(1, btn.winfo_height() // 2)
+
+        # Real entry -> the popup appears once.
+        tip._widget.event_generate("<Enter>")
+        root.update_idletasks()
+        assert tip._tip is not None and tip._tip.winfo_exists(), \
+            "tooltip must appear on a real <Enter>"
+        first = tip._tip  # capture identity to prove it is never rebuilt below
+
+        # Pointer slides onto the inner glyph: a <Leave> on the frame, but the
+        # pointer is still inside the box -> the popup must persist unchanged.
+        # event_generate takes -rootx/-rooty; Tk fills event.x_root/y_root from them.
+        tip._widget.event_generate(
+            "<Leave>", rootx=inside_x, rooty=inside_y)
+        root.update_idletasks()
+        assert tip._tip is first and first.winfo_exists(), (
+            "a <Leave> whose pointer is still over the glyph must NOT destroy the "
+            "tooltip -- the pointer is still inside the box")
+
+        # Pointer returns to the frame from the child: <Enter> again must NOT rebuild
+        # the existing popup (that rebuild was the flicker).
+        tip._widget.event_generate("<Enter>", rootx=inside_x, rooty=inside_y)
+        root.update_idletasks()
+        assert tip._tip is first, (
+            "returning from the glyph must NOT rebuild the tooltip -- it should "
+            "render once and stay put")
+
+        # A genuine exit of the whole box (pointer now outside) finally hides it.
+        tip._widget.event_generate(
+            "<Leave>", rootx=outside_x, rooty=outside_y)
+        root.update_idletasks()
+        assert tip._tip is None, \
+            "a real <Leave> off the box must tear the tooltip down"
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_ui_settings_tooltip_hides_when_exiting_onto_popup() -> None:
+    """Fix #1, regression: the popup Toplevel is a child of the button frame and is
+    positioned DIRECTLY BELOW the button, right on the natural downward exit path.
+
+    Guards against a subtle bug in the 'is the pointer still inside the box?' check:
+    because winfo_containing sees the popup and the popup's Tk-hierarchy parent chain
+    leads back to the button frame, a <Leave> whose coordinates land ON THE POPUP
+    must NOT be mistaken for 'still inside the box'. If it were, moving the mouse
+    straight down off the button (onto the hint) would leave the popup stuck on
+    screen forever -- the frame gets no further <Leave> once the pointer is on the
+    popup, and the popup has no <Leave> of its own. So a leave onto the popup must
+    hide the tooltip.
+    """
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        btn = m.settings_button
+        tip = btn._tooltips[0]
+        root.update_idletasks()
+
+        tip._widget.event_generate("<Enter>")
+        root.update_idletasks()
+        assert tip._tip is not None, "tooltip must show on <Enter>"
+        popup = tip._tip
+        root.update_idletasks()
+        root.update()
+
+        # A point squarely on the popup itself -- moving straight down off the button
+        # onto the floating hint. This is the exact scenario that used to stick.
+        on_popup_x = popup.winfo_rootx() + max(1, popup.winfo_width() // 2)
+        on_popup_y = popup.winfo_rooty() + max(1, popup.winfo_height() // 2)
+        tip._widget.event_generate(
+            "<Leave>", rootx=on_popup_x, rooty=on_popup_y)
+        root.update_idletasks()
+        assert tip._tip is None, (
+            "leaving the button DOWNWARD onto the popup must hide the tooltip, not "
+            "leave it orphaned and stuck on screen")
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
 def test_ui_persistent_show_hide() -> None:
     """Daemon mode: build_window(persistent=True) exposes az_show/az_hide that
     hide (withdraw) the window instead of destroying it, so it can be re-shown.
@@ -1834,8 +1971,8 @@ def main() -> int:
         ("ui_super_key_binding_is_present", test_ui_super_key_binding_is_present),
         ("ui_super_key_closes_and_respects_pin",
          test_ui_super_key_closes_and_respects_pin),
-        ("ui_pin_keeps_capturing_and_regrabs_on_press",
-         test_ui_pin_keeps_capturing_and_regrabs_on_press),
+        ("ui_pin_is_a_focus_independent_toggle",
+         test_ui_pin_is_a_focus_independent_toggle),
         ("ui_pinned_claims_x_focus_onto_own_window",
          test_ui_pinned_claims_x_focus_onto_own_window),
         ("ui_pinned_forced_close_still_works",
@@ -1851,8 +1988,16 @@ def main() -> int:
          test_ui_highlight_bar_placed_over_leftmost_icon),
         ("ui_power_row_centered_and_not_clipped",
          test_ui_power_row_centered_and_not_clipped),
+        ("ui_settings_button_is_disabled", test_ui_settings_button_is_disabled),
+        ("ui_pin_button_still_enabled", test_ui_pin_button_still_enabled),
+        ("ui_dim_image_greys_but_keeps_size",
+         test_ui_dim_image_greys_but_keeps_size),
         ("ui_settings_button_has_tooltip", test_ui_settings_button_has_tooltip),
         ("ui_settings_tooltip_is_instant", test_ui_settings_tooltip_is_instant),
+        ("ui_settings_tooltip_renders_once_and_sticks",
+         test_ui_settings_tooltip_renders_once_and_sticks),
+        ("ui_settings_tooltip_hides_when_exiting_onto_popup",
+         test_ui_settings_tooltip_hides_when_exiting_onto_popup),
         ("ui_persistent_show_hide", test_ui_persistent_show_hide),
         ("ui_persistent_first_show_positions_before_map",
          test_ui_persistent_first_show_positions_before_map),
