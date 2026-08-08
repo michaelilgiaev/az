@@ -68,14 +68,15 @@ MENU_ICON_NAME = "application-menu"
 
 # --- Source files (in the repo) ---------------------------------------------
 # The menu is a multi-module package: menu.py (the orchestrator) imports the other
-# modules as flat siblings (widgets/theme/apps/icons/usage/actions/editing), and
-# daemon.py imports menu.py to keep it resident for instant open; test_menu rides
-# along with them. ALL of these must land in MENU_LIB_DIR together or menu.py (or
-# the daemon) crashes on launch with an ImportError. This list is the single source
-# of truth for what the build emits; keep it in lock-step with the standalone
+# modules as flat siblings (applist/widgets/theme/apps/icons/usage/actions/editing),
+# and daemon.py imports menu.py to keep it resident for instant open; test_menu
+# rides along with them. ALL of these must land in MENU_LIB_DIR together or menu.py
+# (or the daemon) crashes on launch with an ImportError. This list is the single
+# source of truth for what the build emits; keep it in lock-step with the standalone
 # install.sh.
 MENU_MODULES = [
     "menu.py",
+    "applist.py",
     "widgets.py",
     "theme.py",
     "apps.py",

@@ -57,12 +57,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import actions  # noqa: E402
 import editing  # noqa: E402
 import theme as T  # noqa: E402
+from applist import CanvasAppList  # noqa: E402
 from apps import AppEntry, scan_applications  # noqa: E402
 from icons import IconResolver  # noqa: E402
 from usage import UsageStore  # noqa: E402
-from widgets import (  # noqa: E402
-    AppRow, HighlightBar, IconButton, KickoffScrollBar, PowerButton,
-)
+from widgets import HighlightBar, IconButton, PowerButton  # noqa: E402
 
 
 # --- Geometry helper ------------------------------------------------------
@@ -104,13 +103,16 @@ class AppMenu:
         self.small_icons = IconResolver(size=T.POWER_ICON_SIZE)
         self.usage = UsageStore()
         # Canonical order: most-launched first, then alphabetical. This is the
-        # ONE true order the list is always restored to (see _apply_filter).
+        # ONE true order the list is always restored to.
         self.all_apps: list[AppEntry] = self.usage.sorted_apps(
             scan_applications()
         )
-        self.rows: list[AppRow] = []
-        self.visible_rows: list[AppRow] = []
-        self.selected_index = -1
+        # The scrollable list is a CanvasAppList (all apps drawn ONCE as canvas
+        # items, filtered by show/hide -- never mapping/unmapping per-row X
+        # windows, which is what made the old widget list flicker). Created in
+        # _build_app_list; rows are populated lazily via populate().
+        self.applist: CanvasAppList | None = None
+        self._populated = False
         self.search_var = tk.StringVar()
         self.pin_button: IconButton | None = None
 
@@ -227,82 +229,41 @@ class AppMenu:
 
     # -- middle: scrollable application list -------------------------------
     def _build_app_list(self, parent: tk.Widget) -> None:
-        wrap = tk.Frame(parent, bg=T.BG_COLOR)
-        wrap.pack(fill="both", expand=True)
-
-        self.canvas = tk.Canvas(
-            wrap, bg=T.BG_COLOR, highlightthickness=0, borderwidth=0
+        # The list is a CanvasAppList: every app is a set of canvas ITEMS (image
+        # + two text lines + a selection rectangle), drawn once and filtered by
+        # showing/hiding/moving those items. There are NO per-row child windows,
+        # so filtering never maps/unmaps X windows and thus never flickers. The
+        # items themselves are filled lazily by populate() (icon loading is the
+        # expensive part of opening the menu).
+        self.applist = CanvasAppList(
+            parent, [], self.icons.load, self._activate_entry
         )
-        self.canvas.pack(side="left", fill="both", expand=True)
-
-        # EXACT Plasma Kickoff scrollbar: an arrow-less, canvas-drawn rounded
-        # thumb (see widgets.KickoffScrollBar) rather than the classic Tk
-        # scrollbar. It hides itself when the list fits and brightens on hover,
-        # matching Kickoff. It packs/unpacks itself on the right via set().
-        self.scrollbar = KickoffScrollBar(wrap, command=self.canvas.yview)
-        self.scrollbar.pack(side="right", fill="y")
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
-
-        self.list_frame = tk.Frame(self.canvas, bg=T.BG_COLOR)
-        self._list_window = self.canvas.create_window(
-            (0, 0), window=self.list_frame, anchor="nw"
-        )
-
-        def on_frame_config(_e=None) -> None:
-            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-        def on_canvas_config(e) -> None:
-            self.canvas.itemconfigure(self._list_window, width=e.width)
-
-        self.list_frame.bind("<Configure>", on_frame_config)
-        self.canvas.bind("<Configure>", on_canvas_config)
-
-        # Mouse-wheel scrolling (X11 delivers Button-4/5).
-        for seq, delta in (("<Button-4>", -1), ("<Button-5>", 1)):
-            self.canvas.bind_all(seq, self._make_wheel(delta))
-        self.canvas.bind_all("<MouseWheel>", self._wheel_win)
-
-    def _make_wheel(self, direction: int):
-        def handler(_e=None) -> None:
-            self.canvas.yview_scroll(direction, "units")
-        return handler
-
-    def _wheel_win(self, e) -> None:
-        self.canvas.yview_scroll(-1 if e.delta > 0 else 1, "units")
 
     def populate(self) -> None:
-        """Build all application rows in canonical order, then apply whatever is
-        currently typed in the search box. Idempotent: a second call is a no-op,
-        so main() and the tests can both invoke it without double-building.
+        """Fill the list with every application in canonical order, then apply
+        whatever is currently typed in the search box. Idempotent: a second call
+        is a no-op, so main() and the tests can both invoke it without
+        double-building.
 
         This is deliberately NOT run during _build(): it loads a PhotoImage per
         app (the bulk of the open cost). The window's chrome is painted first and
         THEN this fills the list, so the menu appears instantly (see main())."""
-        if self.rows:
+        if self._populated:
             return
         try:
             if not self.root.winfo_exists():
                 return
         except tk.TclError:
             return
-        for entry in self.all_apps:
-            img = self.icons.load(entry.icon)
-            row = AppRow(self.list_frame, entry, img, self._activate_entry)
-            self.rows.append(row)
-        # Honour a query the user may have typed before the rows existed; falls
-        # back to the empty (show-all) filter otherwise.
-        self._apply_filter(self.search_var.get())
+        self.applist.set_entries(self.all_apps)
+        self._populated = True
+        # Honour a query the user may have typed before the list was filled;
+        # falls back to the empty (show-all) filter otherwise.
+        self.applist.apply_filter(self.search_var.get())
 
     # -- search filtering --------------------------------------------------
     def _on_search(self) -> None:
         self._update_placeholder()
-        self._apply_filter(self.search_var.get())
-
-    def _matches(self, row, q: str) -> bool:
-        e = row.entry
-        return not q or q in e.name.casefold() or q in e.type_label.casefold()
-
-    def _apply_filter(self, query: str) -> None:
         # The StringVar trace can fire during teardown; bail if the window is
         # already gone.
         try:
@@ -310,53 +271,8 @@ class AppMenu:
                 return
         except tk.TclError:
             return
-        q = query.strip().casefold()
-
-        # DIFFERENTIAL re-pack: only touch rows whose visibility actually CHANGES.
-        # self.rows is kept in canonical order, so packing each newly-shown row
-        # BEFORE the next row that is already visible keeps the on-screen order
-        # canonical WITHOUT forgetting+repacking the rows that stay put. Forgetting
-        # every row on each keystroke (the old approach) is what made the list
-        # FLASH as the user typed; leaving survivors alone keeps typing clean while
-        # still fixing the clear-the-search reshuffle (order is enforced by the
-        # before= insert, not by a full teardown).
-        desired = [row for row in self.rows if self._matches(row, q)]
-        desired_set = set(id(r) for r in desired)
-
-        # 1) Hide rows that should no longer be visible.
-        for row in self.visible_rows:
-            if id(row) not in desired_set:
-                row.pack_forget()
-
-        # 2) Show/insert rows that should be visible, in canonical order. For a
-        #    row already packed, do nothing. For a newly-shown row, insert it just
-        #    before the next desired row that is ALREADY on screen so it lands in
-        #    the right slot; if none follows, pack at the end.
-        currently = set(id(r) for r in self.visible_rows)
-        for idx, row in enumerate(desired):
-            if id(row) in currently:
-                continue  # already visible and correctly ordered -> leave it
-            anchor = None
-            for later in desired[idx + 1:]:
-                if id(later) in currently:
-                    anchor = later
-                    break
-            if anchor is not None:
-                row.pack(fill="x", before=anchor)
-            else:
-                row.pack(fill="x")
-            currently.add(id(row))
-
-        self.visible_rows = desired
-
-        # Reset selection to the first visible row so Enter launches something.
-        self.selected_index = 0 if self.visible_rows else -1
-        self._refresh_selection()
-        self.canvas.yview_moveto(0.0)
-
-    def _refresh_selection(self) -> None:
-        for i, row in enumerate(self.visible_rows):
-            row.set_selected(i == self.selected_index)
+        if self.applist is not None:
+            self.applist.apply_filter(self.search_var.get())
 
     def resort(self) -> None:
         """Re-order the list by the CURRENT launch counts (most-used first, then
@@ -365,96 +281,50 @@ class AppMenu:
         frozen until the process restarted (the 'sort only updates on restart'
         bug). Called on each re-show so the just-launched app floats up next time.
 
-        Re-sorts self.all_apps and self.rows in lockstep, then re-applies the
-        CURRENT filter so both order and visibility stay correct regardless of an
-        active query. Safe to call standalone."""
-        if not self.rows:
-            # Rows not built yet -> just fix the model order; populate() will
-            # build in this order.
-            self.all_apps = self.usage.sorted_apps(self.all_apps)
+        Re-sorts self.all_apps, hands the new order to the list, then re-applies
+        the CURRENT filter so both order and visibility stay correct regardless
+        of an active query. Safe to call standalone."""
+        self.all_apps = self.usage.sorted_apps(self.all_apps)
+        if not self._populated or self.applist is None:
+            # List not filled yet -> just fix the model order; populate() will
+            # fill in this order.
             return
-        order = {}
-        for i, entry in enumerate(self.usage.sorted_apps(self.all_apps)):
-            order[id(entry)] = i
-        self.all_apps.sort(key=lambda e: order[id(e)])
-        self.rows.sort(key=lambda r: order[id(r.entry)])
-        # Force a full re-pack in the new order: clear visible_rows so the
-        # differential filter treats every kept row as "newly shown" and packs it
-        # in the freshly-sorted self.rows sequence (otherwise rows already visible
-        # would be left in their OLD on-screen slots).
-        for row in self.rows:
-            row.pack_forget()
-        self.visible_rows = []
-        self._apply_filter(self.search_var.get())
+        self.applist.set_entries(self.all_apps)
+        self.applist.apply_filter(self.search_var.get())
 
     def reset_view(self) -> None:
-        """Return the menu to its just-opened state: rows built, search cleared
-        (which restores the canonical order and shows everything), list scrolled
-        to the top with the first row selected. Called by the daemon each time it
+        """Return the menu to its just-opened state: list filled, search cleared
+        (which restores the canonical order and shows everything), scrolled to the
+        top with the first row selected. Called by the daemon each time it
         re-shows the window so a stale query/scroll from last time never lingers.
 
         Also re-sorts by the latest launch counts (resort) so the app the user
         just opened floats to the top on this open rather than only after a
-        restart.
-
-        Fast path: if the search is ALREADY empty and every row is already shown
-        (the usual reopen case -- last close cleared the query), skip the full
-        forget-and-repack of every row and just reset the scroll + selection. The
-        repack is only needed to undo a previous filter."""
-        self.populate()  # no-op if rows already exist
-        # Re-order by the latest usage BEFORE deciding the fast path, so a launch
-        # since the last show is reflected now (not only after a restart).
+        restart."""
+        self.populate()  # no-op if already filled
+        # Re-order by the latest usage so a launch since the last show is
+        # reflected now (not only after a restart). This also re-applies the
+        # current filter.
         self.resort()
         if self.search_var.get():
-            # A query is lingering: clear it -> the trace repacks in canonical
-            # order, resets selection and scroll.
+            # A query is lingering: clear it -> the trace re-filters to the full
+            # canonical list and resets selection + scroll.
             self.search_var.set("")
-        elif len(self.visible_rows) != len(self.rows):
-            # No query but the list is filtered (e.g. reset called mid-filter):
-            # do the full repack.
-            self._apply_filter("")
         else:
-            # Already showing everything in order -> cheap reset only.
-            self.selected_index = 0 if self.visible_rows else -1
-            self._refresh_selection()
-            try:
-                self.canvas.yview_moveto(0.0)
-            except tk.TclError:
-                pass
+            # Already empty -> make sure the list shows everything from the top
+            # with the first row selected (resort already re-applied "").
+            if self.applist is not None:
+                self.applist.apply_filter("")
         self._update_placeholder()
 
     # -- keyboard navigation ----------------------------------------------
     def move_selection(self, delta: int) -> None:
-        if not self.visible_rows:
-            return
-        self.selected_index = max(
-            0, min(len(self.visible_rows) - 1, self.selected_index + delta)
-        )
-        self._refresh_selection()
-        self._scroll_to_selected()
-
-    def _scroll_to_selected(self) -> None:
-        if not (0 <= self.selected_index < len(self.visible_rows)):
-            return
-        row = self.visible_rows[self.selected_index]
-        self.root.update_idletasks()
-        try:
-            top = row.winfo_y()
-            height = row.winfo_height()
-            total = self.list_frame.winfo_height() or 1
-            view_top, view_bot = self.canvas.yview()
-            frac_top = top / total
-            frac_bot = (top + height) / total
-            if frac_top < view_top:
-                self.canvas.yview_moveto(frac_top)
-            elif frac_bot > view_bot:
-                self.canvas.yview_moveto(frac_bot - (view_bot - view_top))
-        except (tk.TclError, ZeroDivisionError):
-            pass
+        if self.applist is not None:
+            self.applist.move_selection(delta)
 
     def activate_selected(self) -> None:
-        if 0 <= self.selected_index < len(self.visible_rows):
-            self.visible_rows[self.selected_index].activate()
+        if self.applist is not None:
+            self.applist.activate_selected()
 
     def _activate_entry(self, entry: AppEntry) -> None:
         # Launch, then close. We do NOT bump the usage counter here: an "open" is

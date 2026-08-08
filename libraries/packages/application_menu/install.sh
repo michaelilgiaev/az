@@ -13,11 +13,11 @@
 #
 # Steps:
 #   1. Install ALL menu modules -> /usr/local/lib/azarch-application-menu/*.py
-#      The menu is a multi-module package (menu.py imports widgets/theme/apps/
-#      icons/usage/actions/editing as flat siblings and daemon.py imports menu),
+#      The menu is a multi-module package (menu.py imports applist/widgets/theme/
+#      apps/icons/usage/actions/editing as flat siblings and daemon.py imports menu),
 #      so every module below MUST be installed or the menu crashes on launch:
-#        menu.py widgets.py theme.py apps.py winwatch.py icons.py usage.py
-#        actions.py editing.py daemon.py test_menu.py + the panel_icon.py helper
+#        menu.py applist.py widgets.py theme.py apps.py winwatch.py icons.py
+#        usage.py actions.py editing.py daemon.py test_menu.py + panel_icon.py
 #   2. Install launcher       -> /usr/local/bin/azarch-application-menu   (0755)
 #   3. Install .desktop       -> /usr/local/share/applications/azarch-application-menu.desktop
 #   4. Install daemon autostart -> ~/.config/autostart/azarch-application-menu-daemon.desktop
@@ -56,7 +56,7 @@ AUTOSTART_DEST="$AUTOSTART_DEST_DIR/azarch-application-menu-daemon.desktop"
 # Every Python module that makes up the menu package. menu.py imports the others
 # as flat siblings, so ALL of these must be installed together (a loop over this
 # list keeps the installer from drifting out of sync with the package again).
-LIB_MODULES="menu.py widgets.py theme.py apps.py winwatch.py icons.py usage.py actions.py editing.py daemon.py test_menu.py panel_icon.py"
+LIB_MODULES="menu.py applist.py widgets.py theme.py apps.py winwatch.py icons.py usage.py actions.py editing.py daemon.py test_menu.py panel_icon.py"
 
 # Panel config (per-user) + the panel containment id (2 = bottom panel).
 APPLETSRC="$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc"

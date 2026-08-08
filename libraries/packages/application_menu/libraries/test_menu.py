@@ -472,12 +472,13 @@ def test_ui_build_and_contents() -> None:
     try:
         m = root.az_menu
         assert len(m.all_apps) > 0
-        assert len(m.rows) == len(m.all_apps)
-        assert len(m.visible_rows) == len(m.rows)  # empty query shows all
-        # Every row has a name + a type subtitle.
-        for r in m.rows:
-            assert r.entry.name
-            assert r.entry.type_label
+        al = m.applist
+        assert len(al.all_entries) == len(m.all_apps)
+        assert al.visible_count == len(al.all_entries)  # empty query shows all
+        # Every entry has a name + a type subtitle.
+        for e in al.all_entries:
+            assert e.name
+            assert e.type_label
         assert root.az_highlight is not None
     finally:
         root.destroy()
@@ -487,14 +488,15 @@ def test_ui_search_filter() -> None:
     _menu, root = _build_testable_menu()
     try:
         m = root.az_menu
+        al = m.applist
 
         def visible_names() -> list[str]:
-            return [r.entry.name for r in m.visible_rows]
+            return [e.name for e in al.visible_entries]
 
         # Capture the canonical (frequency-then-alphabetical) order shown when
         # no query is active. Clearing the search must restore EXACTLY this.
         original_order = visible_names()
-        assert original_order == [r.entry.name for r in m.rows]
+        assert original_order == [e.name for e in al.all_entries]
 
         m.search_var.set("kit")
         root.update_idletasks()
@@ -506,47 +508,50 @@ def test_ui_search_filter() -> None:
         root.update_idletasks()
         vn = visible_names()
         assert any(n == "LibreWolf" for n in vn), vn
-        assert all("web browser" in r.entry.name.casefold()
-                   or "web browser" in r.entry.type_label.casefold()
-                   for r in m.visible_rows)
+        assert all("web browser" in e.name.casefold()
+                   or "web browser" in e.type_label.casefold()
+                   for e in al.visible_entries)
 
         m.search_var.set("zzzznope")
         root.update_idletasks()
         assert visible_names() == []
-        assert m.selected_index == -1
+        assert al.selected_index == -1
 
         # Clear -> the reshuffle-bug regression check: the list comes back in the
         # SAME order it started in, not scrambled by the filter history. We check
-        # both the model order (visible_rows) and the actual on-screen pack order
-        # (grid/pack info y-position) to be sure nothing is merely logically
+        # both the model order (visible_entries) and the actual on-screen vertical
+        # order (each visible row's top y) to be sure nothing is merely logically
         # ordered while visually shuffled.
         m.search_var.set("")
         root.update_idletasks()
         assert visible_names() == original_order, visible_names()
-        # On-screen order: rows sorted by their y position must match too.
-        by_screen = sorted(m.visible_rows, key=lambda r: r.winfo_y())
-        assert [r.entry.name for r in by_screen] == original_order
+        # On-screen order: the row tops must be strictly increasing in the same
+        # order as visible_entries.
+        tops = al.visible_tops()
+        assert tops == sorted(tops), tops
+        assert len(tops) == len(original_order)
     finally:
         root.destroy()
 
 
 def test_ui_search_clear_after_partial_filter() -> None:
     """A tighter reshuffle regression: filter down to a subset that KEEPS some
-    rows visible while hiding others (the case that used to append re-shown rows
-    after the survivors), then clear and confirm the full canonical order."""
+    rows visible while hiding others, then clear and confirm the full canonical
+    order (both the model order and the on-screen vertical order)."""
     _menu, root = _build_testable_menu()
     try:
         m = root.az_menu
-        original = [r.entry.name for r in m.rows]
+        al = m.applist
+        original = [e.name for e in al.all_entries]
         # 'a' keeps every app whose name/type contains 'a' visible and hides the
         # rest -- a genuine partial filter, not all-or-nothing.
         m.search_var.set("a")
         root.update_idletasks()
         m.search_var.set("")
         root.update_idletasks()
-        assert [r.entry.name for r in m.visible_rows] == original
-        by_screen = sorted(m.visible_rows, key=lambda r: r.winfo_y())
-        assert [r.entry.name for r in by_screen] == original
+        assert [e.name for e in al.visible_entries] == original
+        tops = al.visible_tops()
+        assert tops == sorted(tops), tops
     finally:
         root.destroy()
 
@@ -558,15 +563,16 @@ def test_ui_reorders_after_launch_without_restart() -> None:
 
     Records enough launches on a currently-low app to make it the most-used, then
     drives a re-show (reset_view, what the daemon calls) and asserts it floated to
-    the top of both the model order and the on-screen pack order."""
+    the top of both the model order and the on-screen vertical order."""
     _menu, root = _build_testable_menu()
     try:
         m = root.az_menu
-        names = [r.entry.name for r in m.rows]
+        al = m.applist
+        names = [e.name for e in al.all_entries]
         assert len(names) >= 2, names
         # Pick an app that is NOT already first, and make it the most launched.
-        victim = m.rows[-1].entry           # last == least-used / last al:pha
-        assert victim.name != m.rows[0].entry.name
+        victim = al.all_entries[-1]         # last == least-used / last alpha
+        assert victim.name != al.all_entries[0].name
         for _ in range(50):
             m.usage.record(victim.desktop_id)
 
@@ -574,66 +580,58 @@ def test_ui_reorders_after_launch_without_restart() -> None:
         m.reset_view()
         root.update_idletasks()
 
-        assert m.rows[0].entry.desktop_id == victim.desktop_id, (
+        assert al.all_entries[0].desktop_id == victim.desktop_id, (
             "most-launched app must be FIRST after a launch, without a restart; "
-            f"got {[r.entry.name for r in m.rows][:5]}"
+            f"got {[e.name for e in al.all_entries][:5]}"
         )
-        assert m.visible_rows[0].entry.desktop_id == victim.desktop_id
-        # On-screen: the topmost row (smallest y) is the victim.
-        by_screen = sorted(m.visible_rows, key=lambda r: r.winfo_y())
-        assert by_screen[0].entry.desktop_id == victim.desktop_id
+        assert al.visible_entries[0].desktop_id == victim.desktop_id
+        # On-screen: the topmost visible row is the victim.
+        tops = al.visible_tops()
+        assert tops == sorted(tops)
+        assert al.visible_entries[0].desktop_id == victim.desktop_id
     finally:
         root.destroy()
 
 
-def test_ui_search_narrowing_does_not_rechurn_survivors() -> None:
-    """Typing must not flash the whole list. As the query narrows, rows that stay
-    visible must NOT be unpacked/repacked -- only rows whose visibility actually
-    changes may move. The old filter forgot EVERY row on each keystroke and
-    repacked the matches, which flashes the survivors. We assert survivors are
-    never pack_forgotten while narrowing."""
+def test_ui_search_filtering_never_churns_windows() -> None:
+    """Typing must never map/unmap per-row X windows -- that churn under a
+    compositor is exactly what made the old widget list FLICKER. The list is now
+    drawn as canvas ITEMS, so filtering only shows/hides/moves existing items:
+    the number of canvas items (and child windows) stays CONSTANT across any
+    filter. We assert the canvas item count never changes while the query narrows,
+    widens, empties and re-narrows, and that no extra child windows ever appear."""
     _menu, root = _build_testable_menu()
     try:
         m = root.az_menu
+        al = m.applist
+        canvas = al.canvas
 
-        forgets: dict[int, int] = {}
-        for r in m.rows:
-            orig = r.pack_forget
-            key = id(r)
-            forgets[key] = 0
+        def item_count() -> int:
+            return len(canvas.find_all())
 
-            def make(o, k):
-                def wrapped(*a, **kw):
-                    forgets[k] += 1
-                    return o(*a, **kw)
-                return wrapped
-            r.pack_forget = make(orig, key)
+        def child_windows() -> int:
+            # Canvas-item rendering means the canvas has NO child windows for the
+            # rows (unlike the old embedded-frame approach).
+            return len(canvas.winfo_children())
 
-        # Establish a query, then NARROW it (each step is a subset of the prior).
-        m.search_var.set("a")
-        root.update_idletasks()
-        survivors_after_a = list(m.visible_rows)
-        assert survivors_after_a, "test needs a query that matches something"
+        base_items = item_count()
+        base_children = child_windows()
+        assert base_items > 0
 
-        # Reset counters: we only care about churn during the NARROWING step.
-        for k in forgets:
-            forgets[k] = 0
-
-        # Narrow further -- every row still matching 'ar' also matched 'a', so all
-        # 'ar' survivors were already visible and must not be re-churned.
-        m.search_var.set("ar")
-        root.update_idletasks()
-        final = set(id(r) for r in m.visible_rows)
-
-        churned_survivors = [
-            r for r in m.visible_rows if forgets[id(r)] > 0
-        ]
-        assert not churned_survivors, (
-            "rows that stay visible while narrowing were unpacked (flash): "
-            f"{[r.entry.name for r in churned_survivors]}"
-        )
-        # Sanity: narrowing actually removed at least one row (real narrowing).
-        assert len(final) <= len(survivors_after_a)
+        for q in ("s", "sy", "sys", "system", "sy", "s", "",
+                  "a", "ar", "a", "", "office", ""):
+            m.search_var.set(q)
+            root.update_idletasks()
+            assert item_count() == base_items, (
+                f"canvas item count changed on query {q!r}: "
+                f"{item_count()} != {base_items} (rows created/deleted -> churn)"
+            )
+            assert child_windows() == base_children, (
+                f"canvas grew child windows on query {q!r} -> map/unmap flicker"
+            )
+        # The canvas holds one image + two texts + one rect per app, plus a
+        # spare selection rectangle -> child_windows for the rows is zero.
+        assert base_children == 0, base_children
     finally:
         root.destroy()
 
@@ -772,7 +770,7 @@ def test_ui_selection_and_launch(monkeypatch_launch) -> None:
         m = root.az_menu
         m.search_var.set("kit")
         root.update_idletasks()
-        assert m.selected_index == 0
+        assert m.applist.selected_index == 0
         # Activate the selection -> should call actions.launch with kitty argv
         # and then close (close is neutered-ish: it destroys the root).
         m.activate_selected()
@@ -1099,8 +1097,8 @@ def main() -> int:
          test_ui_search_clear_after_partial_filter),
         ("ui_reorders_after_launch_without_restart",
          test_ui_reorders_after_launch_without_restart),
-        ("ui_search_narrowing_does_not_rechurn_survivors",
-         test_ui_search_narrowing_does_not_rechurn_survivors),
+        ("ui_search_filtering_never_churns_windows",
+         test_ui_search_filtering_never_churns_windows),
         ("ui_pin_keeps_menu_open", test_ui_pin_keeps_menu_open),
         ("ui_pinned_forced_close_still_works",
          test_ui_pinned_forced_close_still_works),
