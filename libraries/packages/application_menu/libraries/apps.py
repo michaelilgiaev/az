@@ -365,6 +365,12 @@ def _parse_desktop_file(path: str) -> AppEntry | None:
 HIDDEN_DESKTOP_IDS: frozenset[str] = frozenset(
     {
         "azarch-application-menu.desktop",  # Az'arch Menu (this menu itself)
+        # The Super-key binding .desktop (X-KDE-Shortcuts=Meta). It ships NoDisplay
+        # (which still registers its Meta grab -- kglobalacceld's shortcut-app query
+        # has no noDisplay guard), so it is already hidden from launchers; this entry
+        # is belt-and-suspenders so our menu never lists it even if NoDisplay were
+        # ignored.
+        "azarch-application-menu-shortcut.desktop",  # Az'arch menu Super-key binding
         "bssh.desktop",              # Avahi SSH Server Browser
         "bvnc.desktop",              # Avahi VNC Server Browser
         "avahi-discover.desktop",    # Avahi Zeroconf Browser

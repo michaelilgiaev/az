@@ -410,7 +410,9 @@ def test_scan_hides_denylisted(tmp: str) -> None:
     assert "Vim" not in names
     # And the constant covers every id the spec asked to hide.
     for wanted in (
-        "azarch-application-menu.desktop", "bssh.desktop", "bvnc.desktop",
+        "azarch-application-menu.desktop",
+        "azarch-application-menu-shortcut.desktop",  # the Super-key binding entry
+        "bssh.desktop", "bvnc.desktop",
         "avahi-discover.desktop", "azarch-install.desktop",
         "kdesystemsettings.desktop", "lstopo.desktop", "htop.desktop",
         "lftp.desktop", "cups.desktop", "org.kde.kmenuedit.desktop",
@@ -939,6 +941,90 @@ def test_ui_power_buttons_use_breeze_icons() -> None:
             pass
 
 
+def test_ui_settings_button_is_disabled() -> None:
+    """The Settings (gear) button ships GREYED OUT / disabled: the settings
+    screen is not built yet, so the button must be inert (no hover highlight,
+    ignores clicks, normal arrow cursor) rather than looking clickable but doing
+    nothing. This pins the four observable properties of that disabled state."""
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        btn = m.settings_button
+        assert btn is not None, "settings button was not created"
+        # 1. It is flagged disabled.
+        assert btn._disabled is True
+        # 2. Normal arrow cursor (not the hand2 a live button uses).
+        assert str(btn.cget("cursor")) == "arrow"
+        # 3. Pressing it does nothing: _press is a guarded no-op and the nominal
+        #    command must NOT fire even if _press is called directly.
+        fired = {"v": False}
+        m._noop = lambda: fired.__setitem__("v", True)  # would-be handler
+        btn._command = m._noop
+        btn._press()
+        assert fired["v"] is False, "disabled settings button fired its command"
+        # 4. Hovering does not change its look (set_active is a no-op; a disabled
+        #    button binds no <Enter>/<Leave> so it can never highlight).
+        btn.set_active(True)
+        assert btn._active is False
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_ui_pin_button_still_enabled() -> None:
+    """Regression guard for the settings-disable change: the PIN button must stay
+    fully functional (enabled, hand cursor, active-state toggles) -- only the
+    settings button is disabled."""
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        pin = m.pin_button
+        assert pin is not None and pin._disabled is False
+        assert str(pin.cget("cursor")) == "hand2"
+        pin.set_active(True)
+        assert pin._active is True
+        pin.set_active(False)
+        assert pin._active is False
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_ui_dim_image_greys_but_keeps_size() -> None:
+    """dim_image must return an image of the SAME dimensions whose opaque pixels
+    are shifted toward the disabled grey (so the glyph fades but keeps its
+    shape). We build a tiny opaque red image and check a pixel moved toward grey."""
+    import tkinter as tk
+
+    import theme as T
+    import widgets
+
+    _menu, root = _build_testable_menu()
+    try:
+        src = tk.PhotoImage(width=4, height=4)
+        src.put("#ff0000", to=(0, 0, 4, 4))  # fully opaque red
+        out = widgets.dim_image(src, mix=0.5, toward="#000000")
+        assert out.width() == 4 and out.height() == 4
+        r, g, b = out.get(1, 1)[:3]
+        # Halfway from red(255,0,0) toward black(0,0,0) -> ~127,0,0.
+        assert 120 <= r <= 135 and g == 0 and b == 0
+        # And the default toward-grey path actually dims (red channel drops).
+        out2 = widgets.dim_image(src)
+        r2 = out2.get(1, 1)[0]
+        assert r2 < 255
+        # Sanity: default mix moves toward the configured disabled colour.
+        assert T.DISABLED_ICON_COLOR.startswith("#")
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
 def test_ui_selection_and_launch(monkeypatch_launch) -> None:
     _menu, root = _build_testable_menu()
     try:
@@ -1071,9 +1157,12 @@ def test_ui_persistent_show_hide() -> None:
         root.az_show()
         root.update()
         assert root.winfo_viewable(), "az_show should map the window"
-        # Geometry re-applied on show: not stuck at the 0,0 re-map default.
+        # Geometry re-applied on show: not stuck at the 0,0 re-map default. Our menu
+        # sits at the bottom-LEFT (x=0) but well down the screen (y near the bottom),
+        # so the full corner is (0, y_bottom) -- distinct from the (0,0) top-left
+        # default, which is what this guards against.
         assert (root.winfo_rootx(), root.winfo_rooty()) != (0, 0), \
-            "show must re-apply the bottom-right geometry"
+            "show must re-apply the bottom-left geometry"
 
         # A normal close in persistent mode HIDES (window survives, withdrawn).
         root.az_close()
@@ -1102,9 +1191,10 @@ def test_ui_persistent_first_show_positions_before_map() -> None:
 
     An override-redirect window that has never been mapped sits at X's default
     0,0 origin. If az_show() calls deiconify() (MapWindow) BEFORE re-applying the
-    bottom-right geometry, X maps it visibly at 0,0 and only then moves it -- the
-    'menu opens at top-left on the first click' bug. The position must be set
-    BEFORE the window is mapped, so geometry() must be called before deiconify().
+    bottom-left geometry, X maps it visibly at the top-left (0,0) and only then
+    moves it down -- the 'menu flashes at top-left on the first click' bug. The
+    position must be set BEFORE the window is mapped, so geometry() must be called
+    before deiconify().
 
     Asserted by call ORDER (WM-timing-independent) rather than a post-map winfo_
     sample, which races the Configure flush and hid this bug in the sibling test.

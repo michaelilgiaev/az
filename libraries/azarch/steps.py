@@ -341,9 +341,10 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
         emit.copy_asset(pkg["asset"], img, mode=0o644)
         # screenshot.png = the grid thumbnail (reuse the full image).
         emit.copy_asset(pkg["asset"], pkg_root / "contents" / "screenshot.png", mode=0o644)
-    # Az'arch application menu (OUR menu, shown right of Kickoff). Copy the three
-    # runtime files (menu.py, launcher, .desktop) to their fixed SYSTEM paths; the
-    # panel icon that launches them is baked into desktop.plasma_appletsrc above.
+    # Az'arch application menu (OUR menu -- it REPLACED Kickoff and is the panel's
+    # leftmost icon + the Super key). Copy the runtime files (menu.py + siblings,
+    # launcher, .desktop) to their fixed SYSTEM paths; the panel icon that launches
+    # them is baked into desktop.plasma_appletsrc above.
     # Root-owned system paths -> the OFFLINE Calamares install rsyncs them onto the
     # installed system with no separate step.
     for entry in application_menu.emit_plan():

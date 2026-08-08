@@ -155,6 +155,32 @@ rm -rf /usr/share/wallpapers/Next || true
 # glob also clears any packaged metadata/plasmoid dir if present.
 rm -f /usr/lib/qt6/plugins/plasma/applets/org.kde.plasma.notifications.so || true
 rm -rf /usr/share/plasma/plasmoids/org.kde.plasma.notifications || true
+
+# Remove KRUNNER and KMENUEDIT ENTIRELY -- the Az'arch application menu replaces
+# Kickoff, and the user asked to delete these two: "we dont need them, they are
+# unnecessary, they get in the way, and they are bloat." Neither can be dropped from
+# the package manifest (kmenuedit is a hard dependency of plasma-desktop; the
+# /usr/bin/krunner binary is shipped by the core plasma-workspace package, and the
+# `krunner` library is pulled in by systemsettings/plasma-desktop/milou), so -- just
+# like the notifications applet above -- their runtime files are deleted here in the
+# chroot instead. All rm are guarded with `|| true` so an upstream path change can
+# never abort the ISO build.
+#
+# KRUNNER: delete every way it can start or be triggered, so the search/run popup
+# (Alt+Space / Alt+F2, and the old Meta binding) is simply gone:
+#   * the binary itself,
+#   * the systemd user service that runs `krunner --daemon`,
+#   * the D-Bus activation service (how a keypress launches it on demand), and
+#   * the kglobalaccel shortcut registration (its Alt+Space/Alt+F2 global keys).
+rm -f /usr/bin/krunner || true
+rm -f /usr/lib/systemd/user/plasma-krunner.service || true
+rm -f /usr/share/dbus-1/services/org.kde.krunner.service || true
+rm -f /usr/share/kglobalaccel/org.kde.krunner.desktop || true
+# KMENUEDIT: the "Menu Editor" -- delete the binary and its application entry so it
+# neither runs nor appears in any menu (our own app list also drops it once the
+# .desktop is gone).
+rm -f /usr/bin/kmenuedit || true
+rm -f /usr/share/applications/org.kde.kmenuedit.desktop || true
 """
 
 # getty@tty1 autologin override. The releng base autologins ROOT on tty1; the

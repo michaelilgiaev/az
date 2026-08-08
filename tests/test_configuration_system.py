@@ -137,6 +137,28 @@ def test_customize_airootfs_removes_notifications_applet_entirely():
     assert "rm -rf /usr/share/plasma/plasmoids/org.kde.plasma.notifications" in s
 
 
+def test_customize_airootfs_deletes_krunner_entirely():
+    # The user asked to delete krunner ("bloat, gets in the way"). It cannot be
+    # dropped from the manifest (its lib is pulled by systemsettings/plasma, and the
+    # binary ships in core plasma-workspace), so every way it starts/triggers is
+    # rm'd in the chroot: the binary, the systemd user service, the D-Bus activation
+    # service, and the kglobalaccel shortcut registration. All guarded with `|| true`.
+    s = system.CUSTOMIZE_AIROOTFS
+    assert "rm -f /usr/bin/krunner || true" in s
+    assert "rm -f /usr/lib/systemd/user/plasma-krunner.service || true" in s
+    assert "rm -f /usr/share/dbus-1/services/org.kde.krunner.service || true" in s
+    assert "rm -f /usr/share/kglobalaccel/org.kde.krunner.desktop || true" in s
+
+
+def test_customize_airootfs_deletes_kmenuedit_entirely():
+    # kmenuedit (the "Menu Editor") is deleted too -- a hard dep of plasma-desktop
+    # that cannot be dropped from the manifest, so its binary + application entry are
+    # rm'd in the chroot so it neither runs nor appears in any menu. Guarded `|| true`.
+    s = system.CUSTOMIZE_AIROOTFS
+    assert "rm -f /usr/bin/kmenuedit || true" in s
+    assert "rm -f /usr/share/applications/org.kde.kmenuedit.desktop || true" in s
+
+
 def test_customize_airootfs_wallpaper_python_is_valid():
     # The embedded Python rewriter must at least compile -- a SyntaxError would only
     # surface at build time inside the chroot, aborting mkarchiso. Extract the

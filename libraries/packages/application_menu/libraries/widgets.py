@@ -26,6 +26,52 @@ import tkinter as tk
 import theme as T
 
 
+# --- Image helpers --------------------------------------------------------
+def dim_image(image: tk.PhotoImage, mix: float = T.DISABLED_ICON_MIX,
+              toward: str = T.DISABLED_ICON_COLOR) -> tk.PhotoImage:
+    """Return a greyed-out copy of ``image`` for a disabled control.
+
+    Each opaque pixel is blended ``mix`` of the way toward ``toward`` (the Breeze
+    disabled-foreground grey), leaving fully transparent pixels transparent so the
+    icon's shape is preserved but faded -- the standard "this control is inactive"
+    look. Used for the Settings (gear) button, which is not wired up yet.
+
+    Pure Tk: we read the source with ``get`` and write the blend with ``put``.
+    The top buttons are tiny (POWER_ICON_SIZE px), so the per-pixel loop is cheap
+    and runs once at build time. Returns the original image unchanged if anything
+    goes wrong (a dim glyph is cosmetic; never break the menu over it)."""
+    try:
+        w = image.width()
+        h = image.height()
+    except tk.TclError:
+        return image
+    tr, tg, tb = _hex_rgb(toward)
+    # Start from a full copy so transparency + any pixels we skip are preserved,
+    # then repaint only the opaque pixels with their blended-toward-grey colour.
+    out = tk.PhotoImage(width=w, height=h)
+    try:
+        out.tk.call(out, "copy", image)
+        for y in range(h):
+            for x in range(w):
+                # A transparent source pixel stays transparent (shape preserved).
+                if image.transparency_get(x, y):
+                    continue
+                r, g, b = image.get(x, y)[:3]
+                r = int(r + (tr - r) * mix)
+                g = int(g + (tg - g) * mix)
+                b = int(b + (tb - b) * mix)
+                out.put(f"#{r:02x}{g:02x}{b:02x}", to=(x, y))
+    except tk.TclError:
+        return image
+    return out
+
+
+def _hex_rgb(color: str) -> tuple[int, int, int]:
+    """Parse a #rrggbb string into an (r, g, b) int triple."""
+    c = color.lstrip("#")
+    return int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
+
+
 # --- Highlight bar over the panel icon ------------------------------------
 class HighlightBar:
     """A borderless Breeze-blue accent stripe that POPS IN at full size over the
@@ -195,6 +241,13 @@ class IconButton(tk.Frame):
     Supports an "active" look (a blue outline + tinted fill, like the pinned pin
     in rough-design.png) toggled via :meth:`set_active`, so the pin button can
     show whether the menu is pinned.
+
+    ``disabled=True`` renders a GREYED-OUT, inert button: the glyph is dimmed
+    (see :func:`dim_image`), the pointer stays a normal arrow (no ``hand2``),
+    hover does not highlight, and clicks are ignored (``command`` is never
+    called). This is used for the Settings (gear) button, which is not wired up
+    yet -- greying it out tells the user it is inactive instead of leaving them
+    wondering why pressing it does nothing.
     """
 
     def __init__(
@@ -204,22 +257,31 @@ class IconButton(tk.Frame):
         command,
         *,
         pad: int = 7,
+        disabled: bool = False,
     ) -> None:
+        self._disabled = disabled
         super().__init__(
-            master, bg=T.BG_COLOR, cursor="hand2",
+            master, bg=T.BG_COLOR,
+            cursor="arrow" if disabled else "hand2",
             highlightthickness=1, highlightbackground=T.BG_COLOR,
             highlightcolor=T.BG_COLOR,
         )
         self._command = command
         self._active = False
-        self._label = tk.Label(self, image=image, bg=T.BG_COLOR)
-        self._label.image = image
+        # A disabled button shows a dimmed copy of the glyph; keep a reference so
+        # Tk does not garbage-collect the derived image out from under the label.
+        shown = dim_image(image) if disabled else image
+        self._label = tk.Label(self, image=shown, bg=T.BG_COLOR)
+        self._label.image = shown
         self._label.pack(padx=pad, pady=pad)
 
-        for w in (self, self._label):
-            w.bind("<Enter>", self._on_enter)
-            w.bind("<Leave>", self._on_leave)
-            w.bind("<Button-1>", self._press)
+        # A disabled button binds NO handlers, so it neither highlights on hover
+        # nor fires on click -- it is completely inert.
+        if not disabled:
+            for w in (self, self._label):
+                w.bind("<Enter>", self._on_enter)
+                w.bind("<Leave>", self._on_leave)
+                w.bind("<Button-1>", self._press)
 
     def _fill(self, bg: str, border: str) -> None:
         try:
@@ -246,11 +308,18 @@ class IconButton(tk.Frame):
             self._fill(T.BG_COLOR, T.BG_COLOR)
 
     def set_active(self, active: bool) -> None:
-        """Toggle the pinned/active blue-outline look."""
+        """Toggle the pinned/active blue-outline look. No-op while disabled (a
+        disabled button never changes state)."""
+        if self._disabled:
+            return
         self._active = active
         self._restore()
 
     def _press(self, _e=None) -> None:
+        # Disabled buttons bind no handlers, but guard anyway so a stray
+        # programmatic call can never fire the (unwired) command.
+        if self._disabled:
+            return
         if self._command is not None:
             self._command()
 

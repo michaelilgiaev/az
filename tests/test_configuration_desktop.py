@@ -23,17 +23,19 @@ from azarch.configuration import desktop
 
 # --- PLAN mode/owner/dest table --------------------------------------------
 
-def test_plan_has_exactly_twentyone_entries():
+def test_plan_has_exactly_twentythree_entries():
     # steps.py iterates PLAN; a dropped/extra entry silently un-emits a file.
-    # (21 = original 7 + ~/Desktop launcher + plasmashellrc + kdeglobals + krunnerrc
+    # (23 = original 7 + ~/Desktop launcher + plasmashellrc + kdeglobals + krunnerrc
     #  + kxkbrc keyboard-layouts + plasma-localerc (d/m/y clock) + powerdevilrc
     #  (PC/laptop sleep policy, Plasma-6 schema) + powermanagementprofilesrc migration
     #  flag + kscreenlockerrc (disable auto-lock) + klaunchrc (no launch feedback)
     #  + kwinrc (no window animation) + the org.kde.plasma.icon menu backing
     #  .desktop under ~/.local/share/plasma_icons -- the paper-icon fix -- + the
     #  application-menu daemon autostart (~/.config/autostart, instant first open)
-    #  + the application-menu usage.json seed (~/.local/share, default top-4 order).)
-    assert len(desktop.PLAN) == 21
+    #  + the application-menu usage.json seed (~/.local/share, default top-4 order)
+    #  + the Super-key shortcut .desktop (~/.local/share/applications, Meta -> menu)
+    #  + kglobalshortcutsrc (frees Meta from the removed Kickoff launcher).)
+    assert len(desktop.PLAN) == 23
 
 
 def test_plan_entries_have_the_four_declared_keys():
@@ -96,15 +98,17 @@ def test_appletsrc_entry_is_home_owned_conf():
 
 
 def test_root_owned_dests_are_wrapper_cli_and_menu_launcher():
-    # Exactly three PLAN entries are root-owned: the azarch CLI, the installer
-    # wrapper (both /usr/local/bin), and the system-wide menu launcher
-    # (/usr/share/applications). Everything else is a /home/main dotfile handed to
-    # the live user (uid 1000, gid 998).
+    # Exactly four PLAN entries are root-owned: the azarch CLI, the installer
+    # wrapper (both /usr/local/bin), the system-wide installer menu entry, and the
+    # system-wide Super-key shortcut .desktop (both /usr/share/applications).
+    # Everything else is a /home/main dotfile handed to the live user (uid 1000,
+    # gid 998).
     root_dests = [e["dest"] for e in desktop.PLAN if e["owner"] == "root"]
     assert set(root_dests) == {
         desktop.INSTALL_WRAPPER_PATH,
         desktop.AZARCH_BIN_PATH,
         "/usr/share/applications/azarch-install.desktop",
+        desktop._app_menu.MENU_SHORTCUT_DESKTOP_SYSTEM_PATH,
     }
 
 
@@ -168,11 +172,11 @@ def test_home_owner_gid_is_autologin_group():
 
 # --- emit_plan(): PLAN + bash_profile, without mutating PLAN ----------------
 
-def test_emit_plan_length_is_twentytwo():
-    # 21 PLAN entries + the appended .bash_profile. (The last PLAN additions are the
-    # application-menu daemon autostart and the usage.json seed that fixes the menu's
-    # default top-4 order on a fresh profile.)
-    assert len(desktop.emit_plan()) == 22
+def test_emit_plan_length_is_twentyfour():
+    # 23 PLAN entries + the appended .bash_profile. (The newest PLAN additions are the
+    # Super-key shortcut .desktop and kglobalshortcutsrc that make Meta open the
+    # Az'arch menu now that Kickoff is removed.)
+    assert len(desktop.emit_plan()) == 24
 
 
 def test_emit_plan_prefix_is_plan():
@@ -199,7 +203,7 @@ def test_emit_plan_does_not_mutate_module_plan():
     before = len(desktop.PLAN)
     desktop.emit_plan()
     desktop.emit_plan()
-    assert len(desktop.PLAN) == before == 21
+    assert len(desktop.PLAN) == before == 23
 
 
 # --- xinitrc: Plasma X11 session, no flash ----------------------------------
@@ -639,41 +643,21 @@ def test_wallpaper_seeded_in_nested_image_group():
     assert cp[grp]["Image"] == f"file://{desktop.WALLPAPER_PACKAGE_DIR}"
 
 
-def test_panel_uses_kickoff_not_kicker():
-    # The user asked for labelled shutdown/restart/sleep buttons on the RIGHT and
-    # sleep-instead-of-logout: that footer is a KICKOFF feature (kicker only draws
-    # icon-only power buttons on the left with no caption key). So the menu applet is
-    # org.kde.plasma.kickoff, NOT kicker.
+def test_panel_has_no_kickoff_or_kicker():
+    # MIGRATION: Plasma's Kickoff (and kicker) launcher is REMOVED from the panel
+    # entirely -- the Az'arch application menu replaces it. Neither plugin may
+    # appear anywhere in the panel layout.
     body = desktop.plasma_appletsrc()
-    assert "org.kde.plasma.kickoff" in body
+    assert "org.kde.plasma.kickoff" not in body
     assert "org.kde.plasma.kicker" not in body
 
 
-def test_kickoff_menu_flat_list_labelled_power_sleep_generic_icon():
-    cp = _parse_ini(desktop.plasma_appletsrc())
-    p = desktop.PANEL_CONTAINMENT_ID
-    kcfg = f"Containments][{p}][Applets][1][Configuration][General"
-    assert cp[kcfg]["icon"] == desktop.MENU_ICON          # generic, not the KDE logo
-    assert cp[kcfg]["icon"] != "start-here-kde"
-    # Flat alphabetical app List (kickoff's "All Applications" is a flat A-Z list).
-    assert cp[kcfg]["applicationsDisplay"] == "1"          # 1 = List view
-    assert cp[kcfg]["alphaSort"] == "true"                 # alphabetical
-    # Footer power buttons: Power actions, labelled (text beside icon), sleep first.
-    assert cp[kcfg]["primaryActions"] == "0"               # 0 = Power actions in footer
-    assert cp[kcfg]["showActionButtonCaptions"] == "true"  # TEXT labels on buttons
-    # systemFavorites picks WHICH buttons appear: sleep (suspend) replaces logout.
-    favs = cp[kcfg]["systemFavorites"].split(",")
-    assert favs == ["suspend", "reboot", "shutdown"]
-    assert "logout" not in favs                            # logout replaced by sleep
-    assert cp[kcfg]["showRecentApps"] == "false"
-    assert cp[kcfg]["showRecentDocs"] == "false"
-
-
-def test_kickoff_system_favorites_constant_is_sleep_restart_shutdown():
-    # The power-button set: sleep (suspend) instead of logout. "suspend" is the
-    # verified Plasma 6 session-action id that kickoff labels "Sleep".
-    assert desktop.KICKOFF_SYSTEM_FAVORITES == ["suspend", "reboot", "shutdown"]
-    assert "logout" not in desktop.KICKOFF_SYSTEM_FAVORITES
+def test_kickoff_constants_are_gone():
+    # The Kickoff-only knobs (its generic-icon name + the footer systemFavorites
+    # list) are removed with the launcher; nothing should reference them anymore.
+    assert not hasattr(desktop, "MENU_ICON")
+    assert not hasattr(desktop, "KICKOFF_SYSTEM_FAVORITES")
+    assert not hasattr(desktop, "_MENU_ID")
 
 
 def test_panel_pins_librewolf_kitty_dolphin_in_order():
@@ -731,11 +715,12 @@ def test_panel_status_applets_each_have_a_block_and_carry_internet_audio():
     assert "plugin=org.kde.plasma.volume" in body              # audio
 
 
-def test_panel_applet_order_lists_menu_azmenu_tasks_spacer_status_clock():
-    # AppletOrder must be Kickoff(1), OUR Az'arch menu icon(11), tasks(2),
-    # spacer(3), the N status applets (4..), then the clock (last). A missing id
-    # silently drops that applet. Our menu icon sits between Kickoff and tasks
-    # (right of the Application Launcher, left of LibreWolf).
+def test_panel_applet_order_azmenu_leftmost_then_tasks_spacer_status_clock():
+    # MIGRATION: with Kickoff removed, AppletOrder must be OUR Az'arch menu icon
+    # FIRST (leftmost, id 10 = one past the clock), then tasks(2), spacer(3), the N
+    # status applets (4..), then the clock (last). A missing id silently drops that
+    # applet. Our menu icon now sits where the launcher used to be -- left of
+    # LibreWolf, at the very left of the panel.
     cp = _parse_ini(desktop.plasma_appletsrc())
     p = desktop.PANEL_CONTAINMENT_ID
     n = len(desktop.PANEL_STATUS_APPLETS)
@@ -743,15 +728,15 @@ def test_panel_applet_order_lists_menu_azmenu_tasks_spacer_status_clock():
     clock_id = 4 + n
     expected = ";".join(
         str(i)
-        for i in [desktop._MENU_ID, desktop._AZ_MENU_ID, desktop._TASKS_ID,
+        for i in [desktop._AZ_MENU_ID, desktop._TASKS_ID,
                   desktop._SPACER_ID, *status, clock_id]
     )
     assert cp[f"Containments][{p}][General"]["AppletOrder"] == expected
-    # Our menu icon (id 11) is an org.kde.plasma.icon pointing at the installed
-    # .desktop, positioned immediately after Kickoff in the order.
+    # Our menu icon is FIRST (leftmost) in the order, and is an org.kde.plasma.icon
+    # pointing at the installed .desktop.
     order = cp[f"Containments][{p}][General"]["AppletOrder"].split(";")
-    assert order[0] == str(desktop._MENU_ID)
-    assert order[1] == str(desktop._AZ_MENU_ID)
+    assert order[0] == str(desktop._AZ_MENU_ID)
+    assert order[1] == str(desktop._TASKS_ID)   # task manager right after our menu
     az = f"Containments][{p}][Applets][{desktop._AZ_MENU_ID}"
     assert cp[az]["plugin"] == "org.kde.plasma.icon"
     # url= MUST be a file:// URI (not a bare path): a bare path made the applet bake a
@@ -771,7 +756,7 @@ def test_panel_applet_order_lists_menu_azmenu_tasks_spacer_status_clock():
     assert cp[f"Containments][{p}][Applets][{clock_id}"]["plugin"] == "org.kde.plasma.digitalclock"
     # Our menu icon id must NOT collide with any other applet id -- it is computed
     # as one past the clock precisely so adding status applets can never clash.
-    all_ids = [desktop._MENU_ID, desktop._AZ_MENU_ID, desktop._TASKS_ID,
+    all_ids = [desktop._AZ_MENU_ID, desktop._TASKS_ID,
                desktop._SPACER_ID, *status, clock_id]
     assert len(all_ids) == len(set(all_ids)), f"applet id collision: {all_ids}"
     assert desktop._AZ_MENU_ID == clock_id + 1
@@ -1151,4 +1136,65 @@ def test_az_menu_icon_backing_in_plan_as_home_exec():
     entry = next(e for e in desktop.PLAN if e["dest"] == desktop._AZ_MENU_LOCAL_PATH)
     assert entry["builder"] is desktop.az_menu_plasma_icon_backing
     assert entry["mode"] == 0o755
+    assert entry["owner"] == "home"
+
+
+# --- Super/Meta key -> Az'arch menu (Kickoff launcher removed) --------------
+
+def test_kglobalshortcutsrc_frees_meta_from_kickoff_launcher():
+    # The Super key used to open Kickoff via the plasmashell action
+    # 'activate application launcher'. With Kickoff removed, that action must be
+    # set to none,none so Meta is free for our menu's grab (otherwise the two
+    # contend). Only the [plasmashell] launcher key is touched.
+    body = desktop.kglobalshortcutsrc()
+    cp = _parse_ini(body)
+    assert cp["plasmashell"]["activate application launcher"].startswith("none,none")
+    # It must NOT rebind Meta to the launcher (that is exactly what we are undoing).
+    assert "Meta" not in cp["plasmashell"]["activate application launcher"]
+
+
+def test_menu_shortcut_desktop_binds_meta_and_launches_the_menu():
+    # The dedicated shortcut .desktop carries X-KDE-Shortcuts=Meta and runs the SAME
+    # launcher the panel icon uses, so pressing Super toggles the one menu daemon.
+    body = desktop._app_menu.menu_shortcut_desktop()
+    entry = _parse_ini(body)["Desktop Entry"]
+    assert entry["Type"] == "Application"
+    assert entry["X-KDE-Shortcuts"] == "Meta"
+    assert entry["Exec"] == desktop._app_menu.MENU_LAUNCHER_SYSTEM_PATH
+    # NoDisplay=true keeps it out of app listings AND is compatible with the Meta
+    # grab: kglobalacceld's detectAppsWithShortcuts() (the /usr/share/applications
+    # path) has no noDisplay guard, so a NoDisplay shortcut app still registers its
+    # _launch grab (verified against the kglobalacceld source + live). It is ALSO in
+    # apps.HIDDEN_DESKTOP_IDS as belt-and-suspenders.
+    assert entry["NoDisplay"] == "true"
+
+
+def test_menu_shortcut_desktop_id_is_distinct_from_panel_desktop():
+    # The shortcut file must have a UNIQUE id (basename) so it never collides with
+    # the panel-icon .desktop in KSycoca / kglobalacceld (which key by StorageId).
+    import os
+    shortcut_id = os.path.basename(desktop._app_menu.MENU_SHORTCUT_DESKTOP_SYSTEM_PATH)
+    panel_id = os.path.basename(desktop._app_menu.MENU_DESKTOP_SYSTEM_PATH)
+    assert shortcut_id != panel_id
+    assert shortcut_id == desktop._app_menu.MENU_SHORTCUT_DESKTOP_ID
+
+
+def test_menu_shortcut_desktop_in_plan_under_system_applications_dir():
+    # It must land in the SYSTEM XDG applications dir (/usr/share/applications) so
+    # KSycoca always indexes it and kglobalacceld's KApplicationTrader query scans it
+    # at login -- the file-only path that grabs Meta. Root-owned data file (0o644),
+    # system-wide (one file for all users, carries onto the installed system).
+    dest = desktop._app_menu.MENU_SHORTCUT_DESKTOP_SYSTEM_PATH
+    assert dest == "/usr/share/applications/azarch-application-menu-shortcut.desktop"
+    entry = next(e for e in desktop.PLAN if e["dest"] == dest)
+    assert entry["builder"] is desktop.az_menu_shortcut_desktop
+    assert entry["mode"] == 0o644
+    assert entry["owner"] == "root"
+
+
+def test_kglobalshortcutsrc_in_plan_home_owned_conf():
+    dest = f"{desktop.HOME}/.config/kglobalshortcutsrc"
+    entry = next(e for e in desktop.PLAN if e["dest"] == dest)
+    assert entry["builder"] is desktop.kglobalshortcutsrc
+    assert entry["mode"] == 0o644
     assert entry["owner"] == "home"

@@ -30,11 +30,12 @@ APPLETSRC = os.path.expanduser(
 
 
 # --- Panel-icon highlight bar geometry ------------------------------------
-# Our panel icon (org.kde.plasma.icon launching this menu) sits SECOND from the
-# left on the bottom panel: [Kickoff][Az'arch menu][task launchers...]. The
-# panel is bottom, full screen width, PANEL_HEIGHT px tall, so its top edge is
-# at screen_h - PANEL_HEIGHT.
-ICON_CELL_X = PANEL_HEIGHT           # left edge of our (2nd) icon cell
+# Our panel icon (org.kde.plasma.icon launching this menu) is now the LEFTMOST
+# applet on the bottom panel: [Az'arch menu][task launchers...] -- Kickoff was
+# removed and our icon took its slot (see configuration/desktop.py). The panel is
+# bottom, full screen width, PANEL_HEIGHT px tall, so its top edge is at
+# screen_h - PANEL_HEIGHT and our cell starts at the very left edge (x = 0).
+ICON_CELL_X = 0                      # left edge of our (1st/leftmost) icon cell
 ICON_CELL_W = PANEL_HEIGHT           # square cell, == panel thickness
 HIGHLIGHT_BAR_HEIGHT = 3             # px thick when fully grown
 HIGHLIGHT_BAR_INSET = 6              # px inset on each side of the cell
@@ -48,6 +49,14 @@ DIVIDER_COLOR = "#3a3f44"  # subtle separators between top/list/bottom
 TEXT_COLOR = "#eff0f1"     # Breeze foreground (near-white) -- big app names
 SUBTEXT_COLOR = "#9aa0a6"  # muted foreground -- the type subtitle
 PLACEHOLDER_COLOR = "#7f858a"  # search placeholder text
+
+# Disabled (greyed-out) control. Used by IconButton's disabled mode for the
+# not-yet-working Settings (gear) button: the button shows a dimmed glyph, does
+# not react to hover, and ignores clicks, so the user reads it as inactive rather
+# than wondering why nothing happens. The glyph is composited toward this colour
+# (a muted grey near the window bg) at DISABLED_ICON_MIX so it visibly fades.
+DISABLED_ICON_COLOR = "#5c6166"  # Breeze disabled-foreground grey
+DISABLED_ICON_MIX = 0.62         # 0=untouched .. 1=fully the disabled colour
 
 # The active-applet accent colour, RGB(61,174,233) == #3daee9.
 HIGHLIGHT_COLOR = "#3daee9"

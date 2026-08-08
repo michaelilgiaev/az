@@ -1,9 +1,11 @@
 """The Az'arch application menu -- baked into the live/installed system.
 
-This is OUR application menu: a Python (Tkinter) program shown to the RIGHT of
-KDE's Kickoff -- a borderless, Breeze-styled launcher (search, launch-frequency
-ordering, pin, power actions) that is the seed of a custom menu meant to replace
-Kickoff entirely.
+This is OUR application menu, and it has REPLACED Plasma's Kickoff entirely: a
+Python (Tkinter) program that is the panel's LEFTMOST icon (Kickoff's old slot)
+and the target of the Super/Meta key -- a borderless, Breeze-styled launcher
+(search, launch-frequency ordering, pin, power actions). Kickoff, kmenuedit and
+krunner are removed from the image (see configuration/desktop.py +
+configuration/system.CUSTOMIZE_AIROOTFS).
 
 It is a multi-module package: menu.py orchestrates and imports the siblings
 (widgets/theme/apps/icons/usage/actions) as flat modules, so the whole set MUST be
@@ -52,6 +54,32 @@ MENU_DAEMON_PY_SYSTEM_PATH = f"{MENU_LIB_DIR}/daemon.py"
 MENU_LAUNCHER_SYSTEM_PATH = "/usr/local/bin/azarch-application-menu"
 MENU_DESKTOP_SYSTEM_PATH = (
     "/usr/local/share/applications/azarch-application-menu.desktop"
+)
+
+# --- Super/Meta key global shortcut -----------------------------------------
+# Pressing the Super (Meta) key alone OPENS OUR MENU (it used to open Kickoff,
+# which is now removed). On Plasma 6.1+ a bare modifier key is a first-class
+# kglobalaccel shortcut (KWin's old ModifierOnlyShortcuts is dead code), and the
+# file-only way to bind one is a .desktop carrying X-KDE-Shortcuts that lands in an
+# XDG applications dir kglobalacceld's KApplicationTrader query scans. At its
+# startup (a fresh login builds sycoca then starts the daemon) it registers a
+# "_launch" action for that .desktop and grabs the key -- verified live on the
+# Hypervisor (Plasma 6.7.4): the component registered and invoking _launch ran the
+# launcher. See menu_shortcut_desktop().
+#
+# It is a SEPARATE, dedicated file from the panel-icon .desktop (distinct id) so the
+# shortcut concern never entangles the org.kde.plasma.icon applet's backing/url copy.
+# It lands in the SYSTEM apps dir /usr/share/applications (root-owned): a system
+# XDG_DATA_DIRS location that KSycoca always scans first -- more robust than a
+# per-user ~/.local/share copy (no dependence on the home dir being indexed), one
+# file for every user, and it carries onto the Calamares-installed system via the
+# live-medium rootfs with no extra step. Verified live on the Hypervisor: the same
+# .desktop registered a "_launch" Meta grab and a physical Super press opened the
+# menu (once the Kickoff launcher's active bare-Meta binding was freed).
+MENU_SHORTCUT_KEY = "Meta"  # the bare Super key
+MENU_SHORTCUT_DESKTOP_ID = "azarch-application-menu-shortcut.desktop"
+MENU_SHORTCUT_DESKTOP_SYSTEM_PATH = (
+    f"/usr/share/applications/{MENU_SHORTCUT_DESKTOP_ID}"
 )
 # Per-user autostart entry that starts the resident daemon at login, so even the
 # FIRST panel-icon click is instant. Emitted by configuration/desktop.py (which
@@ -158,6 +186,48 @@ def launcher_sh() -> str:
 def menu_desktop() -> str:
     """The .desktop the panel icon points at (verbatim from the source tree)."""
     return _read_source(_SRC_DESKTOP)
+
+
+def menu_shortcut_desktop() -> str:
+    """The dedicated .desktop that binds the Super/Meta key to open our menu.
+
+    Distinct from menu_desktop() (the panel-icon file) so the global-shortcut
+    concern is isolated: this file exists ONLY to carry ``X-KDE-Shortcuts=Meta``
+    for kglobalacceld. ``Exec`` runs the SAME launcher the panel icon and daemon
+    use, so the Super key toggles the one resident menu daemon. ``NoDisplay=true``
+    keeps it out of application listings.
+
+    NoDisplay + shortcut IS correct here -- do NOT "fix" it by dropping NoDisplay:
+    kglobalacceld finds shortcut apps in /usr/share/applications via
+    GlobalShortcutsRegistry::detectAppsWithShortcuts(), whose KApplicationTrader
+    query has NO noDisplay guard, so a NoDisplay=true service still registers its
+    ``_launch`` grab (verified against the kglobalacceld source AND live on the
+    Hypervisor: the NoDisplay entry registered and a physical Super press opened the
+    menu). kglobalacceld's noDisplay skip lives in a DIFFERENT loop -- the one that
+    scans the /usr/share/kglobalaccel/ DIRECTORY -- which is not the path we use, so
+    it does not apply. (An adversarial review misread that other loop as ours; the
+    source disproves it.) As belt-and-suspenders the id is ALSO in
+    apps.HIDDEN_DESKTOP_IDS so our own menu never lists it even if some tool ignored
+    NoDisplay.
+
+    Lands in the SYSTEM apps dir /usr/share/applications (a system XDG_DATA_DIRS
+    location KSycoca always scans, and that kglobalacceld's KApplicationTrader query
+    reads); at a fresh login the daemon registers a ``_launch`` action for it and
+    grabs Meta. Its id (basename) is unique, so it never collides with the panel
+    .desktop's id."""
+    return (
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        "Name=Az'arch Application Menu (Super key)\n"
+        "GenericName=Application Menu\n"
+        "Comment=Open the Az'arch application menu\n"
+        f"Exec={MENU_LAUNCHER_SYSTEM_PATH}\n"
+        f"Icon={MENU_ICON_NAME}\n"
+        "Terminal=false\n"
+        "Categories=System;Utility;\n"
+        "NoDisplay=true\n"
+        f"X-KDE-Shortcuts={MENU_SHORTCUT_KEY}\n"
+    )
 
 
 def daemon_autostart_desktop() -> str:

@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 """Az'arch application menu -- a borderless Tkinter panel styled like Plasma's
-Kickoff (the "hamburger") menu, pinned flush to the RIGHT edge of the screen.
+Kickoff (the "hamburger") menu, pinned flush to the LEFT edge of the screen.
 
-This is OUR application menu, a companion to KDE's Kickoff. It shows a search
-box, the list of installed applications ordered by how often they are launched
-(most-used first), each with a big Name and a small "type" subtitle derived from
-its freedesktop category (Kitty / Terminal), and a bottom row of session actions
-(Sleep, Lock, Restart, Shut Down) drawn with real Breeze icons. It is opened by
-a dedicated panel icon (see the install script).
+This is OUR application menu, and it REPLACES Plasma's Kickoff (which has been
+removed from the panel): it is the panel's LEFTMOST icon and what the Super/Meta
+key opens. It shows a search box, the list of installed applications ordered by
+how often they are launched (most-used first), each with a big Name and a small
+"type" subtitle derived from its freedesktop category (Kitty / Terminal), and a
+bottom row of session actions (Sleep, Lock, Restart, Shut Down) drawn with real
+Breeze icons. It is opened by the leftmost panel icon (or the Super key).
 
 Behaviour (matched to Plasma's Kickoff popup):
   * NO window chrome -- overrideredirect(True) removes the titlebar/toolbar and
     its min/max/close buttons entirely (KDE cannot decorate it).
-  * Same SIZE as the live Plasma Kickoff popup (read from its popupWidth/
-    popupHeight, with a sensible fallback), pinned to the bottom-RIGHT corner
-    just above the bottom panel.
+  * Sized like the old Kickoff popup (a theme default now that Kickoff is gone;
+    still overridable via popupWidth/popupHeight), pinned to the bottom-LEFT
+    corner just above the bottom panel -- above our leftmost panel icon.
   * Breeze-like flat styling (see theme.py) so it reads as part of the desktop.
   * CLOSES ON ANY CLICK OUTSIDE ITSELF, exactly like Kickoff -- UNLESS the user
     has PINNED it. The pin button (top-right) toggles a "stay open" state: when
@@ -25,6 +26,7 @@ Behaviour (matched to Plasma's Kickoff popup):
 
 Layout (see rough-design.png):
   [ search......................... ] [settings] [pin]   <- top row
+                                        (greyed out)  (works)
   ------------------------------------------------------
    [icon]  Application Name                              <- scrollable app list
            type of application                              (freq-ordered)
@@ -32,8 +34,9 @@ Layout (see rough-design.png):
   ------------------------------------------------------
      [sleep] Sleep   [lock] Lock  [reboot] Restart ...   <- bottom row (Breeze)
 
-The settings (gear) button is pressable but intentionally does nothing. The pin
-button is fully functional.
+The settings (gear) button is GREYED OUT / disabled: the settings screen is not
+built yet, so it ships dimmed and inert (no hover, ignores clicks) rather than
+looking clickable but doing nothing. The pin button is fully functional.
 
 Kept dependency-free on purpose: Tkinter ships in the Python standard library
 (backed by the system `tk` package) and Breeze icons are rasterised via the
@@ -67,9 +70,14 @@ from widgets import HighlightBar, IconButton, PowerButton  # noqa: E402
 
 # --- Geometry helper ------------------------------------------------------
 def kickoff_popup_size() -> tuple[int, int]:
-    """Return (width, height) of the live Kickoff popup, read from Plasma's
-    appletsrc (popupWidth / popupHeight). Falls back to theme defaults if the
-    file or keys are absent, so the menu still matches Kickoff's footprint."""
+    """Return the (width, height) to size the menu window.
+
+    Historically this read the live Kickoff popup's popupWidth / popupHeight from
+    Plasma's appletsrc so our menu matched its footprint. Kickoff has since been
+    REMOVED (our menu replaced it), so those keys are normally absent now and the
+    read simply falls through to the theme defaults (DEFAULT_WIDTH/HEIGHT) -- the
+    intended size. The appletsrc read is kept (harmless, and still honours the keys
+    if a user happens to have them) so the footprint stays overridable."""
     w = h = None
     try:
         with open(T.APPLETSRC, encoding="utf-8") as fh:
@@ -116,6 +124,9 @@ class AppMenu:
         self._populated = False
         self.search_var = tk.StringVar()
         self.pin_button: IconButton | None = None
+        # The (greyed-out, non-functional) settings button; set in
+        # _build_search_row. Referenced so tests can assert it ships disabled.
+        self.settings_button: IconButton | None = None
         # Optional hook the window sets after construction: called when the user
         # CLICKS the search box, so a pinned-but-dormant menu can re-claim the X
         # keyboard on the click (Kickoff refocuses its search box on click). It is a
@@ -173,11 +184,18 @@ class AppMenu:
         row.pack(fill="x", padx=12, pady=(12, 8))
 
         # -- settings + pin buttons, packed to the RIGHT (pin outermost) ----
+        # The settings (gear) button is GREYED OUT: the settings screen is not
+        # built yet, so it ships disabled (dimmed glyph, no hover, ignores
+        # clicks) rather than looking clickable but doing nothing. The pin button
+        # is fully functional. Kept referenced (settings_button) for tests.
         gear_img = self.small_icons.load("configure")
         pin_img = self.small_icons.load("window-pin")
         self.pin_button = IconButton(row, pin_img, self._toggle_pin)
         self.pin_button.pack(side="right", padx=(8, 0))
-        IconButton(row, gear_img, self._noop).pack(side="right", padx=(8, 0))
+        self.settings_button = IconButton(
+            row, gear_img, self._noop, disabled=True
+        )
+        self.settings_button.pack(side="right", padx=(8, 0))
 
         # -- search box: a rounded surface frame with magnifier + entry ------
         box = tk.Frame(
@@ -226,7 +244,11 @@ class AppMenu:
         self._update_placeholder()
 
     def _noop(self) -> None:
-        """Settings (gear) button: deliberately does nothing (placeholder)."""
+        """Settings (gear) button callback -- never actually invoked because the
+        button ships DISABLED (see _build_search_row: IconButton(..., disabled=
+        True), whose click handling is inert). Kept as the button's nominal
+        command so the settings screen can be wired here later by simply dropping
+        the disabled flag."""
         self._focus_search()
 
     def _toggle_pin(self) -> None:
@@ -416,10 +438,12 @@ def build_window(persistent: bool = False) -> tk.Tk:
     screen_w = root.winfo_screenwidth()
     screen_h = root.winfo_screenheight()
 
-    # Same footprint as the live Kickoff popup, pinned to the bottom-RIGHT
-    # corner sitting just above the bottom panel (flush to the right edge).
+    # Sized like the old Kickoff popup, but pinned to the bottom-LEFT corner just
+    # above the bottom panel (flush to the LEFT edge) -- our panel icon is now the
+    # leftmost applet (Kickoff was removed), so the menu opens above its icon on
+    # the left instead of the right.
     win_w, win_h = kickoff_popup_size()
-    x = screen_w - win_w
+    x = 0
     y = screen_h - T.PANEL_HEIGHT - win_h
     root.geometry(f"{win_w}x{win_h}+{x}+{y}")
     root.configure(bg=T.BG_COLOR)
@@ -767,14 +791,16 @@ def build_window(persistent: bool = False) -> tk.Tk:
         except tk.TclError:
             pass
         try:
-            # Apply the bottom-right geometry BEFORE mapping. An overrideredirect
-            # window sits at X's default 0,0 origin until positioned, and on the
-            # very FIRST show it has never been mapped, so a deiconify() (MapWindow)
-            # issued before the move makes X map it VISIBLY at 0,0 and only then
-            # slide it into place -- the 'menu opens at the top-left on the first
-            # click' bug. Positioning first means the window is only ever mapped at
-            # the correct spot. (Re-shows also need this: a withdrawn override-
-            # redirect window forgets its position with no WM to remember it.)
+            # Apply the bottom-left geometry BEFORE mapping. An overrideredirect
+            # window sits at X's default 0,0 (top-left) origin until positioned, and
+            # on the very FIRST show it has never been mapped, so a deiconify()
+            # (MapWindow) issued before the move makes X map it VISIBLY at the top-left
+            # and only then slide it down to the bottom -- the 'menu flashes at the
+            # top-left on the first click' bug. Positioning first means the window is
+            # only ever mapped at the correct spot (our x is 0, but y is near the
+            # bottom, so the pre-move still matters). (Re-shows also need this: a
+            # withdrawn override-redirect window forgets its position with no WM to
+            # remember it.)
             root.geometry(f"{win_w}x{win_h}+{x}+{y}")
             root.deiconify()
             root.lift()

@@ -212,19 +212,11 @@ PANEL_LAUNCHERS = [
     "applications:org.kde.dolphin.desktop",
 ]
 
-# Generic, minimal application-menu button icon (NOT the KDE/Plasma "start-here"
-# logo the user asked to drop). "application-menu" is a plain hamburger glyph that
-# ships with Breeze.
-MENU_ICON = "application-menu"
-
-# Kickoff footer power buttons, as session-action ids (systemFavorites). The user
-# asked for shutdown/restart/sleep with SLEEP replacing logout. The ids are verified
-# from powerdevil/plasma-desktop SystemModel: "suspend" == Sleep, "reboot" == Restart,
-# "shutdown" == Shut Down (kickoff labels them exactly that with showActionButtonCaptions).
-# NOTE: kickoff renders these in a FIXED order (Suspend, Reboot, Shutdown), not the
-# order of this list -- which happens to be the desired left-to-right Sleep/Restart/
-# Shut Down anyway; the list's job is only to pick WHICH three appear (no logout).
-KICKOFF_SYSTEM_FAVORITES = ["suspend", "reboot", "shutdown"]
+# NOTE: Plasma's Kickoff launcher has been REMOVED from the panel entirely (the
+# migration to OUR Az'arch application menu). There is therefore no Kickoff icon
+# constant and no Kickoff footer-power (systemFavorites) list here anymore -- our
+# menu draws its own icon (application_menu.MENU_ICON_NAME) and its own power row.
+# The Az'arch icon applet takes Kickoff's former LEFTMOST slot (see AppletOrder).
 
 # The status widgets on the RIGHT of the panel, placed as STANDALONE panel applets
 # (NOT inside an org.kde.plasma.systemtray container). Why standalone instead of a
@@ -280,11 +272,12 @@ KEYBOARD_TOGGLE = "grp:alt_shift_toggle"
 KEYBOARD_DISPLAY_STYLE = 1  # 1 = Flag (centered icon), fixes the low-hanging text label
 
 
-# Fixed applet ids in the panel. 1 = menu (Kickoff), 2 = task manager, 3 = expanding
-# spacer, then the standalone status applets (PANEL_STATUS_APPLETS) at 4.., then the
-# digital clock last (id = 4 + len(PANEL_STATUS_APPLETS)). Computed so a change to
-# PANEL_STATUS_APPLETS keeps the clock id / order correct.
-_MENU_ID = 1
+# Fixed applet ids in the panel. Kickoff is GONE, so the ids are now: 2 = task
+# manager, 3 = expanding spacer, then the standalone status applets
+# (PANEL_STATUS_APPLETS) at 4.., then the digital clock last (id = 4 +
+# len(PANEL_STATUS_APPLETS)). Computed so a change to PANEL_STATUS_APPLETS keeps
+# the clock id / order correct. (Id 1 is retired with Kickoff; it is not reused so
+# nothing silently inherits the launcher's old slot.)
 _TASKS_ID = 2
 _SPACER_ID = 3
 _STATUS_ID_BASE = 4
@@ -292,14 +285,14 @@ _STATUS_ID_BASE = 4
 # OUR Az'arch application-menu icon gets an id ONE PAST the highest existing applet
 # id (the clock), so it can never collide no matter how many status applets are
 # added later. With the shipped 5-applet status list the clock is id 9 and our menu
-# icon is id 10. AppletOrder (below) still places it between Kickoff and the task
-# manager (right of the Application Launcher, left of LibreWolf) regardless of its id.
+# icon is id 10. AppletOrder (below) now places it FIRST -- the LEFTMOST applet on
+# the panel (where Kickoff used to sit), left of the LibreWolf task button.
 _AZ_MENU_ID = _STATUS_ID_BASE + len(PANEL_STATUS_APPLETS) + 1
 
 # The Az'arch application-menu icon applet (org.kde.plasma.icon). It launches our
-# menu via the installed launcher (see configuration/application_menu.py) and shows
-# a distinct grid glyph so it is visually separate from Kickoff's hamburger. Placed
-# to the RIGHT of Kickoff and LEFT of the LibreWolf task button (the user's request).
+# menu via the installed launcher (see configuration/application_menu.py) and is
+# the panel's LEFTMOST icon now that Kickoff has been removed (the user's "move our
+# application menu to the left side" request).
 from . import application_menu as _app_menu  # noqa: E402  (kept next to its user)
 
 _AZ_MENU_APPLET_PLUGIN = "org.kde.plasma.icon"
@@ -350,9 +343,18 @@ def az_menu_plasma_icon_backing() -> str:
 def plasma_appletsrc() -> str:
     """The full Plasma desktop + panel layout for a fresh profile: the desktop
     containment (with the wallpaper seed) AND a bottom panel carrying, left to right:
-    the application menu (Kickoff), a pinned task manager (LibreWolf, Kitty, Dolphin),
-    an expanding spacer, then the STANDALONE status applets (keyboard-layout,
-    device-notifier, brightness, network, volume), and finally a digital clock.
+    OUR Az'arch application-menu icon (the LEFTMOST applet), a pinned task manager
+    (LibreWolf, Kitty, Dolphin), an expanding spacer, then the STANDALONE status
+    applets (keyboard-layout, device-notifier, brightness, network, volume), and
+    finally a digital clock.
+
+    KICKOFF IS GONE. The migration replaced Plasma's org.kde.plasma.kickoff launcher
+    with the Az'arch application menu entirely: there is no kickoff applet on the
+    panel anymore (and kmenuedit/krunner are deleted from the image, see
+    configuration/system.CUSTOMIZE_AIROOTFS). Our menu is an org.kde.plasma.icon
+    applet that launches the resident Az'arch menu daemon; it sits in Kickoff's old
+    LEFTMOST slot and is also what the Super/Meta key now opens (see
+    application_menu.menu_desktop() + the kglobalshortcutsrc Meta rebind).
 
     NO system tray container. The status widgets are placed as individual panel
     applets on purpose (see PANEL_STATUS_APPLETS): the user wanted these icons visible
@@ -362,20 +364,11 @@ def plasma_appletsrc() -> str:
     exactly this set, always visible, no arrow (verified live in a booted VM).
 
     Deliberate OMISSIONS (the user's panel requests):
+      * NO org.kde.plasma.kickoff -> the Plasma launcher is fully removed.
       * NO org.kde.plasma.showdesktop / minimizeall -> no "Peek at Desktop" button.
       * NO org.kde.plasma.notifications anywhere (also DELETED from the image in
         system.CUSTOMIZE_AIROOTFS) -> notifications gone from the whole distro.
       * NO clipboard and NO battery/power applet (power is reached from the menu).
-
-    Application menu = org.kde.plasma.kickoff (NOT kicker): the user asked for the
-    shutdown/restart/sleep buttons on the RIGHT with TEXT LABELS and SLEEP instead of
-    logout. That footer -- right-aligned buttons rendered TextBesideIcon -- is a
-    kickoff feature (showActionButtonCaptions=true, primaryActions=0 Power,
-    systemFavorites=suspend,reboot,shutdown -> "Sleep / Restart / Shut Down"); kicker
-    can only draw icon-only power buttons on the LEFT and has no caption key at all.
-    For "no categories, just the applications" we use kickoff's List view
-    (applicationsDisplay=1) + alphaSort, whose "All Applications" entry is a flat
-    A-Z app list (kickoff hardcodes flat:true, so there is no category drill-down).
 
     The wallpaper lives in the NESTED [Containments][1][Wallpaper][org.kde.image]
     [General] Image= group (a common mistake is the containment's own [General]) and
@@ -392,15 +385,15 @@ def plasma_appletsrc() -> str:
     d = DESKTOP_CONTAINMENT_ID
     p = PANEL_CONTAINMENT_ID
     launchers = ",".join(PANEL_LAUNCHERS)
-    system_favorites = ",".join(KICKOFF_SYSTEM_FAVORITES)
     # Status applets get ids 4, 5, ...; the clock is the id right after the last one.
     status_ids = [_STATUS_ID_BASE + i for i in range(len(PANEL_STATUS_APPLETS))]
     clock_id = _STATUS_ID_BASE + len(PANEL_STATUS_APPLETS)
-    # Our Az'arch menu icon (_AZ_MENU_ID) sits between Kickoff (_MENU_ID) and the
-    # task manager (_TASKS_ID) -> right of the Application Launcher, left of LibreWolf.
+    # Our Az'arch menu icon (_AZ_MENU_ID) is now the LEFTMOST applet (Kickoff is
+    # gone), then the task manager (_TASKS_ID) -> our icon sits left of LibreWolf,
+    # exactly where the launcher used to be (the "move it to the left" request).
     applet_order = ";".join(
         str(i)
-        for i in [_MENU_ID, _AZ_MENU_ID, _TASKS_ID, _SPACER_ID, *status_ids, clock_id]
+        for i in [_AZ_MENU_ID, _TASKS_ID, _SPACER_ID, *status_ids, clock_id]
     )
     # One block per standalone status applet (keyboard-layout, device-notifier, ...).
     # The keyboard-layout applet additionally gets a [Configuration][General] block
@@ -443,28 +436,11 @@ plugin=org.kde.panel
 [Containments][{p}][General]
 AppletOrder={applet_order}
 
-# 1. Application menu (Kickoff): generic icon, flat alphabetical app List, footer
-# power buttons labelled on the right = Sleep / Restart / Shut Down (sleep replaces
-# logout).
-[Containments][{p}][Applets][{_MENU_ID}]
-immutability=1
-plugin=org.kde.plasma.kickoff
-
-[Containments][{p}][Applets][{_MENU_ID}][Configuration][General]
-icon={MENU_ICON}
-applicationsDisplay=1
-favoritesDisplay=1
-alphaSort=true
-primaryActions=0
-systemFavorites={system_favorites}
-showActionButtonCaptions=true
-showRecentApps=false
-showRecentDocs=false
-
-# 1b. Az'arch application menu icon (org.kde.plasma.icon): OUR menu, immediately
-# right of Kickoff. Launches {_AZ_MENU_DESKTOP_PATH} (the installed .desktop, which
-# runs our Tkinter menu); shows a distinct grid glyph so it does not look like
-# Kickoff. See configuration/application_menu.py.
+# 1. Az'arch application menu icon (org.kde.plasma.icon): OUR menu, now the LEFTMOST
+# panel applet (Kickoff has been removed -- this took its slot). Launches
+# {_AZ_MENU_DESKTOP_PATH} (the installed .desktop, which runs our Tkinter menu) and
+# shows the application-menu glyph. The Super/Meta key opens the same menu (via the
+# kglobalshortcutsrc Meta rebind + application_menu.menu_desktop()'s X-KDE-Shortcuts).
 #
 # localPath points at a backing .desktop WE ship (az_menu_plasma_icon_backing ->
 # ~/.local/share/plasma_icons/...), a real Type=Application launcher, so the applet
@@ -570,6 +546,44 @@ Theme=breeze-dark
 LookAndFeelPackage=org.kde.breezedark.desktop
 widgetStyle=Breeze
 """
+
+
+# --- 3c-bis. ~/.config/kglobalshortcutsrc (Super key -> Az'arch menu) --------
+# The plasmashell action id + friendly text for the bare-Meta "open the launcher"
+# shortcut. Setting it to none,none frees the Super key so OUR menu's Meta grab
+# (application_menu.menu_shortcut_desktop, X-KDE-Shortcuts=Meta) is the only
+# consumer -- otherwise plasmashell's default Meta->launcher and our grab contend.
+_KICKOFF_LAUNCHER_ACTION = "activate application launcher"
+_KICKOFF_LAUNCHER_FRIENDLY = "Activate Application Launcher"
+
+
+def kglobalshortcutsrc() -> str:
+    """Free the Super/Meta key from Plasma's (now-removed) Kickoff launcher so it
+    can open OUR menu instead.
+
+    Plasma binds the bare Meta key to the plasmashell action
+    'activate application launcher' (== open Kickoff). We are removing Kickoff and
+    binding Meta to the Az'arch menu via a dedicated X-KDE-Shortcuts=Meta .desktop
+    (application_menu.menu_shortcut_desktop). Two things must both hold for that to
+    win: our .desktop must grab Meta (it does, at kglobalacceld startup), AND no
+    other component may still claim bare Meta. So this ships kglobalshortcutsrc with
+    the plasmashell launcher shortcut EXPLICITLY disabled (none,none): kglobalaccel
+    treats a stored binding as authoritative over the built-in default, so even if
+    plasmashell re-registers the action it finds 'none' and does not grab Meta.
+
+    Only that one key is set here; every other shortcut is left to Plasma's own
+    defaults (kglobalaccel merges per-key, so an absent key keeps its default). The
+    on-disk value form is "keys,default,friendly-name"; 'none,none,<name>' means no
+    active binding and no default. Shipped to the live home and /etc/skel so both
+    the live and installed sessions open the Az'arch menu on Super.
+
+    Verified live on the Hypervisor (Plasma 6.7.4): the launcher action's key is
+    exactly this id, and with our .desktop present kglobalacceld registered the
+    Az'arch _launch action for Meta."""
+    return (
+        "[plasmashell]\n"
+        f"{_KICKOFF_LAUNCHER_ACTION}=none,none,{_KICKOFF_LAUNCHER_FRIENDLY}\n"
+    )
 
 
 # --- 3d. ~/.config/krunnerrc (menu/search: installed applications only) ------
@@ -918,6 +932,15 @@ def az_menu_usage_seed_json() -> str:
     ~/.local/share and mirrors it into /etc/skel for the installed user. It stays
     dynamic: the daemon re-sorts as apps are opened."""
     return _app_menu.usage_seed_json()
+
+
+def az_menu_shortcut_desktop() -> str:
+    """The dedicated .desktop that binds the Super/Meta key to OUR menu (content is
+    owned by configuration/application_menu.py). Placed by the PLAN below into the
+    SYSTEM apps dir /usr/share/applications (root-owned, always scanned by KSycoca) so
+    kglobalacceld indexes + grabs Meta for it at login; paired with
+    kglobalshortcutsrc() freeing Meta from the removed Kickoff launcher."""
+    return _app_menu.menu_shortcut_desktop()
 
 
 # --- 6. /usr/share/applications/azarch-install.desktop ----------------------
@@ -1398,6 +1421,18 @@ PLAN = [
         "owner": "home",
     },
     {
+        # Bind the Super/Meta key to OUR menu: a dedicated X-KDE-Shortcuts=Meta
+        # .desktop in the SYSTEM apps dir /usr/share/applications (always-scanned by
+        # KSycoca, so kglobalacceld grabs Meta for it at login). Paired with
+        # kglobalshortcutsrc() below, which frees Meta from the removed Kickoff
+        # launcher. Root-owned (system-wide, one file for all users; carries onto the
+        # installed system via the live rootfs).
+        "builder": az_menu_shortcut_desktop,
+        "dest": _app_menu.MENU_SHORTCUT_DESKTOP_SYSTEM_PATH,
+        "mode": _CONF,
+        "owner": "root",
+    },
+    {
         "builder": ksplashrc,
         "dest": f"{HOME}/.config/ksplashrc",
         "mode": _CONF,
@@ -1412,6 +1447,16 @@ PLAN = [
     {
         "builder": kdeglobals,
         "dest": f"{HOME}/.config/kdeglobals",
+        "mode": _CONF,
+        "owner": "home",
+    },
+    {
+        # Super/Meta key -> Az'arch menu: frees Meta from the removed Kickoff
+        # launcher (plasmashell 'activate application launcher' set to none) so our
+        # menu's Meta grab is the only consumer. Paired with the shortcut .desktop
+        # above. Home-owned, mirrored into /etc/skel.
+        "builder": kglobalshortcutsrc,
+        "dest": f"{HOME}/.config/kglobalshortcutsrc",
         "mode": _CONF,
         "owner": "home",
     },
