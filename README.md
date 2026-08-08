@@ -7,7 +7,8 @@
 <tbody>
 <tr><td>
 
-This is a year-old, neglected, poorly put-together project that is undergoing a massive overhaul. Nothing works correctly yet, so please come back later.
+The project compiles and runs, but it is still early in development, with most of the core features missing and a good chance that bugs are present. I suggest
+  coming back to it later once it reaches release.
 
 </td></tr>
 </tbody>
