@@ -70,8 +70,11 @@ class CanvasAppList:
     # AppRow look (40px icon + name + subtitle with padding).
     ROW_H = 56
     PAD_X = 8                 # left/right inset of the selection outline
-    ICON_X = 20               # icon left edge inside the row
-    TEXT_X = 72               # text left edge (icon width + gap)
+    # Icon + text are nudged a touch to the RIGHT (+6px from the original 20/72) so
+    # the app list sits ever so slightly inboard; the +6 is applied to BOTH so the
+    # icon->text gap is unchanged.
+    ICON_X = 26               # icon left edge inside the row (was 20)
+    TEXT_X = 78               # text left edge (icon width + gap; was 72)
     NAME_DY = 18              # name baseline offset from row top
     SUB_DY = 38               # subtitle baseline offset from row top
 
@@ -149,11 +152,11 @@ class CanvasAppList:
             )
             row.name = self.canvas.create_text(
                 0, 0, text=entry.name, anchor="w", fill=T.TEXT_COLOR,
-                font=("Noto Sans", 12), state="hidden",
+                font=(T.FONT_FAMILY, T.FONT_APP_NAME), state="hidden",
             )
             row.sub = self.canvas.create_text(
                 0, 0, text=entry.type_label, anchor="w", fill=T.SUBTEXT_COLOR,
-                font=("Noto Sans", 9), state="hidden",
+                font=(T.FONT_FAMILY, T.FONT_APP_TYPE), state="hidden",
             )
             self._rows.append(row)
 

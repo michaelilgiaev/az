@@ -72,6 +72,73 @@ def _hex_rgb(color: str) -> tuple[int, int, int]:
     return int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
 
 
+# --- Hover tooltip --------------------------------------------------------
+class Tooltip:
+    """A tiny borderless hover hint attached to a widget.
+
+    Shows ``text`` in a small Breeze-styled popup the INSTANT the mouse enters the
+    widget, and hides it the instant the mouse leaves (or on press / when the
+    widget goes away). There is NO dwell delay -- the hint tracks the pointer 1:1
+    so the greyed-out Settings button explains itself immediately on hover. Works
+    even on a DISABLED control (the button binds no hover-paint handlers, but we
+    bind our own <Enter>/<Leave> here so the hint still appears).
+
+    Pure Tkinter, dependency-free and crash-proof, like the rest of the menu: the
+    popup is an ``overrideredirect`` Toplevel (no window chrome), positioned just
+    below-right of the pointer. Any Tk error while showing/placing it is swallowed
+    -- a missing tooltip must never break the button.
+    """
+
+    def __init__(self, widget: tk.Widget, text: str) -> None:
+        self._widget = widget
+        self._text = text
+        self._tip: tk.Toplevel | None = None
+        # Bind on the widget AND (if it has children, e.g. the icon label inside a
+        # button frame) so hovering the glyph counts too. add="+" keeps any
+        # existing bindings intact. <Enter> shows the hint immediately (no
+        # after()-based dwell) so it appears the moment the pointer arrives.
+        widget.bind("<Enter>", self._show, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+        widget.bind("<Button-1>", self._hide, add="+")
+        widget.bind("<Destroy>", self._hide, add="+")
+
+    def _show(self, _e=None) -> None:
+        if self._tip is not None:
+            return
+        try:
+            if not self._widget.winfo_exists():
+                return
+            # Position just below-right of the widget's bottom-left corner.
+            x = self._widget.winfo_rootx() + 8
+            y = self._widget.winfo_rooty() + self._widget.winfo_height() + 4
+            tip = tk.Toplevel(self._widget)
+            tip.wm_overrideredirect(True)
+            tip.configure(
+                bg=T.TOOLTIP_BORDER, highlightthickness=0
+            )
+            # A 1px border via an outer frame coloured the border colour, with the
+            # label inset by 1px so the border shows as a thin blue outline.
+            inner = tk.Label(
+                tip, text=self._text, bg=T.TOOLTIP_BG, fg=T.TOOLTIP_FG,
+                font=(T.FONT_FAMILY, T.FONT_APP_TYPE), justify="left",
+                padx=8, pady=4,
+            )
+            inner.pack(padx=1, pady=1)
+            tip.wm_geometry(f"+{x}+{y}")
+            tip.lift()
+            self._tip = tip
+        except tk.TclError:
+            self._tip = None
+
+    def _hide(self, _e=None) -> None:
+        if self._tip is not None:
+            try:
+                self._tip.destroy()
+            except tk.TclError:
+                pass
+            self._tip = None
+
+
 # --- Highlight bar over the panel icon ------------------------------------
 class HighlightBar:
     """A borderless Breeze-blue accent stripe that POPS IN at full size over the
@@ -168,12 +235,12 @@ class AppRow(tk.Frame):
 
         self._name = tk.Label(
             text, text=entry.name, bg=T.BG_COLOR, fg=T.TEXT_COLOR,
-            font=("Noto Sans", 12), anchor="w", justify="left",
+            font=(T.FONT_FAMILY, T.FONT_APP_NAME), anchor="w", justify="left",
         )
         self._name.pack(fill="x", anchor="w")
         self._type = tk.Label(
             text, text=entry.type_label, bg=T.BG_COLOR, fg=T.SUBTEXT_COLOR,
-            font=("Noto Sans", 9), anchor="w", justify="left",
+            font=(T.FONT_FAMILY, T.FONT_APP_TYPE), anchor="w", justify="left",
         )
         self._type.pack(fill="x", anchor="w")
 
@@ -258,6 +325,7 @@ class IconButton(tk.Frame):
         *,
         pad: int = 7,
         disabled: bool = False,
+        tooltip: str | None = None,
     ) -> None:
         self._disabled = disabled
         super().__init__(
@@ -275,13 +343,23 @@ class IconButton(tk.Frame):
         self._label.image = shown
         self._label.pack(padx=pad, pady=pad)
 
-        # A disabled button binds NO handlers, so it neither highlights on hover
-        # nor fires on click -- it is completely inert.
+        # A disabled button binds NO hover-paint/click handlers, so it neither
+        # highlights on hover nor fires on click -- it is completely inert.
         if not disabled:
             for w in (self, self._label):
                 w.bind("<Enter>", self._on_enter)
                 w.bind("<Leave>", self._on_leave)
                 w.bind("<Button-1>", self._press)
+
+        # A hover tooltip (independent of the hover-paint above) is attached even
+        # when the button is disabled -- e.g. the greyed-out Settings button tells
+        # the user its screen is not built yet. Keep the Tooltip referenced so it
+        # is not garbage-collected. Attach it to both the frame and its glyph label
+        # so resting on the icon itself still triggers the hint.
+        self._tooltips: list[Tooltip] = []
+        if tooltip:
+            self._tooltips.append(Tooltip(self, tooltip))
+            self._tooltips.append(Tooltip(self._label, tooltip))
 
     def _fill(self, bg: str, border: str) -> None:
         try:
@@ -326,9 +404,14 @@ class IconButton(tk.Frame):
 
 # --- Bottom power/session button ------------------------------------------
 class PowerButton(tk.Frame):
-    """A big bottom-bar session button: a Breeze icon beside its label, the
-    whole thing highlighting on hover. Packed with ``expand=True`` by the caller
-    so the four buttons share the bottom bar evenly and fill the window width.
+    """A big bottom-bar session button: a Breeze icon beside its label, the whole
+    thing highlighting on hover. The caller grids the four buttons into four EQUAL
+    columns (``sticky="nsew"``) so each button fills its own equal slice of the
+    bottom bar.
+
+    The icon+label content is packed with the default CENTER anchor, so it sits
+    centred WITHIN the button's cell -- giving 'each button centred in its own
+    slice' rather than the whole group centred across the bar.
     """
 
     def __init__(
@@ -342,14 +425,17 @@ class PowerButton(tk.Frame):
         self._command = command
 
         inner = tk.Frame(self, bg=T.BG_COLOR)
-        inner.pack(padx=6, pady=10)  # generous vertical pad -> fills the bar
+        # Centre the icon+label within the button's (equal) cell. padx/pady are the
+        # margin around the content; the default center anchor keeps the content
+        # centred in its slice.
+        inner.pack(padx=5, pady=10)
 
         self._icon = tk.Label(inner, image=image, bg=T.BG_COLOR)
         self._icon.image = image
         self._icon.pack(side="left", padx=(0, 8))
         self._text = tk.Label(
             inner, text=label, bg=T.BG_COLOR, fg=T.TEXT_COLOR,
-            font=("Noto Sans", 11),
+            font=(T.FONT_FAMILY, T.FONT_POWER),
         )
         self._text.pack(side="left")
 

@@ -21,7 +21,7 @@ PANEL_HEIGHT = 60          # Az'arch bottom panel height (configuration/desktop.
 
 # Fallbacks if Kickoff's size can't be read (defaults observed on this desktop:
 # popupWidth=647, popupHeight=497 in plasma-org.kde.plasma.desktop-appletsrc).
-DEFAULT_WIDTH = 647
+DEFAULT_WIDTH = 582        # menu window width (was 647; -10% -> pulled in from the right)
 DEFAULT_HEIGHT = 497
 
 APPLETSRC = os.path.expanduser(
@@ -87,7 +87,35 @@ SCROLL_THUMB_HOVER = "#93989c"   # hover/drag thumb: #fcfcfc @ ~50% over #2a2e32
 SCROLL_GROOVE_COLOR = "#33383d"  # faint groove behind thumb, hover-only
 SCROLL_THUMB_MIN = 32            # px, minimum thumb length so it stays grabbable
 
-# Icon sizes.
-ICON_SIZE = 40             # px, app-row icon edge
-POWER_ICON_SIZE = 22       # px, bottom power-button icon edge
-TOP_ICON_SIZE = 22         # px, top settings/pin button icon edge
+# --- Tooltip (small hover hint) -------------------------------------------
+# A tiny Breeze-ish popup shown the instant the mouse enters a control that needs
+# a word of explanation -- currently the greyed-out Settings (gear) button, whose
+# tooltip says the settings screen is not available yet. Dark surface with a
+# subtle blue border, matching the menu.
+TOOLTIP_BG = "#31363b"       # tooltip background (Breeze surface)
+TOOLTIP_FG = "#eff0f1"       # tooltip text
+TOOLTIP_BORDER = "#3daee9"   # thin Breeze-blue border
+# Retained for compatibility; the tooltip is now INSTANT (appears on <Enter>,
+# disappears on <Leave>) with no dwell delay, so nothing gates on this value.
+TOOLTIP_DELAY_MS = 0         # no hover dwell -- tooltip shows immediately
+
+
+# --- Fonts ----------------------------------------------------------------
+# ONE home for the menu's text sizes so they scale together. These are 10%
+# bigger than the original Kickoff-match sizes (12/9/12/11 pt) -- a small bump so
+# the text and icons read a touch larger while the window still fits alongside
+# everything else on the panel. Rounded to the nearest whole point because Tk
+# font sizes are integers. The widget modules (widgets.py app rows + power label,
+# applist.py canvas rows, menu.py search box) all read these instead of baking in
+# their own literals, so a future resize is a one-line change here.
+FONT_FAMILY = "Noto Sans"  # the menu's UI font throughout
+FONT_APP_NAME = 13         # app-row NAME (big line)                -- was 12
+FONT_APP_TYPE = 10         # app-row TYPE subtitle (muted line)     -- was 9
+FONT_SEARCH = 13           # search box entry + placeholder         -- was 12
+FONT_POWER = 12            # bottom power-row button labels         -- was 11
+
+# Icon sizes. Bumped 10% (rounded) in step with the fonts above so the glyphs
+# grow with the text rather than looking small beside the larger labels.
+ICON_SIZE = 44             # px, app-row icon edge                  -- was 40
+POWER_ICON_SIZE = 24       # px, bottom power-button icon edge      -- was 22
+TOP_ICON_SIZE = 24         # px, top settings/pin button icon edge  -- was 22

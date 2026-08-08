@@ -193,7 +193,8 @@ class AppMenu:
         self.pin_button = IconButton(row, pin_img, self._toggle_pin)
         self.pin_button.pack(side="right", padx=(8, 0))
         self.settings_button = IconButton(
-            row, gear_img, self._noop, disabled=True
+            row, gear_img, self._noop, disabled=True,
+            tooltip="The application menu settings are not available yet",
         )
         self.settings_button.pack(side="right", padx=(8, 0))
 
@@ -218,7 +219,7 @@ class AppMenu:
         self.search_entry = tk.Entry(
             entry_wrap, textvariable=self.search_var,
             bg=T.SURFACE_COLOR, fg=T.TEXT_COLOR, insertbackground=T.TEXT_COLOR,
-            relief="flat", font=("Noto Sans", 12),
+            relief="flat", font=(T.FONT_FAMILY, T.FONT_SEARCH),
             highlightthickness=0, borderwidth=0,
         )
         self.search_entry.pack(fill="both", expand=True, ipady=6)
@@ -236,7 +237,8 @@ class AppMenu:
 
         self._placeholder_lbl = tk.Label(
             entry_wrap, text="Search...", bg=T.SURFACE_COLOR,
-            fg=T.PLACEHOLDER_COLOR, font=("Noto Sans", 12), anchor="w",
+            fg=T.PLACEHOLDER_COLOR, font=(T.FONT_FAMILY, T.FONT_SEARCH),
+            anchor="w",
         )
         self._placeholder_lbl.place(in_=self.search_entry, x=2, rely=0.5,
                                     anchor="w")
@@ -399,12 +401,18 @@ class AppMenu:
             ("system-reboot", "Restart", self._do(actions.reboot)),
             ("system-shutdown", "Shut Down", self._do(actions.poweroff)),
         )
-        # expand=True on each -> the four buttons share the bar evenly and fill
-        # the whole window width (bigger buttons, per spec).
-        for icon_name, label, cb in items:
+        # Grid the four buttons into four EQUAL columns (weight=1 + a shared
+        # uniform group forces each cell to exactly row_width/4, regardless of how
+        # wide each label is -- 'Shut Down' does not get a bigger cell than
+        # 'Lock'). Each PowerButton fills its cell (sticky="nsew"); its inner
+        # icon+label content uses the default center anchor, so every button sits
+        # centred WITHIN ITS OWN slice. This is the fix for the group having been
+        # centred across the whole bar (Sleep hard-left, Shut Down hard-right).
+        for col, (icon_name, label, cb) in enumerate(items):
             img = self.small_icons.load(icon_name)
-            PowerButton(row, img, label, cb).pack(
-                side="left", expand=True, fill="x"
+            row.grid_columnconfigure(col, weight=1, uniform="power")
+            PowerButton(row, img, label, cb).grid(
+                row=0, column=col, sticky="nsew"
             )
 
     def _do(self, fn):
@@ -683,6 +691,19 @@ def build_window(persistent: bool = False) -> tk.Tk:
 
     # Escape closes (unless pinned); arrows move selection; Enter launches.
     root.bind("<Escape>", close_menu)
+    # Super/Meta ALSO closes -- "Super opened it, Super closes it". The bare Super
+    # key toggles the menu via KWin's global Meta shortcut (kglobalshortcutsrc ->
+    # our launcher -> the daemon), which works while the menu is CLOSED or pinned.
+    # But while UNPINNED the menu holds a global keyboard grab (see arm()), so the
+    # second Super press is delivered to THIS window and never reaches KWin -- the
+    # global toggle can't fire, so the menu would stay open. Binding Super here
+    # makes that grab-delivered press close it, closing the loop. Routed through
+    # close_menu so it honours the pin guard exactly like Escape (a pinned menu
+    # ignores it; there the menu holds no grab, so KWin's toggle handles the
+    # close). Both Super_* (typical) and Meta_* (some layouts report the key as
+    # Meta) keysyms are bound so whichever X delivers triggers the close.
+    for _keysym in ("<Super_L>", "<Super_R>", "<Meta_L>", "<Meta_R>"):
+        root.bind(_keysym, close_menu)
     root.bind("<Down>", lambda _e: menu.move_selection(1))
     root.bind("<Up>", lambda _e: menu.move_selection(-1))
     root.bind("<Return>", lambda _e: menu.activate_selected())
@@ -779,7 +800,19 @@ def build_window(persistent: bool = False) -> tk.Tk:
         state["capturing"] = False  # arm() sets this True once the keyboard is ours
         state["pin_active"] = 0
         root.az_pinned = False
-        # Rebuild the highlight bar (the previous hide destroyed it).
+        # Rebuild the highlight bar. Normally the previous hide already destroyed
+        # it, but a show() with NO intervening hide() (the launcher's auto-start
+        # SIGUSR2 landing while a panel-click SIGUSR1 already showed us, or any
+        # double "show") would otherwise ORPHAN the old bar Toplevel -- it stays
+        # mapped forever because the later hide only closes the CURRENT az_highlight.
+        # That is the 'cyan bar stuck over the panel icon' regression. Closing any
+        # existing bar first makes show idempotent.
+        old_bar = getattr(root, "az_highlight", None)
+        if old_bar is not None:
+            try:
+                old_bar.close()
+            except tk.TclError:
+                pass
         try:
             root.az_highlight = HighlightBar(root, screen_w, screen_h)
         except tk.TclError:

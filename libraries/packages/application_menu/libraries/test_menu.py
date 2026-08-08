@@ -426,6 +426,92 @@ def test_scan_hides_denylisted(tmp: str) -> None:
     assert "systemsettings.desktop" not in apps.HIDDEN_DESKTOP_IDS
 
 
+# --- pure-logic: 10%-bigger text + icons ----------------------------------
+def test_theme_sizes_are_scaled_10pct() -> None:
+    """Text and icons ship 10% bigger than the original Kickoff-match sizes so the
+    menu reads a touch larger while still fitting the panel footprint.
+
+    The font sizes and icon edges USED to be bare literals scattered across
+    widgets.py / applist.py / menu.py (the app-name/type point sizes, the search
+    entry size, the power-row label) and the icon-edge constants in theme.py. They
+    are now centralised as theme.FONT_* / theme.*ICON_SIZE constants so there is ONE
+    place to scale them. This pins the scaled values (original * 1.1, rounded to the
+    nearest whole point/pixel -- Tk fonts and PhotoImage need integers) so a future
+    edit that silently reverts the bump fails here.
+    """
+    import theme as T
+
+    # Original sizes -> 10%-bigger (round-half-to-nearest int).
+    assert T.FONT_APP_NAME == 13, T.FONT_APP_NAME      # was 12
+    assert T.FONT_APP_TYPE == 10, T.FONT_APP_TYPE      # was 9
+    assert T.FONT_SEARCH == 13, T.FONT_SEARCH          # was 12
+    assert T.FONT_POWER == 12, T.FONT_POWER            # was 11
+
+    assert T.ICON_SIZE == 44, T.ICON_SIZE              # was 40
+    assert T.POWER_ICON_SIZE == 24, T.POWER_ICON_SIZE  # was 22
+    assert T.TOP_ICON_SIZE == 24, T.TOP_ICON_SIZE      # was 22
+
+    # Every one is genuinely bigger than the pre-bump value (guards a typo that
+    # made a size SMALLER while still being "changed").
+    for new, old in (
+        (T.FONT_APP_NAME, 12), (T.FONT_APP_TYPE, 9),
+        (T.FONT_SEARCH, 12), (T.FONT_POWER, 11),
+        (T.ICON_SIZE, 40), (T.POWER_ICON_SIZE, 22), (T.TOP_ICON_SIZE, 22),
+    ):
+        assert new > old, (new, old)
+
+
+def test_menu_modules_use_centralised_font_constants() -> None:
+    """The scattered `font=("Noto Sans", <literal>)` sizes are gone -- the row,
+    search and power widgets read their sizes from theme.FONT_* so the 10% bump
+    (and any future resize) lives in ONE place.
+
+    Asserted at the SOURCE level: no menu module may hardcode a Noto Sans point
+    size any more (they must interpolate a theme constant), so a new bare literal
+    creeping back in is caught even though a headless font size is awkward to read
+    back off a Tk widget reliably.
+    """
+    import re
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    # A bare integer point size in a Noto Sans font spec, e.g. ("Noto Sans", 12).
+    bad = re.compile(r'"Noto Sans"\s*,\s*\d')
+    for name in ("widgets.py", "applist.py", "menu.py"):
+        src = open(os.path.join(here, name), encoding="utf-8").read()
+        assert not bad.search(src), (
+            f"{name} still hardcodes a Noto Sans point size; use a theme.FONT_* "
+            f"constant instead"
+        )
+        # And it must actually reference the centralised constants.
+        assert "T.FONT_" in src or "theme.FONT_" in src, name
+
+
+def test_app_rows_are_nudged_right() -> None:
+    """The app list icon + text sit a touch further right than the original
+    20/72 px, and BOTH are shifted by the SAME amount so the icon->text gap is
+    unchanged (a uniform nudge, not a re-spacing)."""
+    import applist
+    orig_icon, orig_text = 20, 72
+    cls = applist.CanvasAppList
+    assert cls.ICON_X > orig_icon, cls.ICON_X
+    assert cls.TEXT_X > orig_text, cls.TEXT_X
+    # Same delta on both -> icon/text gap preserved.
+    assert (cls.ICON_X - orig_icon) == (cls.TEXT_X - orig_text)
+    # "Ever so lightly": a small nudge, not a big move.
+    assert cls.ICON_X - orig_icon <= 12
+
+
+def test_tooltip_theme_constants_exist() -> None:
+    """The hover-tooltip styling constants are defined so the Settings button's
+    hint has a Breeze-ish look. The tooltip is INSTANT now (no dwell), so
+    TOOLTIP_DELAY_MS is retained only for compatibility and must be a
+    non-negative int (0 = show immediately)."""
+    import theme as T
+    for attr in ("TOOLTIP_BG", "TOOLTIP_FG", "TOOLTIP_BORDER"):
+        assert getattr(T, attr).startswith("#"), attr
+    assert isinstance(T.TOOLTIP_DELAY_MS, int) and T.TOOLTIP_DELAY_MS >= 0
+
+
 # --- UI smoke tests (need a display) --------------------------------------
 def _have_display() -> bool:
     return bool(os.environ.get("DISPLAY"))
@@ -577,8 +663,13 @@ def test_ui_reorders_after_launch_without_restart() -> None:
         names = [e.name for e in al.all_entries]
         assert len(names) >= 2, names
         # Pick an app that is NOT already first, and make it the most launched.
+        # Identity is by desktop_id (unique), NOT name: some hosts ship two
+        # entries with the SAME display name (e.g. mintstick-format.desktop and
+        # mintstick-format-kde.desktop both "USB Stick Formatter"), so a
+        # name-inequality check could spuriously fail when the first and last
+        # entries merely share a name while being different apps.
         victim = al.all_entries[-1]         # last == least-used / last alpha
-        assert victim.name != al.all_entries[0].name
+        assert victim.desktop_id != al.all_entries[0].desktop_id
         for _ in range(50):
             m.usage.record(victim.desktop_id)
 
@@ -662,6 +753,110 @@ def test_ui_pin_keeps_menu_open() -> None:
         m._toggle_pin()
         assert root.az_pinned is False
         assert m.pin_button._active is False
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_ui_super_key_binding_is_present() -> None:
+    """The Super/Meta key must CLOSE the menu, mirroring Escape.
+
+    Why a window-level binding at all (vs. just KWin's global Meta->launcher
+    toggle): while the menu is unpinned it holds a GLOBAL keyboard grab, so a
+    second physical Super press is delivered to OUR window and never reaches the
+    WM -- KWin's Meta shortcut can't fire, so the daemon never toggles it shut.
+    Binding Super on the window itself makes that grab-delivered press close it,
+    so 'Super opened it, Super closes it' holds. (When pinned the menu drops the
+    grab, so KWin's toggle handles the close; the binding just no-ops there via
+    close_menu's pin guard.)
+
+    Asserted structurally: every Super/Meta keysym we rely on is bound to a real
+    handler on the window. Tk returns the bound command string when bind() is
+    called with only a sequence, so a non-empty result means "something is bound".
+    """
+    _menu, root = _build_testable_menu()
+    try:
+        for seq in ("<Super_L>", "<Super_R>", "<Meta_L>", "<Meta_R>"):
+            bound = root.bind(seq)
+            assert bound, f"{seq} is not bound (Super must close the menu)"
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def _window_alive(root) -> bool:
+    """True if the window still exists, False if it was destroyed.
+
+    close_menu() in non-persistent mode calls root.destroy(), which tears down the
+    WHOLE Tk application -- so a plain winfo_exists() then raises "application has
+    been destroyed" rather than returning 0. Treat that TclError as "gone"."""
+    import tkinter as tk
+    try:
+        return bool(root.winfo_exists())
+    except tk.TclError:
+        return False
+
+
+def test_ui_super_key_closes_and_respects_pin() -> None:
+    """Pressing Super closes an (unpinned) menu, and -- like Escape -- is ignored
+    while pinned (a forced close still works).
+
+    Driven through the SAME close path a real Super press hits: close_menu is what
+    the <Super_*> bindings invoke. We first prove a real synthetic <Super_L> event
+    routes to it end-to-end (window mapped + focused so Xvfb delivers the key),
+    then prove the pin guard with a direct close_menu call while pinned."""
+    import tkinter as tk
+
+    _menu, root = _build_testable_menu()
+    try:
+        st = root.az_state
+        assert st["closed"] is False
+
+        # End-to-end: a real Super_L key event fires the binding, which closes
+        # (destroys, since this is non-persistent) the window. The window must be
+        # mapped AND focused first, or the synthetic key event has no focused
+        # target to route to under Xvfb (the testable menu leaves it withdrawn).
+        try:
+            root.deiconify()
+            root.lift()
+            root.focus_force()
+        except tk.TclError:
+            pass
+        root.update()
+        root.event_generate("<Super_L>", when="now")
+        try:
+            root.update()
+        except tk.TclError:
+            pass
+        assert not _window_alive(root), (
+            "a Super_L keypress must close (destroy) the unpinned menu"
+        )
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+    # Pinned: Super (like Escape) must NOT dismiss; a forced close still does.
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        m._toggle_pin()
+        assert root.az_pinned is True
+        # The binding's handler (close_menu) is pin-guarded: no-op while pinned.
+        m.close_menu()
+        assert _window_alive(root), "pinned menu must ignore a Super/Escape close"
+        # Forced close (app launch / power) still tears it down.
+        m.close_menu(force=True)
+        try:
+            root.update()
+        except tk.TclError:
+            pass
+        assert not _window_alive(root), "forced close must work even when pinned"
     finally:
         try:
             root.destroy()
@@ -1140,6 +1335,271 @@ def test_ui_search_standard_editing() -> None:
             pass
 
 
+def _mapped_bar_toplevels(root) -> list:
+    """The blue HighlightBar Toplevels currently MAPPED under root -- used to catch
+    the 'cyan bar stuck over the panel icon' leak."""
+    import tkinter as tk
+    out = []
+    for w in root.winfo_children():
+        if not isinstance(w, tk.Toplevel):
+            continue
+        try:
+            if w.winfo_exists() and w.winfo_viewable() and str(w.cget("bg")) == "#3daee9":
+                out.append(str(w))
+        except tk.TclError:
+            pass
+    return out
+
+
+def test_ui_highlight_bar_no_leak_on_double_show() -> None:
+    """Regression: the HighlightBar (the Breeze-blue stripe over the panel icon)
+    must NOT get stuck on screen.
+
+    show_menu() builds a fresh bar each call, assuming the prior hide destroyed
+    it. But a show() with NO intervening hide() (the launcher's auto-start SIGUSR2
+    landing while a panel-click SIGUSR1 already showed the menu, or any repeated
+    'show') orphaned the previous bar Toplevel -- it stayed mapped forever because
+    the later hide only closed the CURRENT az_highlight. This asserts that after a
+    double-show there is exactly ONE mapped bar and that a single hide removes it
+    (zero mapped bars), i.e. no orphan is left behind."""
+    import menu
+    root = menu.build_window(persistent=True)
+    try:
+        root.withdraw()
+        root.az_populate()
+        root.update_idletasks()
+        root.unbind_all("<Button>")
+        root.az_hide()
+        root.update()
+
+        # Two shows in a row, no hide between (the leak trigger).
+        root.az_show(); root.update()
+        for _ in range(4):
+            root.update(); root.update_idletasks()
+        root.az_show(); root.update()
+        for _ in range(4):
+            root.update(); root.update_idletasks()
+        bars = _mapped_bar_toplevels(root)
+        assert len(bars) == 1, f"double-show must leave ONE bar, got {bars}"
+
+        # A single hide must clear it -> no orphan stuck on screen.
+        root.az_hide(); root.update(); root.update_idletasks()
+        bars = _mapped_bar_toplevels(root)
+        assert bars == [], f"hide must remove the bar, but these are stuck: {bars}"
+    finally:
+        for _tid in list(getattr(root, "az_timers", [])):
+            try:
+                root.after_cancel(_tid)
+            except Exception:
+                pass
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_ui_highlight_bar_placed_over_leftmost_icon() -> None:
+    """Fix #2: the cyan/blue highlight bar must sit over the LEFTMOST panel icon
+    (our menu applet took Kickoff's old leftmost slot), not be misplaced.
+
+    The leftmost panel cell physically spans [0, PANEL_HEIGHT) (a square cell as
+    wide as the panel is thick). We assert the mapped bar Toplevel falls ENTIRELY
+    within that first cell -- its left edge is well inside [0, PANEL_HEIGHT) and its
+    right edge does not cross into the SECOND cell (which starts at PANEL_HEIGHT).
+    These bounds are hardcoded from the panel geometry, NOT derived from
+    ICON_CELL_X, so the test is independent of the very constant it guards: if
+    ICON_CELL_X ever regresses to the old 2nd-slot offset (PANEL_HEIGHT), the bar
+    lands at x>=PANEL_HEIGHT and this FAILS loudly. y must be the panel's top edge
+    and height the configured bar height."""
+    import tkinter as tk
+    import theme as T
+    import menu
+    root = menu.build_window(persistent=True)
+    try:
+        root.withdraw()
+        root.az_populate()
+        root.update_idletasks()
+        root.unbind_all("<Button>")
+        root.az_show()
+        for _ in range(4):
+            root.update(); root.update_idletasks()
+
+        bars = [w for w in root.winfo_children()
+                if isinstance(w, tk.Toplevel) and w.winfo_exists()
+                and str(w.cget("bg")) == "#3daee9" and w.winfo_viewable()]
+        assert len(bars) == 1, f"expected exactly one mapped bar, got {len(bars)}"
+        bar = bars[0]
+        screen_h = root.winfo_screenheight()
+        # First cell spans [0, PANEL_HEIGHT). Ground truth, independent of ICON_CELL_X.
+        first_cell_right = T.PANEL_HEIGHT
+        bar_left = bar.winfo_x()
+        bar_right = bar_left + bar.winfo_width()
+        assert 0 <= bar_left < first_cell_right, (
+            f"bar left x={bar_left} not inside the LEFTMOST cell [0,{first_cell_right}); "
+            "ICON_CELL_X likely regressed to a non-leftmost slot"
+        )
+        assert bar_right <= first_cell_right, (
+            f"bar right edge x={bar_right} spills into the 2nd cell "
+            f"(starts at {first_cell_right}) -- misplaced"
+        )
+        # y at the panel's top edge; height as configured.
+        exp_y = screen_h - T.PANEL_HEIGHT
+        assert bar.winfo_y() == exp_y, f"bar y={bar.winfo_y()} != panel top {exp_y}"
+        assert bar.winfo_height() == T.HIGHLIGHT_BAR_HEIGHT, (
+            f"bar height={bar.winfo_height()} != {T.HIGHLIGHT_BAR_HEIGHT}"
+        )
+        # And the width is the inset cell width (a positive stripe, not degenerate).
+        assert bar.winfo_width() == max(1, T.ICON_CELL_W - 2 * T.HIGHLIGHT_BAR_INSET)
+    finally:
+        for _tid in list(getattr(root, "az_timers", [])):
+            try:
+                root.after_cancel(_tid)
+            except Exception:
+                pass
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_ui_power_row_centered_and_not_clipped() -> None:
+    """Fix #3: each power button (Sleep/Lock/Restart/Shut Down) is centred WITHIN
+    ITS OWN cell, not the whole group centred across the bar.
+
+    The four buttons split the row into four EQUAL columns (each PowerButton is
+    gridded with weight=1 + a shared uniform group, then sticky='nsew' to fill its
+    cell), and each button's icon+label content sits centred in its own slice (the
+    inner frame uses the default center anchor). So every button's content-centre
+    must line up with its cell-centre -- the regression where the group was centred
+    across the whole bar (Sleep hard-left, Shut Down hard-right, only Lock/Restart
+    looking centred) must NOT reappear.
+
+    Also guards that the widest label ('Shut Down') is not clipped by the window
+    edge at the narrower (582px) width."""
+    from widgets import PowerButton
+    _menu, root = _build_testable_menu()
+    try:
+        root.update_idletasks(); root.update()
+        W = root.winfo_width()
+        wl = root.winfo_rootx()
+        btns = []
+
+        def walk(w):
+            for c in w.winfo_children():
+                if isinstance(c, PowerButton):
+                    btns.append(c)
+                walk(c)
+        walk(root)
+        assert len(btns) == 4, f"expected 4 power buttons, got {len(btns)}"
+
+        # Each button's frame IS its cell (expand+fill splits the row evenly).
+        # The content spans from the icon's left edge to the label's right edge;
+        # its centre must match the cell's centre -> centred within its own slice.
+        for i, b in enumerate(btns):
+            cell_left = b.winfo_rootx() - wl
+            cell_right = cell_left + b.winfo_width()
+            cell_center = (cell_left + cell_right) / 2
+            content_left = b._icon.winfo_rootx() - wl
+            content_right = b._text.winfo_rootx() + b._text.winfo_width() - wl
+            content_center = (content_left + content_right) / 2
+            assert abs(content_center - cell_center) <= 4, (
+                f"button {i} ({b._text.cget('text')!r}) not centred in its cell: "
+                f"content_center={content_center:.1f} cell_center={cell_center:.1f}"
+            )
+
+        # The four cells are (about) equal width -> an even split, not a cluster.
+        widths = [b.winfo_width() for b in btns]
+        assert max(widths) - min(widths) <= 2, (
+            f"power cells are not equal width (uneven split): {widths}"
+        )
+
+        # Not clipped: the last label must stay inside the window.
+        far_right = W - (btns[-1]._text.winfo_rootx()
+                         + btns[-1]._text.winfo_width() - wl)
+        assert far_right >= 0, (
+            f"'Shut Down' is clipped by the window edge (overflow {-far_right}px)"
+        )
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_ui_settings_button_has_tooltip() -> None:
+    """The greyed-out Settings (gear) button shows a hover hint explaining the
+    settings screen is not built yet -- even though the button is DISABLED and
+    binds no hover-paint handlers. We assert a Tooltip is attached carrying the
+    exact copy, and that showing it maps a small popup with that text."""
+    import tkinter as tk
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        btn = m.settings_button
+        assert btn is not None and btn._disabled is True
+        tips = getattr(btn, "_tooltips", [])
+        assert tips, "settings button must have a tooltip attached"
+        wanted = "The application menu settings are not available yet"
+        assert any(t._text == wanted for t in tips), \
+            f"tooltip text mismatch: {[t._text for t in tips]}"
+
+        # Force one tooltip to show and check a popup label with the text exists,
+        # then hide it cleanly.
+        tip = tips[0]
+        tip._show()
+        root.update_idletasks()
+        assert tip._tip is not None and tip._tip.winfo_exists(), \
+            "showing the tooltip must map a popup"
+        labels = [c for c in tip._tip.winfo_children() if isinstance(c, tk.Label)]
+        assert labels and labels[0].cget("text") == wanted
+        tip._hide()
+        root.update_idletasks()
+        assert tip._tip is None, "hide must tear the tooltip popup down"
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_ui_settings_tooltip_is_instant() -> None:
+    """Fix #1: the Settings-button hover hint must be INSTANT -- it appears the
+    moment the pointer enters the button and disappears the moment it leaves, with
+    NO dwell timer.
+
+    We drive the real Tk bindings: firing the widget's <Enter> event must map the
+    popup SYNCHRONOUSLY (before any after()-based delay could run -- we never pump
+    a timer), and firing <Leave> must tear it down immediately. A dwell-based
+    tooltip would still be un-mapped right after <Enter> (it would be waiting on an
+    after() callback), so this fails loudly if the delay ever creeps back."""
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        btn = m.settings_button
+        tips = getattr(btn, "_tooltips", [])
+        assert tips, "settings button must have a tooltip attached"
+        tip = tips[0]
+        assert tip._tip is None, "tooltip must start hidden"
+
+        # Hover ON: the popup must exist right away, with only idle (not timer)
+        # processing -- update_idletasks() runs pending idle work but does NOT run
+        # after() timers, so a dwell tooltip would still be None here.
+        tip._widget.event_generate("<Enter>")
+        root.update_idletasks()
+        assert tip._tip is not None and tip._tip.winfo_exists(), \
+            "tooltip must appear INSTANTLY on <Enter> (no dwell delay)"
+
+        # Hover OFF: gone immediately.
+        tip._widget.event_generate("<Leave>")
+        root.update_idletasks()
+        assert tip._tip is None, "tooltip must disappear the moment the mouse leaves"
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
 def test_ui_persistent_show_hide() -> None:
     """Daemon mode: build_window(persistent=True) exposes az_show/az_hide that
     hide (withdraw) the window instead of destroying it, so it can be re-shown.
@@ -1313,6 +1773,11 @@ def main() -> int:
         ("winwatch_counts_new_windows_and_dedups",
          test_winwatch_counts_new_windows_and_dedups, ()),
         ("xfocus_helpers_are_crashproof", test_xfocus_helpers_are_crashproof, ()),
+        ("theme_sizes_are_scaled_10pct", test_theme_sizes_are_scaled_10pct, ()),
+        ("menu_modules_use_centralised_font_constants",
+         test_menu_modules_use_centralised_font_constants, ()),
+        ("app_rows_are_nudged_right", test_app_rows_are_nudged_right, ()),
+        ("tooltip_theme_constants_exist", test_tooltip_theme_constants_exist, ()),
     ]
     for name, fn, _ in logic_tests:
         total += 1
@@ -1366,6 +1831,9 @@ def main() -> int:
         ("ui_search_filtering_never_churns_windows",
          test_ui_search_filtering_never_churns_windows),
         ("ui_pin_keeps_menu_open", test_ui_pin_keeps_menu_open),
+        ("ui_super_key_binding_is_present", test_ui_super_key_binding_is_present),
+        ("ui_super_key_closes_and_respects_pin",
+         test_ui_super_key_closes_and_respects_pin),
         ("ui_pin_keeps_capturing_and_regrabs_on_press",
          test_ui_pin_keeps_capturing_and_regrabs_on_press),
         ("ui_pinned_claims_x_focus_onto_own_window",
@@ -1377,6 +1845,14 @@ def main() -> int:
         ("ui_power_buttons_use_breeze_icons",
          test_ui_power_buttons_use_breeze_icons),
         ("ui_search_standard_editing", test_ui_search_standard_editing),
+        ("ui_highlight_bar_no_leak_on_double_show",
+         test_ui_highlight_bar_no_leak_on_double_show),
+        ("ui_highlight_bar_placed_over_leftmost_icon",
+         test_ui_highlight_bar_placed_over_leftmost_icon),
+        ("ui_power_row_centered_and_not_clipped",
+         test_ui_power_row_centered_and_not_clipped),
+        ("ui_settings_button_has_tooltip", test_ui_settings_button_has_tooltip),
+        ("ui_settings_tooltip_is_instant", test_ui_settings_tooltip_is_instant),
         ("ui_persistent_show_hide", test_ui_persistent_show_hide),
         ("ui_persistent_first_show_positions_before_map",
          test_ui_persistent_first_show_positions_before_map),
