@@ -414,7 +414,8 @@ def test_scan_hides_denylisted(tmp: str) -> None:
         "azarch-application-menu.desktop",
         "azarch-application-menu-shortcut.desktop",  # the Super-key binding entry
         "bssh.desktop", "bvnc.desktop",
-        "avahi-discover.desktop", "azarch-install.desktop",
+        "avahi-discover.desktop",
+        "calamares.desktop",  # installer swap: stock "Install System" is hidden
         "kdesystemsettings.desktop", "lstopo.desktop", "htop.desktop",
         "lftp.desktop", "cups.desktop", "org.kde.kmenuedit.desktop",
         "assistant.desktop", "qdbusviewer.desktop", "linguist.desktop",
@@ -425,6 +426,10 @@ def test_scan_hides_denylisted(tmp: str) -> None:
     # The Az'arch Menu itself and KDE's duplicate "KDE System Settings" are hidden,
     # but the real "System Settings" (systemsettings.desktop) must STAY visible.
     assert "systemsettings.desktop" not in apps.HIDDEN_DESKTOP_IDS
+    # Installer swap: the working "Az'arch Linux Installer" must NOT be hidden (only
+    # the dead stock calamares "Install System" is), so the menu can launch it.
+    assert "azarch-install.desktop" not in apps.HIDDEN_DESKTOP_IDS
+    assert "calamares.desktop" in apps.HIDDEN_DESKTOP_IDS
 
 
 # --- pure-logic: 10%-bigger text + icons ----------------------------------

@@ -374,7 +374,12 @@ HIDDEN_DESKTOP_IDS: frozenset[str] = frozenset(
         "bssh.desktop",              # Avahi SSH Server Browser
         "bvnc.desktop",              # Avahi VNC Server Browser
         "avahi-discover.desktop",    # Avahi Zeroconf Browser
-        "azarch-install.desktop",    # Az'arch Linux Installer
+        # INSTALLER SWAP (mirrors csrc/apps.c): the stock calamares "Install System"
+        # entry runs `pkexec calamares`, which is DEAD in the OpenBox session (no
+        # polkit agent), so hide it; azarch-install.desktop ("Az'arch Linux
+        # Installer", passwordless-sudo Exec that works) is SHOWN so the menu
+        # launches/re-opens the installer.
+        "calamares.desktop",         # stock installer -- dead pkexec path, hide it
         "kdesystemsettings.desktop", # KDE System Settings (dupe of System Settings)
         "lstopo.desktop",            # Hardware Locality lstopo
         "htop.desktop",              # Htop
