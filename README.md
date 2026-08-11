@@ -1,4 +1,6 @@
-# Az'arch
+<p align="center">
+  <img src="assets/logo/azarch_title_627×230.png" alt="Az'arch">
+</p>
 
 <table width="100%">
 <thead>
