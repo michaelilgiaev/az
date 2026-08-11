@@ -33,14 +33,15 @@ from patches.openbox import openbox as desktop
 
 
 def _load_azarch_cli():
-    """Import the `azarch` guest CLI (libraries/packages/azarch/azarch/cli.py) as a
-    module by file path.
+    """Import the `azarch` guest CLI (libraries/packages/azarch.py) as a module by
+    file path.
 
-    The CLI package is NOT on sys.path -- and must not be: its top-level package name
-    is `azarch`, which would collide with the COMPILER package of the same name. So we
-    load cli.py directly, the way the old panel_icon.py test loaded a source-tree file.
-    The imported module carries the on-disk COUNTRY_TABLE and the real functions
-    (main/resolve_via_server/apply_*), so tests can both read its data and drive it."""
+    We load it under a distinct module name (`azarch_guest_cli`) rather than as
+    `packages.azarch`, so the on-disk source is exercised exactly as the compiler
+    ships it (verbatim, before the country-table re-injection) and no import-cache
+    aliasing can mask drift. The imported module carries the on-disk COUNTRY_TABLE and
+    the real functions (main/resolve_via_server/apply_*), so tests can both read its
+    data and drive it."""
     import paths
 
     spec = importlib.util.spec_from_file_location("azarch_guest_cli", paths.AZARCH_CLI_SRC)
@@ -659,7 +660,7 @@ def test_install_wrapper_is_sh_script():
 
 
 # --- azarch --sshd-hypervisor guest CLI (now pure Python) -------------------
-# The `azarch` guest CLI is its own Python package (libraries/packages/azarch/);
+# The `azarch` guest CLI is a single Python module (libraries/packages/azarch.py);
 # desktop.azarch_cli() ships it to /usr/local/bin/azarch with the country table
 # re-injected from patches/calamares/locale. These tests assert on that emitted Python.
 

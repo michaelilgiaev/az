@@ -48,7 +48,7 @@ from patches.openbox import openbox as desktop
 import installer
 from patches.calamares import locale
 import pacman
-from packages.pkgbuild import pkgbuild
+from packages import pkgbuild
 import profile
 import specification_classify
 import specification_content

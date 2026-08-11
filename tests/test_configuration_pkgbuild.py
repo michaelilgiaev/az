@@ -39,7 +39,7 @@ from pathlib import Path
 
 import pytest
 
-from packages.pkgbuild import pkgbuild
+from packages import pkgbuild
 
 
 _HEX = re.compile(r"\A[0-9a-fA-F]+\Z")

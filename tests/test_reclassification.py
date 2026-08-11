@@ -13,6 +13,11 @@ can be a real import package (`packages.pkgbuild`, `packages.application_menu`)
 without the module shadowing the directory (or vice versa). If someone renames
 `downloader.py` back to `packages.py`, both imports below break. These tests catch
 that, and the "patches holds only upstream" invariant, at unit-test time.
+
+`packages/` carries no `__init__.py` -- it (like `patches/`) is an implicit
+namespace package, resolved off PYTHONPATH (= libraries/). That is why the flat
+modules `packages/pkgbuild.py` and `packages/azarch.py` import as `packages.pkgbuild`
+/ `packages.azarch` with no package __init__ anywhere under libraries/.
 """
 
 from __future__ import annotations
@@ -27,17 +32,22 @@ def test_downloader_and_packages_dir_coexist():
     from packages import pkgbuild  # noqa: F401  (payload package, not the module)
 
     assert downloader.__file__.endswith("libraries/downloader.py")
-    # `packages` here is the payload directory-package, NOT downloader.
+    # `packages` here is the payload directory-package, NOT downloader. It carries
+    # no __init__.py (implicit namespace package), so `__file__` is None and its
+    # search path points at libraries/packages/.
     import packages as payload_pkg
-    assert payload_pkg.__file__.endswith("libraries/packages/__init__.py")
+    assert payload_pkg.__file__ is None
+    assert any(p.endswith("libraries/packages") for p in payload_pkg.__path__)
 
 
 def test_our_packages_import_from_packages_bucket():
     # pkgbuild recipes and the application-menu build wiring are OUR packages, so
-    # they import from packages.* (not patches.*).
-    from packages.pkgbuild import pkgbuild
+    # they import from packages.* (not patches.*). pkgbuild is now a flat module
+    # (packages/pkgbuild.py); application_menu stays a multi-module subpackage.
+    from packages import pkgbuild
     from packages.application_menu import application_menu
 
+    assert pkgbuild.__file__.endswith("libraries/packages/pkgbuild.py")
     assert callable(pkgbuild.recipe_dirs)
     assert callable(application_menu.emit_plan)
 

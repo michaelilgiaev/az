@@ -30,7 +30,7 @@ from pathlib import Path
 import pytest
 
 import makepkg
-from packages.pkgbuild import pkgbuild as pkgbuild_cfg
+from packages import pkgbuild as pkgbuild_cfg
 
 
 # A faithful slice of Arch's stock /etc/makepkg.conf DLAGENTS block: the local

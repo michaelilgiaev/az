@@ -790,11 +790,11 @@ Keywords=install;calamares;setup;
 
 
 # --- 8. /usr/local/bin/azarch (guest-side CLI) ------------------------------
-# The `azarch` guest CLI is its OWN Python package under libraries/packages/azarch/
+# The `azarch` guest CLI is its OWN Python module, libraries/packages/azarch.py
 # (all Python -- no shell). This module no longer AUTHORS the CLI; it reads that
-# package's cli.py, injects the country->locale table from patches/calamares/locale (the
+# module's source, injects the country->locale table from patches/calamares/locale (the
 # single source of truth) between the AZARCH_CC markers, and ships the result to
-# /usr/local/bin/azarch. See paths.AZARCH_CLI_SRC and azarch/cli.py.
+# /usr/local/bin/azarch. See paths.AZARCH_CLI_SRC and packages/azarch.py.
 AZARCH_BIN_PATH = "/usr/local/bin/azarch"
 
 # Marker lines in cli.py bracketing the generated COUNTRY_TABLE literal.
@@ -803,14 +803,14 @@ _AZARCH_CC_END = "# AZARCH_CC_TABLE_END"
 
 
 def azarch_cli() -> str:
-    """The `azarch` guest CLI (Python), read verbatim from libraries/packages/azarch/
+    """The `azarch` guest CLI (Python), read verbatim from libraries/packages/azarch.py
     and shipped to /usr/local/bin/azarch. The COUNTRY_TABLE dict literal between the
     AZARCH_CC markers is REGENERATED from patches/calamares/locale.RESOLVER_COUNTRY_TABLE so
     the guest resolver's country->locale/layout map stays in lock-step with that single
     source of truth. cli.py already carries a working copy of the table, so the file is
     self-contained/runnable on its own; this re-injection just guarantees no drift.
 
-    Subcommands (see azarch/cli.py for the full behavior):
+    Subcommands (see packages/azarch.py for the full behavior):
       --sshd-hypervisor   install host pubkey from ~/shared/authorized_keys, start sshd
       --resolve-date-time geolocate by IP (pick a server) and set the timezone
       --resolve-language  geolocate by IP and set English + the region language

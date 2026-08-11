@@ -17,7 +17,7 @@ and is now AUR-only). --full-compile only changes the RECIPE, not the set:
                  full = build from Firefox source.
   * calamares -> always compiled from the pinned-sha256 source tarball (there is
                  no Arch binary to install anymore).
-packages.pkgbuild.pkgbuild.recipe_dirs(full_compile) picks the recipe set; produced_names()
+packages.pkgbuild.recipe_dirs(full_compile) picks the recipe set; produced_names()
 below returns the (now tier-independent) set of names built HERE.
 
 Offline policy: makepkg needs to FETCH sources (the calamares/firefox/librewolf
@@ -41,7 +41,7 @@ from typing import Callable
 import emit
 import logstream
 import paths
-from packages.pkgbuild import pkgbuild as pkgbuild_cfg
+from packages import pkgbuild as pkgbuild_cfg
 
 ProgressCb = Callable[[int], None]
 

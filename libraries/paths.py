@@ -6,8 +6,8 @@ Mirrors the directory scheme the old compile.sh used, so the Docker bind mounts
   REPODIR/                 repo root (where compile.sh lives)
     libraries/             the COMPILER's own modules (flat) + build payload
     libraries/packages/    Az'arch's OWN packages (things WE build/ship): the pacman
-                           manifest (packages.x86_64), application_menu/, pkgbuild/,
-                           azarch/ -- both packages are pure stdlib (no requirements.txt)
+                           manifest (packages.x86_64), application_menu/, pkgbuild.py,
+                           azarch.py -- all pure stdlib (no requirements.txt)
     libraries/patches/     ONLY upstream software we modify/configure (calamares,
                            ckbcomp, fastfetch, openbox)
     cache/                 persistent download cache (git-ignored, survives builds)
@@ -38,8 +38,8 @@ LIBDIR = REPODIR / "libraries"
 PKGDIR = LIBDIR
 # Az'arch's OWN packages (the things WE build/ship, baked into the ISO): the package
 # manifest (packages.x86_64), the application-menu source tree + its build wiring
-# (application_menu/), our own package recipes (pkgbuild/), and the `azarch` guest CLI
-# (azarch/). Both our packages are pure Python standard library, so there is NO shared
+# (application_menu/), our own package recipes (pkgbuild.py), and the `azarch` guest CLI
+# (azarch.py). Our packages are pure Python standard library, so there is NO shared
 # requirements.txt here (the only one in the repo is the repo-root requirements.txt the
 # compiler itself uses for its test/dev deps). Formerly libraries/data/; consolidated here.
 PACKAGESDIR = LIBDIR / "packages"
@@ -109,13 +109,11 @@ PACKAGES_FILE = PACKAGESDIR / "packages.x86_64"
 # into the live/installed system (emit_plan) and generates the .desktop entry. The
 # whole menu is OURS, so it is a package here, not a patch.
 APPLICATION_MENU_DIR = PACKAGESDIR / "application_menu"
-# The `azarch` guest CLI package (all Python), laid out like application_menu with
-# its files directly inside libraries/packages/azarch/ (no double-nest). Its cli.py
-# is installed to /usr/local/bin/azarch by the compiler, which injects the
+# The `azarch` guest CLI is a single Python module, libraries/packages/azarch.py.
+# It is installed to /usr/local/bin/azarch by the compiler, which injects the
 # country->locale table from patches/calamares/locale.py into it. See
 # patches/openbox openbox.azarch_cli().
-AZARCH_CLI_DIR = PACKAGESDIR / "azarch"
-AZARCH_CLI_SRC = AZARCH_CLI_DIR / "cli.py"
+AZARCH_CLI_SRC = PACKAGESDIR / "azarch.py"
 
 # Inside the archiso profile tree, the airootfs root and the azarch payload dir
 # baked into the live/installed system.
