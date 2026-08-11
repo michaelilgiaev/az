@@ -3,8 +3,7 @@
 
 This is OUR application menu, and it is the WHOLE shell now: KDE Plasma was removed
 and the desktop is OpenBox with no panel, so this menu -- opened by the Super key
-(via xcape + the OpenBox rc.xml keybind) or the OpenBox root menu -- is the only
-launcher surface. It shows a search box, the list of installed applications ordered
+(via xcape + the OpenBox rc.xml keybind) -- is the only launcher surface. It shows a search box, the list of installed applications ordered
 by how often they are launched (most-used first), each with a big Name and a small
 "type" subtitle derived from its freedesktop category, and a bottom row of session
 actions (Sleep, Lock, Restart, Shut Down) drawn with real Breeze icons.

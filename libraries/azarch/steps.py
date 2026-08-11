@@ -344,7 +344,7 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
         # screenshot.png = a thumbnail (reuse the full image).
         emit.copy_asset(pkg["asset"], pkg_root / "contents" / "screenshot.png", mode=0o644)
     # Az'arch application menu (OUR menu -- the whole shell now that Plasma is gone: a
-    # centered Tkinter launcher opened by the Super key + the OpenBox root menu). Copy
+    # centered Tkinter launcher opened by the Super key). Copy
     # the runtime files (menu.py + siblings, daemon, launcher, .desktop) to their fixed
     # SYSTEM paths; the OpenBox session (desktop.py) starts the daemon from its autostart
     # and binds the Super key to the launcher.

@@ -70,7 +70,7 @@ FILE_PERMISSIONS = {
     "/usr/local/bin/azarch-install": "0:0:755",
     "/usr/local/bin/azarch": "0:0:755",
     # The Az'arch application-menu launcher (run by the Super key via OpenBox's rc.xml
-    # keybind and by the OpenBox root menu). SAME archiso mode-normalization as
+    # keybind). SAME archiso mode-normalization as
     # azarch-install above: application_menu.PLAN emits it 0755, but the squashfs ships
     # it 0644 (non-executable) unless pinned here -- and then the Super key runs a
     # non-executable file and the menu never opens.

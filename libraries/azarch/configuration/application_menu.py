@@ -4,7 +4,7 @@ This is OUR application menu, and it is the WHOLE shell: KDE Plasma was removed 
 the desktop is OpenBox with no panel, so this menu -- a borderless, Breeze-styled
 Tkinter launcher CENTERED on the screen (search, launch-frequency ordering, power
 actions) -- is the only launcher surface. It is opened by the Super key (via xcape +
-the OpenBox rc.xml keybind) and by the OpenBox root menu (see configuration/desktop.py).
+the OpenBox rc.xml keybind); see configuration/desktop.py.
 
 It is a multi-module package: menu.py orchestrates and imports the siblings
 (widgets/theme/apps/icons/usage/actions/...) as flat modules, so the whole set MUST be
@@ -24,8 +24,8 @@ Layers:
       install.sh / uninstall.sh            standalone (post-install) (un)installer
   * BUILD wiring -- this module copies ALL the menu modules plus the launcher and its
     .desktop to fixed system paths in the airootfs. The OpenBox session (configuration/
-    desktop.py) starts the daemon from its autostart and binds the Super key + root menu
-    to the launcher; there is no panel applet to bake anymore.
+    desktop.py) starts the daemon from its autostart and binds the Super key to the
+    launcher; there is no panel applet to bake anymore.
 
 No pip dependencies: Tkinter is in the Python standard library (backed by the `tk`
 package, which is in the manifest). See requirements.txt in the source tree.
@@ -193,7 +193,7 @@ def _module_builder(name: str):
 
 
 # One emit entry per menu module (all mode 0644 in MENU_LIB_DIR), then the launcher
-# (0755, run by the Super key / OpenBox root menu) and a standard app-launcher .desktop.
+# (0755, run by the Super key) and a standard app-launcher .desktop.
 # Building the module entries from MENU_MODULES means the build can never again ship
 # menu.py without its siblings. menu.py stays first so MENU_PY_SYSTEM_PATH keeps a
 # stable builder.

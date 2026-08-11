@@ -2,7 +2,7 @@
 
 KDE Plasma was removed; the desktop is OpenBox with no panel, so this menu is the
 WHOLE shell -- a borderless launcher CENTERED on the screen, opened by the Super key
-(via xcape + the OpenBox rc.xml keybind) and by the OpenBox root menu.
+(via xcape + the OpenBox rc.xml keybind).
 
 These pin the contract that (a) the runtime files are emitted to the fixed system
 paths the launcher/session expect, (b) the constants shared with
@@ -68,9 +68,9 @@ def test_desktop_entry_launches_the_installed_launcher():
 
 
 def test_constants_match_desktop_module():
-    # desktop.py binds the Super key + OpenBox root menu to the menu LAUNCHER and starts
-    # the DAEMON from the OpenBox autostart; a drift in these paths would wire the
-    # session to a path we never installed.
+    # desktop.py binds the Super key to the menu LAUNCHER and starts the DAEMON from the
+    # OpenBox autostart; a drift in these paths would wire the session to a path we never
+    # installed.
     assert desktop.MENU_LAUNCHER == am.MENU_LAUNCHER_SYSTEM_PATH
     assert desktop.MENU_DAEMON_PY == am.MENU_DAEMON_PY_SYSTEM_PATH
     # The launcher rc.xml keybind and the autostart daemon line reference exactly these.

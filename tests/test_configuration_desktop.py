@@ -18,8 +18,9 @@ keyboard + the menu daemon + the installer), and the privileged wrapper's
 KDE Plasma was REMOVED from Az'arch and replaced by a panel-less OpenBox desktop;
 every Plasma-specific builder/constant (panel/appletsrc, kdeglobals, kwinrc,
 powerdevil, kscreenlocker, kickoff, ...) is gone, so the tests that pinned them are
-gone too. The Az'arch application menu (Super key / OpenBox root-menu entry) is the
-only shell surface now.
+gone too. The Az'arch application menu (opened by the Super key) is the only shell
+surface now; the OpenBox desktop right-click root menu was removed at the user's
+request, and the titlebar uses the Az'arch theme (Clearlooks with a doubled bar).
 """
 
 from __future__ import annotations
@@ -35,8 +36,8 @@ def test_plan_has_exactly_eleven_entries():
     # steps.py iterates PLAN; a dropped/extra entry silently un-emits a file. The
     # panel-less OpenBox session ships exactly eleven files via PLAN:
     #   1. ~/.xinitrc                          (startx -> openbox-session)
-    #   2. ~/.config/openbox/rc.xml            (keybinds: Super -> menu, root-menu)
-    #   3. ~/.config/openbox/menu.xml          (OpenBox root menu: launcher/term/installer/power)
+    #   2. ~/.config/openbox/rc.xml            (keybinds, theme, titlebar-button binds)
+    #   3. ~/.themes/Azarch/openbox-3/themerc  (Az'arch theme: doubled-height titlebar)
     #   4. ~/.config/openbox/autostart         (feh, setxkbmap, xcape, menu daemon, installer)
     #   5. ~/.config/openbox/environment       (XDG_CURRENT_DESKTOP=openbox)
     #   6. /usr/local/share/azarch/openbox-autostart-installed (staged "installed"
@@ -46,7 +47,9 @@ def test_plan_has_exactly_eleven_entries():
     #   9. ~/Desktop/azarch-install.desktop     (double-clickable installer launcher)
     #  10. /usr/local/bin/azarch-install         (privileged Calamares wrapper)
     #  11. /usr/local/bin/azarch                 (guest-side CLI)
-    # The .bash_profile snippet is appended by emit_plan(), NOT part of PLAN.
+    # The OpenBox root menu (menu.xml) was REMOVED at the user's request; its PLAN slot
+    # is now the Az'arch theme's themerc. The .bash_profile snippet is appended by
+    # emit_plan(), NOT part of PLAN.
     assert len(desktop.PLAN) == 11
 
 
@@ -82,7 +85,7 @@ def test_scripts_are_exec_configs_are_conf():
     assert by_builder["xinitrc"]["mode"] == 0o755
     assert by_builder["openbox_autostart"]["mode"] == 0o755
     assert by_builder["openbox_rc_xml"]["mode"] == 0o644
-    assert by_builder["openbox_menu_xml"]["mode"] == 0o644
+    assert by_builder["openbox_theme_rc"]["mode"] == 0o644
     assert by_builder["openbox_environment"]["mode"] == 0o644
     assert by_builder["install_menu_desktop"]["mode"] == 0o644
     # The Desktop launcher is the exception among data files: it must be EXECUTABLE so a
@@ -258,7 +261,7 @@ def test_xinitrc_prepaints_wallpaper_before_exec():
     assert feh_idx < exec_idx
 
 
-# --- OpenBox rc.xml: Super -> menu, root-menu, borderless menu window --------
+# --- OpenBox rc.xml: Super -> menu, no root menu, borderless menu window -----
 
 def test_rc_xml_binds_super_and_menu_to_the_launcher():
     # The Super key opens the Az'arch menu. OpenBox cannot bind a lone modifier, so
@@ -274,14 +277,30 @@ def test_rc_xml_binds_super_and_menu_to_the_launcher():
     assert f"<command>{desktop.MENU_LAUNCHER}</command>" in out
 
 
-def test_rc_xml_root_menu_mousebind_opens_the_root_menu():
-    # Right/middle click on the desktop (the "Root" context) must open menu.xml's
-    # root-menu, the convenience fallback surface for the panel-less session.
+def _root_context_block(rc_xml: str) -> str:
+    # Return just the <context name="Root">...</context> block from rc.xml, so a test can
+    # assert on the desktop-click bindings without matching the window-icon context
+    # (which legitimately still opens the built-in client-menu).
+    start = rc_xml.index('<context name="Root">')
+    end = rc_xml.index("</context>", start)
+    return rc_xml[start:end]
+
+
+def test_rc_xml_root_menu_is_disabled():
+    # THE regression this fixes: the user asked to "remove the right click menu ...
+    # disable that menu completely". rc.xml must STILL declare a "Root" context (so the
+    # element tree is explicit) but that context must open NO menu -- no ShowMenu action
+    # and no root-menu reference inside it -- and rc.xml must NOT point OpenBox at any
+    # menu.xml (there is none). Right/middle-clicking the desktop then does nothing. The
+    # window-icon client-menu (a separate, standard OpenBox feature) is unaffected.
     out = desktop.openbox_rc_xml()
-    assert '<context name="Root">' in out
-    assert "<menu>root-menu</menu>" in out
-    # rc.xml points OpenBox at menu.xml for its menu file.
-    assert "<file>menu.xml</file>" in out
+    root_block = _root_context_block(out)
+    assert 'name="ShowMenu"' not in root_block
+    assert "root-menu" not in root_block
+    # No <menu><file>menu.xml</file> block anywhere, and no root-menu declared.
+    assert "<menu>root-menu</menu>" not in out
+    assert "<file>menu.xml</file>" not in out
+    assert "menu.xml" not in out
 
 
 def test_rc_xml_menu_window_is_undecorated():
@@ -313,34 +332,108 @@ def test_rc_xml_is_wellformed_xml():
     ET.fromstring(_strip_xml_comments(desktop.openbox_rc_xml()))
 
 
-# --- OpenBox root menu (menu.xml): launcher/terminal/installer/power ---------
+# --- OpenBox root menu removed: no menu.xml builder at all ------------------
 
-def test_menu_xml_offers_launcher_terminal_installer_and_power_actions():
-    # The OpenBox root menu is a small convenience fallback: it must offer the
-    # application-menu launcher, a terminal (kitty), the installer (same privileged
-    # wrapper), and the session power actions (suspend/reboot/poweroff + lock).
-    out = desktop.openbox_menu_xml()
-    assert f"<command>{desktop.MENU_LAUNCHER}</command>" in out          # app menu
-    assert "<command>kitty</command>" in out                            # terminal
-    assert f"<command>{desktop.INSTALL_WRAPPER_PATH}</command>" in out   # installer
-    # Power actions reuse the same tools the menu's power row uses.
-    assert "<command>systemctl suspend</command>" in out
-    assert "<command>systemctl reboot</command>" in out
-    assert "<command>systemctl poweroff</command>" in out
-    assert "<command>loginctl lock-session</command>" in out
+def test_openbox_menu_xml_builder_is_gone():
+    # The OpenBox root menu was removed at the user's request; the builder that produced
+    # menu.xml must no longer exist (nothing should be able to re-emit it).
+    assert not hasattr(desktop, "openbox_menu_xml")
 
 
-def test_menu_xml_declares_the_root_menu_rc_xml_binds():
-    # rc.xml's mousebind opens <menu>root-menu</menu>; menu.xml MUST define a menu with
-    # exactly that id, or the desktop right-click opens nothing.
-    out = desktop.openbox_menu_xml()
-    assert '<menu id="root-menu"' in out
+def test_no_plan_entry_emits_a_menu_xml():
+    # Belt: no PLAN destination is a menu.xml, so the file is never written to the
+    # airootfs (the empty Root context in rc.xml is the whole "no right-click menu" fix).
+    assert not any(e["dest"].endswith("menu.xml") for e in desktop.PLAN)
 
 
-def test_menu_xml_is_wellformed_xml():
-    import xml.etree.ElementTree as ET
+# --- Titlebar buttons: min/max/close mouse contexts actually bound -----------
 
-    ET.fromstring(_strip_xml_comments(desktop.openbox_menu_xml()))
+def test_rc_xml_binds_titlebar_button_contexts():
+    # THE regression this fixes: OpenBox draws the min/max/close buttons from the theme's
+    # titleLayout, but a button DOES NOTHING unless its mouse context is bound in rc.xml.
+    # The old rc.xml bound only "Titlebar", so the buttons rendered but were dead. rc.xml
+    # must now bind the Iconify/Maximize/Close contexts to their click actions.
+    out = desktop.openbox_rc_xml()
+    assert '<context name="Iconify">' in out
+    assert '<context name="Maximize">' in out
+    assert '<context name="Close">' in out
+    # Each button's click must fire its action.
+    assert '<action name="Iconify"/>' in out
+    assert '<action name="ToggleMaximize"/>' in out
+    assert '<action name="Close"/>' in out
+
+
+def test_rc_xml_binds_window_icon_client_menu():
+    # The window-icon context opens the built-in client-menu (min/max/close/move/... for
+    # that window) -- a standard OpenBox feature, distinct from the removed desktop root
+    # menu. It uses OpenBox's built-in "client-menu" (no menu.xml needed).
+    out = desktop.openbox_rc_xml()
+    assert '<context name="Icon">' in out
+    assert "<menu>client-menu</menu>" in out
+
+
+# --- Titlebar doubled: Az'arch theme + larger title font ---------------------
+
+def test_rc_xml_uses_the_azarch_theme():
+    # rc.xml must name the Az'arch theme (Clearlooks with a doubled titlebar), not stock
+    # Clearlooks, so the taller bar is actually used.
+    out = desktop.openbox_rc_xml()
+    assert desktop.OPENBOX_THEME_NAME == "Azarch"
+    assert f"<name>{desktop.OPENBOX_THEME_NAME}</name>" in out
+    assert "<name>Clearlooks</name>" not in out
+
+
+def test_rc_xml_sets_a_larger_title_font():
+    # The other half of the doubled bar: a bigger title font makes a taller label (and
+    # OpenBox sizes the buttons to the label). Stock OpenBox defaults to 8pt; ours is
+    # doubled to 16pt, set for both the active and inactive window title.
+    out = desktop.openbox_rc_xml()
+    assert desktop.TITLE_FONT_SIZE == 16
+    assert f"<size>{desktop.TITLE_FONT_SIZE}</size>" in out
+    assert '<font place="ActiveWindow">' in out
+    assert '<font place="InactiveWindow">' in out
+
+
+def test_theme_rc_doubles_the_titlebar_padding():
+    # The Az'arch themerc grows the titlebar-height fields vs stock Clearlooks
+    # (padding.height 2 -> 12, padding.width 3 -> 8) and keeps the resize handle
+    # proportional (3 -> 6). These are the size-driving lines; a drift shrinks the bar.
+    out = desktop.openbox_theme_rc()
+    assert desktop.OPENBOX_THEME_PADDING_HEIGHT == 12
+    assert desktop.OPENBOX_THEME_PADDING_WIDTH == 8
+    assert desktop.OPENBOX_THEME_HANDLE_WIDTH == 6
+    assert f"padding.height: {desktop.OPENBOX_THEME_PADDING_HEIGHT}" in out
+    assert f"padding.width: {desktop.OPENBOX_THEME_PADDING_WIDTH}" in out
+    assert f"window.handle.width: {desktop.OPENBOX_THEME_HANDLE_WIDTH}" in out
+    # The doubled values must be strictly larger than the stock Clearlooks originals.
+    assert desktop.OPENBOX_THEME_PADDING_HEIGHT > 2
+    assert desktop.OPENBOX_THEME_PADDING_WIDTH > 3
+
+
+def test_theme_rc_keeps_the_clearlooks_cyan_titlebar_colour():
+    # The bar keeps its familiar "cyan'ish" look: the theme must carry the Clearlooks
+    # title gradient base colour (#8CB0DC) unchanged -- we only grew the size, not the
+    # colours.
+    out = desktop.openbox_theme_rc()
+    assert "*.title.bg.color: #8CB0DC" in out
+
+
+def test_theme_rc_dest_is_a_user_theme_search_path():
+    # The theme ships to ~/.themes/<name>/openbox-3/themerc -- a user theme search path
+    # OpenBox scans alongside /usr/share/themes -- so naming it in rc.xml resolves it.
+    assert desktop.OPENBOX_THEME_DIR == f"{desktop.HOME}/.themes/Azarch/openbox-3"
+    assert desktop.OPENBOX_THEME_THEMERC == (
+        f"{desktop.HOME}/.themes/Azarch/openbox-3/themerc"
+    )
+
+
+def test_theme_rc_entry_is_home_owned_conf():
+    entry = next(
+        e for e in desktop.PLAN if e["dest"] == desktop.OPENBOX_THEME_THEMERC
+    )
+    assert entry["builder"] is desktop.openbox_theme_rc
+    assert entry["mode"] == 0o644
+    assert entry["owner"] == "home"
 
 
 # --- OpenBox autostart: wallpaper, keyboard, xcape, menu daemon, installer ---
@@ -372,7 +465,7 @@ def test_autostart_arms_super_key_via_xcape():
 
 def test_autostart_starts_the_application_menu_daemon():
     # The application-menu daemon is started (detached) so the menu is pre-built and
-    # hidden -- the first Super press / root-menu open is then instant. It runs the
+    # hidden -- the first Super press is then instant. It runs the
     # INSTALLED daemon.py (single source of truth in application_menu.py).
     out = desktop.openbox_autostart()
     assert desktop.MENU_DAEMON_PY == desktop._app_menu.MENU_DAEMON_PY_SYSTEM_PATH
@@ -381,7 +474,7 @@ def test_autostart_starts_the_application_menu_daemon():
 
 def test_autostart_launches_the_installer_once():
     # The Calamares installer auto-opens ONCE, a couple seconds in (Manjaro-style
-    # first-run), via the privileged wrapper -- the same wrapper the menu/root-menu use.
+    # first-run), via the privileged wrapper -- the same wrapper the menu/Desktop launchers use.
     out = desktop.openbox_autostart()
     assert f"( sleep 2; '{desktop.INSTALL_WRAPPER_PATH}' )" in out
 
@@ -403,13 +496,14 @@ def test_environment_exports_openbox_desktop():
 # --- OpenBox config files land under home, correct modes --------------------
 
 def test_openbox_config_files_are_home_owned_with_correct_modes():
-    # The four OpenBox files live under ~/.config/openbox and are handed to the live
-    # user (home-owned; mirrored into /etc/skel). rc.xml/menu.xml/environment are plain
-    # data (0o644); autostart is a sourced shell script and must be EXECUTABLE (0o755).
+    # The OpenBox files under ~/.config/openbox (plus the theme's themerc under
+    # ~/.themes) are handed to the live user (home-owned; mirrored into /etc/skel).
+    # rc.xml/environment/themerc are plain data (0o644); autostart is a sourced shell
+    # script and must be EXECUTABLE (0o755). (menu.xml is gone -- root menu removed.)
     by_dest = {e["dest"]: e for e in desktop.PLAN}
     expected = {
         f"{desktop.HOME}/.config/openbox/rc.xml": (desktop.openbox_rc_xml, 0o644),
-        f"{desktop.HOME}/.config/openbox/menu.xml": (desktop.openbox_menu_xml, 0o644),
+        desktop.OPENBOX_THEME_THEMERC: (desktop.openbox_theme_rc, 0o644),
         f"{desktop.HOME}/.config/openbox/environment": (desktop.openbox_environment, 0o644),
         f"{desktop.HOME}/.config/openbox/autostart": (desktop.openbox_autostart, 0o755),
     }

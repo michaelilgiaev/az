@@ -8,6 +8,6 @@ Modules:
   installer  - the disk installer, chroot-setup, first-boot, setup-pkgs scripts
   profile    - profiledef.sh (archiso profile definition + file_permissions)
   pkgbuild   - Az'arch's own package recipes (calamares, librewolf) as PKGBUILDs
-  desktop    - OpenBox live-session files (xinitrc, rc.xml, menu.xml, autostart, ...)
+  desktop    - OpenBox live-session files (xinitrc, rc.xml, themerc, autostart, ...)
   calamares  - Calamares installer configuration (Btrfs default + LUKS encryption)
 """

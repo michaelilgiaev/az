@@ -101,7 +101,7 @@ def test_emitter_family_covers_all_config_modules():
     # that de-sparsifies /boot so GRUB can read the kernel + finished.conf that adds the
     # Restart-now option + luksbootkeyfile.conf that embeds the LUKS keyfile so the
     # encrypted root is not prompted for twice at boot) + 12 OpenBox desktop builders
-    # (emit_plan: the 11 PLAN entries -- xinitrc, openbox rc.xml/menu.xml/autostart/
+    # (emit_plan: the 11 PLAN entries -- xinitrc, openbox rc.xml/themerc/autostart/
     # environment, the "installed" autostart staged for the Calamares overwrite, the
     # application-menu usage.json seed, the system + Desktop installer launchers, the
     # install wrapper, the azarch CLI -- plus the appended bash_profile) + 6 installer +
