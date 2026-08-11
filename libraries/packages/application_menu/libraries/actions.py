@@ -7,8 +7,10 @@ operations on the bottom bar (Sleep, Lock, Restart, Shut Down).
 
 Everything is fire-and-forget and swallows its own errors: a launcher that
 fails must never take the menu (or the session) down with it. Power operations
-go through ``systemctl``/``loginctl``/``qdbus6`` -- the same tools Plasma uses --
-so they honour the system's logind + polkit policy.
+go through ``systemctl``/``loginctl`` (and, for the lock, the freedesktop
+ScreenSaver D-Bus interface / xdg-screensaver as fallbacks) so they honour the
+system's logind + polkit policy. The desktop is OpenBox (no Plasma), so none of
+these depend on a KDE-specific tool being present.
 """
 
 from __future__ import annotations
@@ -69,11 +71,14 @@ def _first_available(*commands: list[str]) -> None:
 
 # --- Session / power actions ----------------------------------------------
 def lock_session() -> None:
-    """Lock the screen. Prefer the Plasma/freedesktop screensaver D-Bus call
-    (what Kickoff's Lock does), fall back to ``loginctl lock-session``."""
+    """Lock the screen. The desktop is OpenBox (no Plasma screen locker), so prefer
+    the DE-independent ``loginctl lock-session`` -- logind emits the standard "lock"
+    signal any installed locker honours -- and fall back to the freedesktop
+    ScreenSaver D-Bus call and ``xdg-screensaver lock``. Best-effort: if no locker is
+    present nothing happens, which is fine for the live medium (the user asked only
+    that the option exist alongside Sleep/Restart/Shut Down)."""
     sid = os.environ.get("XDG_SESSION_ID")
     _first_available(
-        ["qdbus6", "org.freedesktop.ScreenSaver", "/ScreenSaver", "Lock"],
         ["loginctl", "lock-session"] + ([sid] if sid else []),
         ["loginctl", "lock-sessions"],
         ["xdg-screensaver", "lock"],

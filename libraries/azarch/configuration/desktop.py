@@ -1,37 +1,47 @@
-"""Minimal KDE Plasma live-session desktop, authored as configuration-as-Python strings.
+"""Minimal OpenBox live-session desktop, authored as configuration-as-Python strings.
 
-The ISO boots to a graphical Plasma (X11) live session WITHOUT a display
-manager, Manjaro-style:
+KDE Plasma was REMOVED from Az'arch (it did not fit the distribution); OpenBox is
+the whole desktop now. The ISO boots to a graphical OpenBox (X11) live session
+WITHOUT a display manager, Manjaro-style:
 
     getty@tty1 autologins `main`  ->  ~/.bash_profile runs `exec startx` on
     tty1 only  ->  ~/.xinitrc paints the wallpaper (no flash) and execs
-    `startplasma-x11`  ->  Plasma launches the panel/launcher/kwin_x11, and a
-    ~/.config/autostart entry opens the Calamares installer once.
+    `openbox-session`  ->  OpenBox reads rc.xml (keybinds, no decorations fuss)
+    and runs ~/.config/openbox/autostart, which sets the wallpaper, starts the
+    Az'arch application-menu daemon, arms the Super key (via xcape), applies the
+    keyboard layouts, and opens the Calamares installer once.
+
+There is deliberately NO PANEL (the user's "we're not going to have a bottom panel
+anymore" decision). The ONLY shell surface is the Az'arch application menu -- a
+borderless Tkinter launcher centered on the screen, opened by the Super key (and by
+the OpenBox root menu's entry). Everything the old Plasma panel carried (launcher,
+power actions) lives in that menu.
 
 Everything here is a small builder function returning the CONTENT of one file.
-steps.py emits each to its airootfs destination via emit.write_text/write_exec
-and iterates PLAN (below) so the mapping (path + mode) stays declarative. The
-/home/main tree is chowned 1000:998 by steps.py after emit, exactly like the
-fastfetch/first-boot payloads.
+steps.py emits each to its airootfs destination via emit.write_text/write_exec and
+iterates PLAN (below) so the mapping (path + mode) stays declarative. The /home/main
+tree is chowned 1000:998 by steps.py after emit, exactly like the fastfetch/first-boot
+payloads.
 
-Design constraints (match archiso/Plasma/Calamares reality):
+Design constraints (match archiso/OpenBox/Calamares reality):
   * No emojis, ASCII only.
-  * No display manager. `startplasma-x11` is provided by plasma-workspace; the
-    X11 window manager is kwin_x11 (package kwin-x11, listed explicitly in the
-    manifest because it is only an optdepend of plasma-workspace). The Wayland
-    kwin comes in via plasma-workspace but is unused here (we start the X11
-    session). See libraries/packages/packages.x86_64.
-  * Calamares MUST run privileged. Plasma DOES ship polkit-kde-agent (pulled by
-    plasma-desktop), so pkexec would work -- but the live medium has a
-    passwordless-sudo `main` and passwordless root, so the simplest correct,
-    dependency-order-free launch stays `sudo -E calamares` via the tiny
-    /usr/local/bin/azarch-install wrapper the autostart entry runs.
-  * NO cyan/black flash: the old Openbox session did `xsetroot -solid <cyan>`,
-    which flashed a solid color before the desktop painted. Instead ~/.xinitrc
-    sets the X root to the SAME wallpaper image Plasma will show (feh --bg-fill),
-    and ksplashrc disables KSplash, so the first and only paint is the wallpaper.
-  * The default Plasma wallpaper is baked per-user (appletsrc) into the live
-    `main` home AND /etc/skel, so a Calamares-created user inherits it too.
+  * No display manager. `openbox-session` is provided by the `openbox` package; it
+    is both the window manager AND the session launcher (it sources
+    ~/.config/openbox/{environment,autostart} and reads rc.xml + menu.xml). See
+    libraries/packages/packages.x86_64.
+  * Calamares MUST run privileged. The live medium has passwordless-sudo `main`
+    and passwordless root, so the launch stays `sudo -E calamares` via the tiny
+    /usr/local/bin/azarch-install wrapper the autostart runs.
+  * NO cyan/black flash: ~/.xinitrc sets the X root to the SAME wallpaper image the
+    session will show (feh --bg-fill) BEFORE OpenBox starts, and the autostart's own
+    `feh --bg-fill` repaints the identical pixels -- so the first and only paint is
+    the wallpaper. (OpenBox draws no wallpaper itself; feh owns the root pixmap.)
+  * The Super key opens the menu. OpenBox cannot bind a LONE modifier, so `xcape`
+    turns a solo Super_L tap into the chord Super_L+Menu, which rc.xml binds to the
+    menu launcher (Super still works as a normal modifier for every other bind).
+  * The two azarch wallpapers ("years"/"decades") are shipped under
+    /usr/share/wallpapers as plain images; "years" is the default feh paints. Baked
+    into /etc/skel too so a Calamares-created user inherits the same session.
   * startx-from-tty replaces graphical.target: _link_services needs no
     display-manager .wants symlink or graphical.target (see steps.py STEPS_NOTE).
 """
@@ -39,12 +49,10 @@ Design constraints (match archiso/Plasma/Calamares reality):
 from __future__ import annotations
 
 # --- Branding / assets ------------------------------------------------------
-# Selectable wallpapers shown in Plasma's "Desktop and Wallpaper" grid. Each is a
-# KPackage under /usr/share/wallpapers/<Id>/ (metadata.json + contents/images/
-# <W>x<H>.png). We ship exactly TWO -- the azarch "years" and "decades" images --
-# and REMOVE the stock Plasma "Next" wallpaper (see system.CUSTOMIZE_AIROOTFS) so
-# the grid shows only these. Both source images are 1672x941 (see
-# assets/wallpapers/), so the packaged image is images/1672x941.png.
+# The two wallpapers shipped on the medium. Each is a plain PNG copied under
+# /usr/share/wallpapers/<id>/contents/images/<W>x<H>.png (the old KPackage layout is
+# kept so the assets and steps.py emit paths do not have to change; OpenBox/feh only
+# ever reads the inner file). Both source images are 1672x941 (see assets/wallpapers/).
 WALLPAPERS_SYSTEM_DIR = "/usr/share/wallpapers"
 WALLPAPER_IMAGE_RES = "1672x941"          # WxH of the shipped PNGs
 WALLPAPER_PACKAGES = [
@@ -52,49 +60,25 @@ WALLPAPER_PACKAGES = [
     {"id": "decades", "asset": "wallpapers/decades.png"},
 ]
 
-# The DEFAULT wallpaper baked into the ISO -- the "years" image.
-#
-# THE DUPLICATE-TILE BUG (see ISSUE/ screenshot: a third selected tile labelled by
-# the image RESOLUTION "1672x941" appeared next to "years" and "decades"):
-# Plasma 6's org.kde.image grid is a QConcatenateTablesProxyModel over TWO source
-# models -- a package model (dirs under /usr/share/wallpapers) and a loose-image
-# model (files). ImageProxyModel routes the CONFIGURED Image= by filesystem type:
-# a DIRECTORY is matched against the package model (-> the existing "years" tile),
-# but a FILE PATH is handed to the loose-image model, which -- when the path matches
-# no existing tile -- force-injects it as its OWN tile labelled by the file's
-# basename. Because the previous default pointed Image= at the package's INNER png
-# (.../years/contents/images/1672x941.png), Plasma added that loose "1672x941" tile:
-# the duplicate. (The earlier code comment claimed the inner-png path would be
-# "recognised as the years tile" -- the Plasma source proves the opposite; only a
-# DIRECTORY path matches a package.)
-#
-# FIX: point every Plasma `Image=` (appletsrc + the org.kde.image main.xml default in
-# system.CUSTOMIZE_AIROOTFS) at the package DIRECTORY (trailing slash), so Plasma
-# selects the "years" package tile and injects no loose tile -> the grid shows
-# exactly "years" (selected) and "decades". feh needs a real FILE, so the ~/.xinitrc
-# pre-paint keeps the inner-png path; hence the two separate constants below.
+# The DEFAULT wallpaper painted on the live/installed session -- the "years" image.
+# feh needs a real FILE (it cannot take a directory), so this points at the inner png.
 WALLPAPER_DEFAULT_ID = "years"
-# The package DIRECTORY -- what Plasma's Image= must point at to select the package
-# tile without adding a duplicate loose tile (trailing slash: KPackage path()s are
-# slash-normalised, and PackageListModel::indexOf matches the normalised dir).
-WALLPAPER_PACKAGE_DIR = f"{WALLPAPERS_SYSTEM_DIR}/{WALLPAPER_DEFAULT_ID}/"
-# The actual image FILE inside that package -- what feh --bg-fill paints (feh cannot
-# take a package dir). Same pixels Plasma shows, so the pre-paint is flash-free.
 WALLPAPER_IMAGE_FILE = (
     f"{WALLPAPERS_SYSTEM_DIR}/{WALLPAPER_DEFAULT_ID}"
     f"/contents/images/{WALLPAPER_IMAGE_RES}.png"
 )
-# The asset copied to WALLPAPER_IMAGE_FILE is the same "years" image the package
-# ships; steps.py already writes that package image, so the default resolves to a
-# file that exists without a second standalone copy.
+# The asset copied to WALLPAPER_IMAGE_FILE is the same "years" image; steps.py already
+# writes that image, so the default resolves to a file that exists.
 WALLPAPER_ASSET = "wallpapers/years.png"
 
 
 def wallpaper_metadata_json(wp_id: str) -> str:
-    """Minimal KPackage metadata.json for a custom image wallpaper. Only the
-    KPlugin block is required for an image wallpaper (the org.kde.image engine
-    reads contents/images/<W>x<H>.png); Id + Name are what the grid shows and what
-    the desktop config stores. Name == Id so the grid label reads "years"/"decades"."""
+    """Minimal metadata.json shipped alongside each wallpaper image.
+
+    KDE's KPackage engine is gone, so nothing reads this at runtime anymore; it is
+    kept purely so the two wallpaper directories remain self-describing (authorship /
+    license) and so the steps.py emit layout for wallpapers does not have to change.
+    Name == Id so any future picker still labels them "years"/"decades"."""
     return (
         "{\n"
         '    "KPlugin": {\n'
@@ -108,15 +92,16 @@ def wallpaper_metadata_json(wp_id: str) -> str:
         "}\n"
     )
 
-# The one privileged launch path shared by the autostart entry + a menu launcher.
+
+# The one privileged launch path shared by the autostart + the OpenBox root menu +
+# a menu launcher.
 INSTALL_WRAPPER_PATH = "/usr/local/bin/azarch-install"
 
-# Installer launcher icon. steps.py copies assets/logo/azarch_installer_icon.png
-# (the "Az'" wordmark rendered as a 256x256 app tile) to a SYSTEM icon path so the
-# Desktop launcher, the application-menu entry, and the autostart entry can all name
-# it. Installed to /usr/share/pixmaps (a standard icon search path that needs no
-# theme-cache rebuild) AND to the hicolor 256x256 apps dir; the .desktop files name
-# it by its basename ("azarch-installer") so the icon loader resolves either.
+# Installer launcher icon. steps.py copies assets/logo/azarch_installer_icon.png (the
+# "Az'" wordmark rendered as a 256x256 app tile) to SYSTEM icon paths so the Desktop
+# launcher and the application-menu entry can name it. Installed to /usr/share/pixmaps
+# (a standard icon search path) AND to the hicolor 256x256 apps dir; the .desktop files
+# name it by its basename ("azarch-installer") so the icon loader resolves either.
 INSTALLER_ICON_ASSET = "logo/azarch_installer_icon.png"
 INSTALLER_ICON_NAME = "azarch-installer"
 INSTALLER_ICON_PIXMAP = f"/usr/share/pixmaps/{INSTALLER_ICON_NAME}.png"
@@ -124,53 +109,70 @@ INSTALLER_ICON_HICOLOR = (
     f"/usr/share/icons/hicolor/256x256/apps/{INSTALLER_ICON_NAME}.png"
 )
 
+# Home directory of the live user; the overlay root for HOME-relative entries.
+HOME = "/home/main"
+# uid:gid for the live user tree (autologin group gid 998).
+HOME_OWNER = (1000, 998)
+
+
+# --- Application menu wiring (single source of truth in application_menu.py) --
+# OUR menu is the whole shell now. It ships as a resident daemon (built once, kept
+# hidden) so opening it is instant; the Super key and the OpenBox root menu both run
+# the launcher (/usr/local/bin/azarch-application-menu) which signals that daemon.
+from . import application_menu as _app_menu  # noqa: E402  (kept next to its users)
+
+MENU_LAUNCHER = _app_menu.MENU_LAUNCHER_SYSTEM_PATH
+MENU_DAEMON_PY = _app_menu.MENU_DAEMON_PY_SYSTEM_PATH
+
 
 # --- 1. ~/.xinitrc ----------------------------------------------------------
 def xinitrc() -> str:
-    """Run by `startx` (see ~/.bash_profile). Paints the wallpaper onto the X
-    root BEFORE handing the session to Plasma so nothing flashes, then execs the
-    Plasma X11 session.
+    """Run by `startx` (see ~/.bash_profile). Paints the wallpaper onto the X root
+    BEFORE handing the session to OpenBox so nothing flashes, then execs the OpenBox
+    X11 session.
 
-    `DESKTOP_SESSION=plasma` is the one env var the Arch Wiki has you export for
-    a startx Plasma session; `startplasma-x11` sets XDG_CURRENT_DESKTOP=KDE
-    itself and logind sets XDG_SESSION_TYPE=x11, so nothing else is needed.
+    `openbox-session` (from the openbox package) is BOTH the window manager and the
+    session bootstrap: it exports the OpenBox environment, runs
+    ~/.config/openbox/autostart (wallpaper repaint, menu daemon, xcape, keyboard,
+    installer) and reads rc.xml/menu.xml. logind sets XDG_SESSION_TYPE=x11; we export
+    XDG_CURRENT_DESKTOP=openbox so XDG-aware tools classify the session correctly.
 
-    The `feh --bg-fill <wallpaper>` line replaces the old `xsetroot -solid
-    <cyan>`: feh can show a PNG (xsetroot only does solid colors), and painting
-    the SAME image Plasma will show makes Plasma's own wallpaper repaint
-    invisible (identical pixels) -- so there is no cyan/black flash. `--no-fehbg`
-    keeps feh from writing a ~/.fehbg helper we do not use."""
+    The `feh --bg-fill <wallpaper>` line makes the FIRST visible frame the wallpaper
+    (feh owns the root pixmap under OpenBox); the autostart repaints the identical
+    image, so there is no cyan/black flash. `--no-fehbg` keeps feh from writing a
+    ~/.fehbg helper we do not use."""
     return """\
 #!/bin/sh
-# ~/.xinitrc -- started by `startx` (see ~/.bash_profile). Hands the X session
-# to Plasma (X11). Keep this minimal: per-app launches live in Plasma autostart.
+# ~/.xinitrc -- started by `startx` (see ~/.bash_profile). Hands the X session to
+# OpenBox. Keep this minimal: per-app launches live in the OpenBox autostart.
 
 # Make sure user-dir XDG paths resolve for anything the session spawns.
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 
+# Classify the session for XDG-aware tools (autostart .desktop OnlyShowIn, etc.).
+export XDG_CURRENT_DESKTOP=openbox
+export DESKTOP_SESSION=openbox
+
 # Paint the wallpaper onto the X root FIRST so the first visible frame is the
-# wallpaper, not a solid color. Plasma repaints the same image over it moments
-# later (identical pixels -> no visible transition, no cyan/black flash). feh is
-# shipped in the manifest; xsetroot cannot display a PNG, only solid colors.
+# wallpaper, not a solid color. The OpenBox autostart repaints the same image moments
+# later (identical pixels -> no visible transition, no flash). feh is shipped in the
+# manifest; it owns the root pixmap under OpenBox (OpenBox draws no wallpaper itself).
 [ -x /usr/bin/feh ] && feh --no-fehbg --bg-fill '""" + WALLPAPER_IMAGE_FILE + """'
 
-# The one env var the Arch Wiki has you set for a startx Plasma session.
-export DESKTOP_SESSION=plasma
-
-# Replace this shell with the Plasma X11 session; when Plasma exits, X exits and
+# Replace this shell with the OpenBox X11 session; when OpenBox exits, X exits and
 # control returns to the login shell (which, per bash_profile, logs out the tty).
-exec startplasma-x11
+exec openbox-session
 """
 
 
 # --- 2. /home/main/.bash_profile snippet ------------------------------------
 def bash_profile_startx() -> str:
-    """Appended to /home/main/.bash_profile. On the FIRST virtual terminal only
-    (and only when not already in X) it replaces the login shell with startx, so
-    the autologin drops straight into the graphical session. On any other VT or
-    an SSH login $DISPLAY is set or $(tty) != /dev/tty1, so the guard is false and
-    you get a normal shell -- important for rescue/maintenance use of the ISO."""
+    """Appended to /home/main/.bash_profile. On the FIRST virtual terminal only (and
+    only when not already in X) it replaces the login shell with startx, so the
+    autologin drops straight into the graphical session. On any other VT or an SSH
+    login $DISPLAY is set or $(tty) != /dev/tty1, so the guard is false and you get a
+    normal shell -- important for rescue/maintenance use of the ISO."""
     return """\
 # ~/.bash_profile -- Az'arch live session bootstrap.
 # Source .bashrc for interactive niceties if present.
@@ -188,766 +190,320 @@ fi
 """
 
 
-# --- 3. ~/.config/plasma-org.kde.plasma.desktop-appletsrc -------------------
-# Fixed containment ids used across appletsrc + plasmashellrc. Pinned to constants
-# so the panel-pin key in plasmashellrc ([PlasmaViews][Panel PANEL_ID]) always
-# matches the panel containment number here (a mismatch = the pin is silently
-# ignored). 1 = desktop, 2 = bottom panel.
-DESKTOP_CONTAINMENT_ID = 1
-PANEL_CONTAINMENT_ID = 2
-
-# Home directory of the live user; the overlay root for HOME-relative entries (used
-# by the PLAN below AND by the panel-icon backing-file paths in this section, so it
-# is defined here, before first use).
-HOME = "/home/main"
-# uid:gid for the live user tree (autologin group gid 998).
-HOME_OWNER = (1000, 998)
-
-# The three apps pinned to the bottom panel's task manager, in order. The .desktop
-# ids are the ones shipped on the installed system: LibreWolf -> librewolf.desktop,
-# Kitty -> kitty.desktop, Dolphin -> org.kde.dolphin.desktop (reverse-DNS).
-PANEL_LAUNCHERS = [
-    "applications:librewolf.desktop",
-    "applications:kitty.desktop",
-    "applications:org.kde.dolphin.desktop",
-]
-
-# NOTE: Plasma's Kickoff launcher has been REMOVED from the panel entirely (the
-# migration to OUR Az'arch application menu). There is therefore no Kickoff icon
-# constant and no Kickoff footer-power (systemFavorites) list here anymore -- our
-# menu draws its own icon (application_menu.MENU_ICON_NAME) and its own power row.
-# The Az'arch icon applet takes Kickoff's former LEFTMOST slot (see AppletOrder).
-
-# The status widgets on the RIGHT of the panel, placed as STANDALONE panel applets
-# (NOT inside an org.kde.plasma.systemtray container). Why standalone instead of a
-# tray: the user wanted the internet/audio/etc icons visible but with NO overflow "^"
-# expand-arrow AND with the notifications widget gone ENTIRELY. A systemtray fights
-# both goals -- it AUTO-DISCOVERS every installed tray plasmoid on first login (so it
-# re-adds notifications, plus a camera/virtual-keyboard the user never asked for) and
-# it shows the "^" arrow whenever any item is passive. Placing each wanted widget as
-# its own panel applet sidesteps all of that: exactly these icons, always visible, no
-# arrow, no auto-discovered extras (verified live in a booted VM). Left-to-right on
-# the right side (after an expanding spacer), ending at the clock:
-#   keyboard-layout, device-notifier, brightness, network, volume.
-# Plugin ids verified against plasma-nm/plasma-pa/plasma-workspace/powerdevil.
-# The KEYBOARD-LAYOUT indicator is the LEFTMOST of these (the user asked for it "to
-# the left of all the icons on the right"); it shows "US"/"HE" from the two configured
-# layouts (see kxkbrc()) and clicking it cycles them. Clipboard and battery/power were
-# deliberately dropped at the user's request (no clipboard history; power is reached
-# from the application menu).
-PANEL_STATUS_APPLETS = [
-    "org.kde.plasma.keyboardlayout",      # US/HE layout indicator (leftmost)
-    "org.kde.plasma.devicenotifier",      # removable devices
-    "org.kde.plasma.brightness",          # powerdevil -- brightness
-    "org.kde.plasma.networkmanagement",   # plasma-nm  -- internet
-    "org.kde.plasma.volume",              # plasma-pa  -- audio
-]
-# The notifications plasmoid -- the "notification thingy" the user wants gone from the
-# WHOLE distro. It is NOT placed on the panel here, and (because it would otherwise be
-# auto-discoverable by any systemtray) its plasmoid .so is DELETED from the image
-# entirely in configuration/system.CUSTOMIZE_AIROOTFS. Named here so a test can pin
-# both that it is not a panel applet and that system.py removes it.
-NOTIFICATIONS_APPLET_ID = "org.kde.plasma.notifications"
-
-# The two keyboard layouts the indicator switches between: US English and Hebrew.
-# xkb layout codes -> display labels shown in the applet. Alt+Shift toggles them, and
-# clicking the panel indicator cycles them. Shipped via ~/.config/kxkbrc; the keyboard
-# KDED module reads it at session start, so BOTH layouts are active from first login
-# (verified live -- switching updates the indicator US<->HE).
-KEYBOARD_LAYOUTS = [
-    {"code": "us", "label": "US"},   # English
-    {"code": "il", "label": "HE"},   # Hebrew (xkb layout "il")
-]
-KEYBOARD_TOGGLE = "grp:alt_shift_toggle"
-
-# The keyboard-layout applet's display mode. It exposes exactly ONE config key,
-# `displayStyle` (0 = Label/text, 1 = Flag, 2 = LabelOverFlag). In text (Label) mode the
-# "US"/"HE" label hangs LOW and looks tilted: the applet centers the text line-box with Qt
-# AlignVCenter, which centers the whole line box (including descender space) rather than the
-# visible caps, so the letters sit below the tray icons at ANY panel height/scale (this is
-# intrinsic to text mode, not a fractional-scaling bug -- scale here is 100%). Flag mode
-# renders a flag ICON instead (icons use anchors.fill and center correctly), so it sits
-# vertically centered with the other tray icons. Value 1 = Flag -> the US layout shows a
-# centered USA flag (screenshot-verified on the live VM; the user specifically likes it).
-KEYBOARD_DISPLAY_STYLE = 1  # 1 = Flag (centered icon), fixes the low-hanging text label
+# --- 3. ~/.config/openbox/rc.xml --------------------------------------------
+# The Super key is armed via xcape: a lone Super_L tap is turned into the chord
+# Super_L+Menu (see openbox_autostart), and THIS keybind runs the menu launcher on
+# that chord. OpenBox cannot bind a bare modifier itself, so this indirection is how
+# "Super opens the menu" works while Super still behaves as a normal modifier for
+# every other bind. The Menu keysym is bound both with W- (the xcape chord) and bare
+# (belt: some keyboards' physical Menu/Apps key) so either opens the menu.
+SUPER_MENU_KEYSYM = "Menu"
 
 
-# Fixed applet ids in the panel. Kickoff is GONE, so the ids are now: 2 = task
-# manager, 3 = expanding spacer, then the standalone status applets
-# (PANEL_STATUS_APPLETS) at 4.., then the digital clock last (id = 4 +
-# len(PANEL_STATUS_APPLETS)). Computed so a change to PANEL_STATUS_APPLETS keeps
-# the clock id / order correct. (Id 1 is retired with Kickoff; it is not reused so
-# nothing silently inherits the launcher's old slot.)
-_TASKS_ID = 2
-_SPACER_ID = 3
-_STATUS_ID_BASE = 4
+def openbox_rc_xml() -> str:
+    """OpenBox rc.xml: window-manager behaviour + keybinds for a panel-less session.
 
-# OUR Az'arch application-menu icon gets an id ONE PAST the highest existing applet
-# id (the clock), so it can never collide no matter how many status applets are
-# added later. With the shipped 5-applet status list the clock is id 9 and our menu
-# icon is id 10. AppletOrder (below) now places it FIRST -- the LEFTMOST applet on
-# the panel (where Kickoff used to sit), left of the LibreWolf task button.
-_AZ_MENU_ID = _STATUS_ID_BASE + len(PANEL_STATUS_APPLETS) + 1
+    Keeps OpenBox's stock look (Clearlooks theme ships with the package) but wires the
+    Az'arch bits:
+      * W-Menu / Menu -> run the application-menu launcher (the Super key, via xcape).
+      * A small, sensible keybind set (close window, alt-tab, workspace switch, a
+        terminal on W-Return) so the session is usable without a panel.
+      * The root (desktop) middle/right click opens menu.xml (openbox_menu_xml).
+    There is NO dock/panel configuration -- the Az'arch menu is the only shell.
 
-# The Az'arch application-menu icon applet (org.kde.plasma.icon). It launches our
-# menu via the installed launcher (see configuration/application_menu.py) and is
-# the panel's LEFTMOST icon now that Kickoff has been removed (the user's "move our
-# application menu to the left side" request).
-from . import application_menu as _app_menu  # noqa: E402  (kept next to its user)
-
-_AZ_MENU_APPLET_PLUGIN = "org.kde.plasma.icon"
-_AZ_MENU_ICON_NAME = _app_menu.MENU_ICON_NAME
-_AZ_MENU_DESKTOP_PATH = _app_menu.MENU_DESKTOP_SYSTEM_PATH
-
-# WHY WE PRE-CREATE THE ICON APPLET'S BACKING FILE (the "piece of paper that
-# launches nothing" bug):
-#
-# org.kde.plasma.icon does NOT read its configured .desktop directly. On first
-# paint it derives its OWN backing copy under ~/.local/share/plasma_icons/ and
-# reads THAT (recorded as the applet's Configuration/localPath). It only copies
-# the target verbatim (preserving Type=Application + Exec=) when it recognises the
-# configured url as a LOCAL .desktop file; otherwise it writes a generic
-#     [Desktop Entry]\nType=Link\nURL=<target>\nIcon=unknown
-# wrapper. A BARE path in url= (…/foo.desktop, no file:// scheme) parses to an
-# empty-scheme QUrl that misses the local-desktop-file test, so the applet took
-# the Link branch and baked, on the live VM:
-#     Type=Link, URL=…, Icon=unknown
-# Type=Link means a CLICK opens the file's location instead of Exec'ing the
-# launcher (nothing launches); Icon=unknown is the generic "piece of paper" glyph
-# (the icon the user saw). With immutability locking the applet and the wrong
-# backing file cached, Plasma never self-corrects.
-#
-# FIX: we ship the backing file OURSELVES at the exact localPath Plasma uses, with
-# the correct Type=Application + Exec= + Icon= (identical to the copy-branch
-# output), point Configuration/localPath at it, and give url= a proper file://
-# URI as a belt. The applet then reads our correct file and launches the menu with
-# the grid icon. (menu_desktop() below returns this same content for the standalone
-# installer, so both paths agree.)
-_AZ_MENU_LOCAL_DIR = f"{HOME}/.local/share/plasma_icons"
-_AZ_MENU_LOCAL_PATH = f"{_AZ_MENU_LOCAL_DIR}/azarch-application-menu.desktop"
-
-
-def az_menu_plasma_icon_backing() -> str:
-    """The org.kde.plasma.icon backing .desktop (localPath) for OUR menu applet.
-
-    This is what the applet reads to know what to launch and which icon to show.
-    It MUST be a real application launcher (Type=Application + Exec=), NOT the
-    Type=Link/Icon=unknown wrapper the applet generates from a bare url= (see the
-    _AZ_MENU_LOCAL_PATH note above -- that wrapper is exactly the "paper icon that
-    launches nothing" bug). Content mirrors the installed
-    azarch-application-menu.desktop (application_menu.menu_desktop()): Exec runs the
-    installed launcher, Icon is the grid glyph."""
-    return _app_menu.menu_desktop()
-
-
-def plasma_appletsrc() -> str:
-    """The full Plasma desktop + panel layout for a fresh profile: the desktop
-    containment (with the wallpaper seed) AND a bottom panel carrying, left to right:
-    OUR Az'arch application-menu icon (the LEFTMOST applet), a pinned task manager
-    (LibreWolf, Kitty, Dolphin), an expanding spacer, then the STANDALONE status
-    applets (keyboard-layout, device-notifier, brightness, network, volume), and
-    finally a digital clock.
-
-    KICKOFF IS GONE. The migration replaced Plasma's org.kde.plasma.kickoff launcher
-    with the Az'arch application menu entirely: there is no kickoff applet on the
-    panel anymore (and kmenuedit/krunner are deleted from the image, see
-    configuration/system.CUSTOMIZE_AIROOTFS). Our menu is an org.kde.plasma.icon
-    applet that launches the resident Az'arch menu daemon; it sits in Kickoff's old
-    LEFTMOST slot and is also what the Super/Meta key now opens (see
-    application_menu.menu_desktop() + the kglobalshortcutsrc Meta rebind).
-
-    NO system tray container. The status widgets are placed as individual panel
-    applets on purpose (see PANEL_STATUS_APPLETS): the user wanted these icons visible
-    but with NO overflow "^" expand-arrow and NO notifications widget at all. A
-    systemtray would auto-discover extra plasmoids (notifications, camera, virtual
-    keyboard) and show the "^" arrow for passive items; standalone applets give
-    exactly this set, always visible, no arrow (verified live in a booted VM).
-
-    Deliberate OMISSIONS (the user's panel requests):
-      * NO org.kde.plasma.kickoff -> the Plasma launcher is fully removed.
-      * NO org.kde.plasma.showdesktop / minimizeall -> no "Peek at Desktop" button.
-      * NO org.kde.plasma.notifications anywhere (also DELETED from the image in
-        system.CUSTOMIZE_AIROOTFS) -> notifications gone from the whole distro.
-      * NO clipboard and NO battery/power applet (power is reached from the menu).
-
-    The wallpaper lives in the NESTED [Containments][1][Wallpaper][org.kde.image]
-    [General] Image= group (a common mistake is the containment's own [General]) and
-    points at the package DIRECTORY (WALLPAPER_PACKAGE_DIR), not the inner png, so
-    Plasma matches the existing "years" tile instead of injecting a duplicate loose
-    tile (see the WALLPAPER_* note above). This appletsrc seed is a BELT; the
-    regeneration-proof wallpaper default is the org.kde.image main.xml rewrite in
-    configuration/system.CUSTOMIZE_AIROOTFS.
-
-    Written to BOTH the live `main` home and /etc/skel so the live and installed
-    users get the same desktop. plasmashell MAY regenerate this on first login with
-    its own ids (documented caveat), so the panel-pin/thickness/theme also live in
-    their own regeneration-tolerant files (plasmashellrc, kdeglobals)."""
-    d = DESKTOP_CONTAINMENT_ID
-    p = PANEL_CONTAINMENT_ID
-    launchers = ",".join(PANEL_LAUNCHERS)
-    # Status applets get ids 4, 5, ...; the clock is the id right after the last one.
-    status_ids = [_STATUS_ID_BASE + i for i in range(len(PANEL_STATUS_APPLETS))]
-    clock_id = _STATUS_ID_BASE + len(PANEL_STATUS_APPLETS)
-    # Our Az'arch menu icon (_AZ_MENU_ID) is now the LEFTMOST applet (Kickoff is
-    # gone), then the task manager (_TASKS_ID) -> our icon sits left of LibreWolf,
-    # exactly where the launcher used to be (the "move it to the left" request).
-    applet_order = ";".join(
-        str(i)
-        for i in [_AZ_MENU_ID, _TASKS_ID, _SPACER_ID, *status_ids, clock_id]
-    )
-    # One block per standalone status applet (keyboard-layout, device-notifier, ...).
-    # The keyboard-layout applet additionally gets a [Configuration][General] block
-    # pinning displayStyle=Flag (KEYBOARD_DISPLAY_STYLE) so it shows a centered flag
-    # icon instead of the low-hanging "US"/"HE" text label (see KEYBOARD_DISPLAY_STYLE).
-    _block_parts = []
-    for i, item in enumerate(PANEL_STATUS_APPLETS):
-        _block_parts.append(
-            f"[Containments][{p}][Applets][{status_ids[i]}]\n"
-            f"immutability=1\n"
-            f"plugin={item}\n"
-        )
-        if item == "org.kde.plasma.keyboardlayout":
-            _block_parts.append(
-                f"[Containments][{p}][Applets][{status_ids[i]}][Configuration][General]\n"
-                f"displayStyle={KEYBOARD_DISPLAY_STYLE}\n"
-            )
-    status_blocks = "\n".join(_block_parts)
+    Placed at ~/.config/openbox/rc.xml (and /etc/skel) so the live and installed users
+    share it. OpenBox re-reads it on `openbox --reconfigure`."""
     return f"""\
-[Containments][{d}]
-activityId=
-formfactor=0
-immutability=1
-lastScreen=0
-location=0
-plugin=org.kde.desktopcontainment
-wallpaperplugin=org.kde.image
-
-[Containments][{d}][Wallpaper][org.kde.image][General]
-Image=file://{WALLPAPER_PACKAGE_DIR}
-
-[Containments][{p}]
-activityId=
-formfactor=2
-immutability=1
-lastScreen=0
-location=4
-plugin=org.kde.panel
-
-[Containments][{p}][General]
-AppletOrder={applet_order}
-
-# 1. Az'arch application menu icon (org.kde.plasma.icon): OUR menu, now the LEFTMOST
-# panel applet (Kickoff has been removed -- this took its slot). Launches
-# {_AZ_MENU_DESKTOP_PATH} (the installed .desktop, which runs our Tkinter menu) and
-# shows the application-menu glyph. The Super/Meta key opens the same menu (via the
-# kglobalshortcutsrc Meta rebind + application_menu.menu_desktop()'s X-KDE-Shortcuts).
-#
-# localPath points at a backing .desktop WE ship (az_menu_plasma_icon_backing ->
-# ~/.local/share/plasma_icons/...), a real Type=Application launcher, so the applet
-# does NOT auto-generate a Type=Link/Icon=unknown wrapper (the "paper icon that
-# launches nothing" bug). url= carries a file:// URI (not a bare path) as a belt so
-# even a regenerating applet takes the copy branch. immutability=0: the applet must
-# be able to read/refresh its backing file (a locked applet froze the broken state).
-[Containments][{p}][Applets][{_AZ_MENU_ID}]
-immutability=0
-plugin={_AZ_MENU_APPLET_PLUGIN}
-
-[Containments][{p}][Applets][{_AZ_MENU_ID}][Configuration]
-localPath={_AZ_MENU_LOCAL_PATH}
-
-[Containments][{p}][Applets][{_AZ_MENU_ID}][Configuration][General]
-url=file://{_AZ_MENU_DESKTOP_PATH}
-iconName={_AZ_MENU_ICON_NAME}
-
-# 2. Pinned task manager: LibreWolf, Kitty, Dolphin.
-[Containments][{p}][Applets][{_TASKS_ID}]
-immutability=1
-plugin=org.kde.plasma.icontasks
-
-[Containments][{p}][Applets][{_TASKS_ID}][Configuration][General]
-launchers={launchers}
-
-# 3. Expanding spacer -- pushes the status applets + clock to the right edge.
-[Containments][{p}][Applets][{_SPACER_ID}]
-immutability=1
-plugin=org.kde.plasma.panelspacer
-
-[Containments][{p}][Applets][{_SPACER_ID}][Configuration][General]
-expanding=true
-
-# Standalone status applets (no system tray, no "^" arrow): keyboard-layout (US/HE)
-# is the leftmost, then device-notifier, brightness, network, volume.
-{status_blocks}
-# Digital clock at the right end.
-[Containments][{p}][Applets][{clock_id}]
-immutability=1
-plugin=org.kde.plasma.digitalclock
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Az'arch OpenBox configuration. Panel-less: the Az'arch application menu (Super
+     key / root-menu entry) is the only shell surface. Generated by
+     azarch.configuration.desktop (edit the Python, not this file). -->
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <resistance>
+    <strength>10</strength>
+    <screen_edge_strength>20</screen_edge_strength>
+  </resistance>
+  <focus>
+    <focusNew>yes</focusNew>
+    <followMouse>no</followMouse>
+    <focusLast>yes</focusLast>
+    <underMouse>no</underMouse>
+    <focusDelay>200</focusDelay>
+    <raiseOnFocus>no</raiseOnFocus>
+  </focus>
+  <placement>
+    <policy>Smart</policy>
+    <center>yes</center>
+    <monitor>Primary</monitor>
+    <primaryMonitor>1</primaryMonitor>
+  </placement>
+  <theme>
+    <name>Clearlooks</name>
+    <titleLayout>NLIMC</titleLayout>
+    <keepBorder>yes</keepBorder>
+    <animateIconify>yes</animateIconify>
+  </theme>
+  <desktops>
+    <number>2</number>
+    <firstdesk>1</firstdesk>
+    <names>
+      <name>one</name>
+      <name>two</name>
+    </names>
+    <popupTime>0</popupTime>
+  </desktops>
+  <resize>
+    <drawContents>yes</drawContents>
+    <popupShow>Nonpixel</popupShow>
+  </resize>
+  <keyboard>
+    <!-- The Super key: xcape emits Super_L+Menu on a lone Super tap; bind that chord
+         (and the bare Menu/Apps key) to the Az'arch application-menu launcher. -->
+    <keybind key="W-{SUPER_MENU_KEYSYM}">
+      <action name="Execute">
+        <command>{MENU_LAUNCHER}</command>
+      </action>
+    </keybind>
+    <keybind key="{SUPER_MENU_KEYSYM}">
+      <action name="Execute">
+        <command>{MENU_LAUNCHER}</command>
+      </action>
+    </keybind>
+    <!-- A terminal without the menu (kitty is the primary terminal). -->
+    <keybind key="W-Return">
+      <action name="Execute">
+        <command>kitty</command>
+      </action>
+    </keybind>
+    <!-- Window management basics so the session is usable panel-less. -->
+    <keybind key="A-F4">
+      <action name="Close"/>
+    </keybind>
+    <keybind key="A-Tab">
+      <action name="NextWindow"/>
+    </keybind>
+    <keybind key="A-S-Tab">
+      <action name="PreviousWindow"/>
+    </keybind>
+    <keybind key="W-d">
+      <action name="ToggleShowDesktop"/>
+    </keybind>
+    <keybind key="C-A-Left">
+      <action name="GoToDesktop"><to>left</to><wrap>no</wrap></action>
+    </keybind>
+    <keybind key="C-A-Right">
+      <action name="GoToDesktop"><to>right</to><wrap>no</wrap></action>
+    </keybind>
+  </keyboard>
+  <mouse>
+    <dragThreshold>8</dragThreshold>
+    <doubleClickTime>200</doubleClickTime>
+    <screenEdgeWarpTime>0</screenEdgeWarpTime>
+    <context name="Frame">
+      <mousebind button="A-Left" action="Press"><action name="Focus"/><action name="Raise"/></mousebind>
+      <mousebind button="A-Left" action="Drag"><action name="Move"/></mousebind>
+      <mousebind button="A-Right" action="Drag"><action name="Resize"/></mousebind>
+    </context>
+    <context name="Titlebar">
+      <mousebind button="Left" action="Press"><action name="Focus"/><action name="Raise"/></mousebind>
+      <mousebind button="Left" action="Drag"><action name="Move"/></mousebind>
+      <mousebind button="Left" action="DoubleClick"><action name="ToggleMaximize"/></mousebind>
+    </context>
+    <context name="Root">
+      <!-- Right/middle click on the desktop opens the OpenBox root menu (menu.xml). -->
+      <mousebind button="Right" action="Press"><action name="ShowMenu"><menu>root-menu</menu></action></mousebind>
+      <mousebind button="Middle" action="Press"><action name="ShowMenu"><menu>root-menu</menu></action></mousebind>
+    </context>
+    <context name="Client">
+      <mousebind button="Left" action="Press"><action name="Focus"/><action name="Raise"/></mousebind>
+    </context>
+  </mouse>
+  <menu>
+    <file>menu.xml</file>
+    <hideDelay>200</hideDelay>
+    <showIcons>yes</showIcons>
+  </menu>
+  <applications>
+    <!-- The Az'arch application menu is a borderless override-redirect Tk window; it
+         manages its own placement (centered) and needs no OpenBox decorations. -->
+    <application name="*azarch*menu*">
+      <decor>no</decor>
+    </application>
+  </applications>
+</openbox_config>
 """
 
 
-# Bottom panel height in pixels. Plasma 6's default panel is 44 px; the user asked to
-# make the bottom bar bigger. This ALSO sizes the left launcher/task icons: on Plasma
-# there is no independent icon-size key for the kickoff launcher + icontasks manager --
-# their icons are the panel thickness minus small margins, so a taller panel = bigger
-# left icons. The settled-on value is 60 (an initial 2x/88 looked too tall in the VM;
-# 55 was an intermediate value, then bumped to 60 for ~10% bigger left icons -- both
-# verified live via ffmpeg x11grab screenshots).
-#
-# CRUCIAL Plasma-6 quirk (verified against plasma-workspace shell/panelview.cpp AND
-# empirically in a booted VM): the panel HEIGHT key `thickness` is read from the
-# SCREEN-INDEPENDENT nested group [PlasmaViews][Panel <id>][Defaults] -- NOT the flat
-# [PlasmaViews][Panel <id>] group. `floating` IS read from the flat group. Writing
-# thickness in the flat group (the obvious place) is SILENTLY IGNORED -- the panel
-# stays 44 px. So floating goes flat, thickness goes under [Defaults].
-PANEL_DEFAULT_THICKNESS = 44
-PANEL_THICKNESS = 60   # taller than the 44 px default (bigger left icons), verified live
-
-
-# --- 3b. ~/.config/plasmashellrc (panel pinned, not floating) ---------------
-def plasmashellrc() -> str:
-    """Pin the bottom panel (NOT floating) and set its HEIGHT. Neither is in appletsrc
-    -- plasma-workspace writes them to plasmashellrc under [PlasmaViews][Panel <id>]:
-
-      * `floating` (0 = pinned, 1 = floating) in the FLAT [PlasmaViews][Panel <id>] group.
-      * `thickness` (panel height px) in the NESTED [PlasmaViews][Panel <id>][Defaults]
-        subgroup. Plasma 6's PanelView::restore() reads thickness from configDefaults()
-        == the "Defaults" subgroup; a flat `thickness=` is silently ignored (verified
-        live: the panel stayed 44 px until the key moved under [Defaults]).
-
-    The Panel id MUST match PANEL_CONTAINMENT_ID in appletsrc or the keys are ignored.
-    thickness=60 makes the bottom bar taller than the 44 px default (and the left
-    launcher/task icons ~10% bigger, since their size tracks the panel height), per the
-    user's "make it bigger / bigger left icons" request. Shipped to the live home and
-    /etc/skel."""
+# --- 4. ~/.config/openbox/menu.xml ------------------------------------------
+def openbox_menu_xml() -> str:
+    """The OpenBox ROOT menu (right/middle click on the desktop). Deliberately small:
+    the Az'arch application menu is the real launcher, so this is a convenience
+    fallback offering the application menu itself, a terminal, the installer, and the
+    session power actions. Power actions reuse the same tools the application menu's
+    power row uses (systemctl), so behaviour is identical from either surface."""
     return f"""\
-[PlasmaViews][Panel {PANEL_CONTAINMENT_ID}]
-floating=0
-
-[PlasmaViews][Panel {PANEL_CONTAINMENT_ID}][Defaults]
-thickness={PANEL_THICKNESS}
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Az'arch OpenBox root menu. Generated by azarch.configuration.desktop. -->
+<openbox_menu xmlns="http://openbox.org/3.4/menu">
+  <menu id="root-menu" label="Az'arch">
+    <item label="Application Menu">
+      <action name="Execute"><command>{MENU_LAUNCHER}</command></action>
+    </item>
+    <item label="Terminal">
+      <action name="Execute"><command>kitty</command></action>
+    </item>
+    <item label="Install Az'arch Linux">
+      <action name="Execute"><command>{INSTALL_WRAPPER_PATH}</command></action>
+    </item>
+    <separator/>
+    <menu id="power-menu" label="Leave">
+      <item label="Lock">
+        <action name="Execute"><command>loginctl lock-session</command></action>
+      </item>
+      <item label="Sleep">
+        <action name="Execute"><command>systemctl suspend</command></action>
+      </item>
+      <item label="Restart">
+        <action name="Execute"><command>systemctl reboot</command></action>
+      </item>
+      <item label="Shut Down">
+        <action name="Execute"><command>systemctl poweroff</command></action>
+      </item>
+    </menu>
+  </menu>
+</openbox_menu>
 """
 
 
-# --- 3c. ~/.config/kdeglobals (Breeze Dark global theme) --------------------
-def kdeglobals() -> str:
-    """Set the global theme to Breeze Dark for a fresh profile. The look-and-feel
-    package + color scheme are what darken the whole session; the icon theme and
-    widget style are seeded too so nothing falls back to a light default before the
-    LnF fully applies. Shipped to the live home and /etc/skel."""
-    return """\
-[General]
-ColorScheme=BreezeDark
-Name=Breeze Dark
-
-[Icons]
-Theme=breeze-dark
-
-[KDE]
-LookAndFeelPackage=org.kde.breezedark.desktop
-widgetStyle=Breeze
-"""
+# --- 5. ~/.config/openbox/autostart -----------------------------------------
+# Keyboard layouts for the LIVE session: US English (default) + Hebrew, Alt+Shift to
+# toggle. Applied with setxkbmap in the autostart (the DE-independent equivalent of
+# the old Plasma kxkbrc). Kept as constants so a test can pin them.
+KEYBOARD_LAYOUTS = ["us", "il"]           # xkb codes, us first == default
+KEYBOARD_TOGGLE = "grp:alt_shift_toggle"  # Alt+Shift cycles layouts
 
 
-# --- 3c-bis. ~/.config/kglobalshortcutsrc (Super key -> Az'arch menu) --------
-# The plasmashell action id + friendly text for the bare-Meta "open the launcher"
-# shortcut. Setting it to none,none frees the Super key so OUR menu's Meta grab
-# (application_menu.menu_shortcut_desktop, X-KDE-Shortcuts=Meta) is the only
-# consumer -- otherwise plasmashell's default Meta->launcher and our grab contend.
-_KICKOFF_LAUNCHER_ACTION = "activate application launcher"
-_KICKOFF_LAUNCHER_FRIENDLY = "Activate Application Launcher"
-
-
-def kglobalshortcutsrc() -> str:
-    """Free the Super/Meta key from Plasma's (now-removed) Kickoff launcher so it
-    can open OUR menu instead.
-
-    Plasma binds the bare Meta key to the plasmashell action
-    'activate application launcher' (== open Kickoff). We are removing Kickoff and
-    binding Meta to the Az'arch menu via a dedicated X-KDE-Shortcuts=Meta .desktop
-    (application_menu.menu_shortcut_desktop). Two things must both hold for that to
-    win: our .desktop must grab Meta (it does, at kglobalacceld startup), AND no
-    other component may still claim bare Meta. So this ships kglobalshortcutsrc with
-    the plasmashell launcher shortcut EXPLICITLY disabled (none,none): kglobalaccel
-    treats a stored binding as authoritative over the built-in default, so even if
-    plasmashell re-registers the action it finds 'none' and does not grab Meta.
-
-    Only that one key is set here; every other shortcut is left to Plasma's own
-    defaults (kglobalaccel merges per-key, so an absent key keeps its default). The
-    on-disk value form is "keys,default,friendly-name"; 'none,none,<name>' means no
-    active binding and no default. Shipped to the live home and /etc/skel so both
-    the live and installed sessions open the Az'arch menu on Super.
-
-    Verified live on the Hypervisor (Plasma 6.7.4): the launcher action's key is
-    exactly this id, and with our .desktop present kglobalacceld registered the
-    Az'arch _launch action for Meta."""
-    return (
-        "[plasmashell]\n"
-        f"{_KICKOFF_LAUNCHER_ACTION}=none,none,{_KICKOFF_LAUNCHER_FRIENDLY}\n"
-    )
-
-
-# --- 3d. ~/.config/krunnerrc (menu/search: installed applications only) ------
-def krunnerrc() -> str:
-    """Restrict search to INSTALLED APPLICATIONS only. Kicker's useExtraRunners=false
-    already limits its own search to the applications runner, but this is the
-    system-level belt: disable every KRunner plugin except the applications
-    (krunner_services) runner, so neither the menu search nor Alt-Space surfaces
-    files, bookmarks, shell commands, web shortcuts, etc. Shipped to live home and
-    /etc/skel."""
-    disabled = [
-        "baloosearch", "krunner_bookmarksrunner", "krunner_recentdocuments",
-        "krunner_locations", "krunner_places", "krunner_shell", "krunner_kill2",
-        "krunner_powerdevil", "krunner_sessions", "krunner_calculator",
-        "krunner_unitconverter", "krunner_dictionary", "krunner_webshortcuts",
-        "krunner_windows", "krunner_appstream", "krunner_activities",
-        "krunner_charrunner", "krunner_katesessions", "krunner_konsoleprofiles",
-    ]
-    lines = ["[Plugins]", "krunner_servicesEnabled=true"]
-    lines += [f"{name}Enabled=false" for name in disabled]
-    return "\n".join(lines) + "\n"
-
-
-# --- 3e. ~/.config/kxkbrc (keyboard layouts: US + Hebrew) -------------------
-def kxkbrc() -> str:
-    """Configure the two keyboard layouts the panel's keyboard-layout applet switches
-    between: US English and Hebrew (xkb "us" + "il"), shown as "US"/"HE". The Plasma
-    keyboard KDED module reads this at session start, so BOTH layouts are active from
-    first login and the panel indicator + Alt+Shift toggle (and clicking the indicator)
-    switch between them (verified live: switching updates the indicator US<->HE).
-
-    Keys (Plasma keyboard KCM / kxkbrc [Layout] group):
-      * Use=true              -- enable custom layout configuration.
-      * LayoutList=us,il      -- the xkb layout codes, in order (us first == default).
-      * DisplayNames=US,HE    -- the labels the applet shows for each layout.
-      * Options=grp:alt_shift_toggle -- Alt+Shift cycles layouts.
-      * SwitchMode=Global     -- one active layout for the whole session (not per-window).
-    Shipped to the live home and /etc/skel.
-
-    LIVE-SESSION ONLY: this fixed us,il is correct for the live medium's default
-    (Asia/Jerusalem) desktop, but on a Calamares INSTALL it must NOT survive -- the
-    OFFLINE install copies /home/main verbatim (unpackfs/reuseHome), and on the
-    installed Plasma session kded reads ~/.config/kxkbrc as AUTHORITATIVE, overriding
-    the region-correct /etc/X11/xorg.conf.d/00-keyboard.conf Calamares wrote for the
-    user's chosen region (so every install would come up us,il regardless of region).
-    The Calamares shellprocess step therefore DELETES this file (home + skel) on the
-    target so the region keyboard governs -- see configuration/calamares_shellprocess.
-    INSTALLED_KXKBRC. (The archinstall path is English-only "us" and unaffected.)"""
-    codes = ",".join(l["code"] for l in KEYBOARD_LAYOUTS)
-    labels = ",".join(l["label"] for l in KEYBOARD_LAYOUTS)
+# The three autostart blocks common to BOTH the live and the installed session:
+# wallpaper (feh), the Super key (xcape), and the resident menu daemon. Factored out so
+# the live and installed autostarts cannot drift on the parts they share.
+def _openbox_autostart_common() -> str:
     return f"""\
-[Layout]
-Use=true
-LayoutList={codes}
-DisplayNames={labels}
-Options={KEYBOARD_TOGGLE}
-ResetOldOptions=true
-SwitchMode=Global
-"""
+# 1. Wallpaper: repaint the same image ~/.xinitrc pre-painted (no flash; also covers a
+#    re-login where the X root pixmap was reset). feh owns the root pixmap on OpenBox.
+[ -x /usr/bin/feh ] && feh --no-fehbg --bg-fill '{WALLPAPER_IMAGE_FILE}' &
+
+# 2. Super key -> application menu. OpenBox cannot bind a lone modifier, so xcape turns
+#    a solo Super_L tap into the chord Super_L+Menu, which rc.xml binds to the menu
+#    launcher. Super keeps working as a normal modifier for every other bind. -t 200:
+#    only a tap under 200ms fires (a held Super does not).
+command -v xcape >/dev/null 2>&1 && \\
+    xcape -t 200 -e 'Super_L=Super_L|Menu' &
+
+# 3. Az'arch application-menu daemon: build the menu once and keep it hidden so the
+#    first Super press / root-menu open is instant (see application_menu/daemon.py).
+[ -f '{MENU_DAEMON_PY}' ] && \\
+    setsid python3 '{MENU_DAEMON_PY}' >/dev/null 2>&1 < /dev/null &"""
 
 
-# --- 3f. ~/.config/plasma-localerc (Plasma date format: d/m/y) --------------
-# The date/time locale Plasma uses to FORMAT the digital clock + calendar, kept
-# equal to the system LC_TIME (configuration/locale.DEFAULT_TIME_LOCALE) so the KDE
-# clock reads day/month/year like the rest of the system. Imported so the two never
-# drift.
-from .locale import DEFAULT_TIME_LOCALE as _TIME_LOCALE  # noqa: E402
+def openbox_autostart() -> str:
+    """~/.config/openbox/autostart for the LIVE session -- run by openbox-session once
+    the WM is up.
 
+    Does everything the old Plasma session did via autostart/services, but for a
+    panel-less OpenBox desktop: the shared wallpaper/xcape/menu-daemon block PLUS two
+    LIVE-ONLY behaviours that must NOT survive onto an installed system:
+      * setxkbmap us,il grp:alt_shift_toggle: the US + Hebrew layouts (Alt+Shift to
+        switch), the DE-independent replacement for Plasma's kxkbrc. Live-only because
+        an install picks a region keyboard (written to /etc/X11/xorg.conf.d) that this
+        fixed us,il would otherwise override at every login.
+      * launch the Calamares installer ONCE (Manjaro-style first-run). Live-only: an
+        installed system must not re-open the installer at every login.
 
-def plasma_localerc() -> str:
-    """Set the Plasma per-session date/time format to day/month/year, matching the
-    system LC_TIME (en_GB.UTF-8) so the panel's digital clock and calendar show
-    dates as d/m/y (the user's "modify timedate from m/d/y to d/m/y" request) --
-    not the en_US m/d/y default.
-
-    Plasma's regional-formats KCM writes ~/.config/plasma-localerc; the digital
-    clock reads its date/time format from the [Formats] group's LC_TIME. Setting
-    LC_TIME=en_GB.UTF-8 there (English, but d/m/y) flips the clock's date order
-    without changing the display language. `useDetailedLocales=true` tells Plasma to
-    honour the per-category [Formats] overrides rather than a single global locale.
-
-    This is the Plasma complement to the system-wide LC_TIME set for the LIVE ISO in
-    configuration/locale; both use DEFAULT_TIME_LOCALE so the live desktop clock reads
-    d/m/y. (On a Calamares install the target's LC_* now follows the region the user
-    picked on the Location page -- the old forced-en_GB shellprocess step was removed
-    so the region's date/number locale survives; see configuration/calamares.) Shipped
-    to the live home and /etc/skel so live/default users inherit the d/m/y clock."""
+    So the Calamares OFFLINE install OVERWRITES this file (home + skel) with
+    openbox_autostart_installed() -- which drops exactly those two lines -- via the
+    configuration/calamares_shellprocess cleanup step. Each line is guarded
+    (`command -v` / `[ -x ]`) so a missing tool never aborts the session. Shipped to the
+    live home and /etc/skel."""
+    layouts = ",".join(KEYBOARD_LAYOUTS)
     return f"""\
-[Formats]
-LC_TIME={_TIME_LOCALE}
-useDetailedLocales=true
+#!/bin/sh
+# ~/.config/openbox/autostart -- Az'arch OpenBox LIVE session startup (panel-less).
+# Run by openbox-session after the window manager is up. Keep every line guarded so a
+# missing tool never breaks the session. The Calamares install overwrites this with the
+# "installed" variant (no fixed keyboard, no installer) -- see calamares_shellprocess.py.
+
+{_openbox_autostart_common()}
+
+# 4. LIVE-ONLY -- keyboard layouts: US English (default) + Hebrew, Alt+Shift to toggle.
+#    An install writes a region keyboard to /etc/X11/xorg.conf.d/00-keyboard.conf, so
+#    this fixed us,il is stripped from the installed autostart (it would override it).
+command -v setxkbmap >/dev/null 2>&1 && \\
+    setxkbmap -layout '{layouts}' -option '{KEYBOARD_TOGGLE}' &
+
+# 5. LIVE-ONLY -- Calamares installer, once, a couple seconds in (Manjaro-style
+#    first-run). The wrapper elevates via passwordless sudo on the live medium. Stripped
+#    from the installed autostart so an installed system never re-opens the installer.
+if [ -x '{INSTALL_WRAPPER_PATH}' ]; then
+    ( sleep 2; '{INSTALL_WRAPPER_PATH}' ) &
+fi
 """
 
 
-# --- 3g. ~/.config/powerdevilrc (PowerDevil power policy, Plasma 6 schema) ---
-# Idle-suspend delay on battery, in SECONDS. Plasma 6's PowerDevil profile schema
-# (PowerDevilProfileSettings.kcfg -> kcfgfile "powerdevilrc") uses the key
-# AutoSuspendIdleTimeoutSec in SECONDS -- NOT the old Plasma-5
-# [SuspendSession] idleTime in milliseconds. 15 minutes == 900. Kept equal to the
-# logind IdleActionSec the console policy uses (configuration/system.SLEEP_POLICY_IDLE_SECONDS),
-# so Plasma and the bare console agree on the 15-minute laptop-on-battery timeout.
-POWERDEVIL_BATTERY_IDLE_SECONDS = 900  # 15 minutes
-
-# PowerDevil action enum values (daemon/powerdevilenums.h, verified against
-# powerdevil 6.7.4): NoAction=0, Sleep=1 (suspend-to-RAM), Hibernate=2, Shutdown=8.
-# Shared by AutoSuspendAction / PowerButtonAction / PowerDownAction (all UInt).
-_POWERDEVIL_NO_ACTION = 0        # never / do nothing
-_POWERDEVIL_SLEEP = 1            # suspend-to-RAM
-_POWERDEVIL_SHUTDOWN = 8         # clean poweroff
-
-# IMPORTANT (Plasma 6 vs Plasma 5): the file that PowerDevil 6 actually reads for
-# live per-profile policy is `powerdevilrc` (PowerDevilProfileSettings.kcfg declares
-# <kcfgfile name="powerdevilrc">). The old `powermanagementprofilesrc` is read ONCE by
-# daemon/powerdevilmigrateconfig.cpp for a one-shot Plasma-5 -> 6 migration and then
-# ignored for policy. Its subgroup schema ([<profile>][SuspendSession] with idleTime in
-# ms, suspendType) is the DEAD Plasma-5 format. Shipping only that file silently does
-# nothing on a fresh Plasma-6 install (and worse: an EMPTY [AC] group is skipped by the
-# migrator, so AC falls to PowerDevil-6 defaults = suspend-on-AC + screen-off, the exact
-# OPPOSITE of "PC never sleeps"). So the real settings go in `powerdevilrc` below, and
-# powermanagement_migration_flag() ships the migration-done flag so a first-boot
-# migration can never re-run and layer stale deltas onto our hand-written powerdevilrc.
-
-
-def powerdevilrc() -> str:
-    """PowerDevil per-profile power policy for the INSTALLED Plasma desktop (Plasma 6
-    `powerdevilrc` schema), aligning KDE's own power manager with the user's requests
-    (PROMPT.md sections 1-3) and the PC-vs-laptop sleep rule:
-
-      * AC profile (plugged in, and the ONLY active profile on a desktop PC with no
-        battery):
-          - Display -> TurnOffDisplayWhenIdle=false: the screen NEVER turns off on AC.
-            This key DEFAULTS TO TRUE in Plasma 6, so omitting it would blank the screen
-            (~5-10 min default) -- it MUST be written false explicitly (PROMPT.md #1).
-          - SuspendAndShutdown -> AutoSuspendAction=0 (NoAction): never idle-suspend on
-            AC. Unlike the old schema, omitting this does NOT mean "never" -- the Plasma-6
-            default idle-suspends on AC, so 0 is written explicitly (PROMPT.md #3).
-          - SuspendAndShutdown -> PowerButtonAction=8 (Shutdown): the power button does a
-            clean poweroff (PROMPT.md #2). PowerDevil block-inhibits logind's
-            handle-power-key, so in a Plasma session THIS key -- not the logind drop-in --
-            governs the button; the logind HandlePowerKey=poweroff (system.py) still
-            covers the bare console / non-Plasma case.
-          - SuspendAndShutdown -> PowerDownAction=0 (NoAction): pinned off for safety
-            (its default is the logout-prompt); matches the VM's applied config.
-        Net: "PC never sleeps", "laptop plugged in never sleeps", screen never blanks.
-
-      * Battery profile (laptop, unplugged):
-          - Display -> DimDisplayWhenIdle=false + TurnOffDisplayWhenIdle=false: do not
-            dim or blank on battery either (matches the applied VM config).
-          - SuspendAndShutdown -> AutoSuspendAction=1 (Sleep) + AutoSuspendIdleTimeoutSec
-            =900 (SECONDS): suspend-to-RAM after 15 minutes idle == "laptop unplugged
-            sleeps after 15 minutes".
-          - PowerButtonAction=8: the power button shuts down on battery too (deliberate
-            parity with AC, rather than leaving the Plasma-6 logout-prompt default).
-
-    PowerDevil auto-detects the chassis: on a battery-less PC the Battery profile is
-    never activated (there is no battery to be on), so only the AC profile ever applies
-    -> the PC never sleeps without any explicit chassis check here. On a laptop,
-    unplugging switches PowerDevil to the Battery profile (15-min suspend) and plugging
-    in switches back to the AC profile (no suspend), live.
-
-    This is the Plasma-session complement to the DE-independent logind IdleAction policy
-    (configuration/system.SLEEP_POLICY_SCRIPT), which covers the bare console / live ISO;
-    both encode the same 15-minute-on-battery / never-on-AC rule so behaviour is identical
-    whether or not Plasma is running. Shipped to the live home and /etc/skel (so installed
-    users inherit it).
-
-    Schema note (Plasma 6): on-disk headers are [<profile>][Display] and
-    [<profile>][SuspendAndShutdown] with PascalCase keys; the profile id is literally
-    AC / Battery. Verified against powerdevil 6.7.4 (PowerDevilProfileSettings.kcfg,
-    daemon/powerdevilenums.h) AND read back from the live VM's applied ~/.config/powerdevilrc."""
+def openbox_autostart_installed() -> str:
+    """The INSTALLED-system ~/.config/openbox/autostart: the shared wallpaper/xcape/menu-
+    daemon block ONLY. The Calamares OFFLINE install overwrites the live autostart (which
+    the target inherits verbatim via unpackfs) with THIS content -- dropping the two
+    live-only lines (the fixed us,il setxkbmap and the first-run Calamares launch) so the
+    installed system uses its chosen region keyboard and never re-opens the installer. It
+    is written to BOTH /home/main and /etc/skel by the shellprocess cleanup step. Emitted
+    to a staging path on the ISO (installer_autostart.sh) so the shellprocess can `cp` it
+    into place inside the target chroot without needing any `$`-expansion."""
     return f"""\
-[AC][Display]
-TurnOffDisplayWhenIdle=false
+#!/bin/sh
+# ~/.config/openbox/autostart -- Az'arch OpenBox INSTALLED session startup (panel-less).
+# Written by the Calamares install (calamares_shellprocess.py) over the live autostart:
+# the shared wallpaper/xcape/menu-daemon block only -- NO fixed us,il keyboard (the
+# region keyboard in /etc/X11/xorg.conf.d governs) and NO first-run installer launch.
 
-[AC][SuspendAndShutdown]
-AutoSuspendAction={_POWERDEVIL_NO_ACTION}
-PowerButtonAction={_POWERDEVIL_SHUTDOWN}
-PowerDownAction={_POWERDEVIL_NO_ACTION}
-
-[Battery][Display]
-DimDisplayWhenIdle=false
-TurnOffDisplayWhenIdle=false
-
-[Battery][SuspendAndShutdown]
-AutoSuspendAction={_POWERDEVIL_SLEEP}
-AutoSuspendIdleTimeoutSec={POWERDEVIL_BATTERY_IDLE_SECONDS}
-PowerButtonAction={_POWERDEVIL_SHUTDOWN}
-PowerDownAction={_POWERDEVIL_NO_ACTION}
+{_openbox_autostart_common()}
 """
 
 
-# --- 3g-bis. ~/.config/powermanagementprofilesrc (migration-done flag only) --
-def powermanagement_migration_flag() -> str:
-    """Ship `powermanagementprofilesrc` containing ONLY the Plasma-5 -> 6
-    migration-done flag, so PowerDevil's one-shot migrator never runs on first boot.
+# Where the "installed" autostart is staged on the ISO so the Calamares shellprocess can
+# copy it over the target's inherited live autostart (home + skel) inside the chroot.
+INSTALLED_AUTOSTART_STAGING_PATH = "/usr/local/share/azarch/openbox-autostart-installed"
 
-    Why this is needed as a BELT for powerdevilrc: PowerDevil calls migrateProfilesConfig()
-    on every daemon start; it is gated solely by `if migrationGroup.hasKey("Migrated
-    ProfilesToPlasma6") return;`. If that flag is ABSENT on a fresh install, the migrator
-    runs -- and although with no old profile groups it writes nothing (so it would not, in
-    fact, clobber our hand-written powerdevilrc), shipping the flag makes the outcome
-    independent of that reasoning and of any future stray old-schema file: the migrator is
-    a guaranteed no-op. Value string is exactly what a migrated system records
-    (verified on the live VM: `[Migration] MigratedProfilesToPlasma6=powerdevilrc`).
 
-    This file therefore carries NO power policy at all (that lives in powerdevilrc); it is
-    purely the migration guard. Shipped to the live home and /etc/skel."""
+def openbox_environment() -> str:
+    """~/.config/openbox/environment -- sourced by openbox-session before autostart.
+
+    A minimal, stable place for session env vars. We re-assert XDG_CURRENT_DESKTOP
+    (also set in ~/.xinitrc) so it is correct even if OpenBox is started by some other
+    path than our startx, and keep the XDG base dirs defined."""
     return """\
-[Migration]
-MigratedProfilesToPlasma6=powerdevilrc
+# ~/.config/openbox/environment -- sourced by openbox-session before autostart.
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+export XDG_CURRENT_DESKTOP=openbox
 """
 
 
-# --- 3h. ~/.config/kscreenlockerrc (disable screen auto-lock) ---------------
-def kscreenlockerrc() -> str:
-    """Disable KDE's automatic screen locker.
-
-    This is a DIFFERENT subsystem from PowerDevil and was the ACTUAL cause of the
-    screen "going to sleep" (PROMPT.md #4): the KScreenLocker daemon defaults to
-    auto-lock ON at 5 minutes, and locking BLANKS the display -- so even with
-    PowerDevil's screen-off disabled and idle-suspend off, the screen still went black
-    after ~5 min. It is NOT a real suspend (proven via journalctl: zero
-    "Entering sleep"/"Starting Suspend" events); it is the locker blanking the screen.
-    KScreenLocker reads ~/.config/kscreenlockerrc; when that file is ABSENT, KDE uses
-    its built-in default (auto-lock ON, 5 min), so the fix is to SHIP the file with
-    auto-lock turned off.
-
-    Keys (KScreenLocker [Daemon] group):
-      * Autolock=false     -- do not auto-lock the session at all.
-      * Timeout=0          -- belt: zero-minute timeout (no idle lock) even if Autolock
-                              were re-enabled.
-      * LockOnResume=false -- do not force a lock screen after resume/wake.
-
-    Three independent KDE subsystems can black the screen -- PowerDevil "Turn off
-    screen" (Display), PowerDevil idle-suspend (SuspendAndShutdown), and this screen
-    LOCKER -- and fixing one does not fix the others; all three are handled (powerdevilrc
-    + this file). Shipped to the live home and /etc/skel so live/default users inherit
-    a lock-free desktop."""
-    return """\
-[Daemon]
-Autolock=false
-LockOnResume=false
-Timeout=0
-"""
-
-
-# --- 3j. ~/.config/klaunchrc (no launch-feedback "loading" animation) -------
-def klaunchrc() -> str:
-    """Disable launch feedback so clicking the Az'arch menu icon (or any launcher)
-    shows NO bouncing/busy "loading" cursor and no taskbar launch indicator -- the
-    menu just appears. KDE's klauncher reads ~/.config/klaunchrc; when ABSENT it
-    defaults launch feedback ON. Shipped to the live home and /etc/skel."""
-    return """\
-[BusyCursorSettings]
-Bouncing=false
-Enabled=false
-
-[FeedbackStyle]
-BusyCursor=false
-TaskbarButton=false
-"""
-
-
-# --- 3k. ~/.config/kwinrc (no window open/close animation -> instant menu) --
-def kwinrc() -> str:
-    """Disable KWin's window open/close animations so the Az'arch menu (and every
-    window) APPEARS IMMEDIATELY -- no glide/scale/fade in or out. KWin reads
-    ~/.config/kwinrc; the [Plugins] *Enabled keys switch the desktop-effect plugins
-    off. Shipped to the live home and /etc/skel.
-
-    WHY FIVE KEYS, NOT THREE (the menu pop-in fix): our Az'arch menu is an
-    override-redirect Tk window, and KWin classifies override-redirect windows as
-    POPUPS, not normal windows. The normal-window open/close animations (fade,
-    glide, scale) therefore never touched it -- its fade/slide came from the
-    dedicated POPUP effects instead: `fadingpopups` (the fade) and `slidingpopups`
-    (the slide). So disabling only fade/glide/scale left the menu still fading in.
-    Verified on the live Hypervisor: with the popup effects loaded the menu ramps
-    up over several frames (a fade); with fadingpopups + slidingpopups BOTH
-    disabled it is at full opacity on the very first frame (a pop-in), and qdbus
-    reports zero popup effects loaded. Hence both popup keys below, in addition to
-    the three normal-window keys."""
-    return """\
-[Plugins]
-fadeEnabled=false
-fadingpopupsEnabled=false
-glideEnabled=false
-scaleEnabled=false
-slidingpopupsEnabled=false
-"""
-
-
-# --- 4. ~/.config/ksplashrc -------------------------------------------------
-def ksplashrc() -> str:
-    """Disable the Plasma startup splash (KSplash). `startplasma-x11` would
-    otherwise show a full-screen splash while the session loads; turning it off
-    means the only thing painted between the wallpaper root-pixmap (set in
-    ~/.xinitrc) and the live desktop is the wallpaper itself -- no splash frame,
-    no flash. Shipped to the live home and /etc/skel."""
-    return """\
-[KSplash]
-Engine=none
-Theme=None
-"""
-
-
-# --- 5. ~/.config/autostart/azarch-install.desktop --------------------------
-def autostart_install_desktop() -> str:
-    """Plasma autostart entry that opens the Calamares installer ONCE at session
-    login, Manjaro-style, via the privileged wrapper (Calamares must run as root;
-    see INSTALL_WRAPPER_PATH). Plasma reads ~/.config/autostart/*.desktop and
-    runs each `Exec=` after the session is up.
-
-    X-KDE-autostart-phase=2 delays it until the desktop/panel are ready so the
-    installer window has a session to map into. It is a normal .desktop launcher,
-    so it does not depend on the wrapper's exec bit the way a sourced sh autostart
-    did."""
-    return """\
-[Desktop Entry]
-Type=Application
-Name=Az'arch Linux Installer
-Comment=Launch the Az'arch Linux installer
-Exec=""" + INSTALL_WRAPPER_PATH + """
-Icon=""" + INSTALLER_ICON_NAME + """
-Terminal=false
-X-KDE-autostart-phase=2
-X-GNOME-Autostart-enabled=true
-NoDisplay=false
-"""
-
-
-def az_menu_daemon_autostart_desktop() -> str:
-    """Plasma autostart entry that starts the Az'arch application-menu DAEMON at
-    login, so the resident menu is already built (and hidden) before the first
-    panel-icon click -- making even that first open instant. Content is owned by
-    configuration/application_menu.py (single source of truth for the menu); this
-    module just places it in ~/.config/autostart (and mirrors it into /etc/skel for
-    the installed user), the same way the installer autostart entry is handled."""
-    return _app_menu.daemon_autostart_desktop()
-
-
+# --- 6. Menu daemon usage seed (single source of truth in application_menu.py) --
 def az_menu_usage_seed_json() -> str:
-    """Seed launch-frequency store for OUR menu, fixing the STARTING top of the
-    list to System Settings, LibreWolf, kitty, Dolphin on a fresh profile (the menu
-    otherwise sorts alphabetically until the user has opened things). Content is
-    owned by configuration/application_menu.py; this module just places it under
-    ~/.local/share and mirrors it into /etc/skel for the installed user. It stays
-    dynamic: the daemon re-sorts as apps are opened."""
+    """Seed launch-frequency store for OUR menu, fixing the STARTING top of the list on
+    a fresh profile (the menu otherwise sorts alphabetically until the user has opened
+    things). Content is owned by configuration/application_menu.py; this module just
+    places it under ~/.local/share and mirrors it into /etc/skel. It stays dynamic: the
+    daemon re-sorts as apps are opened."""
     return _app_menu.usage_seed_json()
 
 
-def az_menu_shortcut_desktop() -> str:
-    """The dedicated .desktop that binds the Super/Meta key to OUR menu (content is
-    owned by configuration/application_menu.py). Placed by the PLAN below into the
-    SYSTEM apps dir /usr/share/applications (root-owned, always scanned by KSycoca) so
-    kglobalacceld indexes + grabs Meta for it at login; paired with
-    kglobalshortcutsrc() freeing Meta from the removed Kickoff launcher."""
-    return _app_menu.menu_shortcut_desktop()
-
-
-# --- 6. /usr/share/applications/azarch-install.desktop ----------------------
+# --- 7. /usr/share/applications/azarch-install.desktop ----------------------
 def install_menu_desktop() -> str:
-    """A launcher in the application menu (Kickoff) so the installer can be
-    re-opened after it is closed, sharing the same privileged wrapper. Lands in
-    /usr/share/applications (system-wide), so it is not a per-user file."""
+    """A launcher in the application menu so the installer can be re-opened after it is
+    closed, sharing the same privileged wrapper. Lands in /usr/share/applications
+    (system-wide), so it is not a per-user file and is picked up by the Az'arch menu's
+    application scan."""
     return """\
 [Desktop Entry]
 Type=Application
@@ -962,28 +518,16 @@ Keywords=install;calamares;setup;
 """
 
 
-# --- 6b. ~/Desktop/azarch-install.desktop (live-session Desktop launcher) ----
+# --- 7b. ~/Desktop/azarch-install.desktop (live-session Desktop launcher) ----
 def desktop_installer_launcher() -> str:
-    """A double-clickable "Az'arch Linux Installer" launcher that sits ON the live-session
-    Desktop, so the installer is one obvious icon away even after the autostart
-    window is closed. Uses the same privileged wrapper and the "Az'" app icon.
+    """A double-clickable "Az'arch Linux Installer" launcher that sits ON the live
+    Desktop, so the installer is one obvious icon away even after the autostart window
+    is closed. Uses the same privileged wrapper and the "Az'" app icon.
 
-    TRUST (no warning badge, no launch prompt): KDE Plasma paints an
-    "emblem-important" WARNING BADGE over a Desktop .desktop launcher -- and prompts
-    before running it -- whenever KDesktopFile::isAuthorizedDesktopFile() is false,
-    which for a user-owned Exec= launcher means "not executable". The badge is what
-    the user saw ("weird warning icon that disappears once you open the installer" --
-    it vanishes because the first launch marks the file trusted). The launcher must
-    therefore ship EXECUTABLE. Two things are required and BOTH matter:
-      * PLAN mode 0o755 (below), and -- crucially --
-      * an /etc/skel + /home/main FILE_PERMISSIONS pin in configuration/profile.py,
-        because archiso NORMALIZES overlay modes to 0644 in the squashfs unless a
-        path is pinned there. The 0o755 in PLAN alone is silently downgraded to 0644
-        by mkarchiso (the exact same gotcha documented for /usr/local/bin/azarch-
-        install), which is why the badge appeared even though PLAN said 0o755.
-    (KDE reads NO `user.xdg.trusted` xattr -- that is a GNOME concept; the exec bit /
-    root ownership is the only trust signal. The launcher is generated by us on the
-    ISO, not downloaded, so shipping it pre-trusted is safe.)"""
+    Ships EXECUTABLE (PLAN mode 0o755 + a profile.py FILE_PERMISSIONS pin) so any file
+    manager that honours the exec bit runs it without a "not trusted" prompt -- archiso
+    normalizes overlay modes to 0644 in the squashfs unless a path is pinned (the same
+    gotcha documented for /usr/local/bin/azarch-install), so the pin is required."""
     return """\
 [Desktop Entry]
 Type=Application
@@ -998,39 +542,38 @@ Keywords=install;calamares;setup;
 """
 
 
-# --- 7. /usr/local/bin/azarch (guest-side CLI) ------------------------------
+# --- 8. /usr/local/bin/azarch (guest-side CLI) ------------------------------
 AZARCH_BIN_PATH = "/usr/local/bin/azarch"
 
 
 def azarch_sh() -> str:
-    """Guest-side CLI shipped on the live ISO (and the installed system via
-    /etc/skel or the installer copy). Subcommands:
+    """Guest-side CLI shipped on the live ISO (and the installed system via /etc/skel
+    or the installer copy). Subcommands:
 
     azarch --sshd-hypervisor
-      Installs the host's public key from ~/shared/authorized_keys (staged
-      there by 'hypervisor install') into ~/.ssh/authorized_keys, then enables
-      and starts sshd. Safe to run more than once. (The subcommand is named
-      --sshd-hypervisor because it wires the guest sshd up for the hypervisor's
-      forwarded host->guest SSH port; the host side is hypervisor.cfg's
-      sshd_hypervisor toggle.)
+      Installs the host's public key from ~/shared/authorized_keys (staged there by
+      'hypervisor install') into ~/.ssh/authorized_keys, then enables and starts sshd.
+      Safe to run more than once. (The subcommand is named --sshd-hypervisor because it
+      wires the guest sshd up for the hypervisor's forwarded host->guest SSH port; the
+      host side is hypervisor.cfg's sshd_hypervisor toggle.)
 
     azarch --resolve-region / --resolve-date-time / --resolve-language
-      The ONLY things that ping an external server to geolocate the machine and
-      update its region settings (everything else in Az'arch is static/user-chosen
-      -- the installer and boot never auto-resolve). Each presents a list of 5
-      SHUFFLED IP-geolocation servers; the user picks one, it is queried for the
-      country code + timezone, and the system is updated:
+      The ONLY things that ping an external server to geolocate the machine and update
+      its region settings (everything else in Az'arch is static/user-chosen -- the
+      installer and boot never auto-resolve). Each presents a list of 5 SHUFFLED
+      IP-geolocation servers; the user picks one, it is queried for the country code +
+      timezone, and the system is updated:
         --resolve-date-time  set the timezone to match the IP.
         --resolve-language   set the language to English + the region's language
-                             (English ONLY if the region is English-speaking), i.e.
-                             a second keyboard layout with Alt+Shift + the locale.
+                             (English ONLY if the region is English-speaking), i.e. a
+                             second keyboard layout with Alt+Shift + the locale.
         --resolve-region     do both.
       The country -> (locale, keyboard layout) map is embedded from
       configuration/locale.RESOLVER_COUNTRY_TABLE (the single source of truth).
     """
-    # Embed the resolver's country table (CC|locale|layout|keymap|english) so the
-    # shell can map an IP-geolocated country onto a locale + keyboard layout without
-    # any Python at runtime. Single source of truth: configuration/locale.
+    # Embed the resolver's country table (CC|locale|layout|keymap|english) so the shell
+    # can map an IP-geolocated country onto a locale + keyboard layout without any
+    # Python at runtime. Single source of truth: configuration/locale.
     from .locale import resolver_country_table_sh  # noqa: E402  (kept next to its user)
 
     country_table = resolver_country_table_sh()
@@ -1153,10 +696,9 @@ azarch_apply_language() {{
         english=$(printf '%s' "$row" | cut -d'|' -f5)
     fi
 
-    # Enable + generate the needed locales (English always; the region locale too
-    # when non-English). LANG stays English (en_US) -- only the region format locale
-    # (LC_*) follows the country, matching the installer's "English UI + region
-    # numbers/dates" behaviour.
+    # Enable + generate the needed locales (English always; the region locale too when
+    # non-English). LANG stays English (en_US) -- only the region format locale (LC_*)
+    # follows the country, matching the installer's "English UI + region numbers/dates".
     sudo sed -i 's/^#\\s*en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen 2>/dev/null || true
     if [ "$english" = "0" ]; then
         sudo sed -i "s/^#\\s*${{loc}} UTF-8/${{loc}} UTF-8/" /etc/locale.gen 2>/dev/null || true
@@ -1174,16 +716,19 @@ azarch_apply_language() {{
         fi
     }} | sudo tee /etc/locale.conf >/dev/null
 
-    # Keyboard: English ("us") first/active; the region layout as a switchable
-    # SECOND (Alt+Shift) when non-English. English-speaking -> "us" only.
+    # Keyboard: English ("us") first/active; the region layout as a switchable SECOND
+    # (Alt+Shift) when non-English. English-speaking -> "us" only. Written to the X11
+    # config AND applied live via setxkbmap (the session runs OpenBox, no Plasma KCM).
     if [ "$english" = "0" ] && [ "$layout" != "us" ]; then
         xkb_layout="us,$layout"
         xkb_opts='    Option "XkbOptions" "grp:alt_shift_toggle"'
         vconsole_map="$keymap"
+        live_layout="us,$layout"
     else
         xkb_layout="us"
         xkb_opts=""
         vconsole_map="us"
+        live_layout="us"
     fi
     sudo mkdir -p /etc/X11/xorg.conf.d
     {{
@@ -1196,13 +741,13 @@ azarch_apply_language() {{
     }} | sudo tee /etc/X11/xorg.conf.d/00-keyboard.conf >/dev/null
     printf 'KEYMAP=%s\\n' "$vconsole_map" | sudo tee /etc/vconsole.conf >/dev/null
 
-    # Apply the keyboard to the LIVE X11 session too (so it takes effect now, not
-    # just after re-login), when an X server + setxkbmap are available.
+    # Apply the keyboard to the LIVE X11 session too (so it takes effect now, not just
+    # after re-login), when an X server + setxkbmap are available.
     if [ -n "${{DISPLAY:-}}" ] && command -v setxkbmap >/dev/null 2>&1; then
-        if [ "$xkb_layout" = "us" ]; then
+        if [ "$live_layout" = "us" ]; then
             setxkbmap -layout us 2>/dev/null || true
         else
-            setxkbmap -layout "$xkb_layout" -option grp:alt_shift_toggle 2>/dev/null || true
+            setxkbmap -layout "$live_layout" -option grp:alt_shift_toggle 2>/dev/null || true
         fi
     fi
 
@@ -1218,12 +763,12 @@ cmd="${{1:-}}"
 case "$cmd" in
     --sshd-hypervisor)
         # Resolve the REAL login user, not whoever the shell says. The documented
-        # invocation is 'sudo azarch --sshd-hypervisor', under which $HOME is /root and $USER
-        # is root -- so keying off $HOME would stage the pubkey into /root/.ssh and
-        # the 'main' login (whose sshd reads /home/main/.ssh) would still be locked
-        # out. $SUDO_USER is the invoking user under sudo; fall back to the current
-        # user when run without sudo. Refuse a bare-root target: there is no home
-        # pubkey login for root here (blank password, PermitRootLogin prohibit-pw).
+        # invocation is 'sudo azarch --sshd-hypervisor', under which $HOME is /root and
+        # $USER is root -- so keying off $HOME would stage the pubkey into /root/.ssh and
+        # the 'main' login (whose sshd reads /home/main/.ssh) would still be locked out.
+        # $SUDO_USER is the invoking user under sudo; fall back to the current user when
+        # run without sudo. Refuse a bare-root target: there is no home pubkey login for
+        # root here (blank password, PermitRootLogin prohibit-pw).
         TARGET_USER="${{SUDO_USER:-$(id -un)}}"
         if [ "$TARGET_USER" = "root" ]; then
             printf 'azarch --sshd-hypervisor: run as a normal user via sudo (got root); cannot stage a login key for root\\n' >&2
@@ -1255,8 +800,8 @@ case "$cmd" in
         printf 'Installed pubkey -> %s/.ssh/authorized_keys\\n' "$TARGET_HOME"
         sudo ssh-keygen -A
         # setup-pkgs.sh sets 'ufw default reject incoming', so the forwarded
-        # host->guest :22 connection is dropped unless we open it here. Do this
-        # before starting sshd so the port is reachable the moment it listens.
+        # host->guest :22 connection is dropped unless we open it here. Do this before
+        # starting sshd so the port is reachable the moment it listens.
         sudo ufw allow ssh
         sudo systemctl enable --now sshd
         printf 'sshd enabled and started -- ssh in as %s.\\n' "$TARGET_USER"
@@ -1301,70 +846,63 @@ esac
 """
 
 
-# --- 8. /usr/local/bin/azarch-install (privileged Calamares launcher) -------
+# --- 9. /usr/local/bin/azarch-install (privileged Calamares launcher) -------
 def install_wrapper_sh() -> str:
-    """The single privileged launch path for Calamares, used by both the Plasma
-    autostart entry and the application-menu launcher. On the live medium `main`
-    has passwordless sudo, so `sudo -E calamares` is the correct, dependency-free
-    way to get root for the GUI installer. Plasma DOES run polkit-kde-agent (so
-    pkexec would also work), but keeping `sudo -E` avoids depending on the agent
-    being up before the autostart phase fires and matches the prior behavior.
+    """The single privileged launch path for Calamares, used by both the OpenBox
+    autostart and the menu/root-menu launchers. On the live medium `main` has
+    passwordless sudo, so `sudo -E calamares` is the correct, dependency-free way to
+    get root for the GUI installer.
 
-    -E preserves the X env (DISPLAY, XAUTHORITY, XDG_*) so the root-owned
-    Calamares Qt process can connect to `main`'s X server.
+    -E preserves the X env (DISPLAY, XAUTHORITY, XDG_*) so the root-owned Calamares Qt
+    process can connect to `main`'s X server.
 
     We deliberately do NOT pass `-c /etc/calamares`. Despite its name, `-c` is a
-    testing-only flag that overrides Calamares' *application data* directory, not
-    just the configuration tree: once set, Calamares looks for qml/, branding/ and
+    testing-only flag that overrides Calamares' *application data* directory, not just
+    the configuration tree: once set, Calamares looks for qml/, branding/ and
     settings.conf ONLY under that dir and skips the normal /usr/share/calamares
-    fallback. Our QML ships at /usr/share/calamares/qml (there is no
-    /etc/calamares/qml), so `-c /etc/calamares` made Calamares die at startup with
-    "FATAL: explicitly configured application data directory is missing qml/".
-    With no `-c`, Calamares reads /etc/calamares/settings.conf and branding by
-    default (that IS the sysconfdir it checks first) and finds QML under
-    /usr/share, so the installer launches correctly."""
+    fallback. Our QML ships at /usr/share/calamares/qml (there is no /etc/calamares/qml),
+    so `-c /etc/calamares` made Calamares die at startup with "FATAL: explicitly
+    configured application data directory is missing qml/". With no `-c`, Calamares
+    reads /etc/calamares/settings.conf and branding by default (that IS the sysconfdir
+    it checks first) and finds QML under /usr/share, so the installer launches."""
     return """\
 #!/bin/sh
 # azarch-install -- privileged Calamares launcher for the live session.
 # `main` has passwordless sudo on the live medium, so this needs no polkit agent.
 #
-# XDG_RUNTIME_DIR is unset before elevating: `sudo -E` would otherwise pass
-# main's /run/user/1000 through to the root Qt process, which then logs a
-# "runtime directory is owned by uid 1000, not 0" warning. DISPLAY/XAUTHORITY
-# (the load-bearing X vars) are still preserved by -E, and root can read main's
-# ~/.Xauthority, so Calamares connects to the running X server fine.
+# XDG_RUNTIME_DIR is unset before elevating: `sudo -E` would otherwise pass main's
+# /run/user/1000 through to the root Qt process, which then logs a "runtime directory
+# is owned by uid 1000, not 0" warning. DISPLAY/XAUTHORITY (the load-bearing X vars)
+# are still preserved by -E, and root can read main's ~/.Xauthority, so Calamares
+# connects to the running X server fine.
 #
-# No `-c /etc/calamares`: that flag overrides the app-data dir and makes Calamares
-# look for qml/ under /etc/calamares (which does not exist), a fatal startup error.
+# No `-c /etc/calamares`: that flag overrides the app-data dir and makes Calamares look
+# for qml/ under /etc/calamares (which does not exist), a fatal startup error.
 # Calamares already reads /etc/calamares/settings.conf and branding by default.
 unset XDG_RUNTIME_DIR
 exec sudo -E calamares
 """
 
 
-# --- 9. Emit plan -----------------------------------------------------------
+# --- 10. Emit plan ----------------------------------------------------------
 # Declarative map so steps.py can iterate. Each entry: the builder function that
 # produces the content, the DESTINATION (absolute, or $HOME-relative for the live
-# `main` user), and the file MODE. `owner` records the intended chown so steps.py
-# knows which files fall under the /home/main (uid 1000, gid 998) handback.
+# `main` user), and the file MODE. `owner` records the intended chown so steps.py knows
+# which files fall under the /home/main (uid 1000, gid 998) handback.
 #
-# HOME-relative paths are given relative to /home/main so the airootfs overlay
-# lands them under airootfs/home/main/...; steps.py chowns that whole tree
-# 1000:998 after emit (as it already does for the fastfetch/first-boot payloads).
-# Absolute paths (/usr/local/bin/..., /usr/share/...) stay root-owned (0:0) --
-# do NOT chown them.
+# HOME-relative paths are given relative to /home/main so the airootfs overlay lands
+# them under airootfs/home/main/...; steps.py chowns that whole tree 1000:998 after
+# emit (as it already does for the fastfetch/first-boot payloads). Absolute paths
+# (/usr/local/bin/..., /usr/share/...) stay root-owned (0:0) -- do NOT chown them.
 
 # scripts -> 0o755, configs -> 0o644.
 _EXEC = 0o755
 _CONF = 0o644
 
-# (HOME / HOME_OWNER are defined at the top of the panel section above, before
-# their first use in the panel-icon backing paths.)
-
 # Each PLAN entry is a dict for readability in steps.py:
 #   builder: callable() -> str content
-#   dest:    absolute path in the airootfs (already resolved under /home/main
-#            for user files, so steps.py just prefixes the airootfs root)
+#   dest:    absolute path in the airootfs (already resolved under /home/main for user
+#            files, so steps.py just prefixes the airootfs root)
 #   mode:    octal file mode
 #   owner:   "home" (chown 1000:998 with the rest of /home/main) or "root"
 PLAN = [
@@ -1375,157 +913,62 @@ PLAN = [
         "owner": "home",
     },
     {
-        "builder": plasma_appletsrc,
-        "dest": f"{HOME}/.config/plasma-org.kde.plasma.desktop-appletsrc",
+        # OpenBox window-manager config: keybinds (Super -> menu via xcape's W-Menu),
+        # window management, root-menu binding. No panel/dock config -- the Az'arch
+        # menu is the only shell. Home-owned; mirrored into /etc/skel for installed
+        # users. rc.xml is a plain config (0644).
+        "builder": openbox_rc_xml,
+        "dest": f"{HOME}/.config/openbox/rc.xml",
         "mode": _CONF,
         "owner": "home",
     },
     {
-        # Backing .desktop for OUR org.kde.plasma.icon menu applet, at the exact
-        # localPath the appletsrc points at. Shipping this real Type=Application
-        # launcher stops the applet from baking a Type=Link/Icon=unknown wrapper --
-        # the "paper icon" half of the bug. It MUST be EXECUTABLE (0o755), not 0o644:
-        # KDE's KDesktopFile::isAuthorizedDesktopFile() treats a NON-executable
-        # Type=Application desktop file as UNTRUSTED, so the applet's KIO click path
-        # pops a modal "this desktop entry is not trusted, execute?" dialog (the
-        # "noisy error") and launches NOTHING until confirmed. The exec bit is KDE's
-        # trust signal -> no dialog, launches on click. (archiso normalizes home-file
-        # modes to 0644 in the squashfs; the FILE_PERMISSIONS pin in profile.py keeps
-        # this 0755 -- same gotcha as the ~/Desktop installer launcher.) Home-owned;
-        # mirrored into /etc/skel for installed users.
-        "builder": az_menu_plasma_icon_backing,
-        "dest": _AZ_MENU_LOCAL_PATH,
+        # OpenBox ROOT menu (right/middle click on the desktop): application menu,
+        # terminal, installer, power actions. A convenience fallback to the Az'arch
+        # menu. Home-owned; mirrored into /etc/skel.
+        "builder": openbox_menu_xml,
+        "dest": f"{HOME}/.config/openbox/menu.xml",
+        "mode": _CONF,
+        "owner": "home",
+    },
+    {
+        # OpenBox session autostart: wallpaper (feh), keyboard layouts (setxkbmap),
+        # Super key (xcape), the application-menu daemon, and the first-run installer.
+        # Sourced by openbox-session, so it must be EXECUTABLE (0o755). Home-owned;
+        # mirrored into /etc/skel. (openbox-session runs it via /bin/sh, but shipping
+        # it executable matches the shebang and is harmless.)
+        "builder": openbox_autostart,
+        "dest": f"{HOME}/.config/openbox/autostart",
         "mode": _EXEC,
         "owner": "home",
     },
     {
-        # Autostart the resident application-menu daemon at login so the menu is
-        # pre-built (and hidden) before the first panel-icon click -- the "instant
-        # open" half of the daemon design. A plain data .desktop (0o644), home-owned
-        # and mirrored into /etc/skel so a Calamares-installed user gets it too. The
-        # daemon module + launcher it drives are shipped by application_menu.emit_plan().
-        "builder": az_menu_daemon_autostart_desktop,
-        "dest": _app_menu.MENU_DAEMON_AUTOSTART_SYSTEM_PATH,
+        # OpenBox session environment (sourced before autostart): XDG base dirs +
+        # XDG_CURRENT_DESKTOP=openbox. Home-owned; mirrored into /etc/skel.
+        "builder": openbox_environment,
+        "dest": f"{HOME}/.config/openbox/environment",
         "mode": _CONF,
         "owner": "home",
     },
     {
-        # Seed OUR menu's launch-frequency store so a fresh profile opens with
-        # System Settings, LibreWolf, kitty, Dolphin at the top (it otherwise sorts
-        # alphabetically with no history). Home-owned data file (0o644), mirrored
-        # into /etc/skel so a Calamares-installed user inherits the same starting
-        # order. Fully dynamic afterwards -- the daemon re-sorts as apps are opened.
-        "builder": az_menu_usage_seed_json,
-        "dest": _app_menu.MENU_USAGE_SEED_SYSTEM_PATH,
-        "mode": _CONF,
-        "owner": "home",
-    },
-    {
-        # Bind the Super/Meta key to OUR menu: a dedicated X-KDE-Shortcuts=Meta
-        # .desktop in the SYSTEM apps dir /usr/share/applications (always-scanned by
-        # KSycoca, so kglobalacceld grabs Meta for it at login). Paired with
-        # kglobalshortcutsrc() below, which frees Meta from the removed Kickoff
-        # launcher. Root-owned (system-wide, one file for all users; carries onto the
-        # installed system via the live rootfs).
-        "builder": az_menu_shortcut_desktop,
-        "dest": _app_menu.MENU_SHORTCUT_DESKTOP_SYSTEM_PATH,
-        "mode": _CONF,
+        # The "installed" OpenBox autostart, STAGED on the ISO (root-owned system path,
+        # NOT a per-user file). The Calamares OFFLINE install copies it over the target's
+        # inherited live autostart (home + skel) so the installed system drops the two
+        # live-only lines (fixed us,il keyboard + first-run installer). Executable so the
+        # copied-into-place file is runnable by openbox-session.
+        "builder": openbox_autostart_installed,
+        "dest": INSTALLED_AUTOSTART_STAGING_PATH,
+        "mode": _EXEC,
         "owner": "root",
     },
     {
-        "builder": ksplashrc,
-        "dest": f"{HOME}/.config/ksplashrc",
-        "mode": _CONF,
-        "owner": "home",
-    },
-    {
-        "builder": plasmashellrc,
-        "dest": f"{HOME}/.config/plasmashellrc",
-        "mode": _CONF,
-        "owner": "home",
-    },
-    {
-        "builder": kdeglobals,
-        "dest": f"{HOME}/.config/kdeglobals",
-        "mode": _CONF,
-        "owner": "home",
-    },
-    {
-        # Super/Meta key -> Az'arch menu: frees Meta from the removed Kickoff
-        # launcher (plasmashell 'activate application launcher' set to none) so our
-        # menu's Meta grab is the only consumer. Paired with the shortcut .desktop
-        # above. Home-owned, mirrored into /etc/skel.
-        "builder": kglobalshortcutsrc,
-        "dest": f"{HOME}/.config/kglobalshortcutsrc",
-        "mode": _CONF,
-        "owner": "home",
-    },
-    {
-        "builder": krunnerrc,
-        "dest": f"{HOME}/.config/krunnerrc",
-        "mode": _CONF,
-        "owner": "home",
-    },
-    {
-        "builder": kxkbrc,
-        "dest": f"{HOME}/.config/kxkbrc",
-        "mode": _CONF,
-        "owner": "home",
-    },
-    {
-        # Plasma date format: day/month/year in the clock/calendar (matches system
-        # LC_TIME). The user's "modify timedate from m/d/y to d/m/y" request.
-        "builder": plasma_localerc,
-        "dest": f"{HOME}/.config/plasma-localerc",
-        "mode": _CONF,
-        "owner": "home",
-    },
-    {
-        # PowerDevil power policy (Plasma 6 `powerdevilrc` schema): never suspend or
-        # blank the screen on AC/PC, suspend after 15 min on battery (laptop unplugged),
-        # power button = Shut Down. Plasma-session complement to the logind policy.
-        "builder": powerdevilrc,
-        "dest": f"{HOME}/.config/powerdevilrc",
-        "mode": _CONF,
-        "owner": "home",
-    },
-    {
-        # Migration-done flag ONLY (no policy): stops PowerDevil's one-shot Plasma-5 ->
-        # 6 migrator from ever running on first boot, so it can never layer stale deltas
-        # onto the hand-written powerdevilrc above.
-        "builder": powermanagement_migration_flag,
-        "dest": f"{HOME}/.config/powermanagementprofilesrc",
-        "mode": _CONF,
-        "owner": "home",
-    },
-    {
-        # Disable KDE's automatic screen locker -- the ACTUAL cause of the ~5-min screen
-        # blank (a locker default, separate from PowerDevil). Without this file KDE
-        # auto-locks at 5 min and blanks the display.
-        "builder": kscreenlockerrc,
-        "dest": f"{HOME}/.config/kscreenlockerrc",
-        "mode": _CONF,
-        "owner": "home",
-    },
-    {
-        # No launch-feedback: clicking the menu icon shows no bouncing/busy cursor
-        # or taskbar "loading" indicator -- the menu just appears.
-        "builder": klaunchrc,
-        "dest": f"{HOME}/.config/klaunchrc",
-        "mode": _CONF,
-        "owner": "home",
-    },
-    {
-        # No window open/close animation: the menu (and every window) appears
-        # immediately -- no glide/scale/fade.
-        "builder": kwinrc,
-        "dest": f"{HOME}/.config/kwinrc",
-        "mode": _CONF,
-        "owner": "home",
-    },
-    {
-        "builder": autostart_install_desktop,
-        "dest": f"{HOME}/.config/autostart/azarch-install.desktop",
+        # Seed OUR menu's launch-frequency store so a fresh profile opens with System
+        # Settings, LibreWolf, kitty, Dolphin at the top (it otherwise sorts
+        # alphabetically with no history). Home-owned data file (0o644), mirrored into
+        # /etc/skel so a Calamares-installed user inherits the same starting order.
+        # Fully dynamic afterwards -- the daemon re-sorts as apps are opened.
+        "builder": az_menu_usage_seed_json,
+        "dest": _app_menu.MENU_USAGE_SEED_SYSTEM_PATH,
         "mode": _CONF,
         "owner": "home",
     },
@@ -1536,8 +979,8 @@ PLAN = [
         "owner": "root",
     },
     {
-        # The Desktop launcher must be EXECUTABLE (0o755) so Plasma launches it on
-        # double-click without the untrusted-.desktop security prompt.
+        # The Desktop launcher must be EXECUTABLE (0o755) so a file manager launches it
+        # on double-click without an untrusted-.desktop prompt.
         "builder": desktop_installer_launcher,
         "dest": f"{HOME}/Desktop/azarch-install.desktop",
         "mode": _EXEC,
@@ -1559,16 +1002,16 @@ PLAN = [
 
 # The .bash_profile snippet is handled separately from PLAN because it is not a
 # whole-file replacement conceptually (it is the login bootstrap). steps.py still
-# writes it as the full file content of /home/main/.bash_profile (there is no
-# stock one in the airootfs to preserve), mode 0644, owner "home".
+# writes it as the full file content of /home/main/.bash_profile (there is no stock one
+# in the airootfs to preserve), mode 0644, owner "home".
 BASH_PROFILE_DEST = f"{HOME}/.bash_profile"
 
 
 def emit_plan() -> list[dict]:
-    """Return the PLAN list (builder/dest/mode/owner) plus the .bash_profile
-    entry, so steps.py can iterate a single sequence. Kept as a function (not
-    just the module constant) to mirror the builder-function style of the other
-    configuration modules and to keep the .bash_profile special-case in one place."""
+    """Return the PLAN list (builder/dest/mode/owner) plus the .bash_profile entry, so
+    steps.py can iterate a single sequence. Kept as a function (not just the module
+    constant) to mirror the builder-function style of the other configuration modules
+    and to keep the .bash_profile special-case in one place."""
     return PLAN + [
         {
             "builder": bash_profile_startx,

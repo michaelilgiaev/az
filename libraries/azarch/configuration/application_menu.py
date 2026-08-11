@@ -1,39 +1,34 @@
 """The Az'arch application menu -- baked into the live/installed system.
 
-This is OUR application menu, and it has REPLACED Plasma's Kickoff entirely: a
-Python (Tkinter) program that is the panel's LEFTMOST icon (Kickoff's old slot)
-and the target of the Super/Meta key -- a borderless, Breeze-styled launcher
-(search, launch-frequency ordering, pin, power actions). Kickoff, kmenuedit and
-krunner are removed from the image (see configuration/desktop.py +
-configuration/system.CUSTOMIZE_AIROOTFS).
+This is OUR application menu, and it is the WHOLE shell: KDE Plasma was removed and
+the desktop is OpenBox with no panel, so this menu -- a borderless, Breeze-styled
+Tkinter launcher CENTERED on the screen (search, launch-frequency ordering, power
+actions) -- is the only launcher surface. It is opened by the Super key (via xcape +
+the OpenBox rc.xml keybind) and by the OpenBox root menu (see configuration/desktop.py).
 
 It is a multi-module package: menu.py orchestrates and imports the siblings
-(widgets/theme/apps/icons/usage/actions) as flat modules, so the whole set MUST be
+(widgets/theme/apps/icons/usage/actions/...) as flat modules, so the whole set MUST be
 emitted together (see MENU_MODULES) or menu.py fails to import at launch.
 
 Layers:
   * SOURCE tree -- libraries/packages/application_menu/ (paths.APPLICATION_MENU_DIR):
       libraries/menu.py                    the Tkinter menu orchestrator
       libraries/{widgets,theme,apps,icons,usage,actions}.py  its sibling modules
+      libraries/daemon.py                  the resident daemon (built once, instant open)
       libraries/test_menu.py               the menu's own test suite (rides along)
-      libraries/azarch-application-menu.sh  the launcher the panel icon runs
-      libraries/azarch-application-menu.desktop  what the icon points at
-      libraries/panel_icon.py              add/remove the panel applet (for the
-                                           standalone install.sh; NOT needed at
-                                           build time -- the applet is baked into
-                                           configuration/desktop.plasma_appletsrc)
+      libraries/azarch-application-menu.sh  the launcher (signals the daemon)
+      libraries/azarch-application-menu.desktop  a standard app-launcher entry
+      libraries/panel_icon.py              LEGACY Plasma-applet (un)installer, kept for
+                                           the standalone install.sh only -- NOT used by
+                                           the OpenBox build (there is no panel)
       install.sh / uninstall.sh            standalone (post-install) (un)installer
-  * BUILD wiring -- this module copies ALL the menu modules plus the launcher and
-    its .desktop to fixed system paths in the airootfs, and configuration/desktop.py
-    bakes an org.kde.plasma.icon applet (pointing at MENU_DESKTOP_SYSTEM_PATH) into
-    the panel between Kickoff and the task manager.
+  * BUILD wiring -- this module copies ALL the menu modules plus the launcher and its
+    .desktop to fixed system paths in the airootfs. The OpenBox session (configuration/
+    desktop.py) starts the daemon from its autostart and binds the Super key + root menu
+    to the launcher; there is no panel applet to bake anymore.
 
-The panel icon therefore appears by DEFAULT on a fresh profile (no post-install
-step needed); the standalone install.sh/uninstall.sh remain for adding/removing
-the menu on an already-running system.
-
-No pip dependencies: Tkinter is in the Python standard library (backed by the
-`tk` package, which is in the manifest). See requirements.txt in the source tree.
+No pip dependencies: Tkinter is in the Python standard library (backed by the `tk`
+package, which is in the manifest). See requirements.txt in the source tree.
 """
 
 from __future__ import annotations
@@ -56,64 +51,43 @@ MENU_DESKTOP_SYSTEM_PATH = (
     "/usr/local/share/applications/azarch-application-menu.desktop"
 )
 
-# --- Super/Meta key global shortcut -----------------------------------------
-# Pressing the Super (Meta) key alone OPENS OUR MENU (it used to open Kickoff,
-# which is now removed). On Plasma 6.1+ a bare modifier key is a first-class
-# kglobalaccel shortcut (KWin's old ModifierOnlyShortcuts is dead code), and the
-# file-only way to bind one is a .desktop carrying X-KDE-Shortcuts that lands in an
-# XDG applications dir kglobalacceld's KApplicationTrader query scans. At its
-# startup (a fresh login builds sycoca then starts the daemon) it registers a
-# "_launch" action for that .desktop and grabs the key -- verified live on the
-# Hypervisor (Plasma 6.7.4): the component registered and invoking _launch ran the
-# launcher. See menu_shortcut_desktop().
+# --- Super/Meta key -> menu (handled by OpenBox, not KDE) --------------------
+# Pressing the Super key alone OPENS THIS MENU. Under OpenBox that is wired WITHOUT any
+# KDE machinery: xcape turns a lone Super_L tap into the chord Super_L+Menu and the
+# OpenBox rc.xml binds W-Menu to MENU_LAUNCHER_SYSTEM_PATH (see configuration/desktop.py
+# openbox_rc_xml + openbox_autostart). There is therefore NO X-KDE-Shortcuts .desktop
+# and NO kglobalaccel anymore -- the old KDE global-shortcut file was removed.
 #
-# It is a SEPARATE, dedicated file from the panel-icon .desktop (distinct id) so the
-# shortcut concern never entangles the org.kde.plasma.icon applet's backing/url copy.
-# It lands in the SYSTEM apps dir /usr/share/applications (root-owned): a system
-# XDG_DATA_DIRS location that KSycoca always scans first -- more robust than a
-# per-user ~/.local/share copy (no dependence on the home dir being indexed), one
-# file for every user, and it carries onto the Calamares-installed system via the
-# live-medium rootfs with no extra step. Verified live on the Hypervisor: the same
-# .desktop registered a "_launch" Meta grab and a physical Super press opened the
-# menu (once the Kickoff launcher's active bare-Meta binding was freed).
-MENU_SHORTCUT_KEY = "Meta"  # the bare Super key
-MENU_SHORTCUT_DESKTOP_ID = "azarch-application-menu-shortcut.desktop"
-MENU_SHORTCUT_DESKTOP_SYSTEM_PATH = (
-    f"/usr/share/applications/{MENU_SHORTCUT_DESKTOP_ID}"
-)
-# Per-user autostart entry that starts the resident daemon at login, so even the
-# FIRST panel-icon click is instant. Emitted by configuration/desktop.py (which
-# owns the per-user files + /etc/skel mirroring); content lives here.
-MENU_DAEMON_AUTOSTART_SYSTEM_PATH = (
-    "/home/main/.config/autostart/azarch-application-menu-daemon.desktop"
-)
+# The daemon that keeps the menu resident (instant open) is likewise started from the
+# OpenBox autostart (configuration/desktop.openbox_autostart), not from a KDE autostart
+# .desktop.
 
-# Per-user seed for the launch-frequency store (usage.py's UsageStore file). The
-# menu orders apps most-launched first; on a FRESH profile there is no history, so
-# without this everything would sort alphabetically. Seeding a few counts fixes the
-# STARTING top of the list to the apps a new user wants first -- System Settings,
-# LibreWolf, kitty, Dolphin (descending) -- while leaving it fully dynamic: as the
-# user opens apps the WindowWatcher bumps these counts and the order re-sorts, so
-# the seed only decides the initial arrangement. Keyed by .desktop id (usage.py's
-# key); counts are spaced so the intended order is unambiguous. Emitted by
-# configuration/desktop.py as a home-owned file (mirrored into /etc/skel).
+# Per-user seed for the launch-frequency store (usage.py's UsageStore file). The menu
+# orders apps most-launched first; on a FRESH profile there is no history, so without
+# this everything would sort alphabetically. Seeding a few counts fixes the STARTING top
+# of the list to the apps a new user wants first -- LibreWolf, kitty, Dolphin, GIMP
+# (descending) -- while leaving it fully dynamic: as the user opens apps the
+# WindowWatcher bumps these counts and the order re-sorts, so the seed only decides the
+# initial arrangement. Keyed by .desktop id (usage.py's key); counts are spaced so the
+# intended order is unambiguous. Emitted by configuration/desktop.py as a home-owned
+# file (mirrored into /etc/skel).
 MENU_USAGE_SEED_SYSTEM_PATH = (
     "/home/main/.local/share/azarch-application-menu/usage.json"
 )
 
-# desktop_id -> starting launch count. Descending so order_key (-count, name) puts
-# them in exactly this order at the top of a fresh menu; the tail (everything else,
-# count 0) stays alphabetical.
+# desktop_id -> starting launch count. Descending so order_key (-count, name) puts them
+# in exactly this order at the top of a fresh menu; the tail (everything else, count 0)
+# stays alphabetical. KDE's "System Settings" (systemsettings.desktop) is gone with
+# Plasma, so the seed now leads with the shipped apps a new user actually reaches for.
 MENU_USAGE_SEED: dict[str, int] = {
-    "systemsettings.desktop": 4,     # System Settings
-    "librewolf.desktop": 3,          # LibreWolf
-    "kitty.desktop": 2,              # kitty
-    "org.kde.dolphin.desktop": 1,   # Dolphin
+    "librewolf.desktop": 4,          # LibreWolf (browser)
+    "kitty.desktop": 3,              # kitty (terminal)
+    "org.kde.dolphin.desktop": 2,   # Dolphin (file manager)
+    "gimp.desktop": 1,               # GIMP
 }
 
-# The panel icon glyph: the SAME "application-menu" hamburger Plasma's Kickoff
-# uses, so our icon is visually identical to it. Single source of truth;
-# configuration/desktop.py imports it.
+# The menu launcher's icon glyph: the standard "application-menu" hamburger, so the
+# .desktop entry and any launcher show a recognizable menu icon. Single source of truth.
 MENU_ICON_NAME = "application-menu"
 
 
@@ -144,7 +118,6 @@ MENU_MODULES = [
 # Relative paths under paths.APPLICATION_MENU_DIR for the non-module runtime files.
 _SRC_LAUNCHER = Path("libraries") / "azarch-application-menu.sh"
 _SRC_DESKTOP = Path("libraries") / "azarch-application-menu.desktop"
-_SRC_DAEMON_DESKTOP = Path("libraries") / "azarch-application-menu-daemon.desktop"
 
 
 def _read_source(rel: Path) -> str:
@@ -171,81 +144,35 @@ def daemon_py() -> str:
 def menu_package_source() -> str:
     """Every menu module concatenated, for whole-package assertions.
 
-    menu.py was split into sibling modules (theme/widgets/...), so a symbol such as
-    the HighlightBar or the #3daee9 accent may live in widgets.py or theme.py rather
-    than menu.py. Tests that pin a property of the MENU (not of one file) read this.
+    menu.py was split into sibling modules (theme/widgets/...), so a symbol such as the
+    #3daee9 accent may live in widgets.py or theme.py rather than menu.py. Tests that
+    pin a property of the MENU (not of one file) read this.
     """
     return "\n".join(_module_src(name) for name in MENU_MODULES)
 
 
 def launcher_sh() -> str:
-    """The launcher script the panel icon runs (verbatim from the source tree)."""
+    """The launcher script the Super key / root menu runs (verbatim from the source
+    tree). It signals the resident daemon (SIGUSR1 toggle / SIGUSR2 show)."""
     return _read_source(_SRC_LAUNCHER)
 
 
 def menu_desktop() -> str:
-    """The .desktop the panel icon points at (verbatim from the source tree)."""
+    """A standard application-launcher .desktop for the menu (verbatim from the source
+    tree), landing in /usr/local/share/applications so the menu can be launched by name
+    and appears in app scans. (The Super key is bound by OpenBox's rc.xml, not by this
+    file -- see configuration/desktop.py.)"""
     return _read_source(_SRC_DESKTOP)
 
 
-def menu_shortcut_desktop() -> str:
-    """The dedicated .desktop that binds the Super/Meta key to open our menu.
-
-    Distinct from menu_desktop() (the panel-icon file) so the global-shortcut
-    concern is isolated: this file exists ONLY to carry ``X-KDE-Shortcuts=Meta``
-    for kglobalacceld. ``Exec`` runs the SAME launcher the panel icon and daemon
-    use, so the Super key toggles the one resident menu daemon. ``NoDisplay=true``
-    keeps it out of application listings.
-
-    NoDisplay + shortcut IS correct here -- do NOT "fix" it by dropping NoDisplay:
-    kglobalacceld finds shortcut apps in /usr/share/applications via
-    GlobalShortcutsRegistry::detectAppsWithShortcuts(), whose KApplicationTrader
-    query has NO noDisplay guard, so a NoDisplay=true service still registers its
-    ``_launch`` grab (verified against the kglobalacceld source AND live on the
-    Hypervisor: the NoDisplay entry registered and a physical Super press opened the
-    menu). kglobalacceld's noDisplay skip lives in a DIFFERENT loop -- the one that
-    scans the /usr/share/kglobalaccel/ DIRECTORY -- which is not the path we use, so
-    it does not apply. (An adversarial review misread that other loop as ours; the
-    source disproves it.) As belt-and-suspenders the id is ALSO in
-    apps.HIDDEN_DESKTOP_IDS so our own menu never lists it even if some tool ignored
-    NoDisplay.
-
-    Lands in the SYSTEM apps dir /usr/share/applications (a system XDG_DATA_DIRS
-    location KSycoca always scans, and that kglobalacceld's KApplicationTrader query
-    reads); at a fresh login the daemon registers a ``_launch`` action for it and
-    grabs Meta. Its id (basename) is unique, so it never collides with the panel
-    .desktop's id."""
-    return (
-        "[Desktop Entry]\n"
-        "Type=Application\n"
-        "Name=Az'arch Application Menu (Super key)\n"
-        "GenericName=Application Menu\n"
-        "Comment=Open the Az'arch application menu\n"
-        f"Exec={MENU_LAUNCHER_SYSTEM_PATH}\n"
-        f"Icon={MENU_ICON_NAME}\n"
-        "Terminal=false\n"
-        "Categories=System;Utility;\n"
-        "NoDisplay=true\n"
-        f"X-KDE-Shortcuts={MENU_SHORTCUT_KEY}\n"
-    )
-
-
-def daemon_autostart_desktop() -> str:
-    """The per-user autostart .desktop that starts the resident daemon at login
-    (verbatim from the source tree). Emitted by configuration/desktop.py into
-    ~/.config/autostart so the daemon is up before the first panel-icon click."""
-    return _read_source(_SRC_DAEMON_DESKTOP)
-
-
 def usage_seed_json() -> str:
-    """The seed launch-frequency store (usage.json) that fixes the STARTING top of
-    the menu to System Settings, LibreWolf, kitty, Dolphin on a fresh profile.
+    """The seed launch-frequency store (usage.json) that fixes the STARTING top of the
+    menu to LibreWolf, kitty, Dolphin, GIMP on a fresh profile.
 
-    Rendered in the SAME compact form usage.py's UsageStore._save writes (json.dump
-    with separators=(",", ":")) so the store reads it straight back (the emitter adds
-    a trailing newline, which json.load ignores). It stays fully dynamic afterwards:
-    the daemon's WindowWatcher bumps these counts on every real app-open and
-    re-sorts."""
+    Rendered in the SAME compact form usage.py's UsageStore._save writes (json.dump with
+    separators=(",", ":")) so the store reads it straight back (the emitter adds a
+    trailing newline, which json.load ignores). It stays fully dynamic afterwards: the
+    daemon's WindowWatcher bumps these counts on every real app-open and re-sorts."""
     import json
 
     return json.dumps(MENU_USAGE_SEED, separators=(",", ":"))
@@ -266,9 +193,10 @@ def _module_builder(name: str):
 
 
 # One emit entry per menu module (all mode 0644 in MENU_LIB_DIR), then the launcher
-# (0755, run by the panel icon) and the .desktop it points at. Building the module
-# entries from MENU_MODULES means the build can never again ship menu.py without its
-# siblings. menu.py stays first so MENU_PY_SYSTEM_PATH keeps a stable builder.
+# (0755, run by the Super key / OpenBox root menu) and a standard app-launcher .desktop.
+# Building the module entries from MENU_MODULES means the build can never again ship
+# menu.py without its siblings. menu.py stays first so MENU_PY_SYSTEM_PATH keeps a
+# stable builder.
 PLAN = [
     {
         "builder": _module_builder(name),

@@ -1,4 +1,4 @@
-"""azarch.configuration.desktop -- the KDE Plasma live-session configuration-as-Python payloads.
+"""azarch.configuration.desktop -- the OpenBox live-session configuration-as-Python payloads.
 
 Why these tests matter: steps.py never inspects the CONTENT of these builders;
 it blindly iterates PLAN/emit_plan() and calls emit.write_text/write_exec with
@@ -10,8 +10,16 @@ root-owned wrapper to uid 1000 (or leaves a home dotfile root-owned so the live
 user cannot read it). None of that raises in Python; it only shows up as a dead
 live session. These tests pin the mode/owner/dest table, prove emit_plan() does
 not mutate the module-level PLAN (steps.py may call it more than once), lock the
-Plasma session contract (xinitrc execs startplasma-x11, no cyan flash, wallpaper
-baked in), and the privileged wrapper's `unset XDG_RUNTIME_DIR` before `exec sudo`.
+OpenBox session contract (xinitrc execs openbox-session, no cyan flash, wallpaper
+pre-painted; rc.xml binds the Super key to the menu; autostart arms xcape + the
+keyboard + the menu daemon + the installer), and the privileged wrapper's
+`unset XDG_RUNTIME_DIR` before `exec sudo`.
+
+KDE Plasma was REMOVED from Az'arch and replaced by a panel-less OpenBox desktop;
+every Plasma-specific builder/constant (panel/appletsrc, kdeglobals, kwinrc,
+powerdevil, kscreenlocker, kickoff, ...) is gone, so the tests that pinned them are
+gone too. The Az'arch application menu (Super key / OpenBox root-menu entry) is the
+only shell surface now.
 """
 
 from __future__ import annotations
@@ -23,19 +31,23 @@ from azarch.configuration import desktop
 
 # --- PLAN mode/owner/dest table --------------------------------------------
 
-def test_plan_has_exactly_twentythree_entries():
-    # steps.py iterates PLAN; a dropped/extra entry silently un-emits a file.
-    # (23 = original 7 + ~/Desktop launcher + plasmashellrc + kdeglobals + krunnerrc
-    #  + kxkbrc keyboard-layouts + plasma-localerc (d/m/y clock) + powerdevilrc
-    #  (PC/laptop sleep policy, Plasma-6 schema) + powermanagementprofilesrc migration
-    #  flag + kscreenlockerrc (disable auto-lock) + klaunchrc (no launch feedback)
-    #  + kwinrc (no window animation) + the org.kde.plasma.icon menu backing
-    #  .desktop under ~/.local/share/plasma_icons -- the paper-icon fix -- + the
-    #  application-menu daemon autostart (~/.config/autostart, instant first open)
-    #  + the application-menu usage.json seed (~/.local/share, default top-4 order)
-    #  + the Super-key shortcut .desktop (~/.local/share/applications, Meta -> menu)
-    #  + kglobalshortcutsrc (frees Meta from the removed Kickoff launcher).)
-    assert len(desktop.PLAN) == 23
+def test_plan_has_exactly_eleven_entries():
+    # steps.py iterates PLAN; a dropped/extra entry silently un-emits a file. The
+    # panel-less OpenBox session ships exactly eleven files via PLAN:
+    #   1. ~/.xinitrc                          (startx -> openbox-session)
+    #   2. ~/.config/openbox/rc.xml            (keybinds: Super -> menu, root-menu)
+    #   3. ~/.config/openbox/menu.xml          (OpenBox root menu: launcher/term/installer/power)
+    #   4. ~/.config/openbox/autostart         (feh, setxkbmap, xcape, menu daemon, installer)
+    #   5. ~/.config/openbox/environment       (XDG_CURRENT_DESKTOP=openbox)
+    #   6. /usr/local/share/azarch/openbox-autostart-installed (staged "installed"
+    #      autostart the Calamares install copies over the target's; no keyboard/installer)
+    #   7. ~/.local/share menu usage seed       (default menu ordering)
+    #   8. /usr/share/applications/azarch-install.desktop (menu re-open entry, system)
+    #   9. ~/Desktop/azarch-install.desktop     (double-clickable installer launcher)
+    #  10. /usr/local/bin/azarch-install         (privileged Calamares wrapper)
+    #  11. /usr/local/bin/azarch                 (guest-side CLI)
+    # The .bash_profile snippet is appended by emit_plan(), NOT part of PLAN.
+    assert len(desktop.PLAN) == 11
 
 
 def test_plan_entries_have_the_four_declared_keys():
@@ -63,17 +75,18 @@ def test_exec_and_conf_octal_values():
 
 
 def test_scripts_are_exec_configs_are_conf():
-    # xinitrc is a shell script -> 0o755; the Plasma dotfiles (appletsrc, ksplashrc,
-    # the .desktop launchers) are data -> 0o644.
+    # Shell scripts / executables -> 0o755; plain config/data (OpenBox XML configs, the
+    # system-wide .desktop) -> 0o644. The OpenBox `autostart` is a shell script sourced
+    # by openbox-session, so it is EXECUTABLE; rc.xml/menu.xml/environment are data.
     by_builder = {e["builder"].__name__: e for e in desktop.PLAN}
     assert by_builder["xinitrc"]["mode"] == 0o755
-    assert by_builder["plasma_appletsrc"]["mode"] == 0o644
-    assert by_builder["ksplashrc"]["mode"] == 0o644
-    assert by_builder["autostart_install_desktop"]["mode"] == 0o644
-    assert by_builder["az_menu_daemon_autostart_desktop"]["mode"] == 0o644
+    assert by_builder["openbox_autostart"]["mode"] == 0o755
+    assert by_builder["openbox_rc_xml"]["mode"] == 0o644
+    assert by_builder["openbox_menu_xml"]["mode"] == 0o644
+    assert by_builder["openbox_environment"]["mode"] == 0o644
     assert by_builder["install_menu_desktop"]["mode"] == 0o644
-    # The Desktop launcher is the exception: it must be EXECUTABLE so Plasma runs it
-    # on double-click without the untrusted-.desktop prompt.
+    # The Desktop launcher is the exception among data files: it must be EXECUTABLE so a
+    # file manager runs it on double-click without the untrusted-.desktop prompt.
     assert by_builder["desktop_installer_launcher"]["mode"] == 0o755
 
 
@@ -87,34 +100,38 @@ def test_install_wrapper_entry_is_root_owned_exec():
     assert entry["builder"] is desktop.install_wrapper_sh
 
 
-def test_appletsrc_entry_is_home_owned_conf():
+def test_openbox_rc_xml_entry_is_home_owned_conf():
+    # OpenBox's rc.xml is a plain config (0o644) and must be handed to the live user
+    # (home-owned; mirrored into /etc/skel) or the session cannot read its keybinds.
     entry = next(
         e for e in desktop.PLAN
-        if e["dest"] == f"{desktop.HOME}/.config/plasma-org.kde.plasma.desktop-appletsrc"
+        if e["dest"] == f"{desktop.HOME}/.config/openbox/rc.xml"
     )
     assert entry["mode"] == 0o644
     assert entry["owner"] == "home"
-    assert entry["builder"] is desktop.plasma_appletsrc
+    assert entry["builder"] is desktop.openbox_rc_xml
 
 
-def test_root_owned_dests_are_wrapper_cli_and_menu_launcher():
-    # Exactly four PLAN entries are root-owned: the azarch CLI, the installer
-    # wrapper (both /usr/local/bin), the system-wide installer menu entry, and the
-    # system-wide Super-key shortcut .desktop (both /usr/share/applications).
-    # Everything else is a /home/main dotfile handed to the live user (uid 1000,
-    # gid 998).
+def test_root_owned_dests_are_wrapper_cli_menu_entry_and_installed_autostart():
+    # Exactly four PLAN entries are root-owned: the azarch CLI, the installer wrapper
+    # (both /usr/local/bin), the system-wide installer menu .desktop
+    # (/usr/share/applications), and the STAGED "installed" OpenBox autostart the
+    # Calamares install copies onto the target (a system path, not a per-user file).
+    # (The old KDE Super-key shortcut .desktop is GONE -- OpenBox binds the Super key in
+    # rc.xml, not via a /usr/share/applications file.) Everything else is a /home/main
+    # dotfile handed to the live user (uid 1000, gid 998).
     root_dests = [e["dest"] for e in desktop.PLAN if e["owner"] == "root"]
     assert set(root_dests) == {
         desktop.INSTALL_WRAPPER_PATH,
         desktop.AZARCH_BIN_PATH,
         "/usr/share/applications/azarch-install.desktop",
-        desktop._app_menu.MENU_SHORTCUT_DESKTOP_SYSTEM_PATH,
+        desktop.INSTALLED_AUTOSTART_STAGING_PATH,
     }
 
 
 def test_desktop_launcher_is_on_the_desktop_executable_and_home_owned():
     # The live-session "Az'arch Linux Installer" launcher must land in ~/Desktop, be
-    # executable (0o755, so Plasma trusts it), and be handed to the live user.
+    # executable (0o755, so a file manager trusts it), and be handed to the live user.
     entry = next(
         e for e in desktop.PLAN
         if e["dest"] == f"{desktop.HOME}/Desktop/azarch-install.desktop"
@@ -134,12 +151,11 @@ def test_desktop_launcher_content_names_installer_and_wrapper_and_icon():
 
 
 def test_installer_launchers_all_use_the_azarch_icon():
-    # Desktop, application-menu, and autostart launchers must all reference the
-    # "Az'" installer icon (not the old generic system-software-install).
+    # Both installer launchers (the Desktop one and the application-menu one) must
+    # reference the "Az'" installer icon (not the old generic system-software-install).
     for body in (
         desktop.desktop_installer_launcher(),
         desktop.install_menu_desktop(),
-        desktop.autostart_install_desktop(),
     ):
         assert f"Icon={desktop.INSTALLER_ICON_NAME}" in body
         assert "system-software-install" not in body
@@ -172,11 +188,10 @@ def test_home_owner_gid_is_autologin_group():
 
 # --- emit_plan(): PLAN + bash_profile, without mutating PLAN ----------------
 
-def test_emit_plan_length_is_twentyfour():
-    # 23 PLAN entries + the appended .bash_profile. (The newest PLAN additions are the
-    # Super-key shortcut .desktop and kglobalshortcutsrc that make Meta open the
-    # Az'arch menu now that Kickoff is removed.)
-    assert len(desktop.emit_plan()) == 24
+def test_emit_plan_length_is_twelve():
+    # 11 PLAN entries + the appended .bash_profile snippet = 12. emit_plan() is the
+    # single sequence steps.py iterates.
+    assert len(desktop.emit_plan()) == 12
 
 
 def test_emit_plan_prefix_is_plan():
@@ -203,19 +218,23 @@ def test_emit_plan_does_not_mutate_module_plan():
     before = len(desktop.PLAN)
     desktop.emit_plan()
     desktop.emit_plan()
-    assert len(desktop.PLAN) == before == 23
+    assert len(desktop.PLAN) == before == 11
 
 
-# --- xinitrc: Plasma X11 session, no flash ----------------------------------
+# --- xinitrc: OpenBox X11 session, no flash ---------------------------------
 
-def test_xinitrc_execs_startplasma_x11():
-    # startx hands the session to the Plasma X11 session launcher.
-    assert "exec startplasma-x11" in desktop.xinitrc()
+def test_xinitrc_execs_openbox_session():
+    # startx hands the session to `openbox-session`, which is BOTH the window manager
+    # AND the session bootstrap (it sources environment/autostart and reads rc.xml).
+    assert "exec openbox-session" in desktop.xinitrc()
 
 
-def test_xinitrc_exports_desktop_session_plasma():
-    # The one env var the Arch Wiki has you set for a startx Plasma session.
-    assert "export DESKTOP_SESSION=plasma" in desktop.xinitrc()
+def test_xinitrc_exports_openbox_desktop_classification():
+    # logind sets XDG_SESSION_TYPE=x11; we export XDG_CURRENT_DESKTOP/DESKTOP_SESSION
+    # so XDG-aware tools (autostart OnlyShowIn, etc.) classify the session as openbox.
+    out = desktop.xinitrc()
+    assert "export XDG_CURRENT_DESKTOP=openbox" in out
+    assert "export DESKTOP_SESSION=openbox" in out
 
 
 def test_xinitrc_has_no_cyan_solid_flash():
@@ -229,94 +248,218 @@ def test_xinitrc_has_no_cyan_solid_flash():
 
 def test_xinitrc_prepaints_wallpaper_before_exec():
     # No-flash contract: feh paints the SAME wallpaper onto the X root BEFORE the
-    # exec that starts Plasma, so the first visible frame is the wallpaper and
-    # Plasma's own wallpaper repaint is invisible (identical pixels). feh needs the
-    # actual image FILE (it cannot take a package dir).
+    # exec that starts OpenBox, so the first visible frame is the wallpaper and the
+    # autostart's own feh repaint is invisible (identical pixels). feh needs the
+    # actual image FILE (it cannot take a directory).
     out = desktop.xinitrc()
     assert "feh --no-fehbg --bg-fill '" + desktop.WALLPAPER_IMAGE_FILE + "'" in out
     feh_idx = out.index("feh --no-fehbg --bg-fill")
-    exec_idx = out.index("exec startplasma-x11")
+    exec_idx = out.index("exec openbox-session")
     assert feh_idx < exec_idx
 
 
-# --- Plasma wallpaper appletsrc ---------------------------------------------
+# --- OpenBox rc.xml: Super -> menu, root-menu, borderless menu window --------
 
-def test_appletsrc_sets_wallpaper_in_nested_image_group():
-    # The wallpaper Image= MUST live in the nested
-    # [Containments][1][Wallpaper][org.kde.image][General] group (not the
-    # containment's own [General]) or Plasma ignores it. Value is a file:// URI to the
-    # package DIRECTORY (the duplicate-tile fix).
-    out = desktop.plasma_appletsrc()
-    assert "[Containments][1][Wallpaper][org.kde.image][General]" in out
-    assert "Image=file://" + desktop.WALLPAPER_PACKAGE_DIR in out
-
-
-def test_appletsrc_uses_image_wallpaper_plugin():
-    out = desktop.plasma_appletsrc()
-    assert "wallpaperplugin=org.kde.image" in out
-    assert "plugin=org.kde.desktopcontainment" in out
+def test_rc_xml_binds_super_and_menu_to_the_launcher():
+    # The Super key opens the Az'arch menu. OpenBox cannot bind a lone modifier, so
+    # xcape turns a solo Super_L tap into Super_L+Menu; rc.xml binds THAT chord
+    # (W-Menu) and the bare Menu/Apps key to the menu launcher so either opens it.
+    out = desktop.openbox_rc_xml()
+    assert desktop.SUPER_MENU_KEYSYM == "Menu"
+    assert '<keybind key="W-Menu">' in out
+    assert '<keybind key="Menu">' in out
+    # Both keybinds run the single application-menu launcher.
+    assert desktop.MENU_LAUNCHER == desktop._app_menu.MENU_LAUNCHER_SYSTEM_PATH
+    assert desktop.MENU_LAUNCHER == "/usr/local/bin/azarch-application-menu"
+    assert f"<command>{desktop.MENU_LAUNCHER}</command>" in out
 
 
-# --- KSplash disabled (no splash frame) -------------------------------------
+def test_rc_xml_root_menu_mousebind_opens_the_root_menu():
+    # Right/middle click on the desktop (the "Root" context) must open menu.xml's
+    # root-menu, the convenience fallback surface for the panel-less session.
+    out = desktop.openbox_rc_xml()
+    assert '<context name="Root">' in out
+    assert "<menu>root-menu</menu>" in out
+    # rc.xml points OpenBox at menu.xml for its menu file.
+    assert "<file>menu.xml</file>" in out
 
-def test_ksplashrc_disables_splash():
-    # KSplash off so the only paint between the wallpaper root-pixmap and the live
-    # desktop is the wallpaper itself -- no splash frame, reinforcing no-flash.
-    out = desktop.ksplashrc()
-    assert "[KSplash]" in out
-    assert "Engine=none" in out
-    assert "Theme=None" in out
+
+def test_rc_xml_menu_window_is_undecorated():
+    # The Az'arch application menu is a borderless override-redirect Tk window; rc.xml
+    # must match it (`*azarch*menu*`) and give it NO OpenBox decorations, so no
+    # titlebar/border wraps the launcher.
+    out = desktop.openbox_rc_xml()
+    assert '<application name="*azarch*menu*">' in out
+    assert "<decor>no</decor>" in out
+
+
+def _strip_xml_comments(text: str) -> str:
+    # OpenBox's XML parser is lenient and our generated comments intentionally contain
+    # an em-dash rendered as "--" ("... desktop -- edit the Python ..."), which the
+    # strict XML spec forbids INSIDE a comment. We want the wellformedness check to
+    # validate the ELEMENT tree OpenBox actually reads (balanced tags), not the comment
+    # prose, so drop comments before handing the document to ElementTree.
+    import re
+
+    return re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+
+
+def test_rc_xml_is_wellformed_xml():
+    # A stray unbalanced tag from the f-string would make OpenBox ignore the file and
+    # fall back to stock keybinds (no Super -> menu). Parse the comment-stripped
+    # document to prove the element tree is valid XML.
+    import xml.etree.ElementTree as ET
+
+    ET.fromstring(_strip_xml_comments(desktop.openbox_rc_xml()))
+
+
+# --- OpenBox root menu (menu.xml): launcher/terminal/installer/power ---------
+
+def test_menu_xml_offers_launcher_terminal_installer_and_power_actions():
+    # The OpenBox root menu is a small convenience fallback: it must offer the
+    # application-menu launcher, a terminal (kitty), the installer (same privileged
+    # wrapper), and the session power actions (suspend/reboot/poweroff + lock).
+    out = desktop.openbox_menu_xml()
+    assert f"<command>{desktop.MENU_LAUNCHER}</command>" in out          # app menu
+    assert "<command>kitty</command>" in out                            # terminal
+    assert f"<command>{desktop.INSTALL_WRAPPER_PATH}</command>" in out   # installer
+    # Power actions reuse the same tools the menu's power row uses.
+    assert "<command>systemctl suspend</command>" in out
+    assert "<command>systemctl reboot</command>" in out
+    assert "<command>systemctl poweroff</command>" in out
+    assert "<command>loginctl lock-session</command>" in out
+
+
+def test_menu_xml_declares_the_root_menu_rc_xml_binds():
+    # rc.xml's mousebind opens <menu>root-menu</menu>; menu.xml MUST define a menu with
+    # exactly that id, or the desktop right-click opens nothing.
+    out = desktop.openbox_menu_xml()
+    assert '<menu id="root-menu"' in out
+
+
+def test_menu_xml_is_wellformed_xml():
+    import xml.etree.ElementTree as ET
+
+    ET.fromstring(_strip_xml_comments(desktop.openbox_menu_xml()))
+
+
+# --- OpenBox autostart: wallpaper, keyboard, xcape, menu daemon, installer ---
+
+def test_autostart_repaints_wallpaper_with_feh():
+    # The autostart repaints the SAME image ~/.xinitrc pre-painted (no flash; also
+    # covers a re-login where the root pixmap was reset). feh owns the root pixmap.
+    out = desktop.openbox_autostart()
+    assert "feh --no-fehbg --bg-fill '" + desktop.WALLPAPER_IMAGE_FILE + "'" in out
+
+
+def test_autostart_applies_us_and_hebrew_layouts_with_alt_shift():
+    # setxkbmap sets US English (default) + Hebrew, Alt+Shift to toggle -- the
+    # DE-independent replacement for the old Plasma kxkbrc. Constants are pinned so a
+    # test catches a layout/toggle drift.
+    assert desktop.KEYBOARD_LAYOUTS == ["us", "il"]
+    assert desktop.KEYBOARD_TOGGLE == "grp:alt_shift_toggle"
+    out = desktop.openbox_autostart()
+    assert "setxkbmap -layout 'us,il' -option 'grp:alt_shift_toggle'" in out
+
+
+def test_autostart_arms_super_key_via_xcape():
+    # OpenBox cannot bind a lone modifier, so xcape turns a solo Super_L tap into the
+    # chord Super_L+Menu that rc.xml binds to the menu. -t 200: only a tap under 200ms
+    # fires (a held Super stays a normal modifier).
+    out = desktop.openbox_autostart()
+    assert "xcape -t 200 -e 'Super_L=Super_L|Menu'" in out
+
+
+def test_autostart_starts_the_application_menu_daemon():
+    # The application-menu daemon is started (detached) so the menu is pre-built and
+    # hidden -- the first Super press / root-menu open is then instant. It runs the
+    # INSTALLED daemon.py (single source of truth in application_menu.py).
+    out = desktop.openbox_autostart()
+    assert desktop.MENU_DAEMON_PY == desktop._app_menu.MENU_DAEMON_PY_SYSTEM_PATH
+    assert f"setsid python3 '{desktop.MENU_DAEMON_PY}'" in out
+
+
+def test_autostart_launches_the_installer_once():
+    # The Calamares installer auto-opens ONCE, a couple seconds in (Manjaro-style
+    # first-run), via the privileged wrapper -- the same wrapper the menu/root-menu use.
+    out = desktop.openbox_autostart()
+    assert f"( sleep 2; '{desktop.INSTALL_WRAPPER_PATH}' )" in out
+
+
+def test_autostart_is_sh_script():
+    # openbox-session runs it via /bin/sh; it ships executable, so a shebang is required.
+    assert desktop.openbox_autostart().startswith("#!/bin/sh\n")
+
+
+# --- OpenBox environment: classify the session as openbox -------------------
+
+def test_environment_exports_openbox_desktop():
+    # ~/.config/openbox/environment is sourced by openbox-session before autostart; it
+    # re-asserts XDG_CURRENT_DESKTOP=openbox so the classification is correct even if
+    # OpenBox is started by some path other than our startx.
+    assert "export XDG_CURRENT_DESKTOP=openbox" in desktop.openbox_environment()
+
+
+# --- OpenBox config files land under home, correct modes --------------------
+
+def test_openbox_config_files_are_home_owned_with_correct_modes():
+    # The four OpenBox files live under ~/.config/openbox and are handed to the live
+    # user (home-owned; mirrored into /etc/skel). rc.xml/menu.xml/environment are plain
+    # data (0o644); autostart is a sourced shell script and must be EXECUTABLE (0o755).
+    by_dest = {e["dest"]: e for e in desktop.PLAN}
+    expected = {
+        f"{desktop.HOME}/.config/openbox/rc.xml": (desktop.openbox_rc_xml, 0o644),
+        f"{desktop.HOME}/.config/openbox/menu.xml": (desktop.openbox_menu_xml, 0o644),
+        f"{desktop.HOME}/.config/openbox/environment": (desktop.openbox_environment, 0o644),
+        f"{desktop.HOME}/.config/openbox/autostart": (desktop.openbox_autostart, 0o755),
+    }
+    for dest, (builder, mode) in expected.items():
+        entry = by_dest[dest]
+        assert entry["builder"] is builder, dest
+        assert entry["mode"] == mode, dest
+        assert entry["owner"] == "home", dest
+
+
+# --- Menu usage seed lands under home ---------------------------------------
+
+def test_menu_usage_seed_entry_is_home_owned_conf():
+    # OUR menu's launch-frequency seed lands under ~/.local/share, is plain data
+    # (0o644), and is handed to the live user (mirrored to /etc/skel). Content is owned
+    # by application_menu.py; desktop.py just places it.
+    entry = next(
+        e for e in desktop.PLAN
+        if e["dest"] == desktop._app_menu.MENU_USAGE_SEED_SYSTEM_PATH
+    )
+    assert entry["builder"] is desktop.az_menu_usage_seed_json
+    assert entry["mode"] == 0o644
+    assert entry["owner"] == "home"
+
+
+def test_menu_usage_seed_content_comes_from_application_menu():
+    # Single source of truth: the seed content is application_menu.usage_seed_json().
+    assert desktop.az_menu_usage_seed_json() == desktop._app_menu.usage_seed_json()
 
 
 # --- Autostart + menu launchers open the installer via the wrapper ----------
 
-def test_autostart_desktop_execs_the_wrapper():
-    # The Plasma autostart .desktop must run the single privileged wrapper so the
-    # installer auto-opens once at login.
-    out = desktop.autostart_install_desktop()
-    assert out.splitlines()[0] == "[Desktop Entry]"
-    assert "Exec=" + desktop.INSTALL_WRAPPER_PATH in out
-    assert "Type=Application" in out
-
-
-def test_autostart_desktop_runs_in_phase_two():
-    # Delay until the desktop/panel are ready so the installer window has a session
-    # to map into.
-    assert "X-KDE-autostart-phase=2" in desktop.autostart_install_desktop()
-
-
-def test_menu_daemon_autostart_entry_is_home_owned_conf():
-    # The application-menu daemon autostart lands in ~/.config/autostart, is plain
-    # data (0o644), and is handed to the live user (mirrored to /etc/skel for the
-    # installed user). It starts the daemon so the FIRST panel-icon click is instant.
-    entry = next(
-        e for e in desktop.PLAN
-        if e["dest"] == desktop._app_menu.MENU_DAEMON_AUTOSTART_SYSTEM_PATH
-    )
-    assert entry["builder"] is desktop.az_menu_daemon_autostart_desktop
-    assert entry["mode"] == 0o644
-    assert entry["owner"] == "home"
-    assert entry["dest"] == f"{desktop.HOME}/.config/autostart/azarch-application-menu-daemon.desktop"
-
-
-def test_menu_daemon_autostart_execs_the_installed_daemon():
-    # The autostart entry must launch the INSTALLED daemon.py (the one the build
-    # emits) in autostart phase 2, so it is resident before the first click. Single
-    # source of truth: content comes from application_menu.daemon_autostart_desktop().
-    out = desktop.az_menu_daemon_autostart_desktop()
-    assert out == desktop._app_menu.daemon_autostart_desktop()
-    assert out.splitlines()[0] == "[Desktop Entry]"
-    assert "Type=Application" in out
-    assert desktop._app_menu.MENU_DAEMON_PY_SYSTEM_PATH in out   # execs the installed daemon
-    assert "X-KDE-autostart-phase=2" in out
-
-
 def test_menu_launcher_execs_the_wrapper():
-    # The application-menu launcher (re-open after close) shares the same wrapper.
+    # The application-menu installer entry (re-open after close) shares the same wrapper.
     out = desktop.install_menu_desktop()
     assert out.splitlines()[0] == "[Desktop Entry]"
     assert "Exec=" + desktop.INSTALL_WRAPPER_PATH in out
     assert "Categories=System;" in out
+
+
+def test_install_menu_desktop_is_system_owned_conf():
+    # The application-menu installer .desktop lands system-wide in
+    # /usr/share/applications (one file for all users), root-owned, plain data (0o644).
+    entry = next(
+        e for e in desktop.PLAN
+        if e["dest"] == "/usr/share/applications/azarch-install.desktop"
+    )
+    assert entry["builder"] is desktop.install_menu_desktop
+    assert entry["mode"] == 0o644
+    assert entry["owner"] == "root"
 
 
 # --- Privileged wrapper: unset before exec ----------------------------------
@@ -439,7 +582,6 @@ def test_azarch_resolve_offers_five_shuffled_servers():
     out = desktop.azarch_sh()
     assert "ipapi.co|" in out
     assert "ipquery.io|" in out
-    servers = [ln for ln in out.splitlines() if "|http" in ln and ".co" in ln or "|http" in ln]
     # Exactly five server definition lines in the servers heredoc.
     server_lines = [ln for ln in out.splitlines() if "|http" in ln]
     assert len(server_lines) == 5, server_lines
@@ -557,45 +699,26 @@ def test_install_wrapper_path_value():
     assert desktop.INSTALL_WRAPPER_PATH == "/usr/local/bin/azarch-install"
 
 
-def test_wallpaper_package_dir_and_image_file_values():
-    # THE DUPLICATE-TILE FIX: Plasma's Image= must point at the package DIRECTORY
-    # (trailing slash) so Plasma matches the "years" package tile instead of injecting
-    # a loose "1672x941" tile; feh needs the actual image FILE. Both constants derive
-    # from the "years" package. The asset carries no "wallpaper_" prefix any more.
-    assert desktop.WALLPAPER_PACKAGE_DIR == "/usr/share/wallpapers/years/"
+def test_wallpaper_image_file_is_the_inner_years_png():
+    # feh needs a real FILE (it cannot take a directory), so WALLPAPER_IMAGE_FILE points
+    # at the "years" package's inner PNG. The KPackage-style layout is kept only so the
+    # steps.py emit paths do not change (nothing reads the package metadata at runtime).
+    assert desktop.WALLPAPERS_SYSTEM_DIR == "/usr/share/wallpapers"
+    assert desktop.WALLPAPER_DEFAULT_ID == "years"
+    assert desktop.WALLPAPER_IMAGE_RES == "1672x941"
     assert desktop.WALLPAPER_IMAGE_FILE == (
         "/usr/share/wallpapers/years/contents/images/1672x941.png"
     )
     assert desktop.WALLPAPER_ASSET == "wallpapers/years.png"
-    # The default must be one of the shipped packages (no separate standalone copy).
+    # The default must be one of the shipped wallpaper packages.
     assert desktop.WALLPAPER_DEFAULT_ID in [p["id"] for p in desktop.WALLPAPER_PACKAGES]
 
 
-def test_wallpaper_default_is_a_shipped_package_dir():
-    # REGRESSION GUARD for the "three wallpapers, one duplicate" report: the Plasma
-    # default must be the years KPackage's DIRECTORY (not its inner png), so Plasma
-    # selects the existing tile rather than adding a standalone resolution-labelled one.
-    years = next(p for p in desktop.WALLPAPER_PACKAGES if p["id"] == "years")
-    expected_dir = f"{desktop.WALLPAPERS_SYSTEM_DIR}/{years['id']}/"
-    assert desktop.WALLPAPER_PACKAGE_DIR == expected_dir
-    # The package dir must be a strict prefix of the inner image file it contains.
-    assert desktop.WALLPAPER_IMAGE_FILE.startswith(desktop.WALLPAPER_PACKAGE_DIR)
-    # No asset carries the old "wallpaper_" prefix.
-    for p in desktop.WALLPAPER_PACKAGES:
-        assert "wallpaper_" not in p["asset"]
-
-
-def test_wallpaper_paths_used_in_xinitrc_and_appletsrc():
-    # feh (xinitrc) paints the FILE; Plasma (appletsrc Image=) references the package
-    # DIR. Neither may point Plasma at the inner png (that is the duplicate-tile bug).
+def test_wallpaper_image_file_used_in_xinitrc_and_autostart():
+    # feh paints the same FILE in both the xinitrc pre-paint and the autostart repaint;
+    # neither may drift, or the two paints differ and the no-flash guarantee breaks.
     assert desktop.WALLPAPER_IMAGE_FILE in desktop.xinitrc()
-    assert f"Image=file://{desktop.WALLPAPER_PACKAGE_DIR}" in desktop.plasma_appletsrc()
-    # The appletsrc must NOT reference the inner image file for Plasma's Image= (the
-    # whole point of the fix). Guard the Image= line specifically.
-    image_lines = [
-        ln for ln in desktop.plasma_appletsrc().splitlines() if ln.startswith("Image=")
-    ]
-    assert image_lines == [f"Image=file://{desktop.WALLPAPER_PACKAGE_DIR}"]
+    assert desktop.WALLPAPER_IMAGE_FILE in desktop.openbox_autostart()
 
 
 # --- Every builder returns non-empty content --------------------------------
@@ -609,235 +732,10 @@ def test_all_builders_return_nonempty_str():
         assert content.strip(), entry["dest"]
 
 
-# --- KDE panel / menu / theme / wallpapers (tasks: pinned panel, Breeze Dark,
-#     generic menu icon, no tray/peek, flat app menu, pinned apps, wallpapers) ---
+# --- wallpaper packages (years + decades) -----------------------------------
 
-import configparser as _configparser
 import json as _json
 
-
-def _parse_ini(text: str) -> _configparser.ConfigParser:
-    # Plasma config files are INI-ish with [Group][Sub] section names; ConfigParser
-    # reads them fine for key/value assertions (it treats the whole bracket run as
-    # one section name, which is exactly what we want to look up).
-    cp = _configparser.ConfigParser(strict=False, interpolation=None)
-    cp.optionxform = str  # keep key case (Plasma keys are case-sensitive)
-    cp.read_string(text)
-    return cp
-
-
-def test_appletsrc_has_desktop_and_panel_containments():
-    cp = _parse_ini(desktop.plasma_appletsrc())
-    d, p = desktop.DESKTOP_CONTAINMENT_ID, desktop.PANEL_CONTAINMENT_ID
-    assert cp[f"Containments][{d}"]["wallpaperplugin"] == "org.kde.image"
-    assert cp[f"Containments][{p}"]["plugin"] == "org.kde.panel"
-    # bottom panel: formfactor=2 (horizontal), location=4 (bottom)
-    assert cp[f"Containments][{p}"]["formfactor"] == "2"
-    assert cp[f"Containments][{p}"]["location"] == "4"
-
-
-def test_wallpaper_seeded_in_nested_image_group():
-    cp = _parse_ini(desktop.plasma_appletsrc())
-    d = desktop.DESKTOP_CONTAINMENT_ID
-    grp = f"Containments][{d}][Wallpaper][org.kde.image][General"
-    assert cp[grp]["Image"] == f"file://{desktop.WALLPAPER_PACKAGE_DIR}"
-
-
-def test_panel_has_no_kickoff_or_kicker():
-    # MIGRATION: Plasma's Kickoff (and kicker) launcher is REMOVED from the panel
-    # entirely -- the Az'arch application menu replaces it. Neither plugin may
-    # appear anywhere in the panel layout.
-    body = desktop.plasma_appletsrc()
-    assert "org.kde.plasma.kickoff" not in body
-    assert "org.kde.plasma.kicker" not in body
-
-
-def test_kickoff_constants_are_gone():
-    # The Kickoff-only knobs (its generic-icon name + the footer systemFavorites
-    # list) are removed with the launcher; nothing should reference them anymore.
-    assert not hasattr(desktop, "MENU_ICON")
-    assert not hasattr(desktop, "KICKOFF_SYSTEM_FAVORITES")
-    assert not hasattr(desktop, "_MENU_ID")
-
-
-def test_panel_pins_librewolf_kitty_dolphin_in_order():
-    cp = _parse_ini(desktop.plasma_appletsrc())
-    p = desktop.PANEL_CONTAINMENT_ID
-    tcfg = f"Containments][{p}][Applets][2][Configuration][General"
-    launchers = cp[tcfg]["launchers"]
-    assert launchers == (
-        "applications:librewolf.desktop,"
-        "applications:kitty.desktop,"
-        "applications:org.kde.dolphin.desktop"
-    )
-    # icontasks is the pinned task manager applet.
-    assert cp[f"Containments][{p}][Applets][2"]["plugin"] == "org.kde.plasma.icontasks"
-
-
-def test_panel_uses_standalone_status_applets_no_systray_no_peek():
-    # The status widgets are STANDALONE panel applets, not a systemtray container --
-    # so there is NO "^" overflow arrow and no auto-discovered extras. There must be
-    # NO systemtray, NO Peek-at-Desktop (showdesktop/minimizeall), and NO notifications.
-    body = desktop.plasma_appletsrc()
-    assert "org.kde.plasma.systemtray" not in body        # no tray container -> no "^"
-    assert "org.kde.plasma.showdesktop" not in body       # no Peek at Desktop
-    assert "org.kde.plasma.minimizeall" not in body
-    assert desktop.NOTIFICATIONS_APPLET_ID == "org.kde.plasma.notifications"
-    assert desktop.NOTIFICATIONS_APPLET_ID not in body    # notifications gone entirely
-    assert desktop.NOTIFICATIONS_APPLET_ID not in desktop.PANEL_STATUS_APPLETS
-
-
-def test_panel_status_applets_are_the_expected_set_in_order():
-    # Exactly: keyboard-layout (leftmost), device-notifier, brightness, network,
-    # volume. NO clipboard, NO battery/power (dropped at the user's request).
-    assert desktop.PANEL_STATUS_APPLETS == [
-        "org.kde.plasma.keyboardlayout",
-        "org.kde.plasma.devicenotifier",
-        "org.kde.plasma.brightness",
-        "org.kde.plasma.networkmanagement",
-        "org.kde.plasma.volume",
-    ]
-    # keyboard-layout must be the LEFTMOST status applet (left of all right-side icons).
-    assert desktop.PANEL_STATUS_APPLETS[0] == "org.kde.plasma.keyboardlayout"
-    # Explicitly dropped widgets must not appear anywhere.
-    body = desktop.plasma_appletsrc()
-    assert "org.kde.plasma.clipboard" not in body         # no clipboard history
-    assert "org.kde.plasma.battery" not in body           # power reached from the menu
-
-
-def test_panel_status_applets_each_have_a_block_and_carry_internet_audio():
-    # Every status applet is emitted as its own panel-applet block plugin=<item>, and
-    # the internet (plasma-nm) + audio (plasma-pa) the user wanted back are present.
-    body = desktop.plasma_appletsrc()
-    for item in desktop.PANEL_STATUS_APPLETS:
-        assert f"plugin={item}" in body
-    assert "plugin=org.kde.plasma.networkmanagement" in body   # internet
-    assert "plugin=org.kde.plasma.volume" in body              # audio
-
-
-def test_panel_applet_order_azmenu_leftmost_then_tasks_spacer_status_clock():
-    # MIGRATION: with Kickoff removed, AppletOrder must be OUR Az'arch menu icon
-    # FIRST (leftmost, id 10 = one past the clock), then tasks(2), spacer(3), the N
-    # status applets (4..), then the clock (last). A missing id silently drops that
-    # applet. Our menu icon now sits where the launcher used to be -- left of
-    # LibreWolf, at the very left of the panel.
-    cp = _parse_ini(desktop.plasma_appletsrc())
-    p = desktop.PANEL_CONTAINMENT_ID
-    n = len(desktop.PANEL_STATUS_APPLETS)
-    status = list(range(4, 4 + n))
-    clock_id = 4 + n
-    expected = ";".join(
-        str(i)
-        for i in [desktop._AZ_MENU_ID, desktop._TASKS_ID,
-                  desktop._SPACER_ID, *status, clock_id]
-    )
-    assert cp[f"Containments][{p}][General"]["AppletOrder"] == expected
-    # Our menu icon is FIRST (leftmost) in the order, and is an org.kde.plasma.icon
-    # pointing at the installed .desktop.
-    order = cp[f"Containments][{p}][General"]["AppletOrder"].split(";")
-    assert order[0] == str(desktop._AZ_MENU_ID)
-    assert order[1] == str(desktop._TASKS_ID)   # task manager right after our menu
-    az = f"Containments][{p}][Applets][{desktop._AZ_MENU_ID}"
-    assert cp[az]["plugin"] == "org.kde.plasma.icon"
-    # url= MUST be a file:// URI (not a bare path): a bare path made the applet bake a
-    # Type=Link/Icon=unknown wrapper -- the paper-icon-launches-nothing bug.
-    assert cp[f"{az}][Configuration][General"]["url"] == f"file://{desktop._AZ_MENU_DESKTOP_PATH}"
-    assert cp[f"{az}][Configuration][General"]["iconName"] == desktop._AZ_MENU_ICON_NAME
-    # localPath points at the backing .desktop WE ship, so the applet reads our real
-    # Type=Application launcher instead of generating a broken wrapper.
-    assert cp[f"{az}][Configuration"]["localPath"] == desktop._AZ_MENU_LOCAL_PATH
-    # The applet must NOT be immutable: a locked applet froze the broken backing file.
-    assert cp[az]["immutability"] == "0"
-    # The spacer (id 3) must be an expanding panelspacer so the status icons+clock sit right.
-    scfg = f"Containments][{p}][Applets][3][Configuration][General"
-    assert cp[f"Containments][{p}][Applets][3"]["plugin"] == "org.kde.plasma.panelspacer"
-    assert cp[scfg]["expanding"] == "true"
-    # The clock is the LAST of the standard applet ids and is the digital clock.
-    assert cp[f"Containments][{p}][Applets][{clock_id}"]["plugin"] == "org.kde.plasma.digitalclock"
-    # Our menu icon id must NOT collide with any other applet id -- it is computed
-    # as one past the clock precisely so adding status applets can never clash.
-    all_ids = [desktop._AZ_MENU_ID, desktop._TASKS_ID,
-               desktop._SPACER_ID, *status, clock_id]
-    assert len(all_ids) == len(set(all_ids)), f"applet id collision: {all_ids}"
-    assert desktop._AZ_MENU_ID == clock_id + 1
-
-
-def test_keyboard_layouts_us_and_hebrew_configured():
-    # kxkbrc ships US + Hebrew (xkb us/il) shown as US/HE, Alt+Shift toggles them.
-    assert desktop.KEYBOARD_LAYOUTS == [
-        {"code": "us", "label": "US"},
-        {"code": "il", "label": "HE"},
-    ]
-    cp = _parse_ini(desktop.kxkbrc())
-    layout = cp["Layout"]
-    assert layout["Use"] == "true"
-    assert layout["LayoutList"] == "us,il"
-    assert layout["DisplayNames"] == "US,HE"
-    assert layout["Options"] == desktop.KEYBOARD_TOGGLE == "grp:alt_shift_toggle"
-
-
-def test_kxkbrc_is_home_owned_conf():
-    by_builder = {e["builder"].__name__: e for e in desktop.PLAN}
-    assert by_builder["kxkbrc"]["mode"] == 0o644
-    assert by_builder["kxkbrc"]["owner"] == "home"
-    assert by_builder["kxkbrc"]["dest"] == f"{desktop.HOME}/.config/kxkbrc"
-
-
-def test_panel_pinned_not_floating_matches_containment_id():
-    cp = _parse_ini(desktop.plasmashellrc())
-    grp = f"PlasmaViews][Panel {desktop.PANEL_CONTAINMENT_ID}"
-    assert cp[grp]["floating"] == "0"      # 0 = pinned
-
-
-def test_panel_thickness_is_larger_than_default_in_defaults_group():
-    # The user asked for a bigger bottom bar / bigger left icons; settled on 60 px
-    # (verified live -- 88 looked too tall, 55 was an intermediate value, 60 gives the
-    # ~10%-bigger left launcher/task icons since their size tracks the panel height).
-    # CRUCIAL Plasma-6 quirk: `thickness` is read from the NESTED
-    # [PlasmaViews][Panel <id>][Defaults] subgroup, NOT the flat group (a flat
-    # thickness= is silently ignored). `floating` stays in the flat group.
-    assert desktop.PANEL_DEFAULT_THICKNESS == 44
-    assert desktop.PANEL_THICKNESS == 60
-    assert desktop.PANEL_THICKNESS > desktop.PANEL_DEFAULT_THICKNESS
-    out = desktop.plasmashellrc()
-    cp = _parse_ini(out)
-    flat = f"PlasmaViews][Panel {desktop.PANEL_CONTAINMENT_ID}"
-    defaults = f"PlasmaViews][Panel {desktop.PANEL_CONTAINMENT_ID}][Defaults"
-    # floating in the flat group; thickness in the nested [Defaults] group.
-    assert cp[flat]["floating"] == "0"
-    assert cp[defaults]["thickness"] == str(desktop.PANEL_THICKNESS)
-    # thickness must NOT be in the flat group (that placement is a no-op on Plasma 6).
-    assert "thickness" not in cp[flat]
-    # The nested group header must literally appear.
-    assert f"[PlasmaViews][Panel {desktop.PANEL_CONTAINMENT_ID}][Defaults]" in out
-
-
-def test_global_theme_is_breeze_dark():
-    cp = _parse_ini(desktop.kdeglobals())
-    assert cp["KDE"]["LookAndFeelPackage"] == "org.kde.breezedark.desktop"
-    assert cp["General"]["ColorScheme"] == "BreezeDark"
-    assert cp["Icons"]["Theme"] == "breeze-dark"
-
-
-def test_krunner_search_is_applications_only():
-    cp = _parse_ini(desktop.krunnerrc())
-    plugins = cp["Plugins"]
-    assert plugins["krunner_servicesEnabled"] == "true"   # applications runner ON
-    # A representative set of non-app runners must be OFF.
-    for off in ("baloosearchEnabled", "krunner_bookmarksrunnerEnabled",
-                "krunner_shellEnabled", "krunner_webshortcutsEnabled"):
-        assert plugins[off] == "false"
-
-
-def test_new_plasma_config_files_are_home_owned_conf():
-    by_builder = {e["builder"].__name__: e for e in desktop.PLAN}
-    for name in ("plasmashellrc", "kdeglobals", "krunnerrc"):
-        assert by_builder[name]["mode"] == 0o644
-        assert by_builder[name]["owner"] == "home"
-        assert by_builder[name]["dest"] == f"{desktop.HOME}/.config/{name}"
-
-
-# --- wallpaper KPackages (years + decades; Waterfall/Next removed) ----------
 
 def test_two_wallpaper_packages_named_years_and_decades():
     ids = [p["id"] for p in desktop.WALLPAPER_PACKAGES]
@@ -845,6 +743,8 @@ def test_two_wallpaper_packages_named_years_and_decades():
 
 
 def test_wallpaper_metadata_json_is_valid_and_named():
+    # The KPackage engine is gone, so nothing reads this at runtime; it is kept only so
+    # each wallpaper dir stays self-describing. It must still be valid JSON with Id/Name.
     for wp_id in ("years", "decades"):
         meta = _json.loads(desktop.wallpaper_metadata_json(wp_id))
         assert meta["KPlugin"]["Id"] == wp_id
@@ -856,345 +756,3 @@ def test_wallpaper_package_assets_exist():
     from azarch import paths
     for pkg in desktop.WALLPAPER_PACKAGES:
         assert (paths.ASSETSDIR / pkg["asset"]).exists(), pkg["asset"]
-
-
-def test_stock_next_wallpaper_removed_in_customize():
-    from azarch.configuration import system
-    # The grid must show only the azarch wallpapers, so the bundled Plasma "Next"
-    # wallpaper is deleted in the post-pacstrap hook.
-    assert "rm -rf /usr/share/wallpapers/Next" in system.CUSTOMIZE_AIROOTFS
-
-
-# --- Plasma date format: day/month/year (Task 3) ----------------------------
-
-def test_plasma_localerc_sets_dmy_time_locale():
-    # The KDE clock/calendar formats dates via plasma-localerc [Formats] LC_TIME.
-    # en_GB.UTF-8 is English but d/m/y (vs en_US m/d/y) -- the user's request.
-    s = desktop.plasma_localerc()
-    assert "[Formats]" in s
-    assert "LC_TIME=en_GB.UTF-8" in s
-    # useDetailedLocales makes Plasma honour the per-category LC_TIME override.
-    assert "useDetailedLocales=true" in s
-
-
-def test_plasma_localerc_matches_system_lc_time():
-    # Single source of truth: the Plasma clock locale must equal the system LC_TIME
-    # (configuration/locale.DEFAULT_TIME_LOCALE), or the clock and `date` disagree.
-    from azarch.configuration import locale
-    assert desktop._TIME_LOCALE == locale.DEFAULT_TIME_LOCALE
-    assert f"LC_TIME={locale.DEFAULT_TIME_LOCALE}" in desktop.plasma_localerc()
-
-
-def test_plasma_localerc_in_plan_as_home_conf():
-    entry = next(e for e in desktop.PLAN
-                 if e["dest"] == f"{desktop.HOME}/.config/plasma-localerc")
-    assert entry["mode"] == 0o644
-    assert entry["owner"] == "home"
-
-
-# --- PowerDevil sleep policy: PC/laptop (Task 1) ----------------------------
-
-# NOTE: keep this DISTINCT from the module-level _parse_ini above (which returns a
-# ConfigParser and normalises [a][b] headers): here we want the RAW "[a][b]" header
-# string as the key so a missing/extra SuspendSession subgroup is directly visible.
-def _parse_kv_sections(text: str) -> dict:
-    out: dict = {}
-    section = None
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("[") and line.endswith("]"):
-            section = line
-            out.setdefault(section, {})
-        elif "=" in line and section is not None:
-            k, v = line.split("=", 1)
-            out[section][k.strip()] = v.strip()
-    return out
-
-
-def test_powerdevil_action_enum_values():
-    # The action enum (daemon/powerdevilenums.h, powerdevil 6.7.4): 0=NoAction,
-    # 1=Sleep(suspend-to-RAM), 8=Shutdown. A drift here silently changes what the
-    # AC/Battery profiles do.
-    assert desktop._POWERDEVIL_NO_ACTION == 0
-    assert desktop._POWERDEVIL_SLEEP == 1
-    assert desktop._POWERDEVIL_SHUTDOWN == 8
-
-
-def test_powerdevil_ac_never_suspends_and_never_blanks():
-    # AC profile (plugged in, and the ONLY profile on a battery-less PC): the screen
-    # NEVER turns off and the session NEVER idle-suspends. Plasma-6 schema: both are
-    # EXPLICIT keys (TurnOffDisplayWhenIdle defaults TRUE, AutoSuspendAction defaults to
-    # suspend), so omission would NOT disable them -- they must be written 0/false.
-    s = desktop.powerdevilrc()
-    d = _parse_kv_sections(s)
-    assert d["[AC][Display]"]["TurnOffDisplayWhenIdle"] == "false"   # screen never off
-    ac = d["[AC][SuspendAndShutdown]"]
-    assert ac["AutoSuspendAction"] == "0"       # 0 = NoAction -> never idle-suspend
-    # The dead Plasma-5 subgroup must NOT appear (that schema is ignored by PowerDevil 6).
-    assert "[AC][SuspendSession]" not in s
-
-
-def test_powerdevil_power_button_is_shutdown():
-    # Power button -> Shut Down (PROMPT.md #2). PowerDevil 6 block-inhibits logind's
-    # handle-power-key, so in a Plasma session THIS key governs the button; value 8 =
-    # Shutdown. PowerDownAction pinned 0 (NoAction) for safety (its default is a logout
-    # prompt).
-    d = _parse_kv_sections(desktop.powerdevilrc())
-    ac = d["[AC][SuspendAndShutdown]"]
-    assert ac["PowerButtonAction"] == "8"       # 8 = Shutdown
-    assert ac["PowerDownAction"] == "0"         # 0 = NoAction (pinned off)
-
-
-def test_powerdevil_battery_suspends_after_fifteen_minutes():
-    # Battery profile (laptop unplugged) -> suspend-to-RAM after 15 min. Plasma-6 schema:
-    # AutoSuspendAction=1 (Sleep) + AutoSuspendIdleTimeoutSec in SECONDS (900), NOT the
-    # old idleTime in ms. The screen must also not dim/blank on battery.
-    d = _parse_kv_sections(desktop.powerdevilrc())
-    bd = d["[Battery][Display]"]
-    assert bd["DimDisplayWhenIdle"] == "false"
-    assert bd["TurnOffDisplayWhenIdle"] == "false"
-    bs = d["[Battery][SuspendAndShutdown]"]
-    assert bs["AutoSuspendAction"] == "1"       # 1 = Sleep (suspend-to-RAM)
-    assert bs["AutoSuspendIdleTimeoutSec"] == str(desktop.POWERDEVIL_BATTERY_IDLE_SECONDS)
-    assert bs["PowerButtonAction"] == "8"       # power button shuts down on battery too
-
-
-def test_powerdevil_timeout_matches_logind_seconds():
-    # The Plasma and console-logind 15-minute timeouts must agree (both in SECONDS now),
-    # or a laptop sleeps at two different times depending on whether Plasma is running.
-    from azarch.configuration import system
-    assert desktop.POWERDEVIL_BATTERY_IDLE_SECONDS == system.SLEEP_POLICY_IDLE_SECONDS
-
-
-def test_powerdevil_uses_new_schema_not_dead_plasma5_file():
-    # REGRESSION GUARD: PowerDevil 6 reads `powerdevilrc` (PowerDevilProfileSettings.kcfg
-    # kcfgfile). The old `powermanagementprofilesrc` policy schema is ignored (migration
-    # only). The policy MUST be in powerdevilrc, and powerdevilrc must NOT use the dead
-    # Plasma-5 [SuspendSession]/idleTime/suspendType keys.
-    entry = next(e for e in desktop.PLAN
-                 if e["dest"] == f"{desktop.HOME}/.config/powerdevilrc")
-    assert entry["builder"] is desktop.powerdevilrc
-    assert entry["mode"] == 0o644
-    assert entry["owner"] == "home"
-    s = desktop.powerdevilrc()
-    for dead in ("SuspendSession", "idleTime", "suspendType"):
-        assert dead not in s, dead
-
-
-def test_powermanagementprofilesrc_is_migration_flag_only():
-    # The old file is shipped with ONLY the migration-done flag (no policy), so
-    # PowerDevil's one-shot Plasma-5 -> 6 migrator can never run on first boot and layer
-    # stale deltas onto the hand-written powerdevilrc.
-    s = desktop.powermanagement_migration_flag()
-    d = _parse_kv_sections(s)
-    assert d == {"[Migration]": {"MigratedProfilesToPlasma6": "powerdevilrc"}}
-    # No power-policy groups leaked into this file.
-    assert "SuspendSession" not in s
-    assert "SuspendAndShutdown" not in s
-    assert "[AC]" not in s
-    entry = next(e for e in desktop.PLAN
-                 if e["dest"] == f"{desktop.HOME}/.config/powermanagementprofilesrc")
-    assert entry["builder"] is desktop.powermanagement_migration_flag
-    assert entry["mode"] == 0o644
-    assert entry["owner"] == "home"
-
-
-# --- KDE screen locker disabled (PROMPT.md #4: the actual "sleep" culprit) ---
-
-def test_kscreenlockerrc_disables_autolock():
-    # The KScreenLocker daemon defaults to auto-lock ON at 5 min and BLANKS the display
-    # -- the real cause of the screen "going to sleep". Ship the file with auto-lock off.
-    cp = _parse_ini(desktop.kscreenlockerrc())
-    daemon = cp["Daemon"]
-    assert daemon["Autolock"] == "false"       # no idle auto-lock at all
-    assert daemon["Timeout"] == "0"            # belt: zero-minute idle-lock timeout
-    assert daemon["LockOnResume"] == "false"   # no forced lock on wake/resume
-
-
-def test_kscreenlockerrc_in_plan_as_home_conf():
-    entry = next(e for e in desktop.PLAN
-                 if e["dest"] == f"{desktop.HOME}/.config/kscreenlockerrc")
-    assert entry["builder"] is desktop.kscreenlockerrc
-    assert entry["mode"] == 0o644
-    assert entry["owner"] == "home"
-
-
-def test_klaunchrc_disables_launch_feedback():
-    # Clicking the menu icon must show NO bouncing/busy "loading" cursor or taskbar
-    # launch indicator -- the menu just appears.
-    cp = _parse_ini(desktop.klaunchrc())
-    assert cp["BusyCursorSettings"]["Bouncing"] == "false"
-    assert cp["BusyCursorSettings"]["Enabled"] == "false"
-    assert cp["FeedbackStyle"]["BusyCursor"] == "false"
-    assert cp["FeedbackStyle"]["TaskbarButton"] == "false"
-
-
-def test_klaunchrc_in_plan_as_home_conf():
-    entry = next(e for e in desktop.PLAN
-                 if e["dest"] == f"{desktop.HOME}/.config/klaunchrc")
-    assert entry["builder"] is desktop.klaunchrc
-    assert entry["mode"] == 0o644
-    assert entry["owner"] == "home"
-
-
-def test_kwinrc_disables_window_animations():
-    # The menu (and every window) must appear IMMEDIATELY -- no glide/scale/fade.
-    # Our menu is an override-redirect Tk window, which KWin treats as a POPUP: its
-    # fade/slide comes from the POPUP effects (fadingpopups/slidingpopups), NOT the
-    # normal-window fade/glide/scale. So the popup effects must be disabled too, or
-    # the menu still fades in. All five *Enabled keys must be false.
-    cp = _parse_ini(desktop.kwinrc())
-    plugins = cp["Plugins"]
-    assert plugins["fadeEnabled"] == "false"
-    assert plugins["glideEnabled"] == "false"
-    assert plugins["scaleEnabled"] == "false"
-    # POPUP effects (the actual pop-in fix for the override-redirect menu window).
-    assert plugins["fadingpopupsEnabled"] == "false"
-    assert plugins["slidingpopupsEnabled"] == "false"
-
-
-def test_kwinrc_in_plan_as_home_conf():
-    entry = next(e for e in desktop.PLAN
-                 if e["dest"] == f"{desktop.HOME}/.config/kwinrc")
-    assert entry["builder"] is desktop.kwinrc
-    assert entry["mode"] == 0o644
-    assert entry["owner"] == "home"
-
-
-# --- Keyboard-layout applet: Flag mode (PROMPT.md #5b: fix low-hanging label) -
-
-def test_keyboard_layout_applet_uses_flag_display_style():
-    # The keyboard-layout applet's "US"/"HE" TEXT label hangs low (Qt AlignVCenter
-    # centers the line-box, not the caps). Flag mode (displayStyle=1) shows a centered
-    # flag ICON instead. The applet is the FIRST (leftmost) status applet, id 4.
-    assert desktop.KEYBOARD_DISPLAY_STYLE == 1     # 1 = Flag
-    assert desktop.PANEL_STATUS_APPLETS[0] == "org.kde.plasma.keyboardlayout"
-    cp = _parse_ini(desktop.plasma_appletsrc())
-    p = desktop.PANEL_CONTAINMENT_ID
-    # Status applets start at id 4 (_STATUS_ID_BASE); keyboard-layout is index 0 -> id 4.
-    kb_id = 4
-    assert cp[f"Containments][{p}][Applets][{kb_id}"]["plugin"] == "org.kde.plasma.keyboardlayout"
-    cfg = f"Containments][{p}][Applets][{kb_id}][Configuration][General"
-    assert cp[cfg]["displayStyle"] == str(desktop.KEYBOARD_DISPLAY_STYLE)
-
-
-def test_keyboard_flag_config_only_on_keyboard_applet():
-    # Only the keyboard-layout applet gets a displayStyle config; the other status
-    # applets (device-notifier, brightness, network, volume) must NOT carry it.
-    body = desktop.plasma_appletsrc()
-    # Exactly one displayStyle assignment in the whole appletsrc.
-    assert body.count("displayStyle=") == 1
-
-
-# --- Az'arch menu icon backing .desktop (THE paper-icon / launches-nothing fix) --
-
-def test_az_menu_icon_backing_is_a_real_application_launcher():
-    # THE BUG: org.kde.plasma.icon, given a bare url= path, bakes a
-    # Type=Link/Icon=unknown wrapper (a "paper icon" that opens a file location
-    # instead of Exec'ing) into ~/.local/share/plasma_icons. We ship that backing
-    # file ourselves as a real launcher: Type=Application, Exec=<installed launcher>,
-    # a resolvable Icon -- and crucially NOT Type=Link/URL/Icon=unknown.
-    body = desktop.az_menu_plasma_icon_backing()
-    cp = _parse_ini(body)
-    entry = cp["Desktop Entry"]
-    assert entry["Type"] == "Application"          # NOT Link
-    assert entry["Exec"] == desktop._app_menu.MENU_LAUNCHER_SYSTEM_PATH
-    assert entry["Icon"] == desktop._AZ_MENU_ICON_NAME
-    assert entry["Icon"] != "unknown"              # not the generic paper glyph
-    assert "Type=Link" not in body
-    assert "URL=" not in body
-
-
-def test_az_menu_icon_backing_matches_installed_desktop():
-    # Single source of truth: the applet backing file and the installed
-    # /usr/local/share/applications .desktop must be identical, so both the panel
-    # applet and the menu entry launch the same thing.
-    assert desktop.az_menu_plasma_icon_backing() == desktop._app_menu.menu_desktop()
-
-
-def test_az_menu_local_path_is_the_plasma_icons_backing_path():
-    # The localPath the appletsrc points at must be under ~/.local/share/plasma_icons
-    # (the dir org.kde.plasma.icon reads its backing file from).
-    assert desktop._AZ_MENU_LOCAL_PATH == (
-        f"{desktop.HOME}/.local/share/plasma_icons/azarch-application-menu.desktop"
-    )
-    # And the appletsrc's Configuration/localPath must equal it.
-    cp = _parse_ini(desktop.plasma_appletsrc())
-    p = desktop.PANEL_CONTAINMENT_ID
-    az = f"Containments][{p}][Applets][{desktop._AZ_MENU_ID}][Configuration"
-    assert cp[az]["localPath"] == desktop._AZ_MENU_LOCAL_PATH
-
-
-def test_az_menu_icon_backing_in_plan_as_home_exec():
-    # Emitted to the plasma_icons localPath, home-owned (the live user must read it).
-    # It MUST be 0o755 (EXECUTABLE), not 0o644: KDE treats a non-executable
-    # Type=Application desktop file as UNTRUSTED, so the panel icon's KIO click path
-    # pops a modal "not trusted" dialog and launches nothing. The exec bit is the
-    # trust signal. steps.py mirrors home-owned files into /etc/skel for installed users.
-    entry = next(e for e in desktop.PLAN if e["dest"] == desktop._AZ_MENU_LOCAL_PATH)
-    assert entry["builder"] is desktop.az_menu_plasma_icon_backing
-    assert entry["mode"] == 0o755
-    assert entry["owner"] == "home"
-
-
-# --- Super/Meta key -> Az'arch menu (Kickoff launcher removed) --------------
-
-def test_kglobalshortcutsrc_frees_meta_from_kickoff_launcher():
-    # The Super key used to open Kickoff via the plasmashell action
-    # 'activate application launcher'. With Kickoff removed, that action must be
-    # set to none,none so Meta is free for our menu's grab (otherwise the two
-    # contend). Only the [plasmashell] launcher key is touched.
-    body = desktop.kglobalshortcutsrc()
-    cp = _parse_ini(body)
-    assert cp["plasmashell"]["activate application launcher"].startswith("none,none")
-    # It must NOT rebind Meta to the launcher (that is exactly what we are undoing).
-    assert "Meta" not in cp["plasmashell"]["activate application launcher"]
-
-
-def test_menu_shortcut_desktop_binds_meta_and_launches_the_menu():
-    # The dedicated shortcut .desktop carries X-KDE-Shortcuts=Meta and runs the SAME
-    # launcher the panel icon uses, so pressing Super toggles the one menu daemon.
-    body = desktop._app_menu.menu_shortcut_desktop()
-    entry = _parse_ini(body)["Desktop Entry"]
-    assert entry["Type"] == "Application"
-    assert entry["X-KDE-Shortcuts"] == "Meta"
-    assert entry["Exec"] == desktop._app_menu.MENU_LAUNCHER_SYSTEM_PATH
-    # NoDisplay=true keeps it out of app listings AND is compatible with the Meta
-    # grab: kglobalacceld's detectAppsWithShortcuts() (the /usr/share/applications
-    # path) has no noDisplay guard, so a NoDisplay shortcut app still registers its
-    # _launch grab (verified against the kglobalacceld source + live). It is ALSO in
-    # apps.HIDDEN_DESKTOP_IDS as belt-and-suspenders.
-    assert entry["NoDisplay"] == "true"
-
-
-def test_menu_shortcut_desktop_id_is_distinct_from_panel_desktop():
-    # The shortcut file must have a UNIQUE id (basename) so it never collides with
-    # the panel-icon .desktop in KSycoca / kglobalacceld (which key by StorageId).
-    import os
-    shortcut_id = os.path.basename(desktop._app_menu.MENU_SHORTCUT_DESKTOP_SYSTEM_PATH)
-    panel_id = os.path.basename(desktop._app_menu.MENU_DESKTOP_SYSTEM_PATH)
-    assert shortcut_id != panel_id
-    assert shortcut_id == desktop._app_menu.MENU_SHORTCUT_DESKTOP_ID
-
-
-def test_menu_shortcut_desktop_in_plan_under_system_applications_dir():
-    # It must land in the SYSTEM XDG applications dir (/usr/share/applications) so
-    # KSycoca always indexes it and kglobalacceld's KApplicationTrader query scans it
-    # at login -- the file-only path that grabs Meta. Root-owned data file (0o644),
-    # system-wide (one file for all users, carries onto the installed system).
-    dest = desktop._app_menu.MENU_SHORTCUT_DESKTOP_SYSTEM_PATH
-    assert dest == "/usr/share/applications/azarch-application-menu-shortcut.desktop"
-    entry = next(e for e in desktop.PLAN if e["dest"] == dest)
-    assert entry["builder"] is desktop.az_menu_shortcut_desktop
-    assert entry["mode"] == 0o644
-    assert entry["owner"] == "root"
-
-
-def test_kglobalshortcutsrc_in_plan_home_owned_conf():
-    dest = f"{desktop.HOME}/.config/kglobalshortcutsrc"
-    entry = next(e for e in desktop.PLAN if e["dest"] == dest)
-    assert entry["builder"] is desktop.kglobalshortcutsrc
-    assert entry["mode"] == 0o644
-    assert entry["owner"] == "home"

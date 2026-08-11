@@ -87,24 +87,22 @@ def test_desktop_installer_launcher_stays_executable():
     assert '["/etc/skel/Desktop/azarch-install.desktop"]="0:0:755"' in sh
 
 
-def test_menu_icon_backing_desktop_stays_executable():
-    # THE "noisy error, nothing pops up" FIX: the org.kde.plasma.icon backing
-    # .desktop (the applet's localPath) is a Type=Application launcher; KDE's
-    # isAuthorizedDesktopFile() treats a NON-executable one as UNTRUSTED, so the
-    # panel icon's KIO click path pops a modal "not trusted, execute?" dialog and
-    # launches nothing. archiso normalizes home files to 0644 unless pinned here, so
-    # without these pins the shipped ISO's icon does nothing on click. Both the
-    # live-user copy and the /etc/skel copy must be 0755 (executable = trusted). The
-    # path must match desktop._AZ_MENU_LOCAL_PATH (the localPath the appletsrc points at).
-    from azarch.configuration import desktop
-    live = desktop._AZ_MENU_LOCAL_PATH
-    assert live == "/home/main/.local/share/plasma_icons/azarch-application-menu.desktop"
-    skel = "/etc/skel/.local/share/plasma_icons/azarch-application-menu.desktop"
+def test_openbox_autostart_stays_executable():
+    # The OpenBox session autostart (~/.config/openbox/autostart) is run by
+    # openbox-session and carries a shebang; desktop.PLAN emits it 0o755. archiso
+    # normalizes home files to 0644 in the squashfs unless pinned here, so without
+    # these pins the shipped autostart would be non-executable. Both the live-user copy
+    # and the /etc/skel copy must be 0755. (The old Plasma org.kde.plasma.icon backing
+    # .desktop pins were removed -- there is no panel applet under OpenBox.)
+    live = "/home/main/.config/openbox/autostart"
+    skel = "/etc/skel/.config/openbox/autostart"
     assert profile.FILE_PERMISSIONS[live] == "1000:998:755"
     assert profile.FILE_PERMISSIONS[skel] == "0:0:755"
     sh = profile.profiledef_sh()
     assert f'["{live}"]="1000:998:755"' in sh
     assert f'["{skel}"]="0:0:755"' in sh
+    # The stale Plasma plasma_icons backing-file pins must be GONE.
+    assert not any("plasma_icons" in p for p in profile.FILE_PERMISSIONS)
 
 
 def test_secrets_locked_down():

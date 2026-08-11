@@ -162,13 +162,13 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # Overlay the releng `archiso` hostname with `azarch` (prompt + fastfetch title).
     emit.write_text(airootfs / "etc/hostname", system.HOSTNAME)
 
-    # 8 -- Overlay the KDE Plasma live desktop + Calamares installer configuration.
+    # 8 -- Overlay the OpenBox live desktop + Calamares installer configuration.
     # The graphical live session (Manjaro-style): user configs go to BOTH the live
     # `main` home AND /etc/skel (so a Calamares-created user on the installed system
     # inherits the same desktop). The tty1 autologin override switches the releng
     # default (autologin root) to autologin `main`, whose .bash_profile execs startx
-    # into a Plasma X11 session. The Calamares configuration tree lands under /etc/calamares.
-    bar.step("Overlay Plasma desktop and Calamares configuration")
+    # into an OpenBox X11 session. The Calamares configuration tree lands under /etc/calamares.
+    bar.step("Overlay OpenBox desktop and Calamares configuration")
     _emit_desktop(airootfs, home)
     _emit_calamares(airootfs)
     _emit_tty1_autologin(airootfs)
@@ -214,7 +214,7 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # The first-boot script/service/conf. profiledef.sh (archiso metadata at the
     # PROFILE ROOT) is NOT emitted here: its iso_name is the one thing that differs
     # per variant, so it is written per-variant in the finalize loop below. Calamares
-    # (auto-launched from the Plasma session, step 8) is the SOLE installer: the
+    # (auto-launched from the OpenBox session, step 8) is the SOLE installer: the
     # legacy terminal azarch-iso-installer.sh is no longer emitted to the live user's
     # Desktop (the on-disk installer scripts remain in configuration/installer.py for the
     # first-boot pipeline, but the Desktop launcher is gone).
@@ -306,11 +306,12 @@ def _apply_variant(W: Path, airootfs: Path, variant: str) -> None:
 
 
 def _emit_desktop(airootfs: Path, home: Path) -> None:
-    """Emit the Plasma live-session files. Each PLAN entry has an absolute dest
-    (either under /home/main for the live user or an absolute system path). User
-    files are ALSO copied into /etc/skel so a Calamares-created user on the
-    installed system inherits the same desktop (Manjaro-style). The /home/main
-    tree is chowned 1000:998 by step 6 / the post-emit chown below."""
+    """Emit the OpenBox live-session files. Each PLAN entry has an absolute dest
+    (either under /home/main for the live user -- e.g. ~/.config/openbox/* -- or an
+    absolute system path). User files are ALSO copied into /etc/skel so a
+    Calamares-created user on the installed system inherits the same desktop
+    (Manjaro-style). The /home/main tree is chowned 1000:998 by step 6 / the post-emit
+    chown below."""
     skel = airootfs / "etc/skel"
     for entry in desktop.emit_plan():
         content = entry["builder"]()
@@ -329,22 +330,24 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
     for icon_dest in (desktop.INSTALLER_ICON_PIXMAP, desktop.INSTALLER_ICON_HICOLOR):
         emit.copy_asset(desktop.INSTALLER_ICON_ASSET,
                         airootfs / icon_dest.lstrip("/"), mode=0o644)
-    # Selectable wallpaper KPackages ("years", "decades") shown in Plasma's
-    # "Desktop and Wallpaper" grid. Each: metadata.json + contents/images/<res>.png
-    # (+ a screenshot.png thumbnail). Root-owned under /usr/share/wallpapers. The
-    # stock "Next" wallpaper is removed in customize_airootfs.sh so only these show.
+    # The two Az'arch wallpaper images ("years", "decades") under /usr/share/wallpapers.
+    # Each ships as contents/images/<res>.png (+ a screenshot.png thumbnail and an inert
+    # metadata.json kept for self-description). feh paints the "years" image as the X
+    # root pixmap from the OpenBox autostart / ~/.xinitrc (KDE Plasma and its wallpaper
+    # grid are gone). Root-owned under /usr/share/wallpapers.
     for pkg in desktop.WALLPAPER_PACKAGES:
         pkg_root = airootfs / desktop.WALLPAPERS_SYSTEM_DIR.lstrip("/") / pkg["id"]
         emit.write_text(pkg_root / "metadata.json",
                         desktop.wallpaper_metadata_json(pkg["id"]), mode=0o644)
         img = pkg_root / "contents" / "images" / f"{desktop.WALLPAPER_IMAGE_RES}.png"
         emit.copy_asset(pkg["asset"], img, mode=0o644)
-        # screenshot.png = the grid thumbnail (reuse the full image).
+        # screenshot.png = a thumbnail (reuse the full image).
         emit.copy_asset(pkg["asset"], pkg_root / "contents" / "screenshot.png", mode=0o644)
-    # Az'arch application menu (OUR menu -- it REPLACED Kickoff and is the panel's
-    # leftmost icon + the Super key). Copy the runtime files (menu.py + siblings,
-    # launcher, .desktop) to their fixed SYSTEM paths; the panel icon that launches
-    # them is baked into desktop.plasma_appletsrc above.
+    # Az'arch application menu (OUR menu -- the whole shell now that Plasma is gone: a
+    # centered Tkinter launcher opened by the Super key + the OpenBox root menu). Copy
+    # the runtime files (menu.py + siblings, daemon, launcher, .desktop) to their fixed
+    # SYSTEM paths; the OpenBox session (desktop.py) starts the daemon from its autostart
+    # and binds the Super key to the launcher.
     # Root-owned system paths -> the OFFLINE Calamares install rsyncs them onto the
     # installed system with no separate step.
     for entry in application_menu.emit_plan():
@@ -643,9 +646,10 @@ def _emit_fastfetch(ea: Path, home: Path) -> None:
 def _link_services(airootfs: Path) -> None:
     # Graphical live medium WITHOUT a display manager: the tty1 autologin (overridden
     # to `main`) drops into a login shell whose ~/.bash_profile execs startx ->
-    # startplasma-x11 -> Calamares. So there is deliberately NO display-manager unit
-    # and NO graphical.target.wants here; we only enable the multi-user daemons and
-    # the two azarch oneshots. X is started from the shell, not by systemd.
+    # openbox-session -> (autostart) Calamares. So there is deliberately NO
+    # display-manager unit and NO graphical.target.wants here; we only enable the
+    # multi-user daemons and the two azarch oneshots. X is started from the shell, not
+    # by systemd.
     #
     # These enable-links are variant-independent (both ISOs get them). The sshd
     # variant's extra sshd-hypervisor-setup enable-link is added per-variant in

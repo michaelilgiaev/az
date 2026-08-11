@@ -62,43 +62,33 @@ FILE_PERMISSIONS = {
     "/usr/local/bin/choose-mirror": "0:0:755",
     "/usr/local/bin/Installation_guide": "0:0:755",
     "/usr/local/bin/livecd-sound": "0:0:755",
-    # The Calamares launcher the Plasma autostart .desktop runs on live login.
-    # archiso NORMALIZES overlay file modes when it packs the squashfs -- only
-    # paths listed here keep an explicit mode. Without this entry the wrapper ships
-    # 0644 (non-executable), so the autostart .desktop's Exec= cannot run it and
-    # Calamares never auto-launches. THIS is what breaks the live installer.
+    # The Calamares launcher the OpenBox autostart runs on live login. archiso
+    # NORMALIZES overlay file modes when it packs the squashfs -- only paths listed
+    # here keep an explicit mode. Without this entry the wrapper ships 0644
+    # (non-executable), so the autostart's `[ -x ... ]` guard skips it and Calamares
+    # never auto-launches. THIS is what breaks the live installer.
     "/usr/local/bin/azarch-install": "0:0:755",
     "/usr/local/bin/azarch": "0:0:755",
-    # The Az'arch application-menu launcher the panel icon Exec's (via the
-    # org.kde.plasma.icon backing .desktop). SAME archiso mode-normalization as
-    # azarch-install above: application_menu.PLAN emits it 0755, but the squashfs
-    # ships it 0644 (non-executable) unless pinned here -- and then clicking the
-    # panel icon runs a non-executable file and the menu never opens (the other half
-    # of the "icon does nothing" bug, alongside the Type=Link backing-file fix).
+    # The Az'arch application-menu launcher (run by the Super key via OpenBox's rc.xml
+    # keybind and by the OpenBox root menu). SAME archiso mode-normalization as
+    # azarch-install above: application_menu.PLAN emits it 0755, but the squashfs ships
+    # it 0644 (non-executable) unless pinned here -- and then the Super key runs a
+    # non-executable file and the menu never opens.
     "/usr/local/bin/azarch-application-menu": "0:0:755",
+    # The OpenBox session autostart (~/.config/openbox/autostart). openbox-session runs
+    # it via /bin/sh, but it carries a shebang and desktop.PLAN emits it 0755, so pin it
+    # executable here too (archiso would otherwise normalize it to 0644). Pin both the
+    # live-user copy (1000:998) and the /etc/skel copy (root-owned).
+    "/home/main/.config/openbox/autostart": "1000:998:755",
+    "/etc/skel/.config/openbox/autostart": "0:0:755",
     # The live-session Desktop "Az'arch Linux Installer" launcher. Same archiso mode-
     # normalization as azarch-install above: steps.py emits it 0755, but the squashfs
-    # ships it 0644 unless pinned here. A 0644 (non-executable) .desktop on the Desktop
-    # is UNTRUSTED to KDE -- KDesktopFile::isAuthorizedDesktopFile() returns false for a
-    # user-owned, non-executable Exec= launcher, so Plasma's Folder View paints an
-    # "emblem-important" WARNING BADGE over it (and prompts on first launch) until the
-    # user marks it executable. THIS is the "weird warning icon that disappears once
-    # you open the installer" report: the badge is gone after the first launch trusts
-    # it. Pinning 0755 makes the shipped file executable -> authorized -> no badge, no
-    # prompt, from first boot. Both the live-user copy (uid 1000:998) and the /etc/skel
-    # copy (root-owned; root-owned is ALSO trusted) are pinned.
+    # ships it 0644 unless pinned here. Shipping it EXECUTABLE means a file manager that
+    # honours the exec bit launches it on double-click without a "not trusted" prompt.
+    # Both the live-user copy (uid 1000:998) and the /etc/skel copy (root-owned) are
+    # pinned.
     "/home/main/Desktop/azarch-install.desktop": "1000:998:755",
     "/etc/skel/Desktop/azarch-install.desktop": "0:0:755",
-    # The org.kde.plasma.icon backing .desktop for OUR menu applet (its localPath).
-    # SAME trust rule as the Desktop launcher above: KDE's
-    # KDesktopFile::isAuthorizedDesktopFile() treats a NON-executable Type=Application
-    # file as UNTRUSTED, so the panel icon's KIO click path pops a modal "not trusted,
-    # execute?" dialog (a "noisy error") and launches NOTHING. archiso normalizes home
-    # files to 0644 in the squashfs, so without these pins the icon does nothing on a
-    # fresh ISO. Pin both the live-user copy (1000:998) and the /etc/skel copy (root)
-    # to 0755 -> executable -> trusted -> launches on first click.
-    "/home/main/.local/share/plasma_icons/azarch-application-menu.desktop": "1000:998:755",
-    "/etc/skel/.local/share/plasma_icons/azarch-application-menu.desktop": "0:0:755",
     # Vendored ckbcomp (libraries/azarch/ckbcomp), a Python 3 port of the upstream
     # Perl ckbcomp. Same archiso mode-normalization as azarch-install above: without
     # an explicit 0755 here it ships 0644, Calamares' `QProcess::start("ckbcomp")`

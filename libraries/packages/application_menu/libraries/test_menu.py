@@ -6,8 +6,8 @@ Two layers:
     parsing, and launch-frequency ordering in usage.py. These run anywhere.
   * UI smoke tests (need $DISPLAY): build the real window, disable its
     auto-close bindings, and drive the search filter (including the clear-
-    restores-order fix), selection / launch, the pin toggle and the power
-    wiring deterministically.
+    restores-order fix), selection / launch, the TAB focus toggle between the
+    app list and the power row, and the power wiring deterministically.
 
 Run:  DISPLAY=:0 XAUTHORITY=~/.Xauthority python3 test_menu.py
 The UI layer is skipped automatically when no display is available.
@@ -429,7 +429,7 @@ def test_scan_hides_denylisted(tmp: str) -> None:
 # --- pure-logic: 10%-bigger text + icons ----------------------------------
 def test_theme_sizes_are_scaled_10pct() -> None:
     """Text and icons ship 10% bigger than the original Kickoff-match sizes so the
-    menu reads a touch larger while still fitting the panel footprint.
+    menu reads a touch larger.
 
     The font sizes and icon edges USED to be bare literals scattered across
     widgets.py / applist.py / menu.py (the app-name/type point sizes, the search
@@ -438,6 +438,9 @@ def test_theme_sizes_are_scaled_10pct() -> None:
     place to scale them. This pins the scaled values (original * 1.1, rounded to the
     nearest whole point/pixel -- Tk fonts and PhotoImage need integers) so a future
     edit that silently reverts the bump fails here.
+
+    (The top-row icon size TOP_ICON_SIZE is gone with the removed Settings/pin
+    buttons, so only the app-row and power-row sizes remain to pin.)
     """
     import theme as T
 
@@ -449,14 +452,13 @@ def test_theme_sizes_are_scaled_10pct() -> None:
 
     assert T.ICON_SIZE == 44, T.ICON_SIZE              # was 40
     assert T.POWER_ICON_SIZE == 24, T.POWER_ICON_SIZE  # was 22
-    assert T.TOP_ICON_SIZE == 24, T.TOP_ICON_SIZE      # was 22
 
     # Every one is genuinely bigger than the pre-bump value (guards a typo that
     # made a size SMALLER while still being "changed").
     for new, old in (
         (T.FONT_APP_NAME, 12), (T.FONT_APP_TYPE, 9),
         (T.FONT_SEARCH, 12), (T.FONT_POWER, 11),
-        (T.ICON_SIZE, 40), (T.POWER_ICON_SIZE, 22), (T.TOP_ICON_SIZE, 22),
+        (T.ICON_SIZE, 40), (T.POWER_ICON_SIZE, 22),
     ):
         assert new > old, (new, old)
 
@@ -501,15 +503,36 @@ def test_app_rows_are_nudged_right() -> None:
     assert cls.ICON_X - orig_icon <= 12
 
 
-def test_tooltip_theme_constants_exist() -> None:
-    """The hover-tooltip styling constants are defined so the Settings button's
-    hint has a Breeze-ish look. The tooltip is INSTANT now (no dwell), so
-    TOOLTIP_DELAY_MS is retained only for compatibility and must be a
-    non-negative int (0 = show immediately)."""
+def test_menu_size_is_theme_default() -> None:
+    """menu.menu_size() is the fixed (width, height) the centered window is sized
+    to -- the theme defaults. Plasma/Kickoff is gone, so there is no appletsrc popup
+    size to read anymore; the menu is just a fixed-size centered window."""
+    import menu
     import theme as T
-    for attr in ("TOOLTIP_BG", "TOOLTIP_FG", "TOOLTIP_BORDER"):
-        assert getattr(T, attr).startswith("#"), attr
-    assert isinstance(T.TOOLTIP_DELAY_MS, int) and T.TOOLTIP_DELAY_MS >= 0
+    assert menu.menu_size() == (T.DEFAULT_WIDTH, T.DEFAULT_HEIGHT)
+    w, h = menu.menu_size()
+    assert w > 0 and h > 0
+
+
+def test_removed_panel_and_tooltip_theme_constants_are_gone() -> None:
+    """The panel/highlight-bar and tooltip styling constants were REMOVED with the
+    panel, the panel-icon highlight bar and the Settings-button hint. Only the
+    window geometry defaults (DEFAULT_WIDTH/HEIGHT) and the palette/font/icon
+    constants remain. This pins that the dead constants do NOT creep back."""
+    import theme as T
+    # Geometry defaults are kept.
+    assert isinstance(T.DEFAULT_WIDTH, int) and isinstance(T.DEFAULT_HEIGHT, int)
+    # The panel / highlight-bar / tooltip / disabled-icon constants are gone.
+    for gone in (
+        "PANEL_HEIGHT", "ICON_CELL_W", "ICON_CELL_X",
+        "HIGHLIGHT_BAR_HEIGHT", "HIGHLIGHT_BAR_INSET",
+        "TOP_ICON_SIZE",
+        "TOOLTIP_BG", "TOOLTIP_FG", "TOOLTIP_BORDER", "TOOLTIP_DELAY_MS",
+        "DISABLED_ICON_COLOR",
+    ):
+        assert not hasattr(T, gone), (
+            f"theme.{gone} should have been removed with the panel / settings button"
+        )
 
 
 # --- UI smoke tests (need a display) --------------------------------------
@@ -571,7 +594,35 @@ def test_ui_build_and_contents() -> None:
         for e in al.all_entries:
             assert e.name
             assert e.type_label
-        assert root.az_highlight is not None
+        # Four power buttons in the canonical Sleep/Lock/Restart/Shut Down order.
+        assert len(m.power_buttons) == 4
+    finally:
+        root.destroy()
+
+
+def test_ui_removed_pin_settings_and_highlight_are_gone() -> None:
+    """The PIN button, the SETTINGS (gear) button and the panel-icon HIGHLIGHT BAR
+    were all removed. Neither the AppMenu nor the root window may still expose them,
+    and the state dict no longer carries the pin flags -- a regression that added any
+    of them back is caught here."""
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        # The AppMenu has no pin/settings widgets anymore.
+        assert getattr(m, "pin_button", None) is None
+        assert getattr(m, "settings_button", None) is None
+        assert not hasattr(m, "pin_button")
+        assert not hasattr(m, "settings_button")
+        # And no pin toggle handler.
+        assert not hasattr(m, "_toggle_pin")
+        # The root window exposes no highlight bar / pin attributes.
+        assert not hasattr(root, "az_highlight")
+        assert not hasattr(root, "az_pinned")
+        # The close/capture state has no pin keys (only "closed" + "capturing").
+        st = root.az_state
+        assert "pinned" not in st
+        assert "pin_active" not in st
+        assert set(st) == {"closed", "capturing"}, st
     finally:
         root.destroy()
 
@@ -733,26 +784,294 @@ def test_ui_search_filtering_never_churns_windows() -> None:
         root.destroy()
 
 
-def test_ui_pin_keeps_menu_open() -> None:
-    """Pinning must make outside-click / focus-loss / Escape NON-dismissing,
-    while a forced close (app launch, power action) still works."""
+def test_ui_window_is_centered() -> None:
+    """The window is CENTERED on the screen (the old bottom-left/panel placement is
+    gone with the panel). build_window() applies geometry
+    +max(0,(sw-w)//2)+max(0,(sh-h)//2) with the theme-default size, so we assert the
+    mapped window's top-left matches that formula. Computing the expected corner with
+    the SAME clamp keeps this independent of the (possibly tiny) headless screen: on a
+    window taller than the screen the y clamps to 0, which is still correct."""
+    import tkinter as tk
+    _menu, root = _build_testable_menu()
+    try:
+        # The testable menu is left withdrawn; map it so winfo_* report real coords.
+        try:
+            root.deiconify()
+            root.lift()
+        except tk.TclError:
+            pass
+        root.update_idletasks()
+        root.update()
+
+        sw = root.winfo_screenwidth()
+        sh = root.winfo_screenheight()
+        win_w, win_h = _menu.menu_size()
+        exp_x = max(0, (sw - win_w) // 2)
+        exp_y = max(0, (sh - win_h) // 2)
+        assert (root.winfo_rootx(), root.winfo_rooty()) == (exp_x, exp_y), (
+            "window must be centered; got "
+            f"{(root.winfo_rootx(), root.winfo_rooty())} != {(exp_x, exp_y)}"
+        )
+        # The size is the theme default, not a panel-derived popup size.
+        assert (root.winfo_width(), root.winfo_height()) == (win_w, win_h)
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_ui_default_focus_zone_is_apps() -> None:
+    """The menu opens in the APPS focus zone: the search box has the caret and the
+    app-list selection is shown/enabled, and no power button is focused. reset_view
+    (what the daemon calls on each re-show) must also return to this default."""
     _menu, root = _build_testable_menu()
     try:
         m = root.az_menu
-        assert root.az_pinned is False
-        # Toggle pin ON via the menu's own handler (drives the button too).
-        m._toggle_pin()
-        assert root.az_pinned is True
-        assert m.pin_button._active is True
+        assert m.focus_zone == _menu.FOCUS_APPS
+        assert m.applist._selection_enabled is True
+        assert all(not b._focused for b in m.power_buttons)
 
-        # A normal (unforced) close is now a no-op: the window survives.
-        m.close_menu()
-        assert root.winfo_exists()
+        # Move to the power zone, then reset_view must snap back to apps.
+        m.set_focus_zone(_menu.FOCUS_POWER)
+        assert m.focus_zone == _menu.FOCUS_POWER
+        m.reset_view()
+        root.update_idletasks()
+        assert m.focus_zone == _menu.FOCUS_APPS
+        assert m.applist._selection_enabled is True
+        assert all(not b._focused for b in m.power_buttons)
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
 
-        # Toggle pin OFF -> a normal close dismisses again.
-        m._toggle_pin()
-        assert root.az_pinned is False
-        assert m.pin_button._active is False
+
+def test_ui_tab_toggles_focus_zone() -> None:
+    """TAB flips between the two focus zones. From the default (apps) toggle_focus()
+    moves to the power row -- the app-list selection dims (set_selection_enabled
+    False) and the FIRST power button lights up -- and TAB again returns to apps
+    (selection re-enabled, all power focus cleared)."""
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        # Default: apps zone, selection enabled, nothing focused in the power row.
+        assert m.focus_zone == _menu.FOCUS_APPS
+        assert m.applist._selection_enabled is True
+        assert all(not b._focused for b in m.power_buttons)
+
+        # TAB -> power zone.
+        m.toggle_focus()
+        assert m.focus_zone == _menu.FOCUS_POWER
+        assert m.applist._selection_enabled is False, (
+            "moving to the power zone must dim the app-list selection"
+        )
+        assert m.power_buttons[0]._focused is True, (
+            "the first power button must light up when entering the power zone"
+        )
+        assert all(not b._focused for b in m.power_buttons[1:])
+
+        # TAB again -> back to apps.
+        m.toggle_focus()
+        assert m.focus_zone == _menu.FOCUS_APPS
+        assert m.applist._selection_enabled is True, (
+            "returning to apps must re-enable the app-list selection"
+        )
+        assert all(not b._focused for b in m.power_buttons), (
+            "returning to apps must clear all power focus"
+        )
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_ui_power_zone_left_right_moves_focus_clamped() -> None:
+    """In the power zone Left/Right move the focused button, clamped (no wrap): from
+    the first button on_right() lights the second (and clears the first), and Left
+    from the first / Right from the last stay put."""
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        m.set_focus_zone(_menu.FOCUS_POWER)
+        assert m._power_index == 0
+        assert m.power_buttons[0]._focused is True
+
+        # Right -> index 1 focused, index 0 cleared.
+        m.on_right()
+        assert m._power_index == 1
+        assert m.power_buttons[1]._focused is True
+        assert m.power_buttons[0]._focused is False
+
+        # Right to the end (4 buttons -> last index 3), then Right again clamps.
+        m.on_right()
+        m.on_right()
+        assert m._power_index == 3
+        m.on_right()
+        assert m._power_index == 3, "Right past the last button must clamp (no wrap)"
+        assert m.power_buttons[3]._focused is True
+
+        # Left all the way back, then Left again clamps at 0.
+        m.on_left(); m.on_left(); m.on_left()
+        assert m._power_index == 0
+        m.on_left()
+        assert m._power_index == 0, "Left before the first button must clamp (no wrap)"
+        assert m.power_buttons[0]._focused is True
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_ui_on_activate_in_power_zone_fires_focused_button() -> None:
+    """Enter (on_activate) in the power zone fires the CURRENTLY FOCUSED power
+    button's command, not the app list. We swap the focused button's command for a
+    spy so the assertion is deterministic (and never suspends/reboots the host)."""
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        # Neutralise close so activating does not tear the window down mid-test.
+        m.close_menu = lambda *a, **k: None
+
+        fired = {"which": None}
+        # Give every power button a distinct spy command.
+        for i, b in enumerate(m.power_buttons):
+            b._command = (lambda idx: (lambda: fired.__setitem__("which", idx)))(i)
+
+        m.set_focus_zone(_menu.FOCUS_POWER)
+        # Focus the third button (Restart) and activate via Enter.
+        m.on_right()
+        m.on_right()
+        assert m._power_index == 2
+        m.on_activate()
+        assert fired["which"] == 2, (
+            f"Enter in the power zone must fire the focused button, got {fired}"
+        )
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_ui_power_activation_wired_through_on_activate(monkeypatch_actions) -> None:
+    """End-to-end: TAB to the power row and press Enter on the first button (Sleep)
+    -> the real suspend action fires (through _do -> actions.suspend). Driven with
+    the monkeypatch_actions fixture so the host is never actually suspended. The
+    fixture patches actions.* BEFORE the menu is built, so the button closures
+    capture the recorders."""
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        # _do closes the menu before firing; stub close so this stays non-destructive
+        # (we are asserting the action wiring, not the close, which its own test
+        # covers).
+        m.close_menu = lambda *a, **k: None
+
+        m.toggle_focus()                       # -> power zone, first button focused
+        assert m.focus_zone == _menu.FOCUS_POWER
+        assert m._power_index == 0
+        m.on_activate()                        # Enter on Sleep
+        assert "suspend" in monkeypatch_actions.calls, (
+            f"Enter on the first power button must fire suspend; "
+            f"got {monkeypatch_actions.calls}"
+        )
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_ui_power_button_set_focused_paints_outline() -> None:
+    """PowerButton.set_focused(True) paints the Breeze blue selection OUTLINE
+    (highlightbackground becomes SELECT_BORDER) and set_focused(False) restores it to
+    the background colour so the 1px geometry never shifts but the outline vanishes."""
+    import theme as T
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        btn = m.power_buttons[0]
+        assert btn._focused is False
+        assert str(btn.cget("highlightbackground")) == T.BG_COLOR
+
+        btn.set_focused(True)
+        assert btn._focused is True
+        assert str(btn.cget("highlightbackground")) == T.SELECT_BORDER, (
+            "a focused power button must show the blue selection outline"
+        )
+
+        btn.set_focused(False)
+        assert btn._focused is False
+        assert str(btn.cget("highlightbackground")) == T.BG_COLOR, (
+            "clearing focus must restore the background-matched (invisible) outline"
+        )
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_ui_tab_is_bound_and_click_returns_focus_to_apps() -> None:
+    """<Tab> (and its Shift variants) are bound on the root window, and clicking the
+    search box returns focus to the apps zone (in case the user had TAB'd away)."""
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        # The TAB focus-toggle keys are bound on the window.
+        for seq in ("<Tab>", "<Shift-Tab>", "<ISO_Left_Tab>"):
+            assert root.bind(seq), f"{seq} must be bound to toggle the focus zone"
+
+        # Move to the power zone, then a click in the search box snaps back to apps.
+        m.set_focus_zone(_menu.FOCUS_POWER)
+        assert m.focus_zone == _menu.FOCUS_POWER
+        # The entry's <Button-1> binding calls set_focus_zone(FOCUS_APPS); fire it.
+        m.search_entry.event_generate("<Button-1>")
+        root.update_idletasks()
+        assert m.focus_zone == _menu.FOCUS_APPS, (
+            "clicking the search box must return focus to the apps zone"
+        )
+        assert m.applist._selection_enabled is True
+        assert all(not b._focused for b in m.power_buttons)
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_ui_arrows_move_selection_only_in_apps_zone() -> None:
+    """In the APPS zone Up/Down move the app-list selection; in the POWER zone they
+    are no-ops for the app list (the selection index does not move) -- Left/Right
+    drive the power row there instead."""
+    _menu, root = _build_testable_menu()
+    try:
+        m = root.az_menu
+        al = m.applist
+        assert al.visible_count >= 3, "need a few apps to move the selection"
+
+        # Apps zone: Down/Up move the selection.
+        assert m.focus_zone == _menu.FOCUS_APPS
+        assert al.selected_index == 0
+        m.on_down()
+        assert al.selected_index == 1, "Down must move the app selection in apps zone"
+        m.on_down()
+        assert al.selected_index == 2
+        m.on_up()
+        assert al.selected_index == 1, "Up must move the app selection in apps zone"
+
+        # Power zone: Down/Up must NOT move the app-list selection.
+        m.set_focus_zone(_menu.FOCUS_POWER)
+        frozen = al.selected_index
+        m.on_down()
+        m.on_down()
+        m.on_up()
+        assert al.selected_index == frozen, (
+            "Up/Down must be no-ops for the app list while the power zone has focus"
+        )
     finally:
         try:
             root.destroy()
@@ -763,14 +1082,12 @@ def test_ui_pin_keeps_menu_open() -> None:
 def test_ui_super_key_binding_is_present() -> None:
     """The Super/Meta key must CLOSE the menu, mirroring Escape.
 
-    Why a window-level binding at all (vs. just KWin's global Meta->launcher
-    toggle): while the menu is unpinned it holds a GLOBAL keyboard grab, so a
-    second physical Super press is delivered to OUR window and never reaches the
-    WM -- KWin's Meta shortcut can't fire, so the daemon never toggles it shut.
-    Binding Super on the window itself makes that grab-delivered press close it,
-    so 'Super opened it, Super closes it' holds. (When pinned the menu drops the
-    grab, so KWin's toggle handles the close; the binding just no-ops there via
-    close_menu's pin guard.)
+    Why a window-level binding at all (vs. just OpenBox's global Super->launcher
+    toggle): while the menu is open it holds a GLOBAL keyboard grab, so a second
+    physical Super press is delivered to OUR window and never reaches the WM --
+    OpenBox's Super keybind can't fire, so the daemon never toggles it shut. Binding
+    Super on the window itself makes that grab-delivered press close it, so 'Super
+    opened it, Super closes it' holds.
 
     Asserted structurally: every Super/Meta keysym we rely on is bound to a real
     handler on the window. Tk returns the bound command string when bind() is
@@ -801,14 +1118,13 @@ def _window_alive(root) -> bool:
         return False
 
 
-def test_ui_super_key_closes_and_respects_pin() -> None:
-    """Pressing Super closes an (unpinned) menu, and -- like Escape -- is ignored
-    while pinned (a forced close still works).
+def test_ui_super_key_closes() -> None:
+    """Pressing Super closes the menu (there is no pin -- the menu is a transient
+    launcher, so Super/Escape/outside-click/focus-loss all dismiss it).
 
     Driven through the SAME close path a real Super press hits: close_menu is what
-    the <Super_*> bindings invoke. We first prove a real synthetic <Super_L> event
-    routes to it end-to-end (window mapped + focused so Xvfb delivers the key),
-    then prove the pin guard with a direct close_menu call while pinned."""
+    the <Super_*> bindings invoke. We prove a real synthetic <Super_L> event routes
+    to it end-to-end (window mapped + focused so Xvfb delivers the key)."""
     import tkinter as tk
 
     _menu, root = _build_testable_menu()
@@ -833,205 +1149,9 @@ def test_ui_super_key_closes_and_respects_pin() -> None:
         except tk.TclError:
             pass
         assert not _window_alive(root), (
-            "a Super_L keypress must close (destroy) the unpinned menu"
+            "a Super_L keypress must close (destroy) the menu"
         )
     finally:
-        try:
-            root.destroy()
-        except Exception:
-            pass
-
-    # Pinned: Super (like Escape) must NOT dismiss; a forced close still does.
-    _menu, root = _build_testable_menu()
-    try:
-        m = root.az_menu
-        m._toggle_pin()
-        assert root.az_pinned is True
-        # The binding's handler (close_menu) is pin-guarded: no-op while pinned.
-        m.close_menu()
-        assert _window_alive(root), "pinned menu must ignore a Super/Escape close"
-        # Forced close (app launch / power) still tears it down.
-        m.close_menu(force=True)
-        try:
-            root.update()
-        except tk.TclError:
-            pass
-        assert not _window_alive(root), "forced close must work even when pinned"
-    finally:
-        try:
-            root.destroy()
-        except Exception:
-            pass
-
-
-def test_ui_pin_is_a_focus_independent_toggle() -> None:
-    """The pin button is a plain toggle that NEVER needs a focus-priming press.
-
-    Regression for 'a pinned-but-dormant menu takes two pin presses to unpin (one to
-    gain focus, one to unpin)'. The pin now unpins in a SINGLE press regardless of
-    whether it currently holds the keyboard, as a state machine:
-
-      1. Press pin (unpinned)         -> pinned AND capturing (search stays live).
-      2. User switches app (alt-tab)  -> still pinned, but NO longer capturing
-                                         (menu stays open, search goes dormant, and
-                                         the keyboard is handed to the new window).
-      3. Press pin (pinned, dormant)  -> UNPINS in ONE press (does NOT merely
-                                         re-grab focus and stay pinned).
-
-    Step 4 below re-pins and unpins again from the LIVE state to prove a live pinned
-    menu also unpins in one press -- so the button behaves identically no matter the
-    focus state. Waking a dormant pinned menu still works, but that is the search
-    box's job (test_ui_pinned_claims_x_focus_onto_own_window covers the click-to-
-    reclaim path); it is deliberately NOT bound to the pin button anymore.
-
-    The switch-away in step 2 is what actually happens on the live WM: an override-
-    redirect window will not surrender a forced keyboard focus via <FocusOut> or a
-    grab, so the menu watches _NET_ACTIVE_WINDOW (xfocus.active_window) and, when it
-    changes to another window, hands X focus there (xfocus.set_input_focus) and stops
-    capturing. We drive that deterministically by faking xfocus: active_window()
-    returns a baseline while pinned, then a DIFFERENT id to simulate the user
-    switching apps, and set_input_focus() is recorded so we can assert the keyboard
-    was handed to that window.
-    """
-    import xfocus
-    _orig_active = xfocus.active_window
-    _orig_setfocus = xfocus.set_input_focus
-    handed_to = []
-    fake = {"active": 0x111}  # some other window is active while we're pinned
-    xfocus.active_window = lambda: fake["active"]
-    xfocus.set_input_focus = lambda win: (handed_to.append(win), True)[1]
-
-    _menu, root = _build_testable_menu()
-    try:
-        m = root.az_menu
-        st = root.az_state
-        # We start unpinned. (Initial capturing depends on whether arm() grabbed on
-        # this WM; the STATE MACHINE below is independent of that starting value.)
-        assert st["pinned"] is False
-
-        # 1. Pin -> pinned and capturing, button active, baseline active-window saved.
-        m._toggle_pin()
-        assert st["pinned"] is True, st
-        assert st["capturing"] is True, st
-        assert m.pin_button._active is True
-        assert st["pin_active"] == 0x111, st  # remembered who was active at pin time
-
-        # 2. User switches to another app: _NET_ACTIVE_WINDOW changes. The watcher
-        #    (already scheduled by _focus_window) must notice, hand the keyboard to
-        #    the new window, and stop capturing -- WITHOUT unpinning or closing.
-        fake["active"] = 0x222  # a different window is now active
-        root.after(400, root.quit)   # pump long enough for the 150ms watcher tick
-        root.mainloop()
-        assert st["pinned"] is True, "switching apps must NOT unpin a pinned menu"
-        assert st["capturing"] is False, "switching apps must stop capturing"
-        assert root.winfo_exists(), "pinned menu must stay open on switch-away"
-        assert 0x222 in handed_to, (
-            "the keyboard must be handed to the newly-active window, got %r"
-            % (handed_to,))
-
-        # 3. Press pin while pinned-but-dormant -> UNPINS in ONE press (the bug was
-        #    that this only re-grabbed focus and left the menu pinned, forcing a
-        #    second press to unpin).
-        m._toggle_pin()
-        assert st["pinned"] is False, (
-            "pressing pin while dormant must unpin in a single press, not merely "
-            "reclaim focus")
-        assert m.pin_button._active is False
-
-        # 4. Re-pin, then press once more from the LIVE state -> unpins too, proving
-        #    the toggle is identical regardless of focus/capturing.
-        m._toggle_pin()
-        assert st["pinned"] is True and st["capturing"] is True, st
-        m._toggle_pin()
-        assert st["pinned"] is False, "pressing pin while live must unpin"
-        assert m.pin_button._active is False
-    finally:
-        xfocus.active_window = _orig_active
-        xfocus.set_input_focus = _orig_setfocus
-        try:
-            root.destroy()
-        except Exception:
-            pass
-
-
-def test_ui_pinned_claims_x_focus_onto_own_window() -> None:
-    """Regression for 'pin steals focus to KRunner'. VERIFIED on the live KWin
-    hypervisor: our override-redirect window is NEVER made the X input focus by
-    ``focus_force()`` alone -- with the menu open the real X input focus sits on the
-    Desktop/KRunner, and while UNPINNED only the global grab's keyboard capture keeps
-    the search box live. So the instant pinning releases that grab, keystrokes fall to
-    whatever X still focuses (KRunner on an idle session) unless the menu explicitly
-    grabs the real keyboard.
-
-    The ONE primitive that actually moves (and keeps) the X input focus on an
-    unmanaged window under KWin is ``XSetInputFocus`` targeting that window
-    (xfocus.set_input_focus(our_id)). This test pins the menu with a faked xfocus and
-    asserts the pin path calls set_input_focus with OUR OWN window id -- i.e. the menu
-    claims the keyboard for itself rather than merely calling focus_force() (which the
-    live WM ignores) and, worse, later handing focus AWAY via the active-window
-    watcher.
-
-    active_window() is faked to a STABLE value across the whole flow (modelling the
-    real WM: focus_force on our override-redirect window does not change
-    _NET_ACTIVE_WINDOW), so any set_input_focus we see is the fix claiming focus for
-    the menu, not the switch-away handler."""
-    import xfocus
-    _orig_active = xfocus.active_window
-    _orig_setfocus = xfocus.set_input_focus
-    focused = []                       # every window id set_input_focus is asked for
-    # A foreign window is "active" and stays active -- focus_force on our unmanaged
-    # window does NOT change _NET_ACTIVE_WINDOW on the real WM, so this never varies.
-    xfocus.active_window = lambda: 0xABC
-    xfocus.set_input_focus = lambda win: (focused.append(win), True)[1]
-
-    _menu, root = _build_testable_menu()
-    try:
-        m = root.az_menu
-        st = root.az_state
-        assert st["pinned"] is False
-
-        our_id = root.winfo_id()
-        # Pin. The menu must claim the REAL keyboard onto its own window (the only
-        # thing that works on KWin), not just focus_force() and hope.
-        m._toggle_pin()
-        assert st["pinned"] is True, st
-        assert our_id in focused, (
-            "pinning must claim X input focus onto our OWN window id (0x%x) via "
-            "XSetInputFocus -- focus_force() alone does not move focus off "
-            "KRunner/Desktop on KWin; set_input_focus was called with %r"
-            % (our_id, [hex(w) for w in focused]))
-        assert st["capturing"] is True, st
-
-        # And it must NOT immediately hand focus to the (unchanged) foreign active
-        # window -- that is the switch-away path, which must only fire on a real
-        # active-window CHANGE, never at pin time.
-        root.after(400, root.quit)     # pump past the 150ms watcher tick
-        root.mainloop()
-        assert 0xABC not in focused, (
-            "a stable active window must NOT trigger a switch-away hand-off; the "
-            "menu kept focus for itself only. focused=%r"
-            % ([hex(w) for w in focused],))
-        assert st["pinned"] is True and st["capturing"] is True, st
-
-        # Second reported symptom: clicking the search box while pinned-but-dormant
-        # must re-claim focus (Kickoff refocuses on click). Simulate dormancy, then a
-        # click on the entry, and assert the menu re-claimed X focus onto its own id.
-        st["capturing"] = False
-        focused.clear()
-        m._on_search_click()           # what the entry's <Button-1> binding fires
-        assert our_id in focused, (
-            "clicking the search box while pinned+dormant must re-claim X input "
-            "focus onto our own window id; set_input_focus got %r"
-            % ([hex(w) for w in focused],))
-        assert st["capturing"] is True, "click must restore capturing"
-    finally:
-        for _tid in list(getattr(root, "az_timers", [])):
-            try:
-                root.after_cancel(_tid)
-            except Exception:
-                pass
-        xfocus.active_window = _orig_active
-        xfocus.set_input_focus = _orig_setfocus
         try:
             root.destroy()
         except Exception:
@@ -1059,14 +1179,19 @@ def _is_destroyed(root) -> bool:
         return True
 
 
-def test_ui_pinned_forced_close_still_works() -> None:
-    """Even pinned, launching an app forces the menu closed."""
+def test_ui_forced_close_destroys_window() -> None:
+    """Launching an app / firing a power action calls close_menu(force=True). With
+    no pin there is nothing to override, so a forced close simply tears the
+    (non-persistent) window down, exactly like a normal dismissal."""
     _menu, root = _build_testable_menu()
     try:
         m = root.az_menu
-        m._toggle_pin()
-        assert root.az_pinned is True
-        m.close_menu(force=True)  # forced -> closes regardless of pin
+        assert not _is_destroyed(root)
+        m.close_menu(force=True)  # forced -> destroys
+        try:
+            root.update()
+        except Exception:
+            pass
         assert _is_destroyed(root)
     finally:
         try:
@@ -1075,57 +1200,36 @@ def test_ui_pinned_forced_close_still_works() -> None:
             pass
 
 
-def test_ui_pin_before_arm_does_not_re_grab() -> None:
-    """Regression for the pin-before-arm race: arm() runs deferred (~30ms) and
-    (re)takes a GLOBAL pointer grab. If the user pins the menu in the gap before
-    arm() fires, pinning has just released the grab -- arm() must NOT re-take a
-    global grab while pinned, or every desktop click is black-holed with no
-    click-outside escape (an input wedge).
-
-    We build the window raw (NOT via _build_testable_menu, which flushes arm),
-    pin BEFORE letting arm run, then run the pending arm timer, and assert no
-    global grab is held. grab_current() returns the grabbing widget or None; a
-    global grab set by arm() would make it the root."""
-    import menu
-    import tkinter as tk
-
-    root = menu.build_window()
-    # Neutralise the self-closing bindings the same way the shared helper does,
-    # so nothing tears the window down mid-test.
-    _orig_bind = root.bind
-
-    def _guarded_bind(seq=None, func=None, add=None):
-        if seq == "<FocusOut>":
-            return ""
-        return _orig_bind(seq, func, add)
-
-    root.bind = _guarded_bind
-    root.unbind_all("<Button>")
+def test_ui_normal_and_forced_close_behave_the_same() -> None:
+    """With the pin gone, a normal close_menu() and a forced close_menu(force=True)
+    do the SAME thing in non-persistent mode: both destroy the window. (The force
+    flag is kept only for call-site symmetry between the dismiss paths and the
+    launch/power activate paths.)"""
+    # Normal close destroys.
+    _menu, root = _build_testable_menu()
     try:
-        m = root.az_menu
-        # Map the window WITHOUT running the deferred arm() yet.
-        root.update_idletasks()
-        # Pin first -> toggle_pin() releases any grab and sets pinned.
-        m._toggle_pin()
-        assert root.az_pinned is True
-
-        # Now let the pending timers (incl. arm()) run.
-        root.update()
-        root.update_idletasks()
-
-        # The crux: arm() must NOT have re-taken a global grab while pinned.
-        grabber = root.grab_current()
-        assert grabber in (None, "", ), (
-            "pinned menu unexpectedly holds a grab: %r" % (grabber,)
-        )
-        # And a normal outside-click close is still a no-op while pinned.
-        assert root.az_pinned is True
+        root.az_menu.close_menu()
+        try:
+            root.update()
+        except Exception:
+            pass
+        assert _is_destroyed(root), "a normal close must destroy the window"
     finally:
-        for _tid in list(getattr(root, "az_timers", [])):
-            try:
-                root.after_cancel(_tid)
-            except Exception:
-                pass
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+    # Forced close destroys too.
+    _menu, root = _build_testable_menu()
+    try:
+        root.az_menu.close_menu(force=True)
+        try:
+            root.update()
+        except Exception:
+            pass
+        assert _is_destroyed(root), "a forced close must destroy the window"
+    finally:
         try:
             root.destroy()
         except Exception:
@@ -1150,90 +1254,6 @@ def test_ui_power_buttons_use_breeze_icons() -> None:
             pass
 
 
-def test_ui_settings_button_is_disabled() -> None:
-    """The Settings (gear) button ships GREYED OUT / disabled: the settings
-    screen is not built yet, so the button must be inert (no hover highlight,
-    ignores clicks, normal arrow cursor) rather than looking clickable but doing
-    nothing. This pins the four observable properties of that disabled state."""
-    _menu, root = _build_testable_menu()
-    try:
-        m = root.az_menu
-        btn = m.settings_button
-        assert btn is not None, "settings button was not created"
-        # 1. It is flagged disabled.
-        assert btn._disabled is True
-        # 2. Normal arrow cursor (not the hand2 a live button uses).
-        assert str(btn.cget("cursor")) == "arrow"
-        # 3. Pressing it does nothing: _press is a guarded no-op and the nominal
-        #    command must NOT fire even if _press is called directly.
-        fired = {"v": False}
-        m._noop = lambda: fired.__setitem__("v", True)  # would-be handler
-        btn._command = m._noop
-        btn._press()
-        assert fired["v"] is False, "disabled settings button fired its command"
-        # 4. Hovering does not change its look (set_active is a no-op; a disabled
-        #    button binds no <Enter>/<Leave> so it can never highlight).
-        btn.set_active(True)
-        assert btn._active is False
-    finally:
-        try:
-            root.destroy()
-        except Exception:
-            pass
-
-
-def test_ui_pin_button_still_enabled() -> None:
-    """Regression guard for the settings-disable change: the PIN button must stay
-    fully functional (enabled, hand cursor, active-state toggles) -- only the
-    settings button is disabled."""
-    _menu, root = _build_testable_menu()
-    try:
-        m = root.az_menu
-        pin = m.pin_button
-        assert pin is not None and pin._disabled is False
-        assert str(pin.cget("cursor")) == "hand2"
-        pin.set_active(True)
-        assert pin._active is True
-        pin.set_active(False)
-        assert pin._active is False
-    finally:
-        try:
-            root.destroy()
-        except Exception:
-            pass
-
-
-def test_ui_dim_image_greys_but_keeps_size() -> None:
-    """dim_image must return an image of the SAME dimensions whose opaque pixels
-    are shifted toward the disabled grey (so the glyph fades but keeps its
-    shape). We build a tiny opaque red image and check a pixel moved toward grey."""
-    import tkinter as tk
-
-    import theme as T
-    import widgets
-
-    _menu, root = _build_testable_menu()
-    try:
-        src = tk.PhotoImage(width=4, height=4)
-        src.put("#ff0000", to=(0, 0, 4, 4))  # fully opaque red
-        out = widgets.dim_image(src, mix=0.5, toward="#000000")
-        assert out.width() == 4 and out.height() == 4
-        r, g, b = out.get(1, 1)[:3]
-        # Halfway from red(255,0,0) toward black(0,0,0) -> ~127,0,0.
-        assert 120 <= r <= 135 and g == 0 and b == 0
-        # And the default toward-grey path actually dims (red channel drops).
-        out2 = widgets.dim_image(src)
-        r2 = out2.get(1, 1)[0]
-        assert r2 < 255
-        # Sanity: default mix moves toward the configured disabled colour.
-        assert T.DISABLED_ICON_COLOR.startswith("#")
-    finally:
-        try:
-            root.destroy()
-        except Exception:
-            pass
-
-
 def test_ui_selection_and_launch(monkeypatch_launch) -> None:
     _menu, root = _build_testable_menu()
     try:
@@ -1241,9 +1261,11 @@ def test_ui_selection_and_launch(monkeypatch_launch) -> None:
         m.search_var.set("kit")
         root.update_idletasks()
         assert m.applist.selected_index == 0
-        # Activate the selection -> should call actions.launch with kitty argv
-        # and then close (close is neutered-ish: it destroys the root).
-        m.activate_selected()
+        # The menu opens in the apps zone, so Enter (on_activate) launches the
+        # selected app -> should call actions.launch with kitty argv and then close
+        # (close is neutered-ish: it destroys the root).
+        assert m.focus_zone == _menu.FOCUS_APPS
+        m.on_activate()
         assert monkeypatch_launch.calls, "launch was not invoked"
         argv = monkeypatch_launch.calls[-1]
         assert argv and argv[0] == "kitty"
@@ -1349,133 +1371,6 @@ def test_ui_search_standard_editing() -> None:
             pass
 
 
-def _mapped_bar_toplevels(root) -> list:
-    """The blue HighlightBar Toplevels currently MAPPED under root -- used to catch
-    the 'cyan bar stuck over the panel icon' leak."""
-    import tkinter as tk
-    out = []
-    for w in root.winfo_children():
-        if not isinstance(w, tk.Toplevel):
-            continue
-        try:
-            if w.winfo_exists() and w.winfo_viewable() and str(w.cget("bg")) == "#3daee9":
-                out.append(str(w))
-        except tk.TclError:
-            pass
-    return out
-
-
-def test_ui_highlight_bar_no_leak_on_double_show() -> None:
-    """Regression: the HighlightBar (the Breeze-blue stripe over the panel icon)
-    must NOT get stuck on screen.
-
-    show_menu() builds a fresh bar each call, assuming the prior hide destroyed
-    it. But a show() with NO intervening hide() (the launcher's auto-start SIGUSR2
-    landing while a panel-click SIGUSR1 already showed the menu, or any repeated
-    'show') orphaned the previous bar Toplevel -- it stayed mapped forever because
-    the later hide only closed the CURRENT az_highlight. This asserts that after a
-    double-show there is exactly ONE mapped bar and that a single hide removes it
-    (zero mapped bars), i.e. no orphan is left behind."""
-    import menu
-    root = menu.build_window(persistent=True)
-    try:
-        root.withdraw()
-        root.az_populate()
-        root.update_idletasks()
-        root.unbind_all("<Button>")
-        root.az_hide()
-        root.update()
-
-        # Two shows in a row, no hide between (the leak trigger).
-        root.az_show(); root.update()
-        for _ in range(4):
-            root.update(); root.update_idletasks()
-        root.az_show(); root.update()
-        for _ in range(4):
-            root.update(); root.update_idletasks()
-        bars = _mapped_bar_toplevels(root)
-        assert len(bars) == 1, f"double-show must leave ONE bar, got {bars}"
-
-        # A single hide must clear it -> no orphan stuck on screen.
-        root.az_hide(); root.update(); root.update_idletasks()
-        bars = _mapped_bar_toplevels(root)
-        assert bars == [], f"hide must remove the bar, but these are stuck: {bars}"
-    finally:
-        for _tid in list(getattr(root, "az_timers", [])):
-            try:
-                root.after_cancel(_tid)
-            except Exception:
-                pass
-        try:
-            root.destroy()
-        except Exception:
-            pass
-
-
-def test_ui_highlight_bar_placed_over_leftmost_icon() -> None:
-    """Fix #2: the cyan/blue highlight bar must sit over the LEFTMOST panel icon
-    (our menu applet took Kickoff's old leftmost slot), not be misplaced.
-
-    The leftmost panel cell physically spans [0, PANEL_HEIGHT) (a square cell as
-    wide as the panel is thick). We assert the mapped bar Toplevel falls ENTIRELY
-    within that first cell -- its left edge is well inside [0, PANEL_HEIGHT) and its
-    right edge does not cross into the SECOND cell (which starts at PANEL_HEIGHT).
-    These bounds are hardcoded from the panel geometry, NOT derived from
-    ICON_CELL_X, so the test is independent of the very constant it guards: if
-    ICON_CELL_X ever regresses to the old 2nd-slot offset (PANEL_HEIGHT), the bar
-    lands at x>=PANEL_HEIGHT and this FAILS loudly. y must be the panel's top edge
-    and height the configured bar height."""
-    import tkinter as tk
-    import theme as T
-    import menu
-    root = menu.build_window(persistent=True)
-    try:
-        root.withdraw()
-        root.az_populate()
-        root.update_idletasks()
-        root.unbind_all("<Button>")
-        root.az_show()
-        for _ in range(4):
-            root.update(); root.update_idletasks()
-
-        bars = [w for w in root.winfo_children()
-                if isinstance(w, tk.Toplevel) and w.winfo_exists()
-                and str(w.cget("bg")) == "#3daee9" and w.winfo_viewable()]
-        assert len(bars) == 1, f"expected exactly one mapped bar, got {len(bars)}"
-        bar = bars[0]
-        screen_h = root.winfo_screenheight()
-        # First cell spans [0, PANEL_HEIGHT). Ground truth, independent of ICON_CELL_X.
-        first_cell_right = T.PANEL_HEIGHT
-        bar_left = bar.winfo_x()
-        bar_right = bar_left + bar.winfo_width()
-        assert 0 <= bar_left < first_cell_right, (
-            f"bar left x={bar_left} not inside the LEFTMOST cell [0,{first_cell_right}); "
-            "ICON_CELL_X likely regressed to a non-leftmost slot"
-        )
-        assert bar_right <= first_cell_right, (
-            f"bar right edge x={bar_right} spills into the 2nd cell "
-            f"(starts at {first_cell_right}) -- misplaced"
-        )
-        # y at the panel's top edge; height as configured.
-        exp_y = screen_h - T.PANEL_HEIGHT
-        assert bar.winfo_y() == exp_y, f"bar y={bar.winfo_y()} != panel top {exp_y}"
-        assert bar.winfo_height() == T.HIGHLIGHT_BAR_HEIGHT, (
-            f"bar height={bar.winfo_height()} != {T.HIGHLIGHT_BAR_HEIGHT}"
-        )
-        # And the width is the inset cell width (a positive stripe, not degenerate).
-        assert bar.winfo_width() == max(1, T.ICON_CELL_W - 2 * T.HIGHLIGHT_BAR_INSET)
-    finally:
-        for _tid in list(getattr(root, "az_timers", [])):
-            try:
-                root.after_cancel(_tid)
-            except Exception:
-                pass
-        try:
-            root.destroy()
-        except Exception:
-            pass
-
-
 def test_ui_power_row_centered_and_not_clipped() -> None:
     """Fix #3: each power button (Sleep/Lock/Restart/Shut Down) is centred WITHIN
     ITS OWN cell, not the whole group centred across the bar.
@@ -1540,203 +1435,6 @@ def test_ui_power_row_centered_and_not_clipped() -> None:
             pass
 
 
-def test_ui_settings_button_has_tooltip() -> None:
-    """The greyed-out Settings (gear) button shows a hover hint explaining the
-    settings screen is not built yet -- even though the button is DISABLED and
-    binds no hover-paint handlers. We assert a Tooltip is attached carrying the
-    exact copy, and that showing it maps a small popup with that text."""
-    import tkinter as tk
-    _menu, root = _build_testable_menu()
-    try:
-        m = root.az_menu
-        btn = m.settings_button
-        assert btn is not None and btn._disabled is True
-        tips = getattr(btn, "_tooltips", [])
-        assert tips, "settings button must have a tooltip attached"
-        wanted = "The application menu settings are not available yet"
-        assert any(t._text == wanted for t in tips), \
-            f"tooltip text mismatch: {[t._text for t in tips]}"
-
-        # Force one tooltip to show and check a popup label with the text exists,
-        # then hide it cleanly.
-        tip = tips[0]
-        tip._show()
-        root.update_idletasks()
-        assert tip._tip is not None and tip._tip.winfo_exists(), \
-            "showing the tooltip must map a popup"
-        labels = [c for c in tip._tip.winfo_children() if isinstance(c, tk.Label)]
-        assert labels and labels[0].cget("text") == wanted
-        tip._hide()
-        root.update_idletasks()
-        assert tip._tip is None, "hide must tear the tooltip popup down"
-    finally:
-        try:
-            root.destroy()
-        except Exception:
-            pass
-
-
-def test_ui_settings_tooltip_is_instant() -> None:
-    """Fix #1: the Settings-button hover hint must be INSTANT -- it appears the
-    moment the pointer enters the button and disappears the moment it leaves, with
-    NO dwell timer.
-
-    We drive the real Tk bindings: firing the widget's <Enter> event must map the
-    popup SYNCHRONOUSLY (before any after()-based delay could run -- we never pump
-    a timer), and firing <Leave> must tear it down immediately. A dwell-based
-    tooltip would still be un-mapped right after <Enter> (it would be waiting on an
-    after() callback), so this fails loudly if the delay ever creeps back."""
-    _menu, root = _build_testable_menu()
-    try:
-        m = root.az_menu
-        btn = m.settings_button
-        tips = getattr(btn, "_tooltips", [])
-        assert tips, "settings button must have a tooltip attached"
-        tip = tips[0]
-        assert tip._tip is None, "tooltip must start hidden"
-
-        # Hover ON: the popup must exist right away, with only idle (not timer)
-        # processing -- update_idletasks() runs pending idle work but does NOT run
-        # after() timers, so a dwell tooltip would still be None here.
-        tip._widget.event_generate("<Enter>")
-        root.update_idletasks()
-        assert tip._tip is not None and tip._tip.winfo_exists(), \
-            "tooltip must appear INSTANTLY on <Enter> (no dwell delay)"
-
-        # Hover OFF: gone immediately.
-        tip._widget.event_generate("<Leave>")
-        root.update_idletasks()
-        assert tip._tip is None, "tooltip must disappear the moment the mouse leaves"
-    finally:
-        try:
-            root.destroy()
-        except Exception:
-            pass
-
-
-def test_ui_settings_tooltip_renders_once_and_sticks() -> None:
-    """Fix #1: the Settings-button hint must render ONCE and hold its place -- it
-    must NOT tear down and rebuild as the pointer slides across the box (the old
-    flicker, caused by two tooltips fighting on the frame and its inner glyph, plus
-    frame<->child crossings hiding then re-showing the popup).
-
-    Two guarantees:
-
-      * Exactly ONE Tooltip is attached to the button (not a second copy on the
-        glyph label), so there is a single popup, never a pair swapping in and out.
-      * Once shown, a <Leave> whose pointer is STILL over the box (it merely crossed
-        onto the inner glyph) does nothing. Tkinter's Event exposes no X crossing
-        ``detail`` in every build, so the guard is positional: it re-reads where the
-        pointer is via winfo_containing. We drive that here by firing <Leave> on the
-        frame with x_root/y_root set to a point INSIDE the glyph label -- the same
-        signal a real frame->child crossing produces. The popup Toplevel must be the
-        SAME object throughout (identity unchanged == never rebuilt == no flicker);
-        a <Leave> whose coordinates fall OUTSIDE the box then tears it down.
-    """
-    _menu, root = _build_testable_menu()
-    try:
-        m = root.az_menu
-        btn = m.settings_button
-        tips = getattr(btn, "_tooltips", [])
-        assert len(tips) == 1, (
-            "the button must carry exactly ONE tooltip (a second copy on the glyph "
-            "is what made it flicker); got %d" % len(tips))
-        tip = tips[0]
-        root.update_idletasks()
-
-        # A point that lands squarely inside the inner glyph label (a child of the
-        # button frame) -- crossing here keeps the pointer inside the box subtree.
-        glyph = btn._label
-        inside_x = glyph.winfo_rootx() + max(1, glyph.winfo_width() // 2)
-        inside_y = glyph.winfo_rooty() + max(1, glyph.winfo_height() // 2)
-        # A point well outside the whole button but with valid (non-negative) root
-        # coords -- to the RIGHT of the button -- so this exercises the real
-        # "coordinate present, but not over us" branch, not the missing-coord one.
-        outside_x = btn.winfo_rootx() + btn.winfo_width() + 200
-        outside_y = btn.winfo_rooty() + max(1, btn.winfo_height() // 2)
-
-        # Real entry -> the popup appears once.
-        tip._widget.event_generate("<Enter>")
-        root.update_idletasks()
-        assert tip._tip is not None and tip._tip.winfo_exists(), \
-            "tooltip must appear on a real <Enter>"
-        first = tip._tip  # capture identity to prove it is never rebuilt below
-
-        # Pointer slides onto the inner glyph: a <Leave> on the frame, but the
-        # pointer is still inside the box -> the popup must persist unchanged.
-        # event_generate takes -rootx/-rooty; Tk fills event.x_root/y_root from them.
-        tip._widget.event_generate(
-            "<Leave>", rootx=inside_x, rooty=inside_y)
-        root.update_idletasks()
-        assert tip._tip is first and first.winfo_exists(), (
-            "a <Leave> whose pointer is still over the glyph must NOT destroy the "
-            "tooltip -- the pointer is still inside the box")
-
-        # Pointer returns to the frame from the child: <Enter> again must NOT rebuild
-        # the existing popup (that rebuild was the flicker).
-        tip._widget.event_generate("<Enter>", rootx=inside_x, rooty=inside_y)
-        root.update_idletasks()
-        assert tip._tip is first, (
-            "returning from the glyph must NOT rebuild the tooltip -- it should "
-            "render once and stay put")
-
-        # A genuine exit of the whole box (pointer now outside) finally hides it.
-        tip._widget.event_generate(
-            "<Leave>", rootx=outside_x, rooty=outside_y)
-        root.update_idletasks()
-        assert tip._tip is None, \
-            "a real <Leave> off the box must tear the tooltip down"
-    finally:
-        try:
-            root.destroy()
-        except Exception:
-            pass
-
-
-def test_ui_settings_tooltip_hides_when_exiting_onto_popup() -> None:
-    """Fix #1, regression: the popup Toplevel is a child of the button frame and is
-    positioned DIRECTLY BELOW the button, right on the natural downward exit path.
-
-    Guards against a subtle bug in the 'is the pointer still inside the box?' check:
-    because winfo_containing sees the popup and the popup's Tk-hierarchy parent chain
-    leads back to the button frame, a <Leave> whose coordinates land ON THE POPUP
-    must NOT be mistaken for 'still inside the box'. If it were, moving the mouse
-    straight down off the button (onto the hint) would leave the popup stuck on
-    screen forever -- the frame gets no further <Leave> once the pointer is on the
-    popup, and the popup has no <Leave> of its own. So a leave onto the popup must
-    hide the tooltip.
-    """
-    _menu, root = _build_testable_menu()
-    try:
-        m = root.az_menu
-        btn = m.settings_button
-        tip = btn._tooltips[0]
-        root.update_idletasks()
-
-        tip._widget.event_generate("<Enter>")
-        root.update_idletasks()
-        assert tip._tip is not None, "tooltip must show on <Enter>"
-        popup = tip._tip
-        root.update_idletasks()
-        root.update()
-
-        # A point squarely on the popup itself -- moving straight down off the button
-        # onto the floating hint. This is the exact scenario that used to stick.
-        on_popup_x = popup.winfo_rootx() + max(1, popup.winfo_width() // 2)
-        on_popup_y = popup.winfo_rooty() + max(1, popup.winfo_height() // 2)
-        tip._widget.event_generate(
-            "<Leave>", rootx=on_popup_x, rooty=on_popup_y)
-        root.update_idletasks()
-        assert tip._tip is None, (
-            "leaving the button DOWNWARD onto the popup must hide the tooltip, not "
-            "leave it orphaned and stuck on screen")
-    finally:
-        try:
-            root.destroy()
-        except Exception:
-            pass
-
-
 def test_ui_persistent_show_hide() -> None:
     """Daemon mode: build_window(persistent=True) exposes az_show/az_hide that
     hide (withdraw) the window instead of destroying it, so it can be re-shown.
@@ -1750,16 +1448,25 @@ def test_ui_persistent_show_hide() -> None:
         # Neutralise self-closing bindings so the update loop can't tear it down.
         root.unbind_all("<Button>")
 
-        # Show -> window becomes viewable and correctly positioned (not 0,0).
+        # Show -> window becomes viewable and CENTERED on the screen.
         root.az_show()
         root.update()
         assert root.winfo_viewable(), "az_show should map the window"
-        # Geometry re-applied on show: not stuck at the 0,0 re-map default. Our menu
-        # sits at the bottom-LEFT (x=0) but well down the screen (y near the bottom),
-        # so the full corner is (0, y_bottom) -- distinct from the (0,0) top-left
-        # default, which is what this guards against.
-        assert (root.winfo_rootx(), root.winfo_rooty()) != (0, 0), \
-            "show must re-apply the bottom-left geometry"
+        # Geometry re-applied on show: the window is centered, not stuck at the 0,0
+        # re-map default. We compute the expected top-left with the SAME formula the
+        # menu uses (clamped to >=0), so this is screen-size independent -- on a
+        # window TALLER than the (tiny headless) screen the y clamps to 0, but x is
+        # still centered, so the corner is never the (0,0) top-left default unless
+        # the whole window genuinely fills the screen.
+        sw = root.winfo_screenwidth()
+        sh = root.winfo_screenheight()
+        win_w, win_h = menu.menu_size()
+        exp_x = max(0, (sw - win_w) // 2)
+        exp_y = max(0, (sh - win_h) // 2)
+        assert (root.winfo_rootx(), root.winfo_rooty()) == (exp_x, exp_y), (
+            "show must re-apply the CENTERED geometry; got "
+            f"{(root.winfo_rootx(), root.winfo_rooty())} != {(exp_x, exp_y)}"
+        )
 
         # A normal close in persistent mode HIDES (window survives, withdrawn).
         root.az_close()
@@ -1788,8 +1495,8 @@ def test_ui_persistent_first_show_positions_before_map() -> None:
 
     An override-redirect window that has never been mapped sits at X's default
     0,0 origin. If az_show() calls deiconify() (MapWindow) BEFORE re-applying the
-    bottom-left geometry, X maps it visibly at the top-left (0,0) and only then
-    moves it down -- the 'menu flashes at top-left on the first click' bug. The
+    centered geometry, X maps it visibly at the top-left (0,0) and only then slides
+    it to center -- the 'menu flashes at top-left on the first click' bug. The
     position must be set BEFORE the window is mapped, so geometry() must be called
     before deiconify().
 
@@ -1914,7 +1621,9 @@ def main() -> int:
         ("menu_modules_use_centralised_font_constants",
          test_menu_modules_use_centralised_font_constants, ()),
         ("app_rows_are_nudged_right", test_app_rows_are_nudged_right, ()),
-        ("tooltip_theme_constants_exist", test_tooltip_theme_constants_exist, ()),
+        ("menu_size_is_theme_default", test_menu_size_is_theme_default, ()),
+        ("removed_panel_and_tooltip_theme_constants_are_gone",
+         test_removed_panel_and_tooltip_theme_constants_are_gone, ()),
     ]
     for name, fn, _ in logic_tests:
         total += 1
@@ -1957,9 +1666,11 @@ def main() -> int:
 
     import actions
 
-    # test_ui_build_and_contents / search / clear-order / pin / power icons
+    # build / search / clear-order / centering / TAB focus / power / persistence
     for name, fn in (
         ("ui_build_and_contents", test_ui_build_and_contents),
+        ("ui_removed_pin_settings_and_highlight_are_gone",
+         test_ui_removed_pin_settings_and_highlight_are_gone),
         ("ui_search_filter", test_ui_search_filter),
         ("ui_search_clear_after_partial_filter",
          test_ui_search_clear_after_partial_filter),
@@ -1967,37 +1678,30 @@ def main() -> int:
          test_ui_reorders_after_launch_without_restart),
         ("ui_search_filtering_never_churns_windows",
          test_ui_search_filtering_never_churns_windows),
-        ("ui_pin_keeps_menu_open", test_ui_pin_keeps_menu_open),
+        ("ui_window_is_centered", test_ui_window_is_centered),
+        ("ui_default_focus_zone_is_apps", test_ui_default_focus_zone_is_apps),
+        ("ui_tab_toggles_focus_zone", test_ui_tab_toggles_focus_zone),
+        ("ui_power_zone_left_right_moves_focus_clamped",
+         test_ui_power_zone_left_right_moves_focus_clamped),
+        ("ui_on_activate_in_power_zone_fires_focused_button",
+         test_ui_on_activate_in_power_zone_fires_focused_button),
+        ("ui_power_button_set_focused_paints_outline",
+         test_ui_power_button_set_focused_paints_outline),
+        ("ui_tab_is_bound_and_click_returns_focus_to_apps",
+         test_ui_tab_is_bound_and_click_returns_focus_to_apps),
+        ("ui_arrows_move_selection_only_in_apps_zone",
+         test_ui_arrows_move_selection_only_in_apps_zone),
         ("ui_super_key_binding_is_present", test_ui_super_key_binding_is_present),
-        ("ui_super_key_closes_and_respects_pin",
-         test_ui_super_key_closes_and_respects_pin),
-        ("ui_pin_is_a_focus_independent_toggle",
-         test_ui_pin_is_a_focus_independent_toggle),
-        ("ui_pinned_claims_x_focus_onto_own_window",
-         test_ui_pinned_claims_x_focus_onto_own_window),
-        ("ui_pinned_forced_close_still_works",
-         test_ui_pinned_forced_close_still_works),
-        ("ui_pin_before_arm_does_not_re_grab",
-         test_ui_pin_before_arm_does_not_re_grab),
+        ("ui_super_key_closes", test_ui_super_key_closes),
+        ("ui_forced_close_destroys_window",
+         test_ui_forced_close_destroys_window),
+        ("ui_normal_and_forced_close_behave_the_same",
+         test_ui_normal_and_forced_close_behave_the_same),
         ("ui_power_buttons_use_breeze_icons",
          test_ui_power_buttons_use_breeze_icons),
         ("ui_search_standard_editing", test_ui_search_standard_editing),
-        ("ui_highlight_bar_no_leak_on_double_show",
-         test_ui_highlight_bar_no_leak_on_double_show),
-        ("ui_highlight_bar_placed_over_leftmost_icon",
-         test_ui_highlight_bar_placed_over_leftmost_icon),
         ("ui_power_row_centered_and_not_clipped",
          test_ui_power_row_centered_and_not_clipped),
-        ("ui_settings_button_is_disabled", test_ui_settings_button_is_disabled),
-        ("ui_pin_button_still_enabled", test_ui_pin_button_still_enabled),
-        ("ui_dim_image_greys_but_keeps_size",
-         test_ui_dim_image_greys_but_keeps_size),
-        ("ui_settings_button_has_tooltip", test_ui_settings_button_has_tooltip),
-        ("ui_settings_tooltip_is_instant", test_ui_settings_tooltip_is_instant),
-        ("ui_settings_tooltip_renders_once_and_sticks",
-         test_ui_settings_tooltip_renders_once_and_sticks),
-        ("ui_settings_tooltip_hides_when_exiting_onto_popup",
-         test_ui_settings_tooltip_hides_when_exiting_onto_popup),
         ("ui_persistent_show_hide", test_ui_persistent_show_hide),
         ("ui_persistent_first_show_positions_before_map",
          test_ui_persistent_first_show_positions_before_map),
@@ -2031,25 +1735,33 @@ def main() -> int:
     finally:
         actions.launch = orig_launch
 
-    # power wiring test with monkeypatched power actions
-    total += 1
-    prec = _Recorder()
-    saved = {}
-    for nm in ("suspend", "reboot", "poweroff", "lock_session"):
-        saved[nm] = getattr(actions, nm)
-        setattr(actions, nm, (lambda n: (lambda: prec.calls.append(n)))(nm))
-    try:
-        test_ui_power_buttons_wired(prec)
-        print("ok   ui_power_buttons_wired")
-    except AssertionError as ex:
-        failures += 1
-        print(f"FAIL ui_power_buttons_wired: {ex}")
-    except Exception as ex:  # noqa: BLE001
-        failures += 1
-        print(f"ERR  ui_power_buttons_wired: {type(ex).__name__}: {ex}")
-    finally:
-        for nm, fn in saved.items():
-            setattr(actions, nm, fn)
+    # power wiring tests with monkeypatched power actions. Each builds its own menu
+    # INSIDE the test, so the fakes must be installed BEFORE the call (the button
+    # closures capture actions.* at build time). _Recorder is duck-typed as the
+    # monkeypatch_actions fixture (both expose .calls).
+    for tname, tfn in (
+        ("ui_power_buttons_wired", test_ui_power_buttons_wired),
+        ("ui_power_activation_wired_through_on_activate",
+         test_ui_power_activation_wired_through_on_activate),
+    ):
+        total += 1
+        prec = _Recorder()
+        saved = {}
+        for nm in ("suspend", "reboot", "poweroff", "lock_session"):
+            saved[nm] = getattr(actions, nm)
+            setattr(actions, nm, (lambda n: (lambda: prec.calls.append(n)))(nm))
+        try:
+            tfn(prec)
+            print(f"ok   {tname}")
+        except AssertionError as ex:
+            failures += 1
+            print(f"FAIL {tname}: {ex}")
+        except Exception as ex:  # noqa: BLE001
+            failures += 1
+            print(f"ERR  {tname}: {type(ex).__name__}: {ex}")
+        finally:
+            for nm, fn in saved.items():
+                setattr(actions, nm, fn)
 
     print(f"\n{total - failures}/{total} passed, {failures} failed")
     return 1 if failures else 0

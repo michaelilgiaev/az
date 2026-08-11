@@ -1,6 +1,6 @@
 """Calamares installer configuration, authored as configuration-as-Python strings.
 
-Az'arch boots to a minimal KDE Plasma live session and auto-launches Calamares
+Az'arch boots to a minimal OpenBox live session and auto-launches Calamares
 (Manjaro-style) to install Az'arch Linux to disk. Calamares 3.4.2 reads:
 
   /etc/calamares/settings.conf          -- module search paths + the sequence

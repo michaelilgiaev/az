@@ -210,8 +210,9 @@ DEFAULT_KEYMAP = "us"
 # month/day/year (e.g. 08/03/2026); en_GB.UTF-8 is English but formats them
 # day/month/year (e.g. 03/08/2026). Setting LC_TIME to en_GB.UTF-8 flips the whole
 # system's date order to d/m/y (the user's "modify timedate from m/d/y to d/m/y"
-# request) without changing the language of anything else. The Plasma clock is
-# aligned separately via configuration/desktop.plasma_localerc (same LC_TIME).
+# request) without changing the language of anything else. This LC_TIME governs the
+# whole system; the OpenBox desktop has no separate clock config to align (KDE Plasma
+# and its plasma-localerc are gone).
 DEFAULT_TIME_LOCALE = "en_GB.UTF-8"
 
 # Az'arch default (and, since auto-resolve was removed, ONLY) timezone. Dynamic

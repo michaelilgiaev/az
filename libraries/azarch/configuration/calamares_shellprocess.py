@@ -24,69 +24,62 @@ from __future__ import annotations
 # the account being removed.
 LIVE_USER = "main"
 
-# The live session ships an "Az'arch Linux Installer" launcher ON the Desktop and a Plasma
-# autostart entry that opens Calamares once at login. The OFFLINE install copies the
-# live /home/main VERBATIM via unpackfs (and reuseHome:true keeps it), so WITHOUT the
-# cleanup below the INSTALLED system would still carry the installer icon on its
-# Desktop AND re-launch the installer on every login -- both wrong on a system that is
-# already installed. This shellprocess step (target chroot, post-unpackfs) deletes
-# both artifacts from the live user's reused home and from /etc/skel (so any later-
-# created user is clean too). `rm -f` is a no-op if a path is absent. The system-wide
-# application-menu launcher (/usr/share/applications/azarch-install.desktop) is LEFT
-# in place: re-running the installer from the menu on an installed system is harmless
-# and the user only asked for the DESKTOP icon (and the auto-launch) to be gone.
+# The live session ships an "Az'arch Linux Installer" launcher ON the Desktop, and its
+# OpenBox autostart (~/.config/openbox/autostart) opens Calamares once at login AND sets
+# a fixed us,il keyboard. The OFFLINE install copies the live /home/main VERBATIM via
+# unpackfs (and reuseHome:true keeps it), so WITHOUT the cleanup below the INSTALLED
+# system would still carry the installer icon on its Desktop, re-launch the installer on
+# every login, AND force US+Hebrew regardless of the region the user chose. This
+# shellprocess step (target chroot, post-unpackfs) fixes all three. The system-wide
+# application-menu launcher (/usr/share/applications/azarch-install.desktop) is LEFT in
+# place: re-running the installer from the menu on an installed system is harmless and
+# the user only asked for the DESKTOP icon (and the auto-launch) to be gone.
 INSTALLER_DESKTOP_LAUNCHER = f"/home/{LIVE_USER}/Desktop/azarch-install.desktop"
-INSTALLER_AUTOSTART_ENTRY = (
-    f"/home/{LIVE_USER}/.config/autostart/azarch-install.desktop"
-)
 INSTALLER_SKEL_LAUNCHER = "/etc/skel/Desktop/azarch-install.desktop"
-INSTALLER_SKEL_AUTOSTART = "/etc/skel/.config/autostart/azarch-install.desktop"
 
-# The live session ships a FIXED Plasma keyboard-layout config (us,il == US+Hebrew)
-# at ~/.config/kxkbrc AND /etc/skel/.config/kxkbrc (configuration/desktop.kxkbrc), so
-# the LIVE desktop's panel applet switches US<->HE from first login. But the OFFLINE
-# install copies /home/main VERBATIM via unpackfs, so that fixed kxkbrc lands on the
-# INSTALLED system too -- and on a running Plasma session the KDED keyboard module
-# reads ~/.config/kxkbrc as AUTHORITATIVE (its `[Layout] Use=true` makes kded push
-# LayoutList=us,il via setxkbmap at session start), OVERRIDING the region-correct
-# /etc/X11/xorg.conf.d/00-keyboard.conf that Calamares' keyboard module wrote for the
-# region the user picked on the Location page. Result (the bug): every installed
-# system comes up US+Hebrew regardless of region -- an El_Salvador install that should
-# be us,latam, a Riyadh install that should be us,ara, all revert to us,il.
-#
-# The fix: DELETE the target's kxkbrc (home + skel) in this post-unpackfs chroot step.
-# With no kxkbrc, Plasma does not override the X server layout, so the region-correct
-# 00-keyboard.conf governs on the installed system (verified: the shipped Plasma 6
-# kded keyboard module fetches its layout groups from the X server and only runs
-# setxkbmap under its ConfigureLayouts gate, which an absent kxkbrc leaves off). The
-# LIVE ISO keeps its us,il kxkbrc untouched -- only the installed copy is removed.
-INSTALLED_KXKBRC = f"/home/{LIVE_USER}/.config/kxkbrc"
-INSTALLED_SKEL_KXKBRC = "/etc/skel/.config/kxkbrc"
+# The OpenBox session autostart the target inherits from the live rootfs. It carries two
+# LIVE-ONLY behaviours that must not survive an install:
+#   * `setxkbmap us,il grp:alt_shift_toggle` -- a FIXED US+Hebrew layout. On the installed
+#     system this runs at every OpenBox login and OVERRIDES the region-correct
+#     /etc/X11/xorg.conf.d/00-keyboard.conf Calamares' keyboard module wrote for the
+#     region the user picked (so every install would come up US+Hebrew regardless).
+#   * the first-run Calamares launch -- wrong on an already-installed system.
+# The fix: OVERWRITE the target's autostart (home + skel) with the "installed" variant
+# staged on the ISO (configuration/desktop.openbox_autostart_installed, at
+# desktop.INSTALLED_AUTOSTART_STAGING_PATH), which keeps only the shared wallpaper/xcape/
+# menu-daemon block. `cp` (not an edit) so the result is deterministic and needs no `$`.
+INSTALLED_OPENBOX_AUTOSTART = f"/home/{LIVE_USER}/.config/openbox/autostart"
+INSTALLED_SKEL_OPENBOX_AUTOSTART = "/etc/skel/.config/openbox/autostart"
+
+# The staged "installed" autostart on the target (unpackfs copied the whole live rootfs,
+# so this root-owned system file is present in the target chroot). Kept as a module
+# constant, imported from configuration/desktop, so the staging path and the copy agree.
+from . import desktop as _desktop  # noqa: E402  (single source of truth for the path)
+
+INSTALLED_AUTOSTART_SRC = _desktop.INSTALLED_AUTOSTART_STAGING_PATH
 
 
 def _installer_cleanup_command() -> str:
-    """A single shellprocess command (target chroot) that removes the live-session
-    installer artifacts so the INSTALLED system has no "Az'arch Linux Installer" Desktop icon
-    and does not auto-launch Calamares at login. Deletes the Desktop launcher + the
-    Plasma autostart entry from the reused /home/main AND from /etc/skel. `set -e` with
-    plain `rm -f` (a no-op on an absent path) -- there is nothing here that can
-    legitimately fail, and NO `$` (Calamares macro-expands $WORD and aborts on an
-    unknown one -- see _mkinitcpio_reset_command), so only fixed paths are used.
+    """A single shellprocess command (target chroot) that makes the INSTALLED system's
+    OpenBox session correct: no "Az'arch Linux Installer" Desktop icon, no first-run
+    installer at login, and the region keyboard (not the live us,il) in effect.
 
-    ALSO deletes the fixed us,il Plasma keyboard config (kxkbrc) copied from the live
-    /home/main + /etc/skel: on the installed Plasma session kded reads it as
-    authoritative and would clobber the region keyboard Calamares wrote to
-    /etc/X11/xorg.conf.d/00-keyboard.conf, so every install would come up US+Hebrew
-    regardless of region. Removing it lets the region-correct 00-keyboard.conf govern.
-    See the INSTALLED_KXKBRC comment above."""
+    Deletes the Desktop launcher from the reused /home/main AND /etc/skel, then OVERWRITES
+    the inherited OpenBox autostart (home + skel) with the "installed" variant staged on
+    the ISO -- which drops the two live-only lines (the fixed us,il setxkbmap and the
+    first-run Calamares launch) while keeping wallpaper/xcape/menu-daemon. `set -e` with
+    plain `rm -f`/`cp -f` (a `cp` of a shipped file that always exists), and NO `$`
+    (Calamares macro-expands $WORD and aborts on an unknown one -- see
+    _mkinitcpio_reset_command), so only fixed paths are used."""
     return (
         "set -e\n"
         f"rm -f {INSTALLER_DESKTOP_LAUNCHER}\n"
-        f"rm -f {INSTALLER_AUTOSTART_ENTRY}\n"
         f"rm -f {INSTALLER_SKEL_LAUNCHER}\n"
-        f"rm -f {INSTALLER_SKEL_AUTOSTART}\n"
-        f"rm -f {INSTALLED_KXKBRC}\n"
-        f"rm -f {INSTALLED_SKEL_KXKBRC}"
+        # Replace the inherited live autostart (home + skel) with the installed variant
+        # (no fixed keyboard, no first-run installer). The source is a root-owned file
+        # unpackfs copied onto the target, so it is always present.
+        f"cp -f {INSTALLED_AUTOSTART_SRC} {INSTALLED_OPENBOX_AUTOSTART}\n"
+        f"cp -f {INSTALLED_AUTOSTART_SRC} {INSTALLED_SKEL_OPENBOX_AUTOSTART}"
     )
 
 # The OFFLINE install copies the live archiso rootfs verbatim via unpackfs, which
@@ -393,12 +386,13 @@ def shellprocess_conf() -> str:
     would leave /boot empty or the archiso preset in place and the install would die
     obscurely later at `initcpio`, so it should stop here with a clear failure.
 
-    3. Remove the live-session installer artifacts (the Desktop "Az'arch Linux Installer"
-       launcher + the Plasma autostart entry, from the reused /home/main and from
-       /etc/skel) so the INSTALLED system has no installer icon on its Desktop and
-       does not re-open Calamares at every login. This is load-bearing for the
-       "installer shouldn't be on the Desktop after install" request; `rm -f` is a
-       no-op on an absent path, so it never aborts.
+    3. Fix the live-session leftovers on the INSTALLED OpenBox session: delete the
+       Desktop "Az'arch Linux Installer" launcher (home + skel) and OVERWRITE the
+       inherited ~/.config/openbox/autostart (home + skel) with the "installed" variant
+       staged on the ISO -- which drops the first-run Calamares launch (so the installer
+       does not re-open at every login) and the fixed us,il keyboard (so the region
+       keyboard the user chose governs). Load-bearing for both the "installer shouldn't
+       reopen after install" and the "region keyboard must stick" requirements.
 
     Ordering note: shellprocess sits after unpackfs and before both `users` and
     `initcpiocfg`/`initcpio` in settings.conf's exec sequence, so all three fixups

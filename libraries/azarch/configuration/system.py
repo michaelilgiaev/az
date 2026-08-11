@@ -67,22 +67,21 @@ LOGO=archlinux-logo
 
 # Post-pacstrap customization hook. mkarchiso runs airootfs/root/customize_airootfs.sh
 # INSIDE the pacstrapped rootfs (arch-chroot) AFTER packages are installed, then
-# deletes it -- so it never ships on the ISO. We use it to (1) plant the branded
-# os-release and (2) set the DEFAULT Plasma wallpaper. Doing both here (post-pacstrap)
-# avoids the file-conflicts that pre-placing files in the airootfs overlay triggers
-# against the owning packages (filesystem / plasma-workspace); see steps.py step 7.
-# The staged sources live under /root/azarch/ in the chroot. NoExtract
-# (configuration/pacman.py) already kept `filesystem` from writing its own "Arch Linux"
-# os-release, so usr/lib/os-release is absent until this cp lands ours.
+# deletes it -- so it never ships on the ISO. We use it to plant the branded
+# os-release. Doing it here (post-pacstrap) avoids the file-conflict that pre-placing
+# /usr/lib/os-release in the airootfs overlay would trigger against the owning
+# `filesystem` package; see steps.py step 7. The staged sources live under
+# /root/azarch/ in the chroot. NoExtract (configuration/pacman.py) already kept
+# `filesystem` from writing its own "Arch Linux" os-release, so usr/lib/os-release is
+# absent until this cp lands ours.
 #
-# Wallpaper: rather than seeding a per-user appletsrc Image= (which plasmashell
-# regenerates on first login, orphaning the seed -> the desktop falls back to a
-# black/default background), we rewrite the DEFAULT of the org.kde.image wallpaper
-# plugin (owned by plasma-workspace at a stable path). That default is what Plasma
-# uses for any containment with no explicit image, so it survives appletsrc
-# regeneration and applies to every user. unpackfs copies this edited file onto the
-# installed target, so the installed system inherits the same default -- no separate
-# Calamares step needed. The edit is idempotent and a no-op if Plasma is absent.
+# Wallpaper: the desktop is OpenBox now (KDE Plasma was removed), and OpenBox paints no
+# wallpaper of its own -- feh sets the X root pixmap from the OpenBox autostart /
+# ~/.xinitrc (see configuration/desktop.py). So there is NO Plasma org.kde.image default
+# to rewrite here anymore, and no bundled Plasma "Next" wallpaper / notifications
+# plasmoid / krunner / kmenuedit to delete (those packages are gone from the manifest).
+# The two azarch wallpaper images ship as plain files under /usr/share/wallpapers via
+# steps.py; feh reads the "years" image directly.
 CUSTOMIZE_AIROOTFS = """\
 #!/usr/bin/env bash
 set -euo pipefail
@@ -90,102 +89,11 @@ set -euo pipefail
 # Brand the live system as Az'arch Linux. /etc/os-release symlinks to this path.
 cp /root/azarch/os-release /usr/lib/os-release
 chmod 0644 /usr/lib/os-release
-
-# Set the default Plasma wallpaper by rewriting the org.kde.image plugin's Image
-# default (the fallback Plasma uses when a containment has no explicit image). This
-# is regeneration-proof, unlike a per-user appletsrc Image= seed.
-# WALLPAPER points at the "years" KPackage DIRECTORY (== desktop.WALLPAPER_PACKAGE_DIR),
-# NOT its inner image file: Plasma 6's wallpaper grid routes a DIRECTORY to the package
-# model (matched to the existing "years" tile) but routes a FILE path to the loose-
-# image model, which injects it as a THIRD, duplicate tile labelled by the filename
-# ("1672x941"). Using the package dir keeps the grid to exactly "years"/"decades"
-# with "years" as the default. (test_configuration_system pins this equality.)
-IMG_MAIN_XML="/usr/share/plasma/wallpapers/org.kde.image/contents/config/main.xml"
-WALLPAPER="/usr/share/wallpapers/years/"
-# The wallpaper is not build-critical, so a parse surprise must not abort the ISO
-# build: guard the edit with `|| true`. `-d "$WALLPAPER"` (a directory now).
-if [ -f "$IMG_MAIN_XML" ] && [ -d "$WALLPAPER" ]; then
-    python3 - "$IMG_MAIN_XML" "file://$WALLPAPER" <<'PYEOF' || true
-import re
-import sys
-
-path, uri = sys.argv[1], sys.argv[2]
-with open(path, encoding="utf-8") as fh:
-    xml = fh.read()
-
-# Replace the <default>...</default> (or self-closing <default/>) INSIDE the
-# <entry name="Image" ...> ... </entry> block only, leaving every other entry
-# untouched. Anchored on the Image entry so no other wallpaper option is affected.
-entry = re.compile(r'(<entry\\s+name="Image".*?</entry>)', re.DOTALL)
-
-
-def fix(m):
-    block = m.group(1)
-    if "<default" not in block:
-        # Insert a default right after the entry's opening tag if none exists.
-        return re.sub(r'(<entry\\s+name="Image"[^>]*>)',
-                      r'\\1\\n      <default>%s</default>' % uri, block, count=1)
-    block = re.sub(r'<default\\s*/>', '<default>%s</default>' % uri, block, count=1)
-    block = re.sub(r'<default>.*?</default>', '<default>%s</default>' % uri,
-                   block, count=1, flags=re.DOTALL)
-    return block
-
-
-new = entry.sub(fix, xml, count=1)
-if new != xml:
-    with open(path, "w", encoding="utf-8") as fh:
-        fh.write(new)
-PYEOF
-fi
-
-# Remove the stock Plasma "Next" wallpaper so the "Desktop and Wallpaper" grid
-# shows ONLY the azarch wallpapers ("years", "decades") shipped as KPackages under
-# /usr/share/wallpapers. "Next" is bundled with plasma-workspace (not a separate
-# removable package), so it must be deleted here rather than dropped from the
-# manifest. Guarded so a layout change upstream never aborts the build.
-rm -rf /usr/share/wallpapers/Next || true
-
-# Remove the Plasma NOTIFICATIONS applet ENTIRELY -- the distro ships with no
-# notifications ("i straight up dont need notifications on the distro, remove it
-# entirely"). Deleting the plasmoid .so means plasmashell cannot load or
-# auto-discover it into any system tray, so no notification widget can appear. It is
-# bundled inside plasma-workspace (a core package that cannot be dropped from the
-# manifest), so the applet file is deleted here. Guarded with `|| true` so a path
-# change upstream never aborts the ISO build. The `.so` is the loadable applet; the
-# glob also clears any packaged metadata/plasmoid dir if present.
-rm -f /usr/lib/qt6/plugins/plasma/applets/org.kde.plasma.notifications.so || true
-rm -rf /usr/share/plasma/plasmoids/org.kde.plasma.notifications || true
-
-# Remove KRUNNER and KMENUEDIT ENTIRELY -- the Az'arch application menu replaces
-# Kickoff, and the user asked to delete these two: "we dont need them, they are
-# unnecessary, they get in the way, and they are bloat." Neither can be dropped from
-# the package manifest (kmenuedit is a hard dependency of plasma-desktop; the
-# /usr/bin/krunner binary is shipped by the core plasma-workspace package, and the
-# `krunner` library is pulled in by systemsettings/plasma-desktop/milou), so -- just
-# like the notifications applet above -- their runtime files are deleted here in the
-# chroot instead. All rm are guarded with `|| true` so an upstream path change can
-# never abort the ISO build.
-#
-# KRUNNER: delete every way it can start or be triggered, so the search/run popup
-# (Alt+Space / Alt+F2, and the old Meta binding) is simply gone:
-#   * the binary itself,
-#   * the systemd user service that runs `krunner --daemon`,
-#   * the D-Bus activation service (how a keypress launches it on demand), and
-#   * the kglobalaccel shortcut registration (its Alt+Space/Alt+F2 global keys).
-rm -f /usr/bin/krunner || true
-rm -f /usr/lib/systemd/user/plasma-krunner.service || true
-rm -f /usr/share/dbus-1/services/org.kde.krunner.service || true
-rm -f /usr/share/kglobalaccel/org.kde.krunner.desktop || true
-# KMENUEDIT: the "Menu Editor" -- delete the binary and its application entry so it
-# neither runs nor appears in any menu (our own app list also drops it once the
-# .desktop is gone).
-rm -f /usr/bin/kmenuedit || true
-rm -f /usr/share/applications/org.kde.kmenuedit.desktop || true
 """
 
 # getty@tty1 autologin override. The releng base autologins ROOT on tty1; the
 # graphical live session must instead autologin the unprivileged `main` user, whose
-# ~/.bash_profile execs startx into the Plasma session. Running the desktop as root
+# ~/.bash_profile execs startx into the OpenBox session. Running the desktop as root
 # is wrong (Calamares/Qt dislike it, and the live user model expects `main`). The
 # empty first ExecStart= clears the unit's default before we set ours (systemd
 # requires the reset to override ExecStart in a drop-in).
@@ -371,7 +279,7 @@ WantedBy=multi-user.target
 
 # --- Power management: lid / power button (STATIC logind drop-in) -----------
 # A systemd-logind drop-in shipped root-owned under airootfs/etc, so it governs
-# BOTH the live ISO (bare console + Plasma) AND the installed system -- the OFFLINE
+# BOTH the live ISO (bare console + OpenBox) AND the installed system -- the OFFLINE
 # Calamares install rsyncs the live rootfs verbatim via unpackfs, so an /etc file
 # on the medium lands on the target unchanged (no separate installer step needed).
 #
@@ -414,10 +322,11 @@ HandlePowerKey=poweroff
 # the same service), so unplugging the charger arms the 15-minute idle timer and
 # plugging it back in disarms it, live.
 #
-# WHY logind IdleAction (not PowerDevil): logind is the single idle manager that
-# works on BOTH the bare-console live ISO and the installed Plasma desktop, and it
-# is DE-independent -- exactly the deterministic behaviour the request describes.
-# IdleActionSec=900 == 15 minutes.
+# WHY logind IdleAction: logind is the single idle manager that works on BOTH the
+# bare-console live ISO and the OpenBox desktop, and it is DE-independent -- exactly
+# the deterministic behaviour the request describes. With KDE's PowerDevil removed,
+# logind is now the ONLY idle-suspend manager on the system. IdleActionSec=900 == 15
+# minutes.
 #
 # Detection:
 #   * "laptop" == at least one /sys/class/power_supply/* of type "Battery". This is

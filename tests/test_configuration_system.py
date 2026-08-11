@@ -106,66 +106,28 @@ def test_customize_airootfs_copies_os_release():
     assert "chmod 0644 /usr/lib/os-release" in s
 
 
-def test_customize_airootfs_sets_default_plasma_wallpaper():
-    # The regeneration-proof wallpaper mechanism: rewrite the org.kde.image plugin's
-    # Image default (owned by plasma-workspace) to the Az'arch wallpaper. Must target
-    # the stable main.xml path and be guarded so an absent Plasma / parse surprise
-    # never aborts the mkarchiso build.
+def test_customize_airootfs_brands_os_release():
+    # The hook was reduced to ONLY plant the branded os-release: it is a strict
+    # `set -euo pipefail` bash script that copies /root/azarch/os-release over
+    # /usr/lib/os-release (the file /etc/os-release symlinks to) and modes it 0644.
     s = system.CUSTOMIZE_AIROOTFS
-    assert "/usr/share/plasma/wallpapers/org.kde.image/contents/config/main.xml" in s
-    # The default points at the "years" KPackage DIRECTORY (== desktop.WALLPAPER_PACKAGE_DIR),
-    # NOT its inner image file (a file path makes Plasma add a duplicate resolution-
-    # labelled tile) and NOT a standalone /usr/share/azarch/wallpaper.png.
-    from azarch.configuration import desktop
-    assert f'WALLPAPER="{desktop.WALLPAPER_PACKAGE_DIR}"' in s
-    assert "/usr/share/azarch/wallpaper.png" not in s
-    # Must NOT reference the inner png for the Plasma default (the duplicate-tile bug).
-    assert 'WALLPAPER="/usr/share/wallpapers/years/contents/images' not in s
-    # non-fatal + only runs when the xml file and the wallpaper DIRECTORY both exist
-    assert "|| true" in s
-    assert 'if [ -f "$IMG_MAIN_XML" ] && [ -d "$WALLPAPER" ]; then' in s
+    assert s.startswith("#!/usr/bin/env bash")
+    assert "set -euo pipefail" in s
+    assert "cp /root/azarch/os-release /usr/lib/os-release" in s
+    assert "chmod 0644 /usr/lib/os-release" in s
 
 
-def test_customize_airootfs_removes_notifications_applet_entirely():
-    # The user wants NO notifications on the distro. The plasmoid .so is deleted so
-    # plasmashell cannot load/auto-discover it into any tray. Guarded with `|| true`.
-    s = system.CUSTOMIZE_AIROOTFS
-    assert (
-        "rm -f /usr/lib/qt6/plugins/plasma/applets/org.kde.plasma.notifications.so"
-        in s
-    )
-    assert "rm -rf /usr/share/plasma/plasmoids/org.kde.plasma.notifications" in s
-
-
-def test_customize_airootfs_deletes_krunner_entirely():
-    # The user asked to delete krunner ("bloat, gets in the way"). It cannot be
-    # dropped from the manifest (its lib is pulled by systemsettings/plasma, and the
-    # binary ships in core plasma-workspace), so every way it starts/triggers is
-    # rm'd in the chroot: the binary, the systemd user service, the D-Bus activation
-    # service, and the kglobalaccel shortcut registration. All guarded with `|| true`.
-    s = system.CUSTOMIZE_AIROOTFS
-    assert "rm -f /usr/bin/krunner || true" in s
-    assert "rm -f /usr/lib/systemd/user/plasma-krunner.service || true" in s
-    assert "rm -f /usr/share/dbus-1/services/org.kde.krunner.service || true" in s
-    assert "rm -f /usr/share/kglobalaccel/org.kde.krunner.desktop || true" in s
-
-
-def test_customize_airootfs_deletes_kmenuedit_entirely():
-    # kmenuedit (the "Menu Editor") is deleted too -- a hard dep of plasma-desktop
-    # that cannot be dropped from the manifest, so its binary + application entry are
-    # rm'd in the chroot so it neither runs nor appears in any menu. Guarded `|| true`.
-    s = system.CUSTOMIZE_AIROOTFS
-    assert "rm -f /usr/bin/kmenuedit || true" in s
-    assert "rm -f /usr/share/applications/org.kde.kmenuedit.desktop || true" in s
-
-
-def test_customize_airootfs_wallpaper_python_is_valid():
-    # The embedded Python rewriter must at least compile -- a SyntaxError would only
-    # surface at build time inside the chroot, aborting mkarchiso. Extract the
-    # heredoc body and compile it.
-    s = system.CUSTOMIZE_AIROOTFS
-    body = s.split("<<'PYEOF' || true\n", 1)[1].split("\nPYEOF", 1)[0]
-    compile(body, "<customize_airootfs embedded python>", "exec")
+def test_customize_airootfs_has_no_plasma_leftovers():
+    # KDE Plasma was removed and replaced with OpenBox; the desktop wallpaper is now
+    # painted by feh from the OpenBox session (configuration/desktop.py), NOT here.
+    # Guard that no Plasma-specific chroot step (wallpaper rewrite, notifications
+    # applet / krunner / kmenuedit removal, etc.) ever creeps back into this hook.
+    s = system.CUSTOMIZE_AIROOTFS.lower()
+    for token in (
+        "plasma", "krunner", "kmenuedit", "org.kde", "kwin", "next",
+        "notifications", "kickoff",
+    ):
+        assert token not in s, token
 
 
 # --- getty autologin drop-in ------------------------------------------------

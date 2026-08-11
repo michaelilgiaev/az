@@ -356,69 +356,78 @@ def _installer_cleanup_command(script: list) -> str:
 
 
 def test_shellprocess_removes_installer_from_installed_desktop():
-    # The live session ships an installer launcher on the Desktop and a Plasma
-    # autostart entry; the OFFLINE install copies /home/main verbatim (reuseHome), so
-    # WITHOUT this the installed system would keep the Desktop icon AND re-launch the
-    # installer at every login. This is the "installer shouldn't be on the Desktop
-    # after install" fix. The command must delete the Desktop launcher + the autostart
-    # entry from BOTH the reused /home/main and /etc/skel.
+    # The live session ships an installer launcher on the Desktop and (in its OpenBox
+    # autostart) a first-run Calamares launch; the OFFLINE install copies /home/main
+    # verbatim (reuseHome), so WITHOUT this the installed system would keep the Desktop
+    # icon AND re-launch the installer at every login. This is the "installer shouldn't
+    # be on the Desktop after install" fix. The command must delete the Desktop launcher
+    # from BOTH the reused /home/main and /etc/skel; the auto-launch is removed by
+    # overwriting the OpenBox autostart (see the autostart test below).
     from azarch.configuration import calamares_shellprocess as csp
     d = yaml.safe_load(calamares.shellprocess_conf())
     cmd = _installer_cleanup_command(d["script"])
     assert f"rm -f {csp.INSTALLER_DESKTOP_LAUNCHER}" in cmd
-    assert f"rm -f {csp.INSTALLER_AUTOSTART_ENTRY}" in cmd
     assert f"rm -f {csp.INSTALLER_SKEL_LAUNCHER}" in cmd
-    assert f"rm -f {csp.INSTALLER_SKEL_AUTOSTART}" in cmd
-    # It targets the live user's home Desktop and the autostart dir specifically.
+    # It targets the live user's home Desktop launcher specifically.
     assert csp.INSTALLER_DESKTOP_LAUNCHER == "/home/main/Desktop/azarch-install.desktop"
-    assert csp.INSTALLER_AUTOSTART_ENTRY == (
-        "/home/main/.config/autostart/azarch-install.desktop"
-    )
     # The system-wide MENU launcher is intentionally LEFT in place (re-running the
     # installer from the menu is harmless; only the Desktop icon + auto-launch go).
     assert "/usr/share/applications/azarch-install.desktop" not in cmd
 
 
-def test_installer_cleanup_command_uses_no_shell_variables_and_rm_f():
+def test_installer_cleanup_command_uses_no_shell_variables():
     # Same no-`$` rule as the other shellprocess commands (Calamares macro-expansion).
-    # rm -f so an absent path is a no-op and never aborts under set -e.
+    # rm -f / cp -f so an absent path is a no-op and a shipped-file copy never prompts.
     from azarch.configuration import calamares_shellprocess as csp
     cmd = csp._installer_cleanup_command()
     assert "$" not in cmd
     assert cmd.startswith("set -e")
-    # Every removal uses rm -f (no interactive/failing bare rm).
+    # Every rm uses rm -f and every cp uses cp -f (no interactive/failing bare form).
     for line in cmd.splitlines():
         if line.startswith("rm"):
             assert line.startswith("rm -f "), line
+        if line.startswith("cp"):
+            assert line.startswith("cp -f "), line
 
 
-def test_shellprocess_removes_fixed_kxkbrc_so_region_keyboard_survives():
-    # BUG (post-install keyboard reverts to US+Hebrew regardless of region): the live
-    # session ships a FIXED us,il Plasma keyboard config at ~/.config/kxkbrc (+ /etc/skel),
-    # and the OFFLINE install copies /home/main VERBATIM (reuseHome). On the installed
-    # Plasma session kded reads ~/.config/kxkbrc as AUTHORITATIVE and overrides the
-    # region-correct /etc/X11/xorg.conf.d/00-keyboard.conf Calamares wrote -- so every
-    # install comes up us,il no matter the region. The cleanup step must DELETE the
-    # target's kxkbrc (home + skel) so the region keyboard governs. The live ISO keeps
-    # its own kxkbrc; only the installed copy is removed here (target chroot).
-    from azarch.configuration import calamares_shellprocess as csp
-    d = yaml.safe_load(calamares.shellprocess_conf())
-    cmd = _installer_cleanup_command(d["script"])
-    assert f"rm -f {csp.INSTALLED_KXKBRC}" in cmd
-    assert f"rm -f {csp.INSTALLED_SKEL_KXKBRC}" in cmd
-    # The paths are the reused-home + skel Plasma keyboard config specifically.
-    assert csp.INSTALLED_KXKBRC == "/home/main/.config/kxkbrc"
-    assert csp.INSTALLED_SKEL_KXKBRC == "/etc/skel/.config/kxkbrc"
-
-
-def test_shellprocess_kxkbrc_removal_targets_the_shipped_file():
-    # Guard against drift: the file the cleanup deletes MUST be the exact path
-    # configuration/desktop.py ships kxkbrc to (the live home). If desktop.py's dest
-    # ever moves, this catches it so the clobber-fix keeps targeting the real file.
+def test_shellprocess_overwrites_openbox_autostart_so_region_keyboard_and_no_installer():
+    # BUG classes fixed on the INSTALLED OpenBox session (the live rootfs is copied
+    # verbatim via unpackfs/reuseHome): the live ~/.config/openbox/autostart carries two
+    # LIVE-ONLY lines -- a FIXED `setxkbmap us,il` (which would override the region
+    # keyboard Calamares wrote to /etc/X11/xorg.conf.d/00-keyboard.conf, so every install
+    # would come up US+Hebrew regardless of region) and a first-run Calamares launch
+    # (wrong on an installed system). The cleanup step must OVERWRITE the target's
+    # autostart (home + skel) with the "installed" variant staged on the ISO, which drops
+    # exactly those two lines while keeping wallpaper/xcape/menu-daemon.
     from azarch.configuration import calamares_shellprocess as csp
     from azarch.configuration import desktop
-    by_builder = {e["builder"].__name__: e for e in desktop.emit_plan()}
-    assert by_builder["kxkbrc"]["dest"] == csp.INSTALLED_KXKBRC
+    d = yaml.safe_load(calamares.shellprocess_conf())
+    cmd = _installer_cleanup_command(d["script"])
+    src = desktop.INSTALLED_AUTOSTART_STAGING_PATH
+    assert f"cp -f {src} {csp.INSTALLED_OPENBOX_AUTOSTART}" in cmd
+    assert f"cp -f {src} {csp.INSTALLED_SKEL_OPENBOX_AUTOSTART}" in cmd
+    # The paths are the reused-home + skel OpenBox autostart specifically.
+    assert csp.INSTALLED_OPENBOX_AUTOSTART == "/home/main/.config/openbox/autostart"
+    assert csp.INSTALLED_SKEL_OPENBOX_AUTOSTART == "/etc/skel/.config/openbox/autostart"
+    # The staged "installed" autostart really does drop the two live-only lines.
+    installed = desktop.openbox_autostart_installed()
+    assert "setxkbmap" not in installed
+    assert desktop.INSTALL_WRAPPER_PATH not in installed
+    # ...while the LIVE autostart (what the target inherits before the overwrite) has both.
+    live = desktop.openbox_autostart()
+    assert "setxkbmap" in live
+    assert desktop.INSTALL_WRAPPER_PATH in live
+
+
+def test_shellprocess_autostart_source_is_the_staged_shipped_file():
+    # Guard against drift: the file the cleanup COPIES FROM must be the exact staging
+    # path configuration/desktop.py emits the installed autostart to. If desktop.py's
+    # staging dest ever moves, this catches it so the copy keeps sourcing a real file.
+    from azarch.configuration import calamares_shellprocess as csp
+    from azarch.configuration import desktop
+    assert csp.INSTALLED_AUTOSTART_SRC == desktop.INSTALLED_AUTOSTART_STAGING_PATH
+    dests = {e["dest"] for e in desktop.emit_plan()}
+    assert desktop.INSTALLED_AUTOSTART_STAGING_PATH in dests
 
 
 # --- shellprocess.conf: the archiso mkinitcpio fix (kernel + preset) --------

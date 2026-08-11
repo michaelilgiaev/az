@@ -1,26 +1,23 @@
-"""azarch.configuration.application_menu -- OUR application menu, baked into the
-ISO and shown right of Kickoff.
+"""azarch.configuration.application_menu -- OUR application menu, baked into the ISO.
 
-These pin the contract that (a) the three runtime files are emitted to the fixed
-system paths the panel icon expects, (b) the constants shared with
-configuration/desktop.py agree (a drift there = an icon that launches nothing),
-and (c) the emitted content is the real menu (Hello World) wired to the launcher.
+KDE Plasma was removed; the desktop is OpenBox with no panel, so this menu is the
+WHOLE shell -- a borderless launcher CENTERED on the screen, opened by the Super key
+(via xcape + the OpenBox rc.xml keybind) and by the OpenBox root menu.
 
-They also pin the menu's look/behaviour matching the live hypervisor: the window
-is borderless (overrideredirect, no titlebar buttons) and sized to Kickoff's
-popup, and the launcher is a single-instance TOGGLE (a second click closes it via
-a PID file) rather than a spawn-every-click opener.
+These pin the contract that (a) the runtime files are emitted to the fixed system
+paths the launcher/session expect, (b) the constants shared with
+configuration/desktop.py agree, and (c) the emitted content is the real Tkinter menu
+wired to the launcher.
 
-Two behaviours were ported from the live hypervisor and are pinned here (see
-test_menu_closes_on_outside_click and test_menu_highlights_panel_icon):
-  * The menu now dismisses like Plasma's Kickoff -- a global pointer grab
-    (grab_set_global) plus an outside-click hit-test, with <FocusOut> and Escape
-    backing it up, and the grab always released on close. This SUPERSEDES the
-    earlier "deliberately does NOT grab focus, closes only via the launcher
-    toggle" contract, which must not be re-asserted anywhere.
-  * A borderless Breeze-blue (#3daee9) HighlightBar pops in over the panel icon
-    while the menu is open and vanishes on close. It appears instantly, with NO
-    animation -- a guard asserts no animation helper is reintroduced.
+They also pin the menu's look/behaviour: the window is borderless (overrideredirect,
+no titlebar buttons) and CENTERED, and the launcher is a single-instance TOGGLE (a
+second Super press closes it via a PID file / signalled daemon) rather than a
+spawn-every-click opener.
+
+The menu dismisses like Plasma's Kickoff did -- a global pointer grab (grab_set_global)
+plus an outside-click hit-test, with <FocusOut> and Escape backing it up, and the grab
+always released on close. There is NO pin and NO panel-icon highlight bar anymore (both
+were removed with the panel), so nothing here asserts them.
 """
 
 from __future__ import annotations
@@ -71,10 +68,14 @@ def test_desktop_entry_launches_the_installed_launcher():
 
 
 def test_constants_match_desktop_module():
-    # desktop.plasma_appletsrc bakes the panel icon using these; a mismatch means
-    # the icon would launch a path we never installed.
-    assert desktop._AZ_MENU_DESKTOP_PATH == am.MENU_DESKTOP_SYSTEM_PATH
-    assert desktop._AZ_MENU_ICON_NAME == am.MENU_ICON_NAME
+    # desktop.py binds the Super key + OpenBox root menu to the menu LAUNCHER and starts
+    # the DAEMON from the OpenBox autostart; a drift in these paths would wire the
+    # session to a path we never installed.
+    assert desktop.MENU_LAUNCHER == am.MENU_LAUNCHER_SYSTEM_PATH
+    assert desktop.MENU_DAEMON_PY == am.MENU_DAEMON_PY_SYSTEM_PATH
+    # The launcher rc.xml keybind and the autostart daemon line reference exactly these.
+    assert am.MENU_LAUNCHER_SYSTEM_PATH in desktop.openbox_rc_xml()
+    assert am.MENU_DAEMON_PY_SYSTEM_PATH in desktop.openbox_autostart()
 
 
 def test_launcher_runs_the_daemon_which_runs_the_menu_module():
@@ -132,17 +133,19 @@ def test_emit_ships_xfocus_module():
     assert "import xfocus" in am.menu_py()
 
 
-def test_menu_is_borderless_and_kickoff_sized():
-    # The menu must be chromeless (no titlebar/min/max/close) and sized to match
-    # Plasma's Kickoff popup, pinned bottom-right -- matching the live hypervisor.
+def test_menu_is_borderless_and_centered():
+    # The menu must be chromeless (no titlebar/min/max/close) and CENTERED on the
+    # screen (there is no panel to anchor to anymore). The old bottom-corner /
+    # Kickoff-popup-size machinery is gone.
     src = am.menu_py()
     assert "overrideredirect(True)" in src          # no window chrome
-    assert "kickoff_popup_size" in src              # size tracks Kickoff's popup
-    assert "popupWidth" in src and "popupHeight" in src
-    # NOTE: the earlier version of this menu deliberately did NOT grab focus and
-    # left dismissal to the launcher toggle. That contract was replaced by the
-    # Kickoff-style outside-click close (see test_menu_closes_on_outside_click),
-    # so this test no longer asserts the absence of a focus grab / -topmost.
+    assert "menu_size" in src                        # fixed theme size (no appletsrc read)
+    # Centered placement: (screen - size) / 2 on both axes.
+    assert "screen_w - win_w" in src
+    assert "screen_h - win_h" in src
+    # The old Plasma/Kickoff popup-size read is gone (no appletsrc / popupWidth).
+    assert "kickoff_popup_size" not in src
+    assert "popupWidth" not in src
 
 
 def test_menu_closes_on_outside_click():
@@ -159,50 +162,53 @@ def test_menu_closes_on_outside_click():
     assert "grab_release" in src
 
 
-def test_menu_highlights_panel_icon():
-    # Ported behaviour #2: a Breeze-blue highlight bar appears over the panel icon
-    # while the menu is open, matching Plasma's "active applet" indicator.
-    # menu.py was split into modules, so the bar's definition/colour now live in
-    # widgets.py + theme.py while menu.py instantiates it; assert against the whole
-    # menu package, not menu.py alone.
-    src = am.menu_package_source()
-    assert "#3daee9" in src                          # Breeze Dark selection color (theme.py)
-    assert "HIGHLIGHT_COLOR" in src                  # named accent color (theme.py)
-    assert "class HighlightBar" in src               # the bar is its own Toplevel (widgets.py)
-    assert "az_highlight" in src                     # stashed on root, torn down on close (menu.py)
-    assert "HighlightBar(root" in src                # actually instantiated (menu.py)
-    assert ".show()" in src                          # the bar is shown while open (menu.py)
+def test_menu_has_no_pin_or_settings_or_highlight_bar():
+    # The pin button, the (greyed-out) Settings button, and the panel-icon highlight
+    # bar were all REMOVED (the panel is gone and the menu is a plain transient
+    # launcher). Guard against any of them being reintroduced. Check the RUNTIME
+    # modules (menu.py + widgets.py + theme.py), not the whole package -- the menu's own
+    # test suite (test_menu.py) legitimately mentions these names in its guards.
+    runtime = am.menu_py() + am._module_src("widgets.py") + am._module_src("theme.py")
+    assert "pin_button" not in runtime               # no pin control
+    assert "settings_button" not in runtime          # no settings control
+    assert "class HighlightBar" not in runtime       # no panel-icon highlight bar
+    assert "az_highlight" not in runtime             # nor its root stash
+    assert "class IconButton" not in runtime         # the pin/settings widget is gone
+    # The full-width search box: the search entry still expands to fill the row.
+    assert 'side="left", fill="x", expand=True' in am.menu_py()
 
 
-def test_highlight_bar_is_not_animated():
-    # The bar was explicitly required to POP IN at full size -- no fade/grow. Guard
-    # against a future edit silently reintroducing an animation. show() must just
-    # place + deiconify the bar, never step a geometry over time. The HighlightBar
-    # now lives in widgets.py, so check the whole menu package.
-    src = am.menu_package_source()
-    assert "animate_in" not in src                   # the old fade helper is gone
-    assert "def _animate" not in src                 # no animation stepper method
-    assert "def _grow" not in src                    # nor a grow-over-time helper
-    # show() reveals the bar at full size in one shot (deiconify, in widgets.py).
-    assert "deiconify" in src
+def test_menu_has_tab_focus_toggle_between_search_and_power():
+    # TWO keyboard focus zones toggled with TAB: the default is the search box + app
+    # list (arrows navigate apps), and TAB moves focus to the power row (arrows move
+    # between the power buttons); TAB again returns to the default. Pin the wiring.
+    src = am.menu_py()
+    assert "FOCUS_APPS" in src and "FOCUS_POWER" in src   # the two zones
+    assert "def toggle_focus" in src                       # TAB flips zones
+    assert "def set_focus_zone" in src                     # moves + repaints focus
+    assert '"<Tab>"' in src                                # TAB is bound
+    assert "set_selection_enabled" in src                  # app-list dims when TAB'd away
+    # A power button can render a keyboard-focus outline (driven by the toggle).
+    assert "set_focused" in am.menu_package_source()
 
 
 def test_usage_seed_orders_the_default_top_four():
     # A fresh profile has no launch history, so the menu would sort alphabetically.
-    # The seed store fixes the STARTING top four to System Settings, LibreWolf,
-    # kitty, Dolphin (descending), keyed by .desktop id. Parse it and assert the
-    # order the menu's sort (-count, name) would produce is exactly that.
+    # The seed store fixes the STARTING top four to LibreWolf, kitty, Dolphin, GIMP
+    # (descending), keyed by .desktop id. Parse it and assert the order the menu's sort
+    # (-count, name) would produce is exactly that. (KDE's "System Settings" is gone
+    # with Plasma, so it is no longer seeded.)
     seed = json.loads(am.usage_seed_json())
     ranked = sorted(seed.items(), key=lambda kv: -kv[1])
     assert [k for k, _ in ranked] == [
-        "systemsettings.desktop",
         "librewolf.desktop",
         "kitty.desktop",
         "org.kde.dolphin.desktop",
+        "gimp.desktop",
     ], ranked
-    # System Settings (kept) is seeded; KDE System Settings (hidden) is NOT -- it
-    # never appears, so seeding it would be meaningless.
-    assert "kdesystemsettings.desktop" not in seed
+    # KDE System Settings is gone -> it is NOT seeded (seeding a nonexistent app would
+    # be meaningless).
+    assert "systemsettings.desktop" not in seed
 
 
 def test_usage_seed_matches_usagestore_format_and_is_home_owned():

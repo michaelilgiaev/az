@@ -87,6 +87,11 @@ class CanvasAppList:
         self._rows: list[_RowItem] = []       # one per entry, canonical order
         self._visible: list[_RowItem] = []     # currently shown, in draw order
         self._selected = -1                    # index into self._visible
+        # Whether the keyboard-selection OUTLINE is painted. The menu turns this OFF
+        # when TAB moves focus to the power row (so the app list visibly gives up
+        # focus) and back ON when TAB returns -- see menu.py's focus toggle. The model
+        # index (_selected) is preserved either way; only the outline is suppressed.
+        self._selection_enabled = True
         self._width = 1
 
         wrap = tk.Frame(parent, bg=T.BG_COLOR)
@@ -254,6 +259,18 @@ class CanvasAppList:
         if entry is not None:
             self._on_activate(entry)
 
+    def set_selection_enabled(self, enabled: bool) -> None:
+        """Show or hide the keyboard-selection OUTLINE without losing which row is
+        selected. Used by the menu's TAB focus toggle: when focus moves to the power
+        row the app list dims its selection (enabled=False) so it is visibly not the
+        focused pane; when focus returns the outline comes back on the same row. A
+        no-op change is cheap; a real change just repaints the selection."""
+        enabled = bool(enabled)
+        if enabled == self._selection_enabled:
+            return
+        self._selection_enabled = enabled
+        self._refresh_selection()
+
     def scroll_to_top(self) -> None:
         try:
             self.canvas.yview_moveto(0.0)
@@ -288,7 +305,11 @@ class CanvasAppList:
         to plain. Uses each row's own rect item (moved into place already) so the
         outline lands exactly on the row."""
         for i, r in enumerate(self._visible):
-            selected = (i == self._selected)
+            # When the outline is suppressed (focus is on the power row) a keyboard
+            # selection paints nothing; a live mouse HOVER still highlights so the
+            # pointer stays responsive. So gate the selected-state paint on the
+            # enabled flag, but always honour hover.
+            selected = (i == self._selected) and self._selection_enabled
             hovered = (i == self._hover_index)
             if selected or hovered:
                 self.canvas.itemconfigure(

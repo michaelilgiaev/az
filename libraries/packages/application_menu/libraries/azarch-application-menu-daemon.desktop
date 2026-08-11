@@ -6,6 +6,4 @@ Exec=python3 /usr/local/lib/azarch-application-menu/daemon.py
 Icon=application-menu
 Terminal=false
 NoDisplay=true
-X-KDE-autostart-phase=2
 X-GNOME-Autostart-enabled=true
-OnlyShowIn=KDE;

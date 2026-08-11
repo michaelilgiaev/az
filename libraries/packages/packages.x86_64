@@ -189,23 +189,30 @@ kitty
 ttf-dejavu
 ttf-liberation
 noto-fonts
-# --- KDE Plasma desktop (minimal, no display manager) ---------------------
-# plasma-desktop hard-pulls plasma-workspace (the panel/launcher/startplasma-x11
-# + kscreenlocker), polkit-kde-agent, and powerdevil (laptop sleep/wake), so
-# those are NOT listed. kwin-x11 IS listed explicitly: it is only an optdepend of
-# plasma-workspace, but it is the actual X11 window manager the startx session
-# needs (the auto-pulled `kwin` package is the Wayland compositor only). plasma-nm
-# / plasma-pa are the NetworkManager + audio tray applets (optdepends, ride on the
-# networkmanager + pipewire-pulse already in this manifest). dolphin is the file
-# manager. No sddm (autologin + startx instead), no konsole (kitty is the terminal).
-plasma-desktop
-kwin-x11
-plasma-nm
-plasma-pa
-dolphin
+# --- OpenBox desktop (minimal, no display manager, no panel) --------------
+# KDE Plasma was REMOVED (it did not fit the distro). OpenBox is now the whole
+# desktop: a lightweight X11 window manager the startx session execs directly
+# (exec openbox-session in ~/.xinitrc). There is NO panel -- the Az'arch
+# application menu (Super key / centered popup) is the only shell surface, so no
+# tint2/panel package is shipped. `xcape` turns a lone Super tap into Super+Menu
+# so OpenBox's rc.xml can bind the menu launcher to the bare Super key (OpenBox
+# cannot bind a lone modifier itself). `feh` (already in the manifest) paints the
+# wallpaper from the OpenBox autostart. xterm is a bare fallback terminal for the
+# OpenBox root menu (kitty stays the primary terminal). No sddm (autologin +
+# startx instead).
+openbox
+xcape
+xterm
 adwaita-icon-theme
 gnome-themes-extra
 xcursor-themes
+# --- Calamares installer dependencies -------------------------------------
+# The graphical installer (built via makepkg, see configuration/pkgbuild.py) is a
+# Qt6/KDE-Frameworks app: `pacman -Si calamares` depends on kcrash kconfig
+# kcoreaddons kiconthemes ki18n kpmcore polkit-qt6 qt6-svg solid yaml-cpp (+ the
+# ckbcomp/hwinfo/squashfs-tools already present). These K* + Qt6 packages therefore
+# STAY even though Plasma is gone -- they are the installer's toolkit, not the
+# desktop shell. qt6-declarative/qt6-5compat back Calamares' QML pages.
 kpmcore
 qt6-base
 qt6-svg
@@ -216,6 +223,7 @@ kcoreaddons
 ki18n
 kcrash
 kwidgetsaddons
+kiconthemes
 kpackage
 yaml-cpp
 polkit
@@ -254,5 +262,7 @@ mailcap
 librewolf
 gedit
 gimp
+# dolphin -- the file manager, kept as a standalone application (it is NOT part of
+# the removed Plasma shell; it pulls KDE Frameworks libs but runs under OpenBox fine).
 dolphin
 qalculate-gtk
