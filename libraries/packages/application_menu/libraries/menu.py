@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 import tkinter as tk
 
 # Sibling modules live next to this file (installed together under
@@ -571,14 +572,17 @@ def build_window(persistent: bool = False) -> tk.Tk:
     # Escape closes; arrows + Enter route through the menu's focus-aware handlers; TAB
     # flips the focus zone.
     root.bind("<Escape>", close_menu)
-    # Super/Meta ALSO closes -- "Super opened it, Super closes it". The bare Super key
-    # toggles the menu via xcape + the OpenBox rc.xml keybind (-> our launcher -> the
-    # daemon), which works while the menu is CLOSED. But while the menu is OPEN it holds
-    # a global keyboard grab (see arm()), so the second Super press is delivered to THIS
-    # window and never reaches OpenBox -- the global toggle can't fire, so the menu
-    # would stay open. Binding Super here makes that grab-delivered press close it,
-    # closing the loop. Both Super_* (typical) and Meta_* (some layouts report the key
-    # as Meta) keysyms are bound so whichever X delivers triggers the close.
+    # Super/Meta ALSO closes -- "Super opened it, Super closes it". While the menu is OPEN
+    # it holds an ACTIVE global keyboard grab (see arm()), so the physical Super_L PRESS is
+    # delivered to THIS window; binding it to close is what makes a second Super tap shut
+    # the menu. (xcape reads keys via XRecord and injects the Menu keysym on the tap's
+    # RELEASE regardless of the grab, but that injected Menu is itself caught by the active
+    # grab, so it does NOT reach OpenBox while we are open -- the grab-delivered Super_L
+    # press here is the close path.) The catch: our close releases the grab, so if that
+    # injected Menu lands just after the release it slips through to OpenBox -> the launcher
+    # -> the daemon toggle and would re-open us; the daemon debounces that echo using the
+    # az_last_hidden stamp (see daemon.Daemon.toggle). Both Super_* (typical) and Meta_*
+    # (some layouts report the key as Meta) keysyms are bound so whichever X delivers closes.
     for _keysym in ("<Super_L>", "<Super_R>", "<Meta_L>", "<Meta_R>"):
         root.bind(_keysym, close_menu)
     root.bind("<Down>", lambda _e: menu.on_down())
@@ -643,7 +647,18 @@ def build_window(persistent: bool = False) -> tk.Tk:
     def hide_menu() -> None:
         """DAEMON mode: hide (withdraw) the window instead of destroying it, so the next
         show is instant. Releases the grab, unbinds the focus-out backup, cancels
-        timers, and marks the menu closed so stray handlers no-op while hidden."""
+        timers, and marks the menu closed so stray handlers no-op while hidden.
+
+        Stamps root.az_last_hidden with a monotonic timestamp on EVERY hide (this is the
+        single choke point for all close paths -- Escape, outside-click, the Super-key
+        binding, launching an app, and the daemon's az_hide). The daemon reads it to
+        DEBOUNCE the xcape echo: closing with a Super TAP delivers Super_L to this window
+        (grab active) -> we withdraw and release the grab, but xcape ALSO injects the Menu
+        keysym on the same tap's release; once the grab is gone that Menu reaches OpenBox
+        -> the launcher -> the daemon toggle, which would otherwise immediately re-open the
+        window. The timestamp lets the daemon swallow that echo so a Super close stays
+        closed (see daemon.Daemon.toggle)."""
+        root.az_last_hidden = time.monotonic()
         state["closed"] = True
         _cancel_timers()
         try:
@@ -717,6 +732,11 @@ def build_window(persistent: bool = False) -> tk.Tk:
     root.az_populate = menu.populate
     root.az_show = show_menu
     root.az_hide = hide_menu
+    # Monotonic timestamp of the last hide, stamped by hide_menu on every close path.
+    # The daemon reads it to debounce the xcape "Menu" echo of a Super close-tap so the
+    # menu does not immediately re-open. Far in the past initially so the first show is
+    # never debounced.
+    root.az_last_hidden = 0.0
     # Introspection for tests: the close/capture state dict and the focus-out handler,
     # so a test can drive the "focus left -> close" flow deterministically without
     # relying on real (flaky, headless) X focus delivery.

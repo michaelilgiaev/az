@@ -65,8 +65,8 @@ MENU_DESKTOP_SYSTEM_PATH = (
 # Per-user seed for the launch-frequency store (usage.py's UsageStore file). The menu
 # orders apps most-launched first; on a FRESH profile there is no history, so without
 # this everything would sort alphabetically. Seeding a few counts fixes the STARTING top
-# of the list to the apps a new user wants first -- LibreWolf, kitty, Dolphin, GIMP
-# (descending) -- while leaving it fully dynamic: as the user opens apps the
+# of the list to EXACTLY the first three apps a new user wants -- LibreWolf, kitty,
+# Dolphin (descending) -- while leaving it fully dynamic: as the user opens apps the
 # WindowWatcher bumps these counts and the order re-sorts, so the seed only decides the
 # initial arrangement. Keyed by .desktop id (usage.py's key); counts are spaced so the
 # intended order is unambiguous. Emitted by configuration/desktop.py as a home-owned
@@ -77,13 +77,13 @@ MENU_USAGE_SEED_SYSTEM_PATH = (
 
 # desktop_id -> starting launch count. Descending so order_key (-count, name) puts them
 # in exactly this order at the top of a fresh menu; the tail (everything else, count 0)
-# stays alphabetical. KDE's "System Settings" (systemsettings.desktop) is gone with
-# Plasma, so the seed now leads with the shipped apps a new user actually reaches for.
+# stays alphabetical. EXACTLY three are seeded per the user's request ("make it those
+# three when it's first installed"): LibreWolf, kitty, Dolphin. Everything else (GIMP
+# included) starts in the count-0 alphabetical tail and floats up only as it is used.
 MENU_USAGE_SEED: dict[str, int] = {
-    "librewolf.desktop": 4,          # LibreWolf (browser)
-    "kitty.desktop": 3,              # kitty (terminal)
-    "org.kde.dolphin.desktop": 2,   # Dolphin (file manager)
-    "gimp.desktop": 1,               # GIMP
+    "librewolf.desktop": 3,          # LibreWolf (browser)
+    "kitty.desktop": 2,              # kitty (terminal)
+    "org.kde.dolphin.desktop": 1,   # Dolphin (file manager)
 }
 
 # The menu launcher's icon glyph: the standard "application-menu" hamburger, so the
@@ -166,8 +166,8 @@ def menu_desktop() -> str:
 
 
 def usage_seed_json() -> str:
-    """The seed launch-frequency store (usage.json) that fixes the STARTING top of the
-    menu to LibreWolf, kitty, Dolphin, GIMP on a fresh profile.
+    """The seed launch-frequency store (usage.json) that fixes the STARTING top three of
+    the menu to LibreWolf, kitty, Dolphin on a fresh profile.
 
     Rendered in the SAME compact form usage.py's UsageStore._save writes (json.dump with
     separators=(",", ":")) so the store reads it straight back (the emitter adds a

@@ -29,6 +29,7 @@ from __future__ import annotations
 import os
 import signal
 import sys
+import time
 import tkinter as tk
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -40,6 +41,22 @@ from winwatch import DesktopIndex, WindowWatcher  # noqa: E402
 
 RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
 PID_FILE = os.path.join(RUNTIME_DIR, "azarch-application-menu.pid")
+
+# Debounce window (seconds) for the toggle after a hide. Closing the menu with a Super
+# TAP makes xcape inject a Menu keysym that arrives here as a toggle a moment later; a
+# toggle landing within this window of a hide is treated as that echo and swallowed so
+# the close is not immediately undone.
+#
+# CRITICAL sizing invariant: the debounce clock starts when the menu is hidden, which
+# happens on the Super_L *press* (the grab delivers the physical KeyPress to the window;
+# hide_menu stamps az_last_hidden there). xcape only injects the Menu echo on the *release*,
+# and its -t timeout (see desktop.py, currently 500ms) lets a solo Super be held up to that
+# long and STILL emit the tap. So the echo can arrive as late as (xcape -t) + a little
+# signal-dispatch latency after the stamp. This window MUST therefore exceed the xcape
+# timeout, or a slow (~0.4-0.5s) close-tap re-opens the menu -- the exact "buggy close" this
+# guards. Keep TOGGLE_DEBOUNCE_S > the xcape -t (0.5s) with margin; do not lower it below
+# the xcape timeout when tuning either value.
+TOGGLE_DEBOUNCE_S = 0.6
 
 
 def _pid_alive(pid: int) -> bool:
@@ -60,7 +77,6 @@ def _claim_pidfile() -> bool:
     check-then-write race where both could pass an existence check during the
     ~200ms window before either wrote the file. A stale pidfile (owner dead) is
     removed and the claim retried once."""
-    import time
     for _ in range(3):
         try:
             fd = os.open(PID_FILE, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
@@ -293,8 +309,25 @@ class Daemon:
             mapped = False
         if mapped:
             self.hide()
-        else:
-            self.show()
+            return
+        # Not mapped -> normally show. BUT guard against the xcape echo of a Super
+        # close-tap: closing with a Super TAP delivers Super_L to the (grabbed) window,
+        # which withdraws it and releases the grab; xcape ALSO injects the Menu keysym on
+        # that same tap's release, and once the grab is gone that Menu reaches OpenBox ->
+        # the launcher -> here as a toggle, a few ms after the hide. Without this guard
+        # that echo would re-open the window the instant the user closed it (the "close is
+        # buggy" symptom). If we were hidden within the debounce window, treat this toggle
+        # as that echo and swallow it so the close sticks. A deliberate re-open a moment
+        # later (well past the window) still works.
+        try:
+            since_hidden = time.monotonic() - float(
+                getattr(self.root, "az_last_hidden", 0.0)
+            )
+        except (tk.TclError, TypeError, ValueError):
+            since_hidden = TOGGLE_DEBOUNCE_S + 1.0
+        if 0.0 <= since_hidden < TOGGLE_DEBOUNCE_S:
+            return
+        self.show()
 
     def quit(self) -> None:
         if self._watcher is not None:

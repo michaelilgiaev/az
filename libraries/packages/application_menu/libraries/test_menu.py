@@ -21,6 +21,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -1083,11 +1084,13 @@ def test_ui_super_key_binding_is_present() -> None:
     """The Super/Meta key must CLOSE the menu, mirroring Escape.
 
     Why a window-level binding at all (vs. just OpenBox's global Super->launcher
-    toggle): while the menu is open it holds a GLOBAL keyboard grab, so a second
-    physical Super press is delivered to OUR window and never reaches the WM --
-    OpenBox's Super keybind can't fire, so the daemon never toggles it shut. Binding
-    Super on the window itself makes that grab-delivered press close it, so 'Super
-    opened it, Super closes it' holds.
+    toggle): while the menu is open it holds an ACTIVE global keyboard grab, so the
+    physical Super_L PRESS is delivered to OUR window. Binding Super here is what makes
+    that grab-delivered press close the menu. (xcape still injects the Menu keysym on the
+    tap's release, but the active grab catches that injected key too, so it does not reach
+    OpenBox while we are open; the grab-delivered Super_L press is the close path.) The
+    daemon separately debounces the injected Menu that slips through right after we release
+    the grab, so the close is not immediately undone -- see the daemon toggle-debounce test.
 
     Asserted structurally: every Super/Meta keysym we rely on is bound to a real
     handler on the window. Tk returns the bound command string when bind() is
@@ -1490,6 +1493,108 @@ def test_ui_persistent_show_hide() -> None:
             pass
 
 
+def test_daemon_toggle_debounces_xcape_echo_after_close() -> None:
+    """Closing with a Super TAP must STAY closed -- the daemon must swallow the xcape
+    "Menu" echo that arrives as a toggle a few ms after the hide.
+
+    Root cause this guards: a Super tap that closes the menu (grab delivers Super_L ->
+    our window -> withdraw + grab_release) ALSO makes xcape inject the Menu keysym on the
+    tap's release; once the grab is gone that Menu reaches OpenBox -> the launcher -> the
+    daemon toggle. Without a debounce the toggle finds the window hidden and re-opens it,
+    so the menu appears not to close ("close is buggy"). hide_menu stamps
+    root.az_last_hidden; Daemon.toggle swallows a would-be show within TOGGLE_DEBOUNCE_S
+    of that stamp.
+
+    Covers the DANGER BAND too: the debounce clock starts on the Super PRESS (when
+    hide_menu stamps) but xcape emits the echo on RELEASE, up to the full xcape -t (0.5s)
+    later -- so the debounce must exceed the xcape timeout or a slow close-tap re-opens.
+    This test asserts a ~0.5s-late echo is still swallowed and pins the invariant.
+
+    Drives the REAL Daemon.toggle (unbound, with a lightweight self) against a real
+    persistent window so the actual debounce constant and az_last_hidden wiring are
+    exercised, without standing up the whole daemon (WindowWatcher, signal plumbing)."""
+    import types
+
+    import daemon
+    import menu
+
+    root = menu.build_window(persistent=True)
+    try:
+        root.withdraw()
+        root.az_populate()
+        root.update_idletasks()
+        root.unbind_all("<Button>")
+
+        # A stand-in for the daemon: real toggle logic, but show/hide just record so we
+        # can assert the DECISION without depending on flaky headless map timing.
+        calls: list[str] = []
+        stub = types.SimpleNamespace(
+            root=root,
+            show=lambda: calls.append("show"),
+            hide=lambda: calls.append("hide"),
+        )
+
+        # 1. Window mapped -> toggle hides it (normal close via the launcher/Super path).
+        root.az_show()
+        root.update()
+        assert root.winfo_viewable(), "precondition: window shown"
+        daemon.Daemon.toggle(stub)
+        assert calls == ["hide"], f"a mapped toggle must hide; got {calls}"
+
+        # 2. Simulate the real close stamping az_last_hidden NOW and withdrawing, then the
+        #    xcape echo toggle landing immediately after. It must be SWALLOWED (no show).
+        root.az_hide()               # withdraws AND stamps az_last_hidden = now
+        root.update()
+        assert not root.winfo_viewable(), "precondition: window hidden"
+        calls.clear()
+        daemon.Daemon.toggle(stub)   # the echo of the closing tap
+        assert calls == [], (
+            "the xcape echo within the debounce window must be swallowed (menu stays "
+            f"closed); got {calls}"
+        )
+
+        # 3. DANGER BAND: the debounce clock starts on the Super PRESS (that is when
+        #    hide_menu stamps), but xcape emits the Menu echo on RELEASE -- up to the full
+        #    xcape -t (0.5s) later for a slow tap, plus a little dispatch latency. So an
+        #    echo arriving ~0.5s after the stamp must STILL be swallowed, which requires
+        #    TOGGLE_DEBOUNCE_S to exceed the xcape timeout. Represent a slow (~0.5s)
+        #    close-tap by back-dating the stamp 0.5s and assert the echo is still eaten.
+        root.az_last_hidden = time.monotonic() - 0.5
+        calls.clear()
+        daemon.Daemon.toggle(stub)
+        assert calls == [], (
+            "a SLOW close-tap's echo (~0.5s after the stamp, within the xcape window) "
+            f"must still be swallowed; got {calls}. TOGGLE_DEBOUNCE_S="
+            f"{daemon.TOGGLE_DEBOUNCE_S} must exceed the xcape -t (0.5s)."
+        )
+        # Guard the invariant directly so a future retune can't silently reintroduce the
+        # hole: the debounce must be strictly longer than the xcape tap window.
+        assert daemon.TOGGLE_DEBOUNCE_S > 0.5, (
+            "TOGGLE_DEBOUNCE_S must exceed the xcape -t timeout (0.5s) so the injected "
+            "Menu echo of even a slow close-tap always lands inside the debounce window"
+        )
+
+        # 4. A deliberate reopen well AFTER the debounce window still shows. Rewind the
+        #    stamp past TOGGLE_DEBOUNCE_S to represent "the user pressed Super again later".
+        root.az_last_hidden = time.monotonic() - (daemon.TOGGLE_DEBOUNCE_S + 0.5)
+        calls.clear()
+        daemon.Daemon.toggle(stub)
+        assert calls == ["show"], (
+            "a toggle after the debounce window must reopen the menu; got "
+            f"{calls}"
+        )
+    finally:
+        for _tid in list(getattr(root, "az_timers", [])):
+            try:
+                root.after_cancel(_tid)
+            except Exception:
+                pass
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
 def test_ui_persistent_first_show_positions_before_map() -> None:
     """First open must NOT flash at the top-left (0,0) corner.
 
@@ -1703,6 +1808,8 @@ def main() -> int:
         ("ui_power_row_centered_and_not_clipped",
          test_ui_power_row_centered_and_not_clipped),
         ("ui_persistent_show_hide", test_ui_persistent_show_hide),
+        ("daemon_toggle_debounces_xcape_echo_after_close",
+         test_daemon_toggle_debounces_xcape_echo_after_close),
         ("ui_persistent_first_show_positions_before_map",
          test_ui_persistent_first_show_positions_before_map),
         ("ui_kickoff_scrollbar", test_ui_kickoff_scrollbar),

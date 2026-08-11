@@ -105,7 +105,11 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     paths.BUILDDIR.mkdir(parents=True, exist_ok=True)
     subprocess.run(sudo + ["rm", "-rf", str(W)], check=False)
     W.mkdir(parents=True, exist_ok=True)
-    os.chdir(W)
+    # NB: we deliberately do NOT os.chdir(W) here. Every path below (emits,
+    # subprocess calls, and the mkarchiso invocation with its absolute -w/-o and
+    # profile args) is absolute, so the build never needs the process cwd to be the
+    # workdir -- and chdir'ing into it left the interpreter (and its caller) parked
+    # inside a disposable scratch tree that gets rm -rf'd on the next run/clear.sh.
 
     # 2 -- Sync host toolchain
     bar.step("Sync host toolchain")

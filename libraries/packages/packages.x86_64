@@ -197,12 +197,11 @@ noto-fonts
 # tint2/panel package is shipped. `xcape` turns a lone Super tap into Super+Menu
 # so OpenBox's rc.xml can bind the menu launcher to the bare Super key (OpenBox
 # cannot bind a lone modifier itself). `feh` (already in the manifest) paints the
-# wallpaper from the OpenBox autostart. xterm is a bare-bones fallback terminal for
-# rescue/maintenance (kitty stays the primary terminal; the OpenBox desktop right-click
-# menu was removed). No sddm (autologin + startx instead).
+# wallpaper from the OpenBox autostart. kitty is the ONE terminal (bound to W-Return
+# and seeded in the menu); xterm/uxterm are deliberately NOT shipped -- the `xterm`
+# package drags in both and the user does not want them. No sddm (autologin + startx).
 openbox
 xcape
-xterm
 adwaita-icon-theme
 gnome-themes-extra
 xcursor-themes

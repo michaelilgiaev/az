@@ -502,10 +502,12 @@ def test_autostart_applies_us_and_hebrew_layouts_with_alt_shift():
 
 def test_autostart_arms_super_key_via_xcape():
     # OpenBox cannot bind a lone modifier, so xcape turns a solo Super_L tap into the
-    # chord Super_L+Menu that rc.xml binds to the menu. -t 200: only a tap under 200ms
-    # fires (a held Super stays a normal modifier).
+    # chord Super_L+Menu that rc.xml binds to the menu. -t 500: a tap fires on release;
+    # the generous window keeps a normal (slightly lingering) Super press registering as
+    # a tap instead of being silently dropped -- the old 200ms cap felt laggy/buggy. A
+    # Super pressed WITH another key is still a plain modifier (xcape suppresses the tap).
     out = desktop.openbox_autostart()
-    assert "xcape -t 200 -e 'Super_L=Super_L|Menu'" in out
+    assert "xcape -t 500 -e 'Super_L=Super_L|Menu'" in out
 
 
 def test_autostart_starts_the_application_menu_daemon():

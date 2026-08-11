@@ -638,10 +638,13 @@ def _openbox_autostart_common() -> str:
 
 # 2. Super key -> application menu. OpenBox cannot bind a lone modifier, so xcape turns
 #    a solo Super_L tap into the chord Super_L+Menu, which rc.xml binds to the menu
-#    launcher. Super keeps working as a normal modifier for every other bind. -t 200:
-#    only a tap under 200ms fires (a held Super does not).
+#    launcher. Super keeps working as a normal modifier for every other bind (xcape
+#    suppresses the tap whenever Super is pressed WITH another key). -t 500: a tap fires
+#    the instant Super is released; the generous 500ms window means an ordinary, slightly
+#    lingering press still counts as a tap instead of being silently dropped -- the old
+#    200ms cap made a normal Super press "sometimes do nothing", which felt laggy/buggy.
 command -v xcape >/dev/null 2>&1 && \\
-    xcape -t 200 -e 'Super_L=Super_L|Menu' &
+    xcape -t 500 -e 'Super_L=Super_L|Menu' &
 
 # 3. Az'arch application-menu daemon: build the menu once and keep it hidden so the
 #    first Super press is instant (see application_menu/daemon.py).

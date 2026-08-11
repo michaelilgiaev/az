@@ -192,22 +192,23 @@ def test_menu_has_tab_focus_toggle_between_search_and_power():
     assert "set_focused" in am.menu_package_source()
 
 
-def test_usage_seed_orders_the_default_top_four():
+def test_usage_seed_orders_the_default_top_three():
     # A fresh profile has no launch history, so the menu would sort alphabetically.
-    # The seed store fixes the STARTING top four to LibreWolf, kitty, Dolphin, GIMP
-    # (descending), keyed by .desktop id. Parse it and assert the order the menu's sort
-    # (-count, name) would produce is exactly that. (KDE's "System Settings" is gone
-    # with Plasma, so it is no longer seeded.)
+    # The seed store fixes the STARTING top THREE to LibreWolf, kitty, Dolphin
+    # (descending), keyed by .desktop id -- EXACTLY three per the user's request, so the
+    # freshly-installed menu leads with those and nothing else. Parse it and assert the
+    # order the menu's sort (-count, name) would produce is exactly that.
     seed = json.loads(am.usage_seed_json())
     ranked = sorted(seed.items(), key=lambda kv: -kv[1])
     assert [k for k, _ in ranked] == [
         "librewolf.desktop",
         "kitty.desktop",
         "org.kde.dolphin.desktop",
-        "gimp.desktop",
     ], ranked
-    # KDE System Settings is gone -> it is NOT seeded (seeding a nonexistent app would
-    # be meaningless).
+    # Exactly three are seeded: no fourth app (GIMP used to be seeded; it now starts in
+    # the count-0 alphabetical tail), and KDE's "System Settings" is gone with Plasma.
+    assert len(seed) == 3, seed
+    assert "gimp.desktop" not in seed
     assert "systemsettings.desktop" not in seed
 
 
