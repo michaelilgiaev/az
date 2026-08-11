@@ -372,6 +372,42 @@ def test_rc_xml_binds_window_icon_client_menu():
     assert "<menu>client-menu</menu>" in out
 
 
+# --- Window resize: edge + corner mouse contexts actually bound --------------
+
+def test_rc_xml_binds_window_edge_and_corner_resize():
+    # THE regression this fixes: OpenBox draws a resize border/handle around every
+    # decorated window, but dragging an edge or corner does NOTHING unless that context is
+    # bound (same shape as the dead titlebar buttons). The old rc.xml bound only the
+    # Frame's Alt+Right drag, so a plain edge/corner grab was dead. rc.xml must now bind
+    # the four side contexts (each Resize-ing its own edge) and the four corners (Resize in
+    # both axes) -- the canonical OpenBox defaults.
+    out = desktop.openbox_rc_xml()
+    # Each side edge is its own context, resizing that one edge.
+    assert '<context name="Top">' in out
+    assert '<context name="Bottom">' in out
+    assert '<context name="Left">' in out
+    assert '<context name="Right">' in out
+    assert "<action name=\"Resize\"><edge>top</edge></action>" in out
+    assert "<action name=\"Resize\"><edge>bottom</edge></action>" in out
+    assert "<action name=\"Resize\"><edge>left</edge></action>" in out
+    assert "<action name=\"Resize\"><edge>right</edge></action>" in out
+    # All four corners share one context that resizes freely (Resize with no <edge>).
+    assert '<context name="TRCorner BRCorner TLCorner BLCorner">' in out
+    # A drag-to-Resize with no edge (the corner case) is present.
+    assert '<mousebind button="Left" action="Drag"><action name="Resize"/></mousebind>' in out
+
+
+def test_rc_xml_keeps_alt_right_drag_resize_on_frame():
+    # The existing whole-window resize (Alt + Right-drag anywhere on the frame) must be
+    # KEPT alongside the new edge/corner grabs -- it is the fallback that always works even
+    # on a borderless/edge-less window.
+    out = desktop.openbox_rc_xml()
+    frame_start = out.index('<context name="Frame">')
+    frame_end = out.index("</context>", frame_start)
+    frame_block = out[frame_start:frame_end]
+    assert '<mousebind button="A-Right" action="Drag"><action name="Resize"/></mousebind>' in frame_block
+
+
 # --- Titlebar doubled: Az'arch theme + larger title font ---------------------
 
 def test_rc_xml_uses_the_azarch_theme():
@@ -384,30 +420,39 @@ def test_rc_xml_uses_the_azarch_theme():
 
 
 def test_rc_xml_sets_a_larger_title_font():
-    # The other half of the doubled bar: a bigger title font makes a taller label (and
+    # The dominant half of the ~1.5x bar: a bigger title font makes a taller label (and
     # OpenBox sizes the buttons to the label). Stock OpenBox defaults to 8pt; ours is
-    # doubled to 16pt, set for both the active and inactive window title.
+    # 12pt (exactly 1.5x), set for both the active and inactive window title. (An earlier
+    # round used 16pt, which doubled the bar and overshot.)
     out = desktop.openbox_rc_xml()
-    assert desktop.TITLE_FONT_SIZE == 16
+    assert desktop.TITLE_FONT_SIZE == 12
     assert f"<size>{desktop.TITLE_FONT_SIZE}</size>" in out
     assert '<font place="ActiveWindow">' in out
     assert '<font place="InactiveWindow">' in out
 
 
-def test_theme_rc_doubles_the_titlebar_padding():
-    # The Az'arch themerc grows the titlebar-height fields vs stock Clearlooks
-    # (padding.height 2 -> 12, padding.width 3 -> 8) and keeps the resize handle
-    # proportional (3 -> 6). These are the size-driving lines; a drift shrinks the bar.
+def test_theme_rc_grows_the_titlebar_padding_to_one_and_a_half():
+    # The Az'arch themerc grows the titlebar-height fields vs stock Clearlooks to land the
+    # bar at ~1.5x stock (padding.height 2 -> 7, padding.width 3 -> 6) and keeps the resize
+    # handle proportional (3 -> 5). These are the size-driving lines; a drift shrinks or
+    # regrows the bar. (An earlier round used 12/8/6, which doubled the bar and overshot.)
     out = desktop.openbox_theme_rc()
-    assert desktop.OPENBOX_THEME_PADDING_HEIGHT == 12
-    assert desktop.OPENBOX_THEME_PADDING_WIDTH == 8
-    assert desktop.OPENBOX_THEME_HANDLE_WIDTH == 6
+    assert desktop.OPENBOX_THEME_PADDING_HEIGHT == 7
+    assert desktop.OPENBOX_THEME_PADDING_WIDTH == 6
+    assert desktop.OPENBOX_THEME_HANDLE_WIDTH == 5
     assert f"padding.height: {desktop.OPENBOX_THEME_PADDING_HEIGHT}" in out
     assert f"padding.width: {desktop.OPENBOX_THEME_PADDING_WIDTH}" in out
     assert f"window.handle.width: {desktop.OPENBOX_THEME_HANDLE_WIDTH}" in out
-    # The doubled values must be strictly larger than the stock Clearlooks originals.
+    # Strictly larger than the stock Clearlooks originals (2 / 3 / 3), so the bar is grown.
     assert desktop.OPENBOX_THEME_PADDING_HEIGHT > 2
     assert desktop.OPENBOX_THEME_PADDING_WIDTH > 3
+    assert desktop.OPENBOX_THEME_HANDLE_WIDTH > 3
+    # ...but strictly smaller than the earlier doubled values (12 / 8 / 6): this round
+    # scaled the overshot bar back DOWN toward 1.5x. If these creep back up the bar is
+    # doubled again.
+    assert desktop.OPENBOX_THEME_PADDING_HEIGHT < 12
+    assert desktop.OPENBOX_THEME_PADDING_WIDTH < 8
+    assert desktop.OPENBOX_THEME_HANDLE_WIDTH < 6
 
 
 def test_theme_rc_keeps_the_clearlooks_cyan_titlebar_colour():
