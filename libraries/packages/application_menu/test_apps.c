@@ -71,10 +71,91 @@ static void test_category_type(void) {
     g_free(t3);
 }
 
+/* --- helpers for the pin / live-session tests ---------------------------- */
+/* A minimal heap AzAppEntry with just a desktop_id set (every field owned, so
+ * az_app_entry_free / the array free func can clean it up like a real one). */
+static AzAppEntry *mk_entry(const char *desktop_id) {
+    AzAppEntry *e = g_new0(AzAppEntry, 1);
+    e->name            = g_strdup(desktop_id);
+    e->type_label      = g_strdup("");
+    e->exec_argv       = g_new0(char *, 1);
+    e->icon            = g_strdup("");
+    e->comment         = g_strdup("");
+    e->desktop_id      = g_strdup(desktop_id);
+    e->startup_wmclass = g_strdup("");
+    return e;
+}
+
+static const char *id_at(GPtrArray *a, guint i) {
+    return ((AzAppEntry *)g_ptr_array_index(a, i))->desktop_id;
+}
+
+/* --- installer pin (the live-session ordering) --------------------------- */
+static void test_pin_first(void) {
+    g_print("installer pin:\n");
+    /* Array with the SAME free func the real scan uses, so a buggy pin that frees
+     * the moved entry (the g_ptr_array_remove_index trap) would corrupt/crash here. */
+    GPtrArray *a = g_ptr_array_new_with_free_func((GDestroyNotify)az_app_entry_free);
+    g_ptr_array_add(a, mk_entry("aaa.desktop"));
+    g_ptr_array_add(a, mk_entry("bbb.desktop"));
+    g_ptr_array_add(a, mk_entry(az_installer_desktop_id()));   /* index 2 */
+    g_ptr_array_add(a, mk_entry("zzz.desktop"));
+
+    gboolean moved = az_apps_pin_first(a, az_installer_desktop_id());
+    CHECK(moved == TRUE, "pin reports it moved the installer");
+    CHECK(a->len == 4, "pin keeps the entry count (no free/leak of the moved item)");
+    CHECK(g_strcmp0(id_at(a, 0), az_installer_desktop_id()) == 0,
+          "installer is now first");
+    /* Order of the rest is preserved. */
+    CHECK(g_strcmp0(id_at(a, 1), "aaa.desktop") == 0, "aaa still 2nd");
+    CHECK(g_strcmp0(id_at(a, 2), "bbb.desktop") == 0, "bbb still 3rd");
+    CHECK(g_strcmp0(id_at(a, 3), "zzz.desktop") == 0, "zzz still last");
+    /* The moved entry is still a VALID object (would crash/garbage if freed). */
+    CHECK(((AzAppEntry *)g_ptr_array_index(a, 0))->name != NULL,
+          "moved entry survives (not freed)");
+
+    /* Already-first -> no-op, returns FALSE. */
+    CHECK(az_apps_pin_first(a, az_installer_desktop_id()) == FALSE,
+          "pin is a no-op when already first");
+    /* Absent id -> no-op, returns FALSE, nothing disturbed. */
+    CHECK(az_apps_pin_first(a, "nope.desktop") == FALSE,
+          "pin is a no-op for an absent id");
+    CHECK(a->len == 4 && g_strcmp0(id_at(a, 0), az_installer_desktop_id()) == 0,
+          "array unchanged after no-op pins");
+    g_ptr_array_free(a, TRUE);
+
+    /* Empty / NULL inputs must not crash. */
+    CHECK(az_apps_pin_first(NULL, az_installer_desktop_id()) == FALSE,
+          "pin handles NULL array");
+    GPtrArray *empty = g_ptr_array_new_with_free_func((GDestroyNotify)az_app_entry_free);
+    CHECK(az_apps_pin_first(empty, az_installer_desktop_id()) == FALSE,
+          "pin handles empty array");
+    g_ptr_array_free(empty, TRUE);
+}
+
+/* --- live-session detection (via the test override) ---------------------- */
+static void test_live_session(void) {
+    g_print("live session:\n");
+    g_setenv("AZARCH_FORCE_LIVE", "1", TRUE);
+    CHECK(az_is_live_session() == TRUE, "AZARCH_FORCE_LIVE=1 -> live");
+    g_setenv("AZARCH_FORCE_LIVE", "true", TRUE);
+    CHECK(az_is_live_session() == TRUE, "AZARCH_FORCE_LIVE=true -> live");
+    g_setenv("AZARCH_FORCE_LIVE", "0", TRUE);
+    CHECK(az_is_live_session() == FALSE, "AZARCH_FORCE_LIVE=0 -> installed");
+    g_setenv("AZARCH_FORCE_LIVE", "false", TRUE);
+    CHECK(az_is_live_session() == FALSE, "AZARCH_FORCE_LIVE=false -> installed");
+    g_unsetenv("AZARCH_FORCE_LIVE");
+    /* installer id is the expected basename */
+    CHECK(g_strcmp0(az_installer_desktop_id(), "azarch-install.desktop") == 0,
+          "installer desktop id is azarch-install.desktop");
+}
+
 int main(void) {
     test_installer_swap();
     test_denylist();
     test_category_type();
+    test_pin_first();
+    test_live_session();
     if (failures) {
         g_printerr("\n%d test(s) FAILED\n", failures);
         return 1;

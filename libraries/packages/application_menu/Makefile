@@ -29,7 +29,14 @@ $(TEST_BIN): test_apps.c apps.c apps.h
 test: $(TEST_BIN)
 	./$(TEST_BIN)
 
+# Interactive UI regression checks against the live hypervisor (black-flash on
+# delete, power-button hover, off-bar scrollbar drag). Needs the daemon built; self-
+# skips if the hypervisor/ffmpeg/XTEST are unavailable. Kept out of `test` so the
+# default test run stays headless.
+test-ui: $(BIN)
+	./test_ui.sh
+
 clean:
 	rm -f $(OBJS) $(BIN) $(TEST_BIN)
 
-.PHONY: clean test
+.PHONY: clean test test-ui

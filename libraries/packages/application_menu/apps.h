@@ -36,4 +36,15 @@ GPtrArray *az_scan_applications(void);
 /* Whether a .desktop basename is hidden from OUR menu (still installed). */
 gboolean az_is_hidden_desktop_id(const char *desktop_id);
 
+/* TRUE when running from the archiso live medium (distro not yet installed).
+ * Detected via /run/archiso; AZARCH_FORCE_LIVE=1/0 overrides for testing. */
+gboolean az_is_live_session(void);
+
+/* Move the entry with this .desktop id to index 0 (order of the rest preserved).
+ * Returns TRUE if it moved. No-op if the id is absent or already first. */
+gboolean az_apps_pin_first(GPtrArray *apps, const char *desktop_id);
+
+/* The .desktop id the menu pins to the top in a live session (the installer). */
+const char *az_installer_desktop_id(void);
+
 #endif /* AZ_APPS_H */

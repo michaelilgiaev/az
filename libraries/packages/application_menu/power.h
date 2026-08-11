@@ -25,4 +25,15 @@ GtkWidget *az_power_button_new(AzIcons *icons, const char *icon_name,
                                const char *label, AzPowerAction action,
                                AzPowerBeforeFn before, gpointer before_user);
 
+/* Force-clear the hover state (repaints at rest). The menu calls this on hide so a
+ * button the pointer was over when the menu closed does not re-open still lit -- the
+ * off-screen hide never delivers the leave-notify that would normally clear it. */
+void az_power_button_clear_hover(GtkWidget *btn);
+
+/* Give every button a reference to the whole row (borrowed array of `n` widgets) so
+ * hover can (a) stay exclusive to one button and (b) take over the TAB-focus highlight
+ * while the mouse is over the row, reverting to the focused button on leave. Call once
+ * after all buttons are created and gridded. */
+void az_power_row_set_siblings(GtkWidget **btns, int n);
+
 #endif /* AZ_POWER_H */

@@ -209,6 +209,16 @@ static gboolean on_entry_focus_out(GtkWidget *w, GdkEvent *e, gpointer box) {
 }
 
 /* --- app model ------------------------------------------------------------ */
+/* Canonical menu order: usage frequency (usage.c), then -- only in a live session --
+ * float the installer to the very top so a not-yet-installed system offers it first.
+ * Every place that (re)sorts the app set goes through here so the pin can't be
+ * skipped on a refresh/resort. */
+static void order_apps(AzUsage *usage, GPtrArray *apps) {
+    az_usage_sort_apps(usage, apps);
+    if (az_is_live_session())
+        az_apps_pin_first(apps, az_installer_desktop_id());
+}
+
 static void populate(AzMenu *m) {
     if (m->populated)
         return;
@@ -224,7 +234,7 @@ static gboolean refresh_apps(AzMenu *m) {
         g_ptr_array_free(scanned, TRUE);
         return FALSE;                        /* transient empty scan -> keep */
     }
-    az_usage_sort_apps(m->usage, scanned);
+    order_apps(m->usage, scanned);
     /* Compare desktop_id sequences. */
     gboolean same = (scanned->len == m->all_apps->len);
     for (guint i = 0; same && i < scanned->len; i++) {
@@ -239,7 +249,7 @@ static gboolean refresh_apps(AzMenu *m) {
 }
 
 static void resort(AzMenu *m) {
-    az_usage_sort_apps(m->usage, m->all_apps);
+    order_apps(m->usage, m->all_apps);
     if (!m->populated)
         return;
     if (az_applist_set_entries(m->applist, m->all_apps))
@@ -423,6 +433,10 @@ static void arm_echo(AzMenu *m) {
 static void hide_menu(AzMenu *m) {
     m->last_hidden_us = g_get_monotonic_time();
     m->shown = FALSE;
+    /* Clear any power-button hover: the off-screen hide never delivers the
+     * leave-notify, so without this a button the pointer sat on would re-open lit. */
+    for (int i = 0; i < 4; i++)
+        az_power_button_clear_hover(m->power_buttons[i]);
     ungrab_all(m);
     int ox = gdk_screen_width() + AZ_OFFSCREEN_MARGIN;
     int oy = gdk_screen_height() + AZ_OFFSCREEN_MARGIN;
@@ -555,6 +569,10 @@ static void build_window(AzMenu *m) {
         gtk_box_pack_start(GTK_BOX(power_row), btn, TRUE, TRUE, 0);
         m->power_buttons[i] = btn;
     }
+    /* Each power button centres its own icon+label block in its equal-width cell
+     * (see power_draw), so no shared-column alignment pass is needed. Hand each button
+     * the whole row so mouse hover stays exclusive and takes over the TAB highlight. */
+    az_power_row_set_siblings(m->power_buttons, 4);
 
     gtk_widget_add_events(m->win, GDK_KEY_PRESS_MASK | GDK_BUTTON_PRESS_MASK);
     g_signal_connect(m->win, "key-press-event", G_CALLBACK(on_key_press), m);
@@ -682,7 +700,7 @@ int main(int argc, char **argv) {
     m->small_icons = az_icons_new(AZ_POWER_ICON_SIZE);
     m->usage = az_usage_new();
     m->all_apps = az_scan_applications();
-    az_usage_sort_apps(m->usage, m->all_apps);
+    order_apps(m->usage, m->all_apps);
 
     build_window(m);
     warmup(m);

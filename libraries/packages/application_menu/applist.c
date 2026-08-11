@@ -25,11 +25,10 @@ struct AzAppList {
     AzActivateFn  on_activate;
     gpointer      user;
 
-    GtkWidget    *overlay;    /* GtkOverlay: scrolled window + custom scrollbar */
-    GtkWidget    *scrolled;   /* GtkScrolledWindow */
-    GtkWidget    *area;       /* GtkDrawingArea */
-    GtkAdjustment *vadj;
-    AzKScroll    *kscroll;    /* Kickoff pill scrollbar (overlaid, right edge) */
+    GtkWidget    *overlay;    /* horizontal box: drawing area + custom scrollbar */
+    GtkWidget    *area;       /* GtkDrawingArea (viewport-sized; scrolls in software) */
+    GtkAdjustment *vadj;      /* owned; scroll position (software scroll, no viewport) */
+    AzKScroll    *kscroll;    /* Kickoff pill scrollbar (right edge) */
 
     GArray       *rows;       /* Row, canonical order */
     GPtrArray    *visible;    /* Row* currently shown, draw order */
@@ -76,6 +75,15 @@ static gboolean on_draw(GtkWidget *w, cairo_t *cr, gpointer data) {
     /* Background. */
     set_src(cr, AZ_BG_COLOR);
     cairo_paint(cr);
+
+    /* Software scroll: the drawing area is exactly VIEWPORT-sized (never content-tall),
+     * so we translate the whole scene up by the adjustment value and draw only the rows
+     * that fall in view. This deliberately avoids GtkViewport's child-window scrolling,
+     * whose gdk_window_move optimisation desynced from our Cairo paint on large jumps and
+     * left a ~64px unpainted band under the search box (the "cover that grows as I drag
+     * past the max"). With no scrolling viewport there is no window to desync. */
+    double scroll = gtk_adjustment_get_value(l->vadj);
+    cairo_translate(cr, 0, -scroll);
 
     PangoLayout *lay = pango_cairo_create_layout(cr);
 
@@ -165,8 +173,18 @@ static gboolean row_matches(Row *r, const char *qcf) {
     return m;
 }
 
+/* Push the current content height + viewport height into the adjustment. The area is
+ * NOT resized to the content (software scroll draws it offset); the adjustment is the
+ * single source of truth for scroll position, and GtkAdjustment clamps value into
+ * [lower, upper-page] for us so we never over-scroll. Called on filter changes and on
+ * every size-allocate (page size follows the real viewport height). */
 static void update_scroll_region(AzAppList *l) {
-    gtk_widget_set_size_request(l->area, -1, MAX(l->content_h, 1));
+    GtkAllocation a; gtk_widget_get_allocation(l->area, &a);
+    double page = MAX(a.height, 1);
+    double upper = MAX(l->content_h, page);   /* never below page: keeps value at 0 */
+    gtk_adjustment_configure(l->vadj,
+                             gtk_adjustment_get_value(l->vadj),
+                             0.0, upper, AZ_ROW_H, page, page);
     gtk_widget_queue_draw(l->area);
 }
 
@@ -332,12 +350,40 @@ gboolean az_applist_set_entries(AzAppList *l, GPtrArray *entries) {
     return TRUE;
 }
 
+/* Mouse-wheel scroll: with no GtkScrolledWindow we drive the adjustment ourselves.
+ * One notch = 3 rows (GTK's own default step is per-line; 3 rows feels like Kickoff).
+ * GtkAdjustment clamps the result into range. */
+static gboolean on_scroll(GtkWidget *w, GdkEventScroll *e, gpointer data) {
+    (void)w;
+    AzAppList *l = data;
+    double dy = 0;
+    if (e->direction == GDK_SCROLL_UP)        dy = -3 * AZ_ROW_H;
+    else if (e->direction == GDK_SCROLL_DOWN) dy =  3 * AZ_ROW_H;
+    else if (e->direction == GDK_SCROLL_SMOOTH) dy = e->delta_y * AZ_ROW_H;
+    else return FALSE;
+    gtk_adjustment_set_value(l->vadj, gtk_adjustment_get_value(l->vadj) + dy);
+    return TRUE;
+}
+
 /* ---- construction -------------------------------------------------------- */
 static void on_size_alloc(GtkWidget *w, GdkRectangle *alloc, gpointer data) {
     (void)w;
     AzAppList *l = data;
     l->width = alloc->width;
-    gtk_widget_queue_draw(l->area);
+    /* The viewport height IS this allocation now (the area is viewport-sized). Keep the
+     * adjustment's page size in sync so max scroll = content_h - viewport_h exactly. */
+    update_scroll_region(l);
+}
+
+/* Paint a widget's background the menu colour. Only the list GtkDrawingArea paints
+ * itself; the scrolled window and its auto-created viewport have NO background, so a
+ * bare relayout expose can show the X server's default BLACK. The primary cure for
+ * the "goes black when I delete" flash is in kscroll.c (the scrollbar reserves its
+ * column by collapsing WIDTH, never by mapping/unmapping its window) -- these
+ * backgrounds are defence-in-depth so any other transient expose stays on-theme. */
+static void widget_bg(GtkWidget *w, const char *hex) {
+    GdkRGBA c; gdk_rgba_parse(&c, hex);
+    gtk_widget_override_background_color(w, GTK_STATE_FLAG_NORMAL, &c);
 }
 
 AzAppList *az_applist_new(AzIcons *icons, AzActivateFn on_activate, gpointer user) {
@@ -360,30 +406,29 @@ AzAppList *az_applist_new(AzIcons *icons, AzActivateFn on_activate, gpointer use
     pango_font_description_set_family(l->font_sub, AZ_FONT_FAMILY);
     pango_font_description_set_size(l->font_sub, AZ_FONT_APP_TYPE * PANGO_SCALE);
 
-    l->scrolled = gtk_scrolled_window_new(NULL, NULL);
-    /* EXTERNAL vertical policy: the scrolled window still scrolls (wheel, adjustment)
-     * but draws NO GTK scrollbar -- we overlay our own Kickoff pill instead. Overlay
-     * + kinetic scrolling OFF kills GTK's edge-overshoot glow at the scroll limits
-     * (item E): Tk had none of that bounce. */
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(l->scrolled),
-                                   GTK_POLICY_NEVER, GTK_POLICY_EXTERNAL);
-    gtk_scrolled_window_set_overlay_scrolling(GTK_SCROLLED_WINDOW(l->scrolled), FALSE);
-    gtk_scrolled_window_set_kinetic_scrolling(GTK_SCROLLED_WINDOW(l->scrolled), FALSE);
-    l->vadj = gtk_scrolled_window_get_vadjustment(
-        GTK_SCROLLED_WINDOW(l->scrolled));
+    /* Our own scroll position. No GtkScrolledWindow / GtkViewport: those scroll by
+     * moving the child's GdkWindow (gdk_window_move), which desynced from our Cairo
+     * paint on large jumps and left an unpainted band under the search box. We keep a
+     * plain adjustment and draw the list offset by its value (software scroll). */
+    l->vadj = gtk_adjustment_new(0, 0, 1, AZ_ROW_H, 1, 1);
+    g_object_ref_sink(l->vadj);
 
     l->area = gtk_drawing_area_new();
     gtk_widget_add_events(l->area, GDK_POINTER_MOTION_MASK |
-                          GDK_LEAVE_NOTIFY_MASK | GDK_BUTTON_PRESS_MASK);
+                          GDK_LEAVE_NOTIFY_MASK | GDK_BUTTON_PRESS_MASK |
+                          GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK);
     g_signal_connect(l->area, "draw", G_CALLBACK(on_draw), l);
     g_signal_connect(l->area, "motion-notify-event", G_CALLBACK(on_motion), l);
     g_signal_connect(l->area, "leave-notify-event", G_CALLBACK(on_leave), l);
     g_signal_connect(l->area, "button-press-event", G_CALLBACK(on_button), l);
+    g_signal_connect(l->area, "scroll-event", G_CALLBACK(on_scroll), l);
     g_signal_connect(l->area, "size-allocate", G_CALLBACK(on_size_alloc), l);
     g_signal_connect(l->vadj, "value-changed",
                      G_CALLBACK(on_vadj_changed), l);
 
-    gtk_container_add(GTK_CONTAINER(l->scrolled), l->area);
+    /* The drawing area paints its own background; still theme it so any transient
+     * relayout expose stays on-theme rather than flashing the X default black. */
+    widget_bg(l->area, AZ_BG_COLOR);
 
     /* Pack the custom scrollbar in a row to the RIGHT of the list, reserving its 12px
      * column exactly like Tk (KickoffScrollBar packed side="right", fill="y"). This
@@ -391,7 +436,8 @@ AzAppList *az_applist_new(AzIcons *icons, AzActivateFn on_activate, gpointer use
      * matching Tk) rather than floating over it; when the bar auto-hides (content fits)
      * it gives the column back to the list, like Tk's pack_forget. */
     l->overlay = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_box_pack_start(GTK_BOX(l->overlay), l->scrolled, TRUE, TRUE, 0);
+    widget_bg(l->overlay, AZ_BG_COLOR);
+    gtk_box_pack_start(GTK_BOX(l->overlay), l->area, TRUE, TRUE, 0);
     l->kscroll = az_kscroll_new(l->vadj);
     gtk_box_pack_start(GTK_BOX(l->overlay), az_kscroll_widget(l->kscroll),
                        FALSE, FALSE, 0);
@@ -405,6 +451,7 @@ GtkWidget *az_applist_widget(AzAppList *l) {
 void az_applist_free(AzAppList *l) {
     if (!l) return;
     az_kscroll_free(l->kscroll);
+    if (l->vadj) g_object_unref(l->vadj);
     g_array_free(l->rows, TRUE);
     g_ptr_array_free(l->visible, TRUE);
     g_string_free(l->signature, TRUE);

@@ -127,6 +127,18 @@ static void scroll_to_pixel(AzKScroll *s, double y) {
     gtk_adjustment_set_value(s->vadj, lo + new_top * (up - lo));
 }
 
+/* Local y within the bar for a pointer event, taken from ROOT coordinates. During
+ * a drag the GTK grab (see on_press) can hand us motion events whose window -- and
+ * so whose e->y -- belongs to a sibling widget the pointer drifted onto; e->y_root
+ * is screen-absolute and always right, so translate it against the bar window's
+ * screen origin instead of trusting e->y. */
+static double bar_local_y(AzKScroll *s, double y_root) {
+    GdkWindow *win = gtk_widget_get_window(s->area);
+    int ox = 0, oy = 0;
+    if (win) gdk_window_get_origin(win, &ox, &oy);
+    return y_root - oy;
+}
+
 static gboolean on_press(GtkWidget *w, GdkEventButton *e, gpointer data) {
     (void)w;
     AzKScroll *s = data;
@@ -143,6 +155,12 @@ static gboolean on_press(GtkWidget *w, GdkEventButton *e, gpointer data) {
         s->drag_dy = (bot - top) / 2.0;
         scroll_to_pixel(s, e->y);
     }
+    /* Route ALL further pointer events here until release, even when the pointer
+     * drifts off the 12px-wide bar onto the list. Without this, motion is delivered
+     * to whatever window sits under the pointer, so a real drag that wanders a few
+     * px sideways stops feeding on_motion and the thumb freezes/stutters -- the
+     * "laggy, not smooth when I drag it" bug. */
+    gtk_grab_add(s->area);
     gtk_widget_queue_draw(s->area);
     return TRUE;
 }
@@ -151,14 +169,17 @@ static gboolean on_motion(GtkWidget *w, GdkEventMotion *e, gpointer data) {
     (void)w;
     AzKScroll *s = data;
     if (s->dragging)
-        scroll_to_pixel(s, e->y);
+        scroll_to_pixel(s, bar_local_y(s, e->y_root));
     return FALSE;
 }
 
 static gboolean on_release(GtkWidget *w, GdkEventButton *e, gpointer data) {
     (void)w; (void)e;
     AzKScroll *s = data;
-    s->dragging = FALSE;
+    if (s->dragging) {
+        s->dragging = FALSE;
+        gtk_grab_remove(s->area);
+    }
     gtk_widget_queue_draw(s->area);
     return FALSE;
 }
@@ -183,7 +204,19 @@ static gboolean on_leave(GtkWidget *w, GdkEventCrossing *e, gpointer data) {
 static void on_adj_changed(GtkAdjustment *adj, gpointer data) {
     (void)adj;
     AzKScroll *s = data;
-    gtk_widget_set_visible(s->area, !fits(s));
+    /* Reserve the 12px track only when there is something to scroll, giving the
+     * column back to the list otherwise -- but do it by COLLAPSING THE WIDTH, never
+     * by gtk_widget_set_visible. Mapping/unmapping the bar's GdkWindow on a filter
+     * change forced a full relayout of the override-redirect toplevel that left the
+     * ENTIRE window painted black until the next redraw (the "goes black when I
+     * delete" bug). A width change relayouts the list the same way but keeps the bar
+     * mapped, so no black expose. width 0 also makes on_draw a no-op via its own
+     * clamp, and the pill simply has no room. */
+    int want = fits(s) ? 0 : AZ_SCROLL_TRACK_WIDTH;
+    int cur = -1;
+    gtk_widget_get_size_request(s->area, &cur, NULL);
+    if (cur != want)
+        gtk_widget_set_size_request(s->area, want, -1);
     gtk_widget_queue_draw(s->area);
 }
 

@@ -178,6 +178,50 @@ gboolean az_is_hidden_desktop_id(const char *desktop_id) {
     return in_list(HIDDEN_IDS, desktop_id);
 }
 
+/* --- live-session detection + installer pin ------------------------------- *
+ * On the archiso live medium the distro is not yet installed, so the installer
+ * should be the first thing in the menu. archiso's init creates /run/archiso on
+ * the live system (and it is absent once installed), which is the canonical, cheap
+ * signal. AZARCH_FORCE_LIVE overrides it either way for testing (1/true = live,
+ * 0/false = installed). */
+gboolean az_is_live_session(void) {
+    const char *force = g_getenv("AZARCH_FORCE_LIVE");
+    if (force && force[0]) {
+        char *low = g_ascii_strdown(force, -1);
+        gboolean live = (strcmp(low, "1") == 0) || (strcmp(low, "true") == 0) ||
+                        (strcmp(low, "yes") == 0);
+        g_free(low);
+        return live;
+    }
+    return g_file_test("/run/archiso", G_FILE_TEST_IS_DIR);
+}
+
+/* Move the entry with `desktop_id` to the front of `apps` (stable for the rest).
+ * No-op if absent. Returns TRUE if a move happened.
+ *
+ * Uses g_ptr_array_steal_index, NOT _remove_index: the app arrays are created with a
+ * free func (az_app_entry_free), and _remove_index would FREE the entry we are about
+ * to re-insert, leaving a dangling pointer the app list then dereferences (crash).
+ * _steal_index detaches without freeing, so the entry survives the re-insert. */
+gboolean az_apps_pin_first(GPtrArray *apps, const char *desktop_id) {
+    if (!apps || !desktop_id) return FALSE;
+    for (guint i = 0; i < apps->len; i++) {
+        AzAppEntry *e = g_ptr_array_index(apps, i);
+        if (strcmp(e->desktop_id, desktop_id) == 0) {
+            if (i == 0) return FALSE;
+            g_ptr_array_steal_index(apps, i);       /* detach WITHOUT freeing */
+            g_ptr_array_insert(apps, 0, e);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+/* The .desktop id of the Az'arch installer, pinned to the top in a live session. */
+const char *az_installer_desktop_id(void) {
+    return "azarch-install.desktop";
+}
+
 /* --- XDG application dirs (most-specific first) -------------------------- */
 static GPtrArray *app_dirs(void) {
     GPtrArray *dirs = g_ptr_array_new_with_free_func(g_free);
