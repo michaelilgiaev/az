@@ -14,7 +14,7 @@ WITHOUT a display manager, Manjaro-style:
 There is deliberately NO PANEL (the user's "we're not going to have a bottom panel
 anymore" decision) and NO desktop right-click menu (the OpenBox root menu was removed
 at the user's request; right-clicking the background does nothing). The ONLY shell
-surface is the Az'arch application menu -- a borderless Tkinter launcher centered on
+surface is the Az'arch application menu -- a borderless C/GTK3 launcher centered on
 the screen, opened by the Super key. Everything the old Plasma panel carried (launcher,
 power actions) lives in that menu.
 
@@ -123,7 +123,7 @@ HOME_OWNER = (1000, 998)
 from packages.application_menu import application_menu as _app_menu  # noqa: E402  (the menu is OUR package)
 
 MENU_LAUNCHER = _app_menu.MENU_LAUNCHER_SYSTEM_PATH
-MENU_DAEMON_PY = _app_menu.MENU_DAEMON_PY_SYSTEM_PATH
+MENU_DAEMON_BIN = _app_menu.MENU_DAEMON_BIN_SYSTEM_PATH
 
 
 # --- 1. ~/.xinitrc ----------------------------------------------------------
@@ -647,9 +647,9 @@ command -v xcape >/dev/null 2>&1 && \\
     xcape -t 500 -e 'Super_L=Super_L|Menu' &
 
 # 3. Az'arch application-menu daemon: build the menu once and keep it hidden so the
-#    first Super press is instant (see application_menu/daemon.py).
-[ -f '{MENU_DAEMON_PY}' ] && \\
-    setsid python3 '{MENU_DAEMON_PY}' >/dev/null 2>&1 < /dev/null &"""
+#    first Super press is instant (the C/GTK3 daemon, see application_menu/menu.c).
+[ -x '{MENU_DAEMON_BIN}' ] && \\
+    setsid '{MENU_DAEMON_BIN}' >/dev/null 2>&1 < /dev/null &"""
 
 
 def openbox_autostart() -> str:

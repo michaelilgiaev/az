@@ -38,6 +38,18 @@ FROM archlinux:latest
 # The heavy makedepends (cmake, qt6-*, kpmcore, rust, clang, ...) are installed at
 # build time by makepkg._install_host_build_deps, not baked in here, so the
 # image stays small and the dep set tracks the recipes.
+#
+# The Az'arch application menu is a COMPILED C / GTK3 program: the build COMPILES it on
+# the host (compiler.build_daemon -> `make`) during _emit_desktop, so the GTK3 dev stack
+# must be present in THIS image or that compile fails with "gtk/gtk.h: No such file or
+# directory" and aborts the build. This is unlike the makepkg makedepends: those are
+# installed at build time by makepkg, but the menu compile happens BEFORE that step, so
+# its deps have to be baked in here. Keep in sync with
+# application_menu.MENU_BUILD_DEPS (compiler._check_host_deps installs the same set on a
+# non-Docker Arch host):
+#   gtk3       -> the GTK3 dev headers + gtk+-3.0.pc and the whole -3.0 pkg-config stack
+#                 the menu Makefile resolves (gdk/glib/pango/cairo/gdk-pixbuf come as deps).
+#   pkgconf    -> pkg-config, which the Makefile shells out to (also in base-devel).
 RUN pacman -Sy --needed --noconfirm archlinux-keyring \
     && pacman -Syu --needed --noconfirm \
         archiso \
@@ -48,6 +60,8 @@ RUN pacman -Sy --needed --noconfirm archlinux-keyring \
         python \
         fakeroot \
         gnupg \
+        gtk3 \
+        pkgconf \
     && pacman -Scc --noconfirm
 
 # Initialize pacman's trust database. Installing archlinux-keyring above only

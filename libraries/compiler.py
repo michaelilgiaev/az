@@ -374,12 +374,17 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
         # screenshot.png = a thumbnail (reuse the full image).
         emit.copy_asset(pkg["asset"], pkg_root / "contents" / "screenshot.png", mode=0o644)
     # Az'arch application menu (OUR menu -- the whole shell now that Plasma is gone: a
-    # centered Tkinter launcher opened by the Super key). Copy
-    # the runtime files (menu.py + siblings, daemon, launcher, .desktop) to their fixed
-    # SYSTEM paths; the OpenBox session (openbox.py) starts the daemon from its autostart
-    # and binds the Super key to the launcher.
+    # centered GTK3 launcher opened by the Super key). The menu is a COMPILED C program:
+    # build_daemon() runs `make` against a private copy of the C sources and installs the
+    # resulting binary; emit_plan() then drops the two generated TEXT artifacts (the
+    # pure-Python launcher installed as the bin entry point, and the .desktop). The
+    # OpenBox session (openbox.py) starts the daemon binary from its autostart and binds
+    # the Super key to the launcher.
     # Root-owned system paths -> the OFFLINE Calamares install rsyncs them onto the
     # installed system with no separate step.
+    application_menu.build_daemon(
+        airootfs / application_menu.MENU_DAEMON_BIN_SYSTEM_PATH.lstrip("/")
+    )
     for entry in application_menu.emit_plan():
         emit.write_text(
             airootfs / entry["dest"].lstrip("/"),
@@ -588,7 +593,13 @@ def _unmount_worktree(sudo) -> None:
 
 
 def _check_host_deps(sudo, offline: bool) -> None:
-    host_pkgs = ["archiso", "git", "base-devel", "go"]
+    # archiso/git/base-devel/go are the base build toolchain; the application-menu build
+    # deps (gtk3 + pkgconf + gcc) are appended because _emit_desktop COMPILES the C/GTK3
+    # menu daemon (application_menu.build_daemon) later in this run -- without the GTK3
+    # dev stack present here, that `make` dies with "gtk/gtk.h: No such file or directory"
+    # and aborts the whole build. Listing them here also means the "already present"
+    # early-return below cannot skip a host that is missing only the GTK3 dev stack.
+    host_pkgs = ["archiso", "git", "base-devel", "go"] + application_menu.MENU_BUILD_DEPS
     if subprocess.run(["pacman", "-Qq", *host_pkgs],
                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
         print("    [+] Build-host dependencies already present, skipping sync (offline).")

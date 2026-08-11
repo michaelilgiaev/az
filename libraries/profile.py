@@ -75,6 +75,12 @@ FILE_PERMISSIONS = {
     # it 0644 (non-executable) unless pinned here -- and then the Super key runs a
     # non-executable file and the menu never opens.
     "/usr/local/bin/azarch-application-menu": "0:0:755",
+    # The COMPILED application-menu daemon binary (built by application_menu.build_daemon
+    # and started from the OpenBox autostart). Same archiso mode-normalization: it is
+    # installed 0755, but the squashfs would ship it 0644 unless pinned -- and the
+    # autostart's `[ -x ... ]` guard would then skip it, so the menu is never pre-built
+    # and the first Super press does nothing / starts nothing.
+    "/usr/local/lib/azarch-application-menu/azarch-application-menu-daemon": "0:0:755",
     # The OpenBox session autostart (~/.config/openbox/autostart). openbox-session runs
     # it via /bin/sh, but it carries a shebang and openbox.PLAN emits it 0755, so pin it
     # executable here too (archiso would otherwise normalize it to 0644). Pin both the

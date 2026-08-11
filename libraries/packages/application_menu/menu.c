@@ -48,6 +48,11 @@
 
 typedef enum { FOCUS_APPS, FOCUS_POWER } FocusZone;
 
+/* The power row is {Sleep, Lock, Restart, Shut Down}; TAB into the row lands on
+ * "Shut Down" (the rightmost, index 3) so the commonest session action is one
+ * TAB + Enter away. Left/Right then walk off it and the position is preserved. */
+#define AZ_POWER_SHUTDOWN_INDEX 3
+
 typedef struct {
     const char *icon_name;
     const char *label;
@@ -157,7 +162,7 @@ static void install_css(void) {
         "overshoot, undershoot { background: none; box-shadow: none; }",
         AZ_SURFACE_COLOR, AZ_DIVIDER_COLOR, AZ_BORDER_COLOR,
         AZ_SURFACE_COLOR, AZ_TEXT_COLOR, AZ_TEXT_COLOR,
-        AZ_TK_SEL_BG, AZ_TK_SEL_FG);
+        AZ_SEL_BG, AZ_SEL_FG);
 
     GtkCssProvider *prov = gtk_css_provider_new();
     gtk_css_provider_load_from_data(prov, css, -1, NULL);
@@ -321,7 +326,14 @@ static gboolean on_key_press(GtkWidget *w, GdkEventKey *e, gpointer user) {
         hide_menu(m); return TRUE;
     }
     if (kv == GDK_KEY_Tab || kv == GDK_KEY_ISO_Left_Tab) {
-        set_focus_zone(m, m->focus_zone == FOCUS_APPS ? FOCUS_POWER : FOCUS_APPS);
+        if (m->focus_zone == FOCUS_APPS) {
+            /* TAB into the power row lands on "Shut Down" (index 3), not wherever the
+             * previous visit left the cursor. */
+            m->power_index = AZ_POWER_SHUTDOWN_INDEX;
+            set_focus_zone(m, FOCUS_POWER);
+        } else {
+            set_focus_zone(m, FOCUS_APPS);
+        }
         return TRUE;
     }
     if (kv == GDK_KEY_Return || kv == GDK_KEY_KP_Enter) {

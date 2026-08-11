@@ -1,8 +1,8 @@
-/* Az'arch application menu (C/GTK3 port) -- shared palette + geometry constants.
+/* Az'arch application menu (C/GTK3) -- shared palette + geometry constants.
  *
- * One-to-one port of theme.py: the Breeze-ish dark palette and the geometry
- * numbers, in ONE place so every module (window, app list, power row, search
- * box) reads the same values. No behaviour here -- just constants.
+ * The Breeze-ish dark palette and the geometry numbers, in ONE place so every
+ * module (window, app list, power row, search box) reads the same values. No
+ * behaviour here -- just constants.
  *
  * The menu is a fixed-size borderless window CENTERED on the screen (OpenBox,
  * no panel); menu.c centers it via (screen - size) / 2.
@@ -11,13 +11,13 @@
 #define AZ_THEME_H
 
 /* --- Geometry (px) ------------------------------------------------------- */
-#define AZ_DEFAULT_WIDTH   582   /* menu window width  (theme.py DEFAULT_WIDTH)  */
-#define AZ_DEFAULT_HEIGHT  497   /* menu window height (theme.py DEFAULT_HEIGHT) */
+#define AZ_DEFAULT_WIDTH   582   /* menu window width  */
+#define AZ_DEFAULT_HEIGHT  497   /* menu window height */
 
 /* How far OFF-screen the daemon parks the (still-mapped) window to hide it.
  * Instant-open key: a mapped window that is merely MOVED costs almost nothing to
  * bring on-screen (no re-expose), whereas a re-map re-exposes the whole tree.
- * See menu.py OFFSCREEN_MARGIN. */
+ * menu.c reads this in hide_menu/warmup. */
 #define AZ_OFFSCREEN_MARGIN 4000
 
 /* --- Breeze-ish palette (hex strings, parsed via gdk_rgba_parse) --------- */
@@ -34,11 +34,12 @@
 #define AZ_SELECT_FILL      "#31383e"   /* subtle fill inside selected/hovered control */
 #define AZ_SELECT_TEXT      "#ffffff"   /* text on a selected row */
 
-/* Tk's DEFAULT Entry text-selection colours on the target (measured: an unstyled
- * tk.Entry reports selectbackground #c3c3c3, selectforeground #000000). menu.py never
- * overrides them, so the search box highlight must use these to look identical. */
-#define AZ_TK_SEL_BG        "#c3c3c3"   /* search-box selection background (Tk default) */
-#define AZ_TK_SEL_FG        "#000000"   /* search-box selection text       (Tk default) */
+/* Search-box text-selection colours. These match the light selection the earlier
+ * Tk-based menu rendered (an unstyled tk.Entry's defaults, measured on the target:
+ * selectbackground #c3c3c3, selectforeground #000000), kept so the search box
+ * highlight looks identical across the port. */
+#define AZ_SEL_BG        "#c3c3c3"   /* search-box selection background */
+#define AZ_SEL_FG        "#000000"   /* search-box selection text       */
 
 /* --- Scrollbar (arrow-less rounded pill, Kickoff style) ------------------ */
 #define AZ_SCROLL_THUMB_WIDTH  6

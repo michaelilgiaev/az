@@ -5,17 +5,19 @@ Installed to /usr/local/bin/azarch-application-menu. Bound to the Super key by
 OpenBox (see patches/openbox.py) and pointed at by the menu's .desktop
 entry -- opening either runs this.
 
-The menu runs as a resident DAEMON (menu built once, kept hidden) so opening it is
-instant -- no per-click Python/Tk startup. This launcher just signals the daemon:
+The menu runs as a resident DAEMON (a C/GTK3 binary that builds the window once and
+keeps it hidden) so opening it is instant -- no per-click startup. This launcher just
+signals the daemon:
   * daemon already running  -> SIGUSR1 = toggle (show if hidden, hide if shown)
   * daemon not running yet   -> start it, wait for it to be ready, SIGUSR2 = show
 
 State is the daemon's PID file under XDG_RUNTIME_DIR. Pure standard library --
 no pip packages, no venv (Python is already on the live session).
 
-This is the Python replacement for the old POSIX-sh launcher: Az'arch packages
-are all Python, no shell scripts. The daemon-signaling contract (PID file,
-SIGUSR1 toggle / SIGUSR2 show) is unchanged, so daemon.py needs no edits.
+The launcher stayed Python when the menu itself was ported from Tkinter to C: it is a
+thin bin entry point, and the daemon-signaling contract (PID file, SIGUSR1 toggle /
+SIGUSR2 show) is identical, so it drives the C daemon unchanged -- it just execs the
+compiled binary instead of a python module.
 """
 
 from __future__ import annotations
@@ -26,10 +28,13 @@ import subprocess
 import sys
 import time
 
-# Installed daemon/menu modules. Overridable via AZARCH_MENU_DIR for local testing
-# (both daemon.py and menu.py live in the same dir).
+# Installed daemon binary. Overridable via AZARCH_MENU_DIR / AZARCH_DAEMON_BIN for local
+# testing (the compiled daemon lives directly under MENU_DIR).
 MENU_DIR = os.environ.get("AZARCH_MENU_DIR", "/usr/local/lib/azarch-application-menu")
-DAEMON_PY = os.environ.get("AZARCH_DAEMON_PY", os.path.join(MENU_DIR, "daemon.py"))
+DAEMON_BIN = os.environ.get(
+    "AZARCH_DAEMON_BIN",
+    os.path.join(MENU_DIR, "azarch-application-menu-daemon"),
+)
 
 RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
 PID_FILE = os.path.join(RUNTIME_DIR, "azarch-application-menu.pid")
@@ -57,8 +62,8 @@ def _signal(pid: int, sig: int) -> None:
 
 
 def main() -> int:
-    if not os.path.isfile(DAEMON_PY):
-        print(f"azarch-application-menu: daemon module not found at {DAEMON_PY}",
+    if not os.path.isfile(DAEMON_BIN):
+        print(f"azarch-application-menu: daemon binary not found at {DAEMON_BIN}",
               file=sys.stderr)
         return 1
 
@@ -79,7 +84,7 @@ def main() -> int:
     # daemon writes its own PID file once its window is built and ready.
     with open(os.devnull, "r+b") as null:
         subprocess.Popen(
-            [sys.executable, DAEMON_PY],
+            [DAEMON_BIN],
             stdin=null, stdout=null, stderr=null, start_new_session=True,
         )
 

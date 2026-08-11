@@ -105,11 +105,11 @@ STEPS_LOG = LOGDIR / "steps.log"
 
 # Verbatim data files.
 PACKAGES_FILE = PACKAGESDIR / "packages.x86_64"
-# The Az'arch application-menu package (all Python): the menu source modules
-# (menu.py + siblings, daemon.py, launcher.py, test_menu.py, conftest.py) live
-# DIRECTLY here, alongside application_menu.py -- the build wiring that copies them
-# into the live/installed system (emit_plan) and generates the .desktop entry. The
-# whole menu is OURS, so it is a package here, not a patch.
+# The Az'arch application-menu package (C / GTK3): the menu source files (menu.c +
+# siblings, theme.h, Makefile) live DIRECTLY here alongside application_menu.py -- the
+# build wiring that COMPILES them into the daemon binary and installs it, ships the
+# pure-Python launcher (launcher.py), and generates the .desktop entry. The whole menu
+# is OURS, so it is a package here, not a patch.
 APPLICATION_MENU_DIR = PACKAGESDIR / "application_menu"
 # The `azarch` guest CLI is a single Python module, libraries/packages/azarch.py.
 # It is installed to /usr/local/bin/azarch by the compiler, which injects the

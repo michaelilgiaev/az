@@ -532,11 +532,13 @@ def test_autostart_arms_super_key_via_xcape():
 
 def test_autostart_starts_the_application_menu_daemon():
     # The application-menu daemon is started (detached) so the menu is pre-built and
-    # hidden -- the first Super press is then instant. It runs the
-    # INSTALLED daemon.py (single source of truth in application_menu.py).
+    # hidden -- the first Super press is then instant. It runs the INSTALLED daemon
+    # BINARY (the menu is a compiled C/GTK3 program now; single source of truth in
+    # application_menu.py) directly -- no `python3` interpreter in front of it.
     out = desktop.openbox_autostart()
-    assert desktop.MENU_DAEMON_PY == desktop._app_menu.MENU_DAEMON_PY_SYSTEM_PATH
-    assert f"setsid python3 '{desktop.MENU_DAEMON_PY}'" in out
+    assert desktop.MENU_DAEMON_BIN == desktop._app_menu.MENU_DAEMON_BIN_SYSTEM_PATH
+    assert f"setsid '{desktop.MENU_DAEMON_BIN}'" in out
+    assert "python3" not in out                       # the daemon is a native binary now
 
 
 def test_autostart_launches_the_installer_once():
