@@ -24,8 +24,10 @@ def test_download_conf_trust_and_repos():
     conf = pacman.download_conf()
     assert "SigLevel          = Never" in conf
     assert "[core]" in conf and "[extra]" in conf and "[multilib]" in conf
-    # Hard-coded Arch mirrors, not a host mirrorlist.
-    assert "geo.mirror.pkgbuild.com" in conf
+    # Hard-coded PINNED Arch Linux Archive snapshot, not a host mirrorlist -- so the fetch
+    # is host-independent AND immune to the live repos being momentarily inconsistent.
+    assert "archive.archlinux.org" in conf
+    assert pacman.ARCH_SNAPSHOT in conf
 
 
 def test_download_conf_has_no_active_download_user():

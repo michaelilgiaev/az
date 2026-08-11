@@ -50,8 +50,23 @@ FROM archlinux:latest
 #   gtk3       -> the GTK3 dev headers + gtk+-3.0.pc and the whole -3.0 pkg-config stack
 #                 the menu Makefile resolves (gdk/glib/pango/cairo/gdk-pixbuf come as deps).
 #   pkgconf    -> pkg-config, which the Makefile shells out to (also in base-devel).
-RUN pacman -Sy --needed --noconfirm archlinux-keyring \
-    && pacman -Syu --needed --noconfirm \
+#
+# PINNED to an Arch Linux Archive (ALA) snapshot instead of the rolling live mirrors.
+# The live `core`/`extra` repos are periodically INTERNALLY INCONSISTENT for short
+# windows (a package is pulled while another still depends on it) -- e.g. `elfutils`
+# vanished from `core` while `debugedit` (a `base-devel` member) still required it,
+# making EVERY build fail with "unable to satisfy dependency 'elfutils'" no matter how
+# the sync is flagged (-Sy / -Syu / -Syyu all hit the same broken DB). The ALA serves
+# frozen, self-consistent DAILY snapshots, so pinning one makes the image BUILD-STABLE
+# and REPRODUCIBLE regardless of the rolling repos' momentary state. Bump the date to
+# roll the toolchain forward. `SigLevel = Never` is required because the snapshot's
+# package signatures can predate the freshly-populated keyring's validity window.
+ARG ARCH_SNAPSHOT=2026/08/10
+RUN printf 'Server = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n' "$ARCH_SNAPSHOT" \
+        > /etc/pacman.d/mirrorlist \
+    && sed -i 's/^SigLevel.*/SigLevel = Never/' /etc/pacman.conf \
+    && pacman -Syy --noconfirm --needed --disable-download-timeout \
+        archlinux-keyring \
         archiso \
         base-devel \
         go \

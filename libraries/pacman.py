@@ -23,6 +23,28 @@ The variants:
 
 from __future__ import annotations
 
+# --- Pinned Arch package snapshot -------------------------------------------
+# The rolling Arch `core`/`extra` repos are periodically INTERNALLY INCONSISTENT for
+# short windows -- a package is dropped while another still depends on it (observed:
+# `elfutils` vanished from `core` while `debugedit`, a `base-devel` member, still
+# required it, so every pacman transaction that pulled `base-devel` failed with "unable
+# to satisfy dependency 'elfutils'"). To make the ISO BUILD-STABLE and REPRODUCIBLE, the
+# package-cache download step fetches from a frozen Arch Linux Archive (ALA) DAILY
+# snapshot instead of the live mirrors. Bump this date to roll the whole ISO's package
+# set forward in lockstep.
+#
+# KEEP IN SYNC with the Dockerfile's `ARG ARCH_SNAPSHOT` (the build-host toolchain is
+# pinned to the SAME snapshot there) so the host that builds the ISO and the ISO's own
+# package set are drawn from one self-consistent point in time.
+ARCH_SNAPSHOT = "2026/08/10"
+
+# ALA snapshot mirror lines (both a primary and the canonical archive host as fallback).
+# SigLevel=Never at download time makes the possibly-old package signatures a non-issue;
+# final trust is re-established at pacstrap against the file:// local repo.
+_SNAPSHOT_MIRRORS = (
+    f"Server = https://archive.archlinux.org/repos/{ARCH_SNAPSHOT}/$repo/os/$arch\n"
+)
+
 # Header shared by the base/profile/pacstrap variants (verbatim Arch default).
 _STD_HEADER = """\
 #
@@ -159,15 +181,14 @@ def _net_repos(multilib: bool) -> str:
 def download_conf() -> str:
     """Host-independent configuration for the package-cache download step (cache-pkgs).
 
-    Hard-codes Arch's official mirrors and never Includes the host mirrorlist, so
-    the fetch behaves identically on Manjaro, real Arch, and Docker. SigLevel=Never
-    (trust is re-established at pacstrap against the file:// repo) and no
+    Fetches from a PINNED Arch Linux Archive snapshot (ARCH_SNAPSHOT) and never Includes
+    the host mirrorlist, so the fetch behaves identically on Manjaro, real Arch, and
+    Docker AND is immune to the live repos being momentarily inconsistent (the
+    `elfutils`/`base-devel` breakage that pinning fixes -- see ARCH_SNAPSHOT). SigLevel=
+    Never (trust is re-established at pacstrap against the file:// repo) and no
     DownloadUser=alpm (pacman runs as root into root-owned scratch here).
     """
-    mirrors = (
-        "Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch\n"
-        "Server = https://mirror.rackspace.com/archlinux/$repo/os/$arch\n"
-    )
+    mirrors = _SNAPSHOT_MIRRORS
     return f"""\
 #
 # Self-contained Arch Linux configuration used ONLY by the package-cache step to
