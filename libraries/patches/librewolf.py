@@ -2,13 +2,26 @@
 
 LibreWolf is an UPSTREAM privacy-hardened Firefox fork we ship (built by the
 recipe in packages/pkgbuild.py). We do not fork it; we only OVERRIDE a handful of
-its defaults to fit Az'arch. That override policy lives HERE (a patch-package,
-like calamares/ckbcomp/fastfetch/openbox) so it is the single source of truth:
-packages/pkgbuild.py imports overrides_cfg() and ships the returned text as
-/opt/librewolf/librewolf.overrides.cfg -- LibreWolf's officially-supported
-AutoConfig override file, loaded AFTER the stock librewolf.cfg
-(https://librewolf.net/docs/settings/), so a defaultPref here beats LibreWolf's
-own defaultPref for the same key.
+its defaults to fit Az'arch. That override policy lives HERE (a flat patch
+module -- patches/librewolf.py, like the single-file ckbcomp/fastfetch/openbox
+patches beside it) so it is the single source of truth for both the CONTENT and
+its DELIVERY location.
+
+WHERE THE OVERRIDE FILE MUST GO (this bit is load-bearing and was gotten WRONG
+before): LibreWolf's AutoConfig override file, librewolf.overrides.cfg, is loaded
+AFTER the stock librewolf.cfg so a defaultPref here beats LibreWolf's own
+defaultPref for the same key (https://librewolf.net/docs/settings/). BUT LibreWolf
+does NOT read it from the install dir /opt/librewolf/. Its compiled AutoConfig
+loader (omni.ja -> defaults/autoconfig/prefcalls.js) sets
+autoadmin.global_config_url to a PROFILE/CONFIG-relative path -- on this build
+(widget.support-xdg-config = true, non-legacy profile) that is
+    file://$XDG_CONFIG_HOME/librewolf/librewolf/librewolf.overrides.cfg
+i.e. ~/.config/librewolf/librewolf/librewolf.overrides.cfg (note the DOUBLED
+"librewolf/librewolf"). A copy dropped in /opt/librewolf/ is simply never read.
+So emit_plan() below ships this as a HOME file at exactly that profile path (and
+compiler.py mirrors it into /etc/skel so a Calamares-created user inherits it).
+The PKGBUILD does NOT ship it -- packaging it under /opt was the dead-letter bug.
+OVERRIDES_PROFILE_PATH is the single source of truth for the path.
 
 Everything else is stock LibreWolf. We change exactly two things (both requested):
 
@@ -40,18 +53,31 @@ Everything else is stock LibreWolf. We change exactly two things (both requested
      and "newtab"). The user can still toggle it back on with Ctrl+Shift+B.
 
 Only relaxes/sets these specific prefs; every other LibreWolf hardening pref is
-left exactly as upstream ships it. Pure standard library (returns a string);
-compiler.py never touches this module directly -- pkgbuild.py does, at recipe
-emit time.
+left exactly as upstream ships it. Pure standard library (returns strings).
+compiler.py iterates emit_plan() to drop the override at OVERRIDES_PROFILE_PATH
+(home + /etc/skel) -- that profile-path file is the ONLY copy the running browser
+reads. pkgbuild.py no longer touches this module or the override at all (it used to
+ship a dead copy under /opt; that was removed).
 """
 
 from __future__ import annotations
 
 
-# The AutoConfig override filename the recipe installs under /opt/librewolf.
-# LibreWolf reads this after librewolf.cfg (its general.config.filename), so a
-# defaultPref here overrides LibreWolf's own defaultPref for the same key.
+# The AutoConfig override filename LibreWolf reads after librewolf.cfg, so a
+# defaultPref in it overrides LibreWolf's own defaultPref for the same key.
 OVERRIDES_FILENAME = "librewolf.overrides.cfg"
+
+# The live user's home (matches openbox.HOME / the airootfs /home/main tree).
+HOME = "/home/main"
+
+# WHERE LibreWolf ACTUALLY READS THE OVERRIDE (see the module docstring): its
+# compiled AutoConfig loader points autoadmin.global_config_url at
+# $XDG_CONFIG_HOME/librewolf/librewolf/librewolf.overrides.cfg (XDG_CONFIG_HOME
+# defaults to ~/.config, which the OpenBox session sets explicitly). The doubled
+# "librewolf/librewolf" is deliberate -- that is the path the loader builds. This
+# is the single source of truth for the delivery location; emit_plan() ships the
+# file here and compiler.py mirrors it into /etc/skel.
+OVERRIDES_PROFILE_PATH = f"{HOME}/.config/librewolf/librewolf/{OVERRIDES_FILENAME}"
 
 
 def overrides_cfg() -> str:
@@ -59,18 +85,20 @@ def overrides_cfg() -> str:
 
     Two policies: (1) sessions + cookies persist across restarts, (2) the
     bookmarks toolbar ("For quick access") is hidden by default. This is the
-    single source of truth; packages/pkgbuild.py ships it verbatim.
+    single source of truth; emit_plan() ships it to OVERRIDES_PROFILE_PATH (the
+    path LibreWolf actually reads) and compiler.py mirrors it into /etc/skel.
 
     AutoConfig files MUST begin with a comment line -- the engine ignores line 1
     -- so the leading `//` banner is required, not decoration."""
     return """\
 // Az'arch LibreWolf overrides -- session/cookie persistence + hidden bookmarks bar
 //
-// LibreWolf's officially-supported override file (general.config.filename),
-// loaded AFTER the stock librewolf.cfg, so a defaultPref here beats LibreWolf's
-// own defaultPref for the same key. Generated by patches/librewolf/librewolf.py
-// (edit the Python, not this file). It ONLY changes the prefs below; every other
-// LibreWolf hardening pref is left exactly as upstream ships it.
+// LibreWolf's officially-supported AutoConfig override file, loaded AFTER the
+// stock librewolf.cfg, so a defaultPref here beats LibreWolf's own defaultPref for
+// the same key. LibreWolf reads it from the PROFILE/CONFIG dir
+// (~/.config/librewolf/librewolf/librewolf.overrides.cfg), NOT /opt. Generated by
+// patches/librewolf.py (edit the Python, not this file). It ONLY changes the prefs
+// below; every other LibreWolf hardening pref is left exactly as upstream ships it.
 //
 // AutoConfig files must begin with a comment line; the engine ignores line 1.
 
@@ -105,3 +133,28 @@ defaultPref("browser.sessionstore.privacy_level", 0);
 // still toggle it back on with Ctrl+Shift+B. (Values: "always"/"newtab"/"never".)
 defaultPref("browser.toolbars.bookmarks.visibility", "never");
 """
+
+
+# --- Emit plan --------------------------------------------------------------
+# Declarative map (builder -> dest -> mode -> owner), mirroring patches/openbox.PLAN
+# and packages/application_menu.PLAN so compiler.py iterates it the same way. The ONE
+# entry ships librewolf.overrides.cfg to the profile/config path LibreWolf actually
+# reads (OVERRIDES_PROFILE_PATH); owner="home" so compiler.py chowns it 1000:998 with
+# the rest of /home/main AND mirrors it into /etc/skel (so a Calamares-created user
+# inherits the same browser policy). Mode 0644 (plain config data).
+_CONF = 0o644
+
+
+def emit_plan() -> list[dict]:
+    """Return the emit plan for the LibreWolf overrides: a single HOME file at the
+    profile path LibreWolf's AutoConfig loader reads (see the module docstring). Shape
+    matches openbox.emit_plan()/application_menu.emit_plan() -- builder/dest/mode/owner
+    -- so compiler.py can emit it with the same loop (and skel-mirror home files)."""
+    return [
+        {
+            "builder": overrides_cfg,
+            "dest": OVERRIDES_PROFILE_PATH,
+            "mode": _CONF,
+            "owner": "home",
+        },
+    ]

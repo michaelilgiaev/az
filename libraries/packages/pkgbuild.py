@@ -757,21 +757,12 @@ Exec=/opt/librewolf/librewolf --private-window %u
 """
 
 
-def librewolf_overrides_cfg() -> str:
-    """LibreWolf's officially-supported override file (loaded AFTER the stock
-    librewolf.cfg). Two Az'arch policies: sessions/cookies persist across
-    restarts, and the bookmarks toolbar ("For quick access") is hidden by
-    default. It relaxes/sets ONLY those specific prefs; every other LibreWolf
-    hardening pref is left as upstream ships it. https://librewolf.net/docs/settings/
-
-    The CONTENT is authored in the librewolf PATCH package
-    (patches/librewolf/librewolf.py) -- the single source of truth for our
-    browser policy, alongside the other upstream patches -- and read verbatim
-    here so the recipe stays self-contained. This mirrors how patches/openbox
-    pulls the country table from patches/calamares/locale."""
-    from patches.librewolf import librewolf as _librewolf  # noqa: E402 (patch pkg; local import keeps pkgbuild import-light)
-
-    return _librewolf.overrides_cfg()
+# NOTE on the LibreWolf AutoConfig override (librewolf.overrides.cfg): it is NO LONGER
+# a package companion file. LibreWolf's compiled AutoConfig loader reads it from the
+# user's PROFILE dir (~/.config/librewolf/librewolf/), never from /opt, so shipping it
+# in the package did nothing. It is delivered as a HOME file (mirrored into /etc/skel)
+# by patches/librewolf.emit_plan(), which owns both its content AND its location. This
+# recipe therefore neither generates nor installs it.
 
 
 # ---------------------------------------------------------------------------
@@ -810,8 +801,10 @@ def pkgbuild_librewolf() -> str:
 # patch set, so the lineage traces to scrutinizable source even in this path.
 #
 # AZ'ARCH CUSTOMISATION: LibreWolf clears cookies + history on shutdown by
-# default; Az'arch ships librewolf.overrides.cfg (LibreWolf's supported override)
-# so sessions and cookies persist. Everything else is stock LibreWolf.
+# default; Az'arch relaxes that (sessions/cookies persist) + hides the bookmarks
+# toolbar via LibreWolf's supported AutoConfig override. That override is delivered
+# as a HOME file at the profile path LibreWolf actually reads (NOT packaged here --
+# see patches/librewolf.py); this recipe is otherwise stock LibreWolf.
 # =============================================================================
 
 pkgname=librewolf
@@ -831,11 +824,12 @@ source=(
   "librewolf-${{_lwver}}-linux-x86_64-package.tar.xz::${{_dl}}/librewolf-${{_lwver}}-linux-x86_64-package.tar.xz"
   "librewolf-${{_lwver}}-linux-x86_64-package.tar.xz.sig::${{_dl}}/librewolf-${{_lwver}}-linux-x86_64-package.tar.xz.sig"
   'librewolf.desktop'
-  'librewolf.overrides.cfg'
 )
-# Tarball: pinned sha256 (+ GPG). .sig: GPG-checked (SKIP sha). Local files:
-# shipped in-repo, reviewed in packages.pkgbuild (SKIP sha).
-sha256sums=('{LIBREWOLF_SHA256}' 'SKIP' 'SKIP' 'SKIP')
+# Tarball: pinned sha256 (+ GPG). .sig: GPG-checked (SKIP sha). Local .desktop:
+# shipped in-repo, reviewed in packages.pkgbuild (SKIP sha). The AutoConfig override
+# is NOT packaged (LibreWolf reads it from the profile dir, not /opt) -- it ships as a
+# home file via patches/librewolf.emit_plan().
+sha256sums=('{LIBREWOLF_SHA256}' 'SKIP' 'SKIP')
 validpgpkeys=('{LIBREWOLF_PGP_KEY}')
 
 package() {{
@@ -853,9 +847,10 @@ package() {{
   [[ -f "$icon" ]] && install -Dm644 "$icon" \\
     "$pkgdir/usr/share/icons/hicolor/128x128/apps/librewolf.png"
 
-  # Az'arch persistence override (loaded after the stock librewolf.cfg).
-  install -Dm644 "$srcdir/librewolf.overrides.cfg" \\
-    "$pkgdir/opt/librewolf/librewolf.overrides.cfg"
+  # NOTE: the Az'arch persistence/bookmarks override is NOT installed here. LibreWolf's
+  # AutoConfig loader reads librewolf.overrides.cfg from the user's PROFILE dir
+  # (~/.config/librewolf/librewolf/), never from /opt, so it is delivered as a home file
+  # by patches/librewolf.emit_plan() (compiler.py) instead.
 }}
 """
 
@@ -909,9 +904,10 @@ options=('!strip' '!lto' '!debug')
 source=(
   "librewolf-bsys6::git+https://codeberg.org/librewolf/bsys6.git#tag=${{_lwver}}"
   'librewolf.desktop'
-  'librewolf.overrides.cfg'
 )
-sha256sums=('SKIP' 'SKIP' 'SKIP')
+# The AutoConfig override is NOT packaged (LibreWolf reads it from the profile dir, not
+# /opt) -- it ships as a home file via patches/librewolf.emit_plan().
+sha256sums=('SKIP' 'SKIP')
 
 build() {{
   cd "$srcdir/librewolf-bsys6"
@@ -959,8 +955,9 @@ package() {{
   [[ -f "$icon" ]] && install -Dm644 "$icon" \\
     "$pkgdir/usr/share/icons/hicolor/128x128/apps/librewolf.png"
 
-  install -Dm644 "$srcdir/librewolf.overrides.cfg" \\
-    "$pkgdir/opt/librewolf/librewolf.overrides.cfg"
+  # NOTE: the Az'arch override is NOT installed here -- LibreWolf reads it from the
+  # profile dir, not /opt, so patches/librewolf.emit_plan() (compiler.py) delivers it as
+  # a home file. See patches/librewolf.py.
 }}
 """
 
@@ -982,9 +979,13 @@ def recipe_dirs(full_compile: bool) -> list[tuple[str, dict[str, str]]]:
                   same source recipe.
       librewolf : default = repackage the verified upstream binary tarball;
                   --full-compile = compile from Firefox source (1.5-3+ hours)."""
+    # The .desktop is the ONLY companion file the package ships now. The AutoConfig
+    # override (librewolf.overrides.cfg) is NOT packaged: LibreWolf reads it from the
+    # user's PROFILE dir, not /opt, so it is delivered as a home file by
+    # patches/librewolf.emit_plan() (compiler.py) instead -- shipping it under /opt did
+    # nothing. See patches/librewolf.py.
     lw_common = {
         "librewolf.desktop": librewolf_desktop(),
-        "librewolf.overrides.cfg": librewolf_overrides_cfg(),
     }
     calamares = ("calamares", {
         "PKGBUILD": pkgbuild_calamares(),

@@ -56,18 +56,23 @@ def test_patches_bucket_holds_only_upstream():
     # After the reclassification, libraries/patches/ contains ONLY upstream software
     # we modify/configure. Anything WE author outright must have left it.
     #
-    # The single-file patches (ckbcomp/fastfetch/openbox) were FLATTENED from a
+    # The single-file patches (ckbcomp/fastfetch/librewolf/openbox) were FLATTENED from a
     # one-file dir (patches/openbox/openbox.py) to a flat module (patches/openbox.py),
-    # mirroring the earlier azarch/pkgbuild flattening. calamares stays a dir
-    # (multi-module: calamares.py + locale.py + calamares_shellprocess.py); librewolf
-    # is a dir holding our browser-policy patch (patches/librewolf/librewolf.py).
+    # mirroring the earlier azarch/pkgbuild flattening. calamares stays a dir (genuinely
+    # multi-module: calamares.py + locale.py + calamares_shellprocess.py); librewolf is a
+    # single file (just librewolf.py), so it is a flat module too -- it must NOT be left
+    # as a one-file dir (that inconsistency was a regression).
     patches = paths.PATCHESDIR
     names = {p.name for p in patches.iterdir()}
     dirs = {p.name for p in patches.iterdir() if p.is_dir()}
-    # multi-module upstream patches stay as directories:
-    assert {"calamares", "librewolf"} <= dirs
+    # ONLY genuinely multi-module upstream patches stay as directories:
+    assert "calamares" in dirs
+    assert "librewolf" not in dirs, (
+        "librewolf is a single-file patch -- it must be a flat module "
+        "(patches/librewolf.py), not a one-file dir"
+    )
     # flattened single-file upstream patches are now flat modules (files), not dirs:
-    for flat in ("ckbcomp.py", "fastfetch.py", "openbox.py"):
+    for flat in ("ckbcomp.py", "fastfetch.py", "librewolf.py", "openbox.py"):
         assert flat in names, f"{flat} should be a flat patch module"
         assert (paths.PATCHESDIR / flat).is_file()
         assert flat[:-3] not in dirs, f"{flat[:-3]}/ dir should be gone after flattening"

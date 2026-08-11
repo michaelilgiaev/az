@@ -248,6 +248,41 @@ def test_menu_open_is_instant_no_rebuild_when_order_unchanged():
     assert "if rebuilt:" in menu_src                     # only re-filter on a real change
 
 
+def test_menu_open_is_instant_window_stays_mapped_moved_not_remapped():
+    # Opening the menu must be INSTANT even on the FIRST Super press. Under X the
+    # expensive part of showing the window is the MAP itself: withdraw()/deiconify()
+    # unmaps and re-maps the whole widget tree, and re-mapping re-exposes every child X
+    # window (~120-600ms here, worst on the very first map) -- the "renders slowly the
+    # first time / not snappy" bug. The fix: the daemon maps the window ONCE, OFF-screen,
+    # at login (paying that first-map cost invisibly), and thereafter HIDES by moving it
+    # off-screen and SHOWS by moving it back on-screen -- never re-mapping.
+    menu_src = am.menu_py()
+    # An off-screen park distance + a warm-up that maps once and a hide that MOVES.
+    assert "OFFSCREEN_MARGIN" in menu_src                 # park distance beyond all screens
+    assert "def warmup_menu(" in menu_src                 # one-time off-screen map at login
+    assert "root.az_warmup = warmup_menu" in menu_src     # exposed for the daemon
+    # hide_menu must NOT withdraw (that would force a re-map on the next show); it moves
+    # the still-mapped window off-screen instead.
+    hide_body = menu_src.split("def hide_menu(", 1)[1].split("def show_menu(", 1)[0]
+    assert "root.withdraw(" not in hide_body, (
+        "hide_menu must NOT call root.withdraw() (a re-map on next show is the slow path); "
+        "it must MOVE the still-mapped window off-screen"
+    )
+    assert "OFFSCREEN_MARGIN" in hide_body                # parks off-screen
+    assert "root.az_shown = False" in hide_body           # tracks shown/hidden explicitly
+    # The daemon warms the window up at startup (maps off-screen once) and toggles on the
+    # az_shown flag -- NOT winfo_viewable(), which is always True now the window stays
+    # mapped while hidden.
+    daemon_src = am.daemon_py()
+    assert "az_warmup()" in daemon_src                    # prepay the first map at login
+    assert "az_shown" in daemon_src                       # toggle reads the shown flag
+    toggle_body = daemon_src.split("def toggle(", 1)[1].split("def quit(", 1)[0]
+    assert "self.root.winfo_viewable" not in toggle_body, (
+        "toggle() must decide shown/hidden by az_shown, not winfo_viewable() -- the hidden "
+        "window stays mapped (moved off-screen), so winfo_viewable() is always True"
+    )
+
+
 def test_menu_repopulates_newly_installed_apps_on_open():
     # A long-lived daemon that scanned .desktop files only once at login would never
     # show a package installed later (e.g. `pacman -S firefox`). reset_view now

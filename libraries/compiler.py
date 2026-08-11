@@ -44,6 +44,7 @@ from patches.calamares import calamares
 from patches.calamares import locale
 from patches import openbox
 from patches import fastfetch
+from patches import librewolf
 import installer
 import pacman
 import profile
@@ -336,7 +337,13 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
     (Manjaro-style). The /home/main tree is chowned 1000:998 by step 6 / the post-emit
     chown below."""
     skel = airootfs / "etc/skel"
-    for entry in openbox.emit_plan():
+    # OpenBox live-session files + the LibreWolf browser-policy override. Both use the
+    # same builder/dest/mode/owner plan shape and the same home-file + /etc/skel mirror
+    # rule, so they iterate through one loop. The LibreWolf entry drops
+    # librewolf.overrides.cfg at the PROFILE path LibreWolf's AutoConfig loader actually
+    # reads (~/.config/librewolf/librewolf/...); shipping it under /opt did nothing (the
+    # loader never looks there). See patches/librewolf.emit_plan().
+    for entry in openbox.emit_plan() + librewolf.emit_plan():
         content = entry["builder"]()
         dest_abs = entry["dest"]          # e.g. "/home/main/.xinitrc" or "/usr/local/bin/..."
         mode = entry["mode"]

@@ -113,13 +113,14 @@ def test_librewolf_pkgver_field_correct():
 
 
 def test_librewolf_sha256sums_shape():
-    # One real hash then three 'SKIP's: tarball hashed, .sig GPG-checked (SKIP),
-    # two shipped-in-repo local files (SKIP each).
+    # One real hash then two 'SKIP's: tarball hashed, .sig GPG-checked (SKIP), and the
+    # single shipped-in-repo local file .desktop (SKIP). (The AutoConfig override is no
+    # longer a source() entry -- it ships as a home file, not a package companion.)
     s = pkgbuild.pkgbuild_librewolf()
     assert (
-        "sha256sums=('%s' 'SKIP' 'SKIP' 'SKIP')" % pkgbuild.LIBREWOLF_SHA256
+        "sha256sums=('%s' 'SKIP' 'SKIP')" % pkgbuild.LIBREWOLF_SHA256
     ) in s
-    assert s.count("'SKIP'") == 3
+    assert s.count("'SKIP'") == 2
 
 
 def test_librewolf_validpgpkeys_present():
@@ -147,13 +148,14 @@ def test_librewolf_download_url_uses_tag_version():
 
 # --- pkgbuild_librewolf_src (FULL / from-source tier) ----------------------
 
-def test_librewolf_src_three_skips_no_hash():
-    # From-source tier pins nothing by sha (bsys6 verifies Firefox itself): all
-    # three source() entries are 'SKIP', the LibreWolf tarball hash never appears,
-    # and there is no validpgpkeys line (no .sig download in this path).
+def test_librewolf_src_skips_no_hash():
+    # From-source tier pins nothing by sha (bsys6 verifies Firefox itself): both
+    # source() entries (the bsys6 git tree + the .desktop) are 'SKIP', the LibreWolf
+    # tarball hash never appears, and there is no validpgpkeys line (no .sig download in
+    # this path). (The override is no longer a source() entry -- it is a home file.)
     s = pkgbuild.pkgbuild_librewolf_src()
-    assert "sha256sums=('SKIP' 'SKIP' 'SKIP')" in s
-    assert s.count("'SKIP'") == 3
+    assert "sha256sums=('SKIP' 'SKIP')" in s
+    assert s.count("'SKIP'") == 2
     assert pkgbuild.LIBREWOLF_SHA256 not in s
     assert "validpgpkeys" not in s
 
@@ -616,12 +618,16 @@ def test_desktop_exec_path_matches_install():
 
 def test_overrides_first_line_is_comment():
     # AutoConfig files: the engine ignores line 1, so it MUST be a comment.
-    first = pkgbuild.librewolf_overrides_cfg().splitlines()[0]
+    from patches import librewolf as lw_patch
+
+    first = lw_patch.overrides_cfg().splitlines()[0]
     assert first.startswith("//")
 
 
 def test_overrides_disables_sanitize_on_shutdown():
-    cfg = pkgbuild.librewolf_overrides_cfg()
+    from patches import librewolf as lw_patch
+
+    cfg = lw_patch.overrides_cfg()
     assert (
         'defaultPref("privacy.sanitize.sanitizeOnShutdown", false);' in cfg
     )
@@ -634,7 +640,9 @@ def test_overrides_restore_session_needs_privacy_level_zero():
     # back LOGGED OUT -- so the restore also needs privacy_level=0 (store
     # everything, the Firefox default) and browser.startup.page=3 (restore the
     # previous session). Guard both, since privacy_level=0 is the easy-to-miss half.
-    cfg = pkgbuild.librewolf_overrides_cfg()
+    from patches import librewolf as lw_patch
+
+    cfg = lw_patch.overrides_cfg()
     assert 'defaultPref("browser.startup.page", 3);' in cfg
     assert 'defaultPref("browser.sessionstore.privacy_level", 0);' in cfg
     # network.cookie.lifetimePolicy is OBSOLETE in modern Firefox/LibreWolf (the
@@ -646,20 +654,40 @@ def test_overrides_hide_bookmarks_toolbar_by_default():
     # "For quick access" (the bookmarks toolbar, Ctrl+Shift+B) must be HIDDEN by
     # default. LibreWolf ships browser.toolbars.bookmarks.visibility="always"; our
     # override sets it to "never" (hides it on every window AND the new-tab page).
-    cfg = pkgbuild.librewolf_overrides_cfg()
+    from patches import librewolf as lw_patch
+
+    cfg = lw_patch.overrides_cfg()
     assert (
         'defaultPref("browser.toolbars.bookmarks.visibility", "never");' in cfg
     )
 
 
-def test_overrides_content_is_owned_by_the_librewolf_patch():
-    # The overrides.cfg content is authored in the librewolf PATCH package (the
-    # single source of truth for our browser policy); pkgbuild.py ships it verbatim.
-    # A drift between the two would mean the recipe embeds stale policy.
-    from patches.librewolf import librewolf as lw_patch
+def test_overrides_delivered_to_profile_path_not_opt():
+    # THE load-bearing fact (this was the regression): LibreWolf's AutoConfig loader
+    # reads librewolf.overrides.cfg from the user's PROFILE/CONFIG dir
+    # (~/.config/librewolf/librewolf/librewolf.overrides.cfg -- doubled "librewolf"),
+    # NEVER from /opt. So the override must be delivered as a HOME file by the patch's
+    # emit_plan(), and the PKGBUILD must NOT ship it into /opt (a dead file there).
+    from patches import librewolf as lw_patch
 
-    assert lw_patch.__file__.endswith("libraries/patches/librewolf/librewolf.py")
-    assert pkgbuild.librewolf_overrides_cfg() == lw_patch.overrides_cfg()
+    plan = lw_patch.emit_plan()
+    assert len(plan) == 1
+    entry = plan[0]
+    assert entry["dest"] == (
+        "/home/main/.config/librewolf/librewolf/librewolf.overrides.cfg"
+    ), "override must land at the profile path LibreWolf actually reads"
+    assert entry["owner"] == "home"          # chowned 1000:998 + mirrored into /etc/skel
+    assert entry["builder"]() == lw_patch.overrides_cfg()
+    # The recipe must NOT package the override into /opt anymore (it was never read).
+    for pb in (pkgbuild.pkgbuild_librewolf(), pkgbuild.pkgbuild_librewolf_src()):
+        assert "/opt/librewolf/librewolf.overrides.cfg" not in pb, (
+            "the override must NOT be installed under /opt -- LibreWolf never reads it "
+            "there; it ships as a home file via patches/librewolf.emit_plan()"
+        )
+    # And it is no longer a recipe companion file in either tier.
+    for full in (False, True):
+        files = dict(pkgbuild.recipe_dirs(full))["librewolf"]
+        assert "librewolf.overrides.cfg" not in files
 
 
 # --- recipe_dirs tier dispatch ---------------------------------------------
@@ -679,7 +707,9 @@ def test_recipe_dirs_default_tier():
         pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME,
     }
     files = dict(dirs)["librewolf"]
-    assert set(files) == {"PKGBUILD", "librewolf.desktop", "librewolf.overrides.cfg"}
+    # PKGBUILD + the .desktop only. The AutoConfig override is NO LONGER a companion
+    # (it ships as a home file at the profile path -- /opt was never read).
+    assert set(files) == {"PKGBUILD", "librewolf.desktop"}
     assert "make fetch" not in files["PKGBUILD"]
 
 
@@ -699,12 +729,11 @@ def test_recipe_dirs_full_tier():
 
 
 def test_recipe_dirs_companion_files_shared_across_tiers():
-    # The two companion files are identical content regardless of tier -- both
-    # tiers embed the same .desktop and overrides.cfg.
+    # The .desktop is the sole companion file now and is identical across tiers. (The
+    # AutoConfig override is no longer packaged -- it ships as a home file.)
     default_lw = dict(pkgbuild.recipe_dirs(False))["librewolf"]
     full_lw = dict(pkgbuild.recipe_dirs(True))["librewolf"]
     assert default_lw["librewolf.desktop"] == full_lw["librewolf.desktop"]
-    assert (
-        default_lw["librewolf.overrides.cfg"] == full_lw["librewolf.overrides.cfg"]
-    )
     assert default_lw["librewolf.desktop"] == pkgbuild.librewolf_desktop()
+    assert "librewolf.overrides.cfg" not in default_lw
+    assert "librewolf.overrides.cfg" not in full_lw

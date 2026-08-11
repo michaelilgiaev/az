@@ -4,9 +4,14 @@
 Spawning a fresh Python+Tk process on every click costs ~120-280ms (interpreter
 start, tkinter import, X connection, building the window + loading an icon per
 app). That is the delay the user sees. This module removes it entirely: ONE
-long-lived process builds the whole window ONCE at login and keeps it HIDDEN
-(withdrawn). Toggling the menu then just maps the already-built window -- a
-sub-frame operation -- so it appears the instant the panel icon is clicked.
+long-lived process builds the whole window ONCE at login, then WARMS IT UP -- maps
+it a single time OFF-SCREEN and forces a full render, paying the one expensive first
+map (~600ms, re-exposing the whole widget tree) invisibly at login. It thereafter
+keeps the window MAPPED but parked off-screen; showing it just MOVES it on-screen and
+hiding it moves it back off (never a re-map, ~10-40ms), so it appears the instant the
+Super key is pressed. (Under X the map/unmap -- withdraw()/deiconify() -- is the slow
+part, not the content; keeping the window mapped is what makes the open instant. See
+menu.warmup_menu / hide_menu / show_menu.)
 
 Control is by Unix signal from the tiny launcher (/usr/local/bin/azarch-
 application-menu):
@@ -167,21 +172,25 @@ class Daemon:
     """Owns the persistent window and the signal-driven show/hide/quit loop."""
 
     def __init__(self) -> None:
-        # Build the full window (chrome + all rows) up front, then hide it so the
-        # first real open is instant. Withdraw FIRST -- before any update -- so
-        # the window never flashes on screen during daemon startup.
+        # Build the full window (chrome + all rows) up front, then warm it up so the
+        # first real open is instant. Withdraw FIRST -- before any update -- so the
+        # window never flashes on screen during daemon startup.
         self.root = M.build_window(persistent=True)
         try:
             self.root.withdraw()
         except tk.TclError:
             pass
-        self.root.az_populate()          # build every application row now
-        self.visible = False
+        # Warm-up: map the window ONCE, OFF-SCREEN, and force a full render. This pays the
+        # expensive first map (~600ms -- re-exposing the whole widget tree, worst of all
+        # opens) HERE, at login, while the window is invisible. After this the window
+        # stays mapped off-screen; every user open just MOVES it on-screen (~10-40ms, no
+        # re-map/re-expose), which is what makes the menu open instantly and snappily
+        # instead of stalling on the first Super press. (az_warmup populates the rows,
+        # so the separate az_populate call is no longer needed.)
         try:
-            self.root.update_idletasks()  # realise geometry while withdrawn
+            self.root.az_warmup()
         except tk.TclError:
             pass
-        self.root.az_hide()               # ensure hidden/grab-released state
 
         # --- system-wide "app opened" counting ----------------------------
         # The menu is ordered most-USED first, and the spec is literal: an open
@@ -289,7 +298,6 @@ class Daemon:
     def show(self) -> None:
         try:
             self.root.az_show()
-            self.visible = True
         except tk.TclError:
             pass
         # az_show() re-scanned the .desktop files (menu.reset_view -> refresh_apps),
@@ -306,25 +314,29 @@ class Daemon:
     def hide(self) -> None:
         try:
             self.root.az_hide()
-            self.visible = False
         except tk.TclError:
             pass
 
     def toggle(self) -> None:
-        # Track true mapped state (the window may have hidden itself via an
-        # outside click / Escape without going through us).
+        # Track true SHOWN state. The window stays MAPPED even when hidden (daemon mode
+        # parks it off-screen instead of withdrawing it -- see menu.hide_menu -- so the
+        # first show can be instant), which means winfo_viewable() is always True and can
+        # no longer tell shown from hidden. az_shown is the source of truth; it is set
+        # False by every close path (outside click / Escape / the Super binding all go
+        # through hide_menu, which clears it) so a self-close is reflected here too.
         try:
-            mapped = self.root.winfo_viewable()
+            shown = bool(getattr(self.root, "az_shown", False))
         except tk.TclError:
-            mapped = False
-        if mapped:
+            shown = False
+        if shown:
             self.hide()
             return
-        # Not mapped -> normally show. BUT guard against the xcape echo of a Super
+        # Hidden -> normally show. BUT guard against the xcape echo of a Super
         # close-tap: closing with a Super TAP delivers Super_L to the (grabbed) window,
-        # which withdraws it and releases the grab; xcape ALSO injects the Menu keysym on
-        # that same tap's release, and once the grab is gone that Menu reaches OpenBox ->
-        # the launcher -> here as a toggle, a few ms after the hide. Without this guard
+        # which moves it off-screen and releases the grab; xcape ALSO injects the Menu
+        # keysym on that same tap's release, and once the grab is gone that Menu reaches
+        # OpenBox -> the launcher -> here as a toggle, a few ms after the hide. Without this
+        # guard
         # that echo would re-open the window the instant the user closed it (the "close is
         # buggy" symptom). If we were hidden within the debounce window, treat this toggle
         # as that echo and swallow it so the close sticks. A deliberate re-open a moment

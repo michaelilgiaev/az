@@ -45,6 +45,7 @@ import paths
 
 from patches.calamares import calamares
 from patches import openbox as desktop
+from patches import librewolf
 import installer
 from patches.calamares import locale
 import pacman
@@ -82,9 +83,11 @@ _EMITTERS = [
     ("pacman.installer_pacstrap_conf", pacman.installer_pacstrap_conf),
     ("pkgbuild.pkgbuild_calamares", pkgbuild.pkgbuild_calamares),
     ("pkgbuild.librewolf_desktop", pkgbuild.librewolf_desktop),
-    ("pkgbuild.librewolf_overrides_cfg", pkgbuild.librewolf_overrides_cfg),
     ("pkgbuild.pkgbuild_librewolf", pkgbuild.pkgbuild_librewolf),
     ("pkgbuild.pkgbuild_librewolf_src", pkgbuild.pkgbuild_librewolf_src),
+    # The LibreWolf AutoConfig override, now delivered as a home file at the profile
+    # path (not packaged under /opt) -- exercise its emit_plan builder too.
+    *[(f"librewolf:{e['dest']}", e["builder"]) for e in librewolf.emit_plan()],
 ]
 
 
@@ -107,8 +110,10 @@ def test_emitter_family_covers_all_config_modules():
     # environment, the "installed" autostart staged for the Calamares overwrite, the
     # application-menu usage.json seed, the system + Desktop installer launchers, the
     # install wrapper, the azarch CLI -- plus the appended bash_profile) + 6 installer +
-    # locale + profile + 4 pacman + 5 pkgbuild.
-    assert len(_EMITTERS) == 19 + 12 + 6 + 1 + 1 + 4 + 5
+    # locale + profile + 4 pacman + 4 pkgbuild (calamares + librewolf.desktop + the two
+    # librewolf PKGBUILD tiers) + 1 librewolf emit_plan builder (the AutoConfig override,
+    # now a home file at the profile path, not a packaged /opt file).
+    assert len(_EMITTERS) == 19 + 12 + 6 + 1 + 1 + 4 + 4 + 1
 
 
 def test_recipe_dir_contents_are_nonempty_str_both_tiers():

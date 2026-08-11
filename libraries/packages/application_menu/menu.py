@@ -85,6 +85,20 @@ def menu_size() -> tuple[int, int]:
     return (T.DEFAULT_WIDTH, T.DEFAULT_HEIGHT)
 
 
+# How far OFF the screen the daemon parks the (still-mapped) window to hide it.
+# INSTANT-OPEN KEY: under X the expensive part of showing the menu is the MAP itself
+# -- withdraw()/deiconify() unmap and re-map the whole widget tree, and re-mapping
+# re-exposes every child X window (search box, power buttons, ...), which measured at
+# ~120-600ms here (worst on the very first map) and is the "slow first open / not
+# snappy" the user hit. A window that is ALREADY mapped and merely MOVED costs almost
+# nothing to bring on-screen (~10-40ms, no re-expose). So daemon mode never unmaps:
+# it maps the window ONCE (off-screen, at login), renders it, and thereafter hides by
+# moving it here and shows by moving it back to the centered spot. The offset is far
+# beyond the bottom-right of any plausible multi-monitor arrangement so the parked
+# window is never visible on any screen.
+OFFSCREEN_MARGIN = 4000
+
+
 # --- The menu content -----------------------------------------------------
 class AppMenu:
     """Builds and drives the menu content inside an already-created root window: the
@@ -510,9 +524,15 @@ def build_window(persistent: bool = False) -> tk.Tk:
     inspect ``root.az_menu`` and the bound events.
 
     persistent=True switches the window into DAEMON mode: closing (outside click,
-    Escape, focus loss, launching an app) HIDES the window (withdraw) instead of
-    destroying it, so the resident daemon can re-show it instantly. In that mode the
-    caller drives visibility with root.az_show() / root.az_hide()."""
+    Escape, focus loss, launching an app) HIDES the window instead of destroying it,
+    so the resident daemon can re-show it instantly. In that mode the caller drives
+    visibility with root.az_show() / root.az_hide().
+
+    INSTANT OPEN: in daemon mode the window is never unmapped. It is mapped ONCE
+    (off-screen) and then hidden by MOVING it off-screen and shown by moving it back
+    -- re-mapping a withdrawn window re-exposes every child X window and measured at
+    ~120-600ms here, whereas moving an already-mapped window is ~10-40ms. See
+    OFFSCREEN_MARGIN and the daemon's warm-up."""
     root = tk.Tk()
     root.title("azarch-application-menu")
 
@@ -692,20 +712,28 @@ def build_window(persistent: bool = False) -> tk.Tk:
         _later(150, arm_focus_out)
 
     def hide_menu() -> None:
-        """DAEMON mode: hide (withdraw) the window instead of destroying it, so the next
-        show is instant. Releases the grab, unbinds the focus-out backup, cancels
+        """DAEMON mode: hide the window by MOVING it OFF-SCREEN (not withdrawing it), so
+        the next show is instant. Releases the grab, unbinds the focus-out backup, cancels
         timers, and marks the menu closed so stray handlers no-op while hidden.
+
+        Why move instead of withdraw: withdraw()+deiconify() unmaps and re-maps the whole
+        widget tree, and re-mapping re-exposes every child X window (~120-600ms here, worst
+        on the first map -- the "slow/not-snappy open" bug). The window stays mapped and is
+        simply parked OFFSCREEN_MARGIN beyond the bottom-right of every screen; showing it
+        again only moves it back (~10-40ms, no re-expose). It stays winfo_viewable() while
+        hidden, so mapped-state is tracked by az_shown / on-screen position, not viewability.
 
         Stamps root.az_last_hidden with a monotonic timestamp on EVERY hide (this is the
         single choke point for all close paths -- Escape, outside-click, the Super-key
         binding, launching an app, and the daemon's az_hide). The daemon reads it to
         DEBOUNCE the xcape echo: closing with a Super TAP delivers Super_L to this window
-        (grab active) -> we withdraw and release the grab, but xcape ALSO injects the Menu
-        keysym on the same tap's release; once the grab is gone that Menu reaches OpenBox
-        -> the launcher -> the daemon toggle, which would otherwise immediately re-open the
-        window. The timestamp lets the daemon swallow that echo so a Super close stays
-        closed (see daemon.Daemon.toggle)."""
+        (grab active) -> we move it off-screen and release the grab, but xcape ALSO injects
+        the Menu keysym on the same tap's release; once the grab is gone that Menu reaches
+        OpenBox -> the launcher -> the daemon toggle, which would otherwise immediately
+        re-open the window. The timestamp lets the daemon swallow that echo so a Super close
+        stays closed (see daemon.Daemon.toggle)."""
         root.az_last_hidden = time.monotonic()
+        root.az_shown = False
         state["closed"] = True
         _cancel_timers()
         try:
@@ -716,19 +744,29 @@ def build_window(persistent: bool = False) -> tk.Tk:
             root.grab_release()
         except tk.TclError:
             pass
+        # Park the (still-mapped) window off every screen. Re-read the live screen size
+        # each hide so a resolution change can't leave the park spot on-screen.
         try:
-            root.withdraw()
+            off_x = root.winfo_screenwidth() + OFFSCREEN_MARGIN
+            off_y = root.winfo_screenheight() + OFFSCREEN_MARGIN
+            root.geometry(f"{win_w}x{win_h}+{off_x}+{off_y}")
         except tk.TclError:
             pass
 
     def show_menu() -> None:
         """DAEMON mode: (re)show the pre-built window instantly. Resets the menu to a
         clean state -- search cleared, list scrolled to top with the first row selected,
-        focus on the search box + app list -- then maps it, raises it and arms the
-        grab/focus. Because the window and all rows already exist, this is essentially
-        instant (no build, no icon loading)."""
+        focus on the search box + app list -- then moves it on-screen, raises it and arms
+        the grab/focus. Because the window and all rows already exist AND it stays mapped
+        (only moved, never re-mapped -- see hide_menu), this is essentially instant: no
+        build, no icon loading, and no widget-tree re-expose.
+
+        Ensures the window is mapped first (the daemon maps it off-screen at startup; this
+        deiconify is a no-op after that, and a safety net if a show ever precedes the
+        warm-up). The one-time first map is paid off-screen at login, never on a user open."""
         state["closed"] = False
         state["capturing"] = False  # arm() sets this True once the keyboard is ours
+        root.az_shown = True
         # Clean slate: clear the query (repopulates the full list in order), reset focus
         # to the default zone, and scroll back to the top.
         try:
@@ -736,14 +774,12 @@ def build_window(persistent: bool = False) -> tk.Tk:
         except tk.TclError:
             pass
         try:
-            # Apply the centered geometry BEFORE mapping. An overrideredirect window
-            # sits at X's default 0,0 (top-left) origin until positioned, and on the
-            # very FIRST show it has never been mapped, so a deiconify() (MapWindow)
-            # issued before the move makes X map it VISIBLY at the top-left and only then
-            # slide it to center -- the 'menu flashes at the top-left on the first click'
-            # bug. Positioning first means the window is only ever mapped at the correct
-            # spot. (Re-shows also need this: a withdrawn override-redirect window
-            # forgets its position with no WM to remember it.)
+            # Position at the centered spot, then ensure mapped + raised. The window is
+            # already mapped (off-screen) in daemon mode, so this just MOVES it on-screen
+            # -- the cheap, instant path (no re-expose of the widget tree). geometry is set
+            # before deiconify() so that if the window is somehow still unmapped (first show
+            # before warm-up), it maps directly at the centered spot and never flashes at
+            # the 0,0 top-left default.
             root.geometry(f"{win_w}x{win_h}+{x}+{y}")
             root.deiconify()
             root.lift()
@@ -756,9 +792,38 @@ def build_window(persistent: bool = False) -> tk.Tk:
         except tk.TclError:
             pass
 
+    def warmup_menu() -> None:
+        """DAEMON mode one-time cost prepayment: MAP the window off-screen and force a
+        full render, so the expensive first map (~600ms, worst of all) is paid ONCE at
+        login while the window is invisible -- not on the user's first Super press.
+
+        Populates the rows, parks the window off every screen, maps it, and flushes the
+        expose so all child X windows and glyph/pixmap caches are realised. It then leaves
+        the window MAPPED but off-screen (the hidden daemon state); every later show just
+        moves it on-screen (instant). Safe/idempotent: reset_view/populate are no-ops if
+        already done, and a second call just re-renders off-screen."""
+        try:
+            menu.populate()
+        except tk.TclError:
+            pass
+        try:
+            off_x = root.winfo_screenwidth() + OFFSCREEN_MARGIN
+            off_y = root.winfo_screenheight() + OFFSCREEN_MARGIN
+            root.geometry(f"{win_w}x{win_h}+{off_x}+{off_y}")
+            root.deiconify()      # the one and only real map -- off-screen, invisible
+            root.update()         # flush map + expose now (pays the first-map cost here)
+        except tk.TclError:
+            pass
+        # Mark hidden (mapped, off-screen). Far-past az_last_hidden so the first user show
+        # is never debounced.
+        root.az_shown = False
+        root.az_last_hidden = 0.0
+
     if persistent:
-        # Daemon mode: do NOT arm now. The window is built, then withdrawn by the
-        # daemon; arm()/grab happen on each show_menu().
+        # Daemon mode: do NOT arm now, and do NOT map on-screen. The daemon calls
+        # az_warmup() to map the window ONCE off-screen (prepaying the first-map cost),
+        # after which every az_show() just moves it on-screen instantly. arm()/grab happen
+        # on each show_menu().
         pass
     else:
         # Fire arm() the instant the window is mapped (after_idle), not on a fixed timer
@@ -779,6 +844,12 @@ def build_window(persistent: bool = False) -> tk.Tk:
     root.az_populate = menu.populate
     root.az_show = show_menu
     root.az_hide = hide_menu
+    root.az_warmup = warmup_menu
+    # Whether the menu is currently SHOWN (on-screen). In daemon mode the window stays
+    # mapped even when hidden (it is moved off-screen, not withdrawn), so winfo_viewable()
+    # can no longer tell shown from hidden -- this flag and the on-screen position do.
+    # False until the first az_show().
+    root.az_shown = False
     # Monotonic timestamp of the last hide, stamped by hide_menu on every close path.
     # The daemon reads it to debounce the xcape "Menu" echo of a Super close-tap so the
     # menu does not immediately re-open. Far in the past initially so the first show is

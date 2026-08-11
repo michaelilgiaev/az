@@ -1439,48 +1439,70 @@ def test_ui_power_row_centered_and_not_clipped() -> None:
 
 
 def test_ui_persistent_show_hide() -> None:
-    """Daemon mode: build_window(persistent=True) exposes az_show/az_hide that
-    hide (withdraw) the window instead of destroying it, so it can be re-shown.
-    A close (Escape/outside click) must HIDE, not destroy, when persistent."""
+    """Daemon mode: build_window(persistent=True) exposes az_show/az_hide that hide the
+    window by MOVING it OFF-SCREEN (not destroying, and NOT withdrawing) so it can be
+    re-shown instantly. A close (Escape/outside click) must HIDE, not destroy.
+
+    INSTANT-OPEN invariant: the window stays MAPPED across hide/show (withdraw+deiconify
+    re-exposes the whole widget tree, ~120-600ms -- the "slow first open"). So "hidden"
+    is a window that is still winfo_viewable() but parked off every screen, and az_shown
+    -- not winfo_viewable() -- is the shown/hidden source of truth."""
     import menu
     root = menu.build_window(persistent=True)
     try:
-        root.withdraw()
-        root.az_populate()
-        root.update_idletasks()
+        # Warm up exactly as the daemon does: maps the window ONCE off-screen and renders
+        # it, leaving it mapped-but-hidden. (Replaces the old withdraw + az_populate.)
+        root.az_warmup()
+        root.update()
         # Neutralise self-closing bindings so the update loop can't tear it down.
         root.unbind_all("<Button>")
 
-        # Show -> window becomes viewable and CENTERED on the screen.
-        root.az_show()
-        root.update()
-        assert root.winfo_viewable(), "az_show should map the window"
-        # Geometry re-applied on show: the window is centered, not stuck at the 0,0
-        # re-map default. We compute the expected top-left with the SAME formula the
-        # menu uses (clamped to >=0), so this is screen-size independent -- on a
-        # window TALLER than the (tiny headless) screen the y clamps to 0, but x is
-        # still centered, so the corner is never the (0,0) top-left default unless
-        # the whole window genuinely fills the screen.
         sw = root.winfo_screenwidth()
         sh = root.winfo_screenheight()
         win_w, win_h = menu.menu_size()
+
+        # After warm-up: mapped (viewable) but hidden off-screen, and NOT shown.
+        assert root.winfo_viewable(), "warm-up should MAP the window (stays mapped)"
+        assert root.az_shown is False, "warm-up leaves the menu hidden, not shown"
+        assert root.winfo_rootx() >= sw, (
+            "a hidden menu must be parked OFF-screen (x beyond the right edge); got "
+            f"x={root.winfo_rootx()} (screen width {sw})"
+        )
+
+        # Show -> window moves ON-screen, CENTERED, and az_shown flips True. We compute
+        # the expected top-left with the SAME formula the menu uses (clamped to >=0), so
+        # this is screen-size independent -- on a window TALLER than the (tiny headless)
+        # screen the y clamps to 0, but x is still centered.
+        root.az_show()
+        root.update()
+        assert root.winfo_viewable(), "az_show keeps the window mapped"
+        assert root.az_shown is True, "az_show must mark the menu shown"
         exp_x = max(0, (sw - win_w) // 2)
         exp_y = max(0, (sh - win_h) // 2)
         assert (root.winfo_rootx(), root.winfo_rooty()) == (exp_x, exp_y), (
-            "show must re-apply the CENTERED geometry; got "
+            "show must move the window to the CENTERED geometry; got "
             f"{(root.winfo_rootx(), root.winfo_rooty())} != {(exp_x, exp_y)}"
         )
 
-        # A normal close in persistent mode HIDES (window survives, withdrawn).
+        # A normal close in persistent mode HIDES: window survives, stays MAPPED, but is
+        # moved back off-screen and marked not-shown (never destroyed, never withdrawn).
         root.az_close()
         root.update()
         assert root.winfo_exists(), "persistent close must NOT destroy"
-        assert not root.winfo_viewable(), "persistent close should withdraw"
+        assert root.winfo_viewable(), "persistent close must NOT withdraw (stays mapped)"
+        assert root.az_shown is False, "persistent close must mark the menu hidden"
+        assert root.winfo_rootx() >= sw, (
+            "persistent close must park the window OFF-screen; got "
+            f"x={root.winfo_rootx()} (screen width {sw})"
+        )
 
-        # Re-show works again (proving it was hidden, not destroyed).
+        # Re-show works again (proving it was hidden, not destroyed): back on-screen.
         root.az_show()
         root.update()
-        assert root.winfo_viewable(), "should re-show after hide"
+        assert root.winfo_viewable() and root.az_shown is True, "should re-show after hide"
+        assert (root.winfo_rootx(), root.winfo_rooty()) == (exp_x, exp_y), (
+            "re-show must move the window back on-screen (centered)"
+        )
     finally:
         for _tid in list(getattr(root, "az_timers", [])):
             try:
@@ -1520,9 +1542,10 @@ def test_daemon_toggle_debounces_xcape_echo_after_close() -> None:
 
     root = menu.build_window(persistent=True)
     try:
-        root.withdraw()
-        root.az_populate()
-        root.update_idletasks()
+        # Warm up like the daemon (maps off-screen, leaves hidden). Replaces the old
+        # withdraw + az_populate; the window now stays mapped across hide/show.
+        root.az_warmup()
+        root.update()
         root.unbind_all("<Button>")
 
         # A stand-in for the daemon: real toggle logic, but show/hide just record so we
@@ -1534,18 +1557,21 @@ def test_daemon_toggle_debounces_xcape_echo_after_close() -> None:
             hide=lambda: calls.append("hide"),
         )
 
-        # 1. Window mapped -> toggle hides it (normal close via the launcher/Super path).
+        # 1. Window shown -> toggle hides it (normal close via the launcher/Super path).
+        #    toggle() reads az_shown (not winfo_viewable, which is always True now that the
+        #    hidden window stays mapped off-screen).
         root.az_show()
         root.update()
-        assert root.winfo_viewable(), "precondition: window shown"
+        assert root.az_shown is True, "precondition: window shown"
         daemon.Daemon.toggle(stub)
-        assert calls == ["hide"], f"a mapped toggle must hide; got {calls}"
+        assert calls == ["hide"], f"a shown toggle must hide; got {calls}"
 
-        # 2. Simulate the real close stamping az_last_hidden NOW and withdrawing, then the
-        #    xcape echo toggle landing immediately after. It must be SWALLOWED (no show).
-        root.az_hide()               # withdraws AND stamps az_last_hidden = now
+        # 2. Simulate the real close stamping az_last_hidden NOW and parking the window
+        #    off-screen, then the xcape echo toggle landing immediately after. It must be
+        #    SWALLOWED (no show).
+        root.az_hide()               # moves off-screen AND stamps az_last_hidden = now
         root.update()
-        assert not root.winfo_viewable(), "precondition: window hidden"
+        assert root.az_shown is False, "precondition: window hidden"
         calls.clear()
         daemon.Daemon.toggle(stub)   # the echo of the closing tap
         assert calls == [], (
@@ -1595,18 +1621,19 @@ def test_daemon_toggle_debounces_xcape_echo_after_close() -> None:
             pass
 
 
-def test_ui_persistent_first_show_positions_before_map() -> None:
-    """First open must NOT flash at the top-left (0,0) corner.
+def test_ui_persistent_warmup_maps_offscreen_never_flashes() -> None:
+    """First open must NOT flash at the top-left (0,0) corner, and must be INSTANT.
 
-    An override-redirect window that has never been mapped sits at X's default
-    0,0 origin. If az_show() calls deiconify() (MapWindow) BEFORE re-applying the
-    centered geometry, X maps it visibly at the top-left (0,0) and only then slides
-    it to center -- the 'menu flashes at top-left on the first click' bug. The
-    position must be set BEFORE the window is mapped, so geometry() must be called
-    before deiconify().
+    An override-redirect window that has never been mapped sits at X's default 0,0
+    origin, so a deiconify() (MapWindow) issued before positioning maps it VISIBLY at
+    the top-left -- the 'menu flashes at top-left on the first click' bug. The new design
+    removes that risk at the root: the daemon's WARM-UP maps the window exactly ONCE, and
+    it does so OFF-screen (geometry set before deiconify), paying the expensive first map
+    invisibly at login. Every later show only MOVES the already-mapped window on-screen,
+    so the window is NEVER mapped at 0,0 and no user open pays a map.
 
-    Asserted by call ORDER (WM-timing-independent) rather than a post-map winfo_
-    sample, which races the Configure flush and hid this bug in the sibling test.
+    Asserted by call ORDER (WM-timing-independent) for the geometry-before-map rule, plus
+    the resulting off-screen position, so a regression that maps on-screen-first is caught.
     """
     import menu
     root = menu.build_window(persistent=True)
@@ -1625,21 +1652,36 @@ def test_ui_persistent_first_show_positions_before_map() -> None:
 
     try:
         root.withdraw()
-        root.az_populate()
         root.update_idletasks()
         root.unbind_all("<Button>")
-        root.az_hide()  # withdrawn, never-mapped state == the real first show
 
         root.geometry = spy_geometry
         root.deiconify = spy_deiconify
-        root.az_show()
+        # Warm-up is the ONLY place the window is mapped; it must position (off-screen)
+        # BEFORE mapping so the one real map never happens at the 0,0 top-left.
+        root.az_warmup()
 
-        assert "deiconify" in order, "az_show must map the window"
-        assert "geometry" in order, "az_show must position the window"
+        assert "deiconify" in order, "warm-up must map the window"
+        assert "geometry" in order, "warm-up must position the window"
         assert order.index("geometry") < order.index("deiconify"), (
-            "first show maps at 0,0: geometry() must be applied BEFORE "
-            f"deiconify(), got order {order}"
+            "warm-up maps at 0,0: geometry() must be applied BEFORE deiconify(), got "
+            f"order {order}"
         )
+        # And the map lands OFF every screen (never visible), so nothing flashes.
+        root.update()
+        sw = root.winfo_screenwidth()
+        assert root.winfo_rootx() >= sw, (
+            "warm-up must map the window OFF-screen; got "
+            f"x={root.winfo_rootx()} (screen width {sw})"
+        )
+
+        # A subsequent show must NOT re-map (deiconify may be a harmless no-op, but the
+        # window is already mapped): it just moves on-screen. Verify no NEW map is needed
+        # by checking the window stays viewable throughout.
+        order.clear()
+        root.az_show()
+        root.update()
+        assert root.winfo_viewable(), "show must keep the window mapped (no re-map)"
     finally:
         root.geometry = real_geometry
         root.deiconify = real_deiconify
