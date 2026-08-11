@@ -252,3 +252,7 @@ dotnet-host
 calamares
 mailcap
 librewolf
+gedit
+gimp
+dolphin
+qalculate-gtk
