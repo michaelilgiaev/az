@@ -1,4 +1,4 @@
-"""azarch.paths -- the filesystem layout. The Docker bind mounts and the ownership
+"""paths -- the filesystem layout. The Docker bind mounts and the ownership
 handback all depend on these paths composing to exactly the right places, so a
 dropped path segment here is a silent, build-breaking regression.
 """
@@ -7,24 +7,26 @@ from __future__ import annotations
 
 import importlib
 
-from azarch import paths
+import paths
 
 
 def test_repodir_is_repo_root():
-    # paths.py is libraries/azarch/paths.py -> repo root is three parents up and
+    # paths.py is libraries/paths.py -> repo root is two parents up and
     # must contain the known top-level entries.
     assert (paths.REPODIR / "libraries").is_dir()
     assert (paths.REPODIR / "compile.sh").is_file()
 
 
 def test_static_dirs_are_under_repodir():
-    for d in (paths.LIBDIR, paths.PACKAGESDIR, paths.ASSETSDIR, paths.PKGDIR,
-              paths.CACHEDIR, paths.BUILDDIR, paths.LOGDIR, paths.CKBCOMP_SRC):
+    for d in (paths.LIBDIR, paths.PACKAGESDIR, paths.PATCHESDIR, paths.ASSETSDIR,
+              paths.PKGDIR, paths.CACHEDIR, paths.BUILDDIR, paths.LOGDIR,
+              paths.CKBCOMP_SRC):
         assert str(d).startswith(str(paths.REPODIR))
 
 
-def test_ckbcomp_src_is_inside_package():
-    assert paths.CKBCOMP_SRC == paths.REPODIR / "libraries" / "azarch" / "ckbcomp"
+def test_ckbcomp_src_is_a_patch_package():
+    assert paths.PATCHESDIR == paths.REPODIR / "libraries" / "patches"
+    assert paths.CKBCOMP_SRC == paths.PATCHESDIR / "ckbcomp" / "ckbcomp"
 
 
 def test_packagesdir_is_libraries_packages():
@@ -95,7 +97,7 @@ def test_workdir_docker_is_container_internal(monkeypatch):
 
 
 def test_in_docker_reads_dockerenv(monkeypatch):
-    import azarch.paths as p
+    import paths as p
 
     seen = {}
 

@@ -19,10 +19,12 @@ Both are derived deterministically from real signals:
     addition -- i.e. it is not reachable from any stock releng root. This is
     computed by specification_resolve from the edges, not guessed from names.
   * AZARCH_CONFIGURED  -- the subset of Az'arch Components the build demonstrably
-    customises. Grounded in the build's own configuration modules (libraries/azarch/
-    configuration/*.py): each entry says which package is touched and how. It no longer
-    defines a separate edition; it is surfaced as a per-package sub-note on the
-    Az'arch-Component packages that carry Az'arch-specific changes.
+    customises. Grounded in the build's own configuration-as-Python modules (the flat
+    compiler modules in libraries/, the upstream-tailoring patches in
+    libraries/patches/*/, and our own packages in libraries/packages/): each entry
+    says which package is touched and how. It no longer defines a separate edition;
+    it is surfaced as a per-package sub-note on the Az'arch-Component packages that
+    carry Az'arch-specific changes.
   * CATEGORY cascade   -- curated role map first (highest confidence), then Arch
     group membership, then name patterns, then a shared-library / description
     fallback. Every package lands in exactly one category; nothing is left blank.
@@ -38,10 +40,12 @@ import re
 # reconfigures. This is NOT an edition -- it is a per-package sub-note shown on
 # top of the `az'arch` (Az'arch-Component) edition.
 #
-# Source of truth: the build's own configuration modules. Each package here is one that
-# libraries/azarch/configuration/*.py demonstrably brands, configures, themes, replaces
-# or removes. `note` is the concrete, user-facing reason. `archiso` is the build
-# tool itself and is intentionally absent -- it never ships inside the ISO.
+# Source of truth: the build's own configuration-as-Python modules (flat compiler
+# modules in libraries/, upstream-tailoring patches in libraries/patches/*/, and our
+# own packages in libraries/packages/). Each package here is one those modules
+# demonstrably brand, configure, theme, replace or remove. `note` is the concrete,
+# user-facing reason. `archiso` is the build tool itself and is intentionally absent
+# -- it never ships inside the ISO.
 # --------------------------------------------------------------------------- #
 AZARCH_CONFIGURED = {
     "fastfetch":        "Custom Az' ANSI logo + config.jsonc replace the stock Arch fetch output",

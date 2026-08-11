@@ -330,9 +330,10 @@ def render(packages, resolved, tiers, tags, glance, svg_rel):
     d.w("Every external host and service the distribution talks to: where it "
         "downloads packages from, how it resolves the timezone and locale, and "
         "what it pings. Read live from the build configuration "
-        "(`libraries/azarch/configuration/*.py`), so this list cannot drift from what the "
-        "ISO actually does. The system is designed to work fully offline; these "
-        "are the endpoints used **when a network is available**.")
+        "(`libraries/pacman.py`, `libraries/installer.py`, and "
+        "`libraries/patches/calamares/locale.py`), so this list cannot drift from "
+        "what the ISO actually does. The system is designed to work fully offline; "
+        "these are the endpoints used **when a network is available**.")
     d.w()
     d.w("| Endpoint | Purpose | Where / notes |")
     d.w("|---|---|---|")
@@ -347,7 +348,7 @@ def render(packages, resolved, tiers, tags, glance, svg_rel):
         "the baked-in package cache used when no mirror is reachable.")
     d.w("- **Timezone / locale / keyboard** are auto-detected on first boot from a "
         "geo-IP lookup; if that host is unreachable the defaults (`en_US.UTF-8`, "
-        "`us`) apply. Change the provider in `libraries/azarch/configuration/locale.py`.")
+        "`us`) apply. Change the provider in `libraries/patches/calamares/locale.py`.")
     d.w("- **Time sync** uses systemd-timesyncd's default NTP servers, enabled only "
         "after the connectivity probe succeeds.")
     d.w()

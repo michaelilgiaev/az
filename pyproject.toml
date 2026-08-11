@@ -2,8 +2,9 @@
 #
 # The suite is driven by `bash tests.sh` (which builds the venv and sets
 # PYTHONPATH), but this configuration also makes a bare `pytest` invocation work from
-# inside an activated venv: pythonpath below adds both import roots so
-# `import azarch.*` and the flat `specification_*` modules resolve without any wrapper.
+# inside an activated venv: pythonpath below adds both import roots so the flat
+# compiler modules (compiler, paths, ...), the packages.* / patches.* packages, and
+# the flat `specification_*` modules all resolve without any wrapper.
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

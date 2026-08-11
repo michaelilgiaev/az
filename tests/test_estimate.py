@@ -1,4 +1,4 @@
-"""azarch.estimate -- the --estimate* heuristics (six flags, two tiers, three modes).
+"""estimate -- the --estimate* heuristics (six flags, two tiers, three modes).
 
 Everything here is PURE: the one function that touches the network (measure_mbps)
 is NEVER called live -- tests inject a bandwidth or monkeypatch measure_mbps, so
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from azarch import estimate
+import estimate
 
 
 # --- _fmt_hours (unchanged, kept as regression guards) ----------------------

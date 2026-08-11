@@ -1,9 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Az'arch Application Menu Daemon
-Comment=Keeps the Az'arch application menu resident so it opens instantly
-Exec=python3 /usr/local/lib/azarch-application-menu/daemon.py
-Icon=application-menu
-Terminal=false
-NoDisplay=true
-X-GNOME-Autostart-enabled=true

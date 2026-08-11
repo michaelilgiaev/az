@@ -1,4 +1,4 @@
-"""azarch.configuration.locale -- the static (English-only, Asia/Jerusalem) locale
+"""patches.calamares.locale -- the static (English-only, Asia/Jerusalem) locale
 setup plus the country->locale map retained as data for the deferred resolver.
 
 As of the "no auto-resolve" change the emitted setup bash is STATIC: it must NOT
@@ -12,7 +12,7 @@ the single source of truth those future commands will consume.
 
 from __future__ import annotations
 
-from azarch.configuration import locale
+from patches.calamares import locale
 
 
 def test_language_map_has_no_duplicate_country_codes():
@@ -260,7 +260,7 @@ def test_resolver_table_matches_calamares_patch_layout_codes():
     # the resolver table must also appear as a { "CC", "layout", "keymap" } row in
     # the Calamares region-keyboard C++ patch, so the guest resolver and the
     # installer never drift.
-    from azarch.configuration import pkgbuild
+    from packages.pkgbuild import pkgbuild
 
     patch = pkgbuild.calamares_region_keyboard_patch()
     for cc, (loc, layout, keymap, english) in locale.RESOLVER_COUNTRY_TABLE.items():

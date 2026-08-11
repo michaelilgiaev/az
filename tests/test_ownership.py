@@ -1,4 +1,4 @@
-"""azarch.ownership -- owner resolution + the WORKDIR-skip catastrophe guard.
+"""ownership -- owner resolution + the WORKDIR-skip catastrophe guard.
 
 Two behaviors here can silently relock the host's cache/ output/ logs/ trees or,
 worse, recurse into the live mkarchiso work tree that holds proc/sys/dev/run bind
@@ -27,7 +27,7 @@ import os
 
 import pytest
 
-from azarch import ownership
+import ownership
 
 
 # --------------------------------------------------------------------------

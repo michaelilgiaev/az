@@ -1,4 +1,4 @@
-"""azarch.configuration.profile -- profiledef.sh (the archiso profile mkarchiso sources).
+"""patches.profile -- profiledef.sh (the archiso profile mkarchiso sources).
 
 The file_permissions map is load-bearing: archiso NORMALIZES overlay file modes
 when it packs the squashfs, so any path that must stay executable in the live ISO
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 
-from azarch.configuration import profile
+import profile
 
 
 def test_profiledef_is_a_bash_script():
@@ -60,7 +60,7 @@ def test_application_menu_launcher_stays_executable():
     # squashfs mode normalization. Without this pin it ships 0644 (non-executable), so
     # clicking the icon runs a non-executable file and the menu never opens. The path
     # must match application_menu.MENU_LAUNCHER_SYSTEM_PATH (the Exec target).
-    from azarch.configuration import application_menu
+    from packages.application_menu import application_menu
     launcher = application_menu.MENU_LAUNCHER_SYSTEM_PATH
     assert launcher == "/usr/local/bin/azarch-application-menu"
     assert profile.FILE_PERMISSIONS[launcher] == "0:0:755"
@@ -70,7 +70,7 @@ def test_application_menu_launcher_stays_executable():
 def test_desktop_installer_launcher_stays_executable():
     # THE WARNING-BADGE FIX: KDE paints an "emblem-important" warning badge over a
     # Desktop .desktop launcher (and prompts on first launch) unless it is executable
-    # (KDesktopFile::isAuthorizedDesktopFile). steps.py emits it 0755, but archiso
+    # (KDesktopFile::isAuthorizedDesktopFile). compiler.py emits it 0755, but archiso
     # normalizes overlay modes to 0644 in the squashfs unless pinned here -- which is
     # exactly why the badge appeared. Pin both the live-user copy (uid 1000:998) and
     # the /etc/skel copy (root-owned) to 0755 so the shipped launcher is trusted.

@@ -1,4 +1,4 @@
-"""azarch.configuration.system -- the security-sensitive user/group databases, sudoers,
+"""patches.system -- the security-sensitive user/group databases, sudoers,
 OS branding, boot menus, and systemd units baked into the live ISO.
 
 These are pure Python string constants, but they are the ones where a silent
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 
-from azarch.configuration import system
+import system
 
 
 # --- passwd / shadow / group / gshadow: the user database -------------------
@@ -119,7 +119,7 @@ def test_customize_airootfs_brands_os_release():
 
 def test_customize_airootfs_has_no_plasma_leftovers():
     # KDE Plasma was removed and replaced with OpenBox; the desktop wallpaper is now
-    # painted by feh from the OpenBox session (configuration/desktop.py), NOT here.
+    # painted by feh from the OpenBox session (patches/openbox/openbox.py), NOT here.
     # Guard that no Plasma-specific chroot step (wallpaper rewrite, notifications
     # applet / krunner / kmenuedit removal, etc.) ever creeps back into this hook.
     s = system.CUSTOMIZE_AIROOTFS.lower()

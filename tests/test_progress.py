@@ -1,4 +1,4 @@
-"""azarch.progress -- the weighted, pinned-to-bottom build progress bar.
+"""progress -- the weighted, pinned-to-bottom build progress bar.
 
 The bar's numbers are what the human watches for the whole multi-minute build,
 and its milestone lines are the only durable checkpoints written to steps.log.
@@ -21,8 +21,8 @@ import io
 
 import pytest
 
-from azarch import progress
-from azarch.progress import ProgressBar
+import progress
+from progress import ProgressBar
 
 
 @pytest.fixture
@@ -519,7 +519,7 @@ def test_start_epoch_read_from_compile_start_env(steps_log, monkeypatch):
 
 
 def test_start_epoch_falls_back_to_now_when_unset(steps_log, monkeypatch):
-    # Running build.py directly (no shim) leaves _COMPILE_START unset; the bar must
+    # Running compiler.py directly (no shim) leaves _COMPILE_START unset; the bar must
     # fall back to the current time (frozen to 1000.0 by the frozen_clock fixture),
     # not crash or render a garbage clock.
     monkeypatch.delenv("_COMPILE_START", raising=False)

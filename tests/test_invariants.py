@@ -38,16 +38,18 @@ import re
 import pytest
 import yaml
 
-from azarch import build, makepkg, packages, paths, steps
-from azarch.configuration import (
-    calamares,
-    desktop,
-    installer,
-    locale,
-    pacman,
-    pkgbuild,
-    profile,
-)
+import compiler
+import makepkg
+import downloader
+import paths
+
+from patches.calamares import calamares
+from patches.openbox import openbox as desktop
+import installer
+from patches.calamares import locale
+import pacman
+from packages.pkgbuild import pkgbuild
+import profile
 import specification_classify
 import specification_content
 import specification_stock_baseline
@@ -149,7 +151,7 @@ def test_exactly_one_calamares_file_is_non_yaml():
 # ---------------------------------------------------------------------------
 
 def _tokenize(text: str) -> list[str]:
-    # The exact strip mkarchiso/packages._sync_and_download applies: everything
+    # The exact strip mkarchiso/downloader._sync_and_download applies: everything
     # from the first '#' is a comment, remainder stripped, empties dropped.
     return [tok for line in text.splitlines()
             if (tok := line.split("#", 1)[0].strip())]
@@ -251,24 +253,23 @@ def test_azarch_configured_keys_and_removed_are_stable():
 # 8. The deliberate _sudo asymmetry, parametrized across modules.
 # ---------------------------------------------------------------------------
 #
-# build/steps run cleanup on the Ctrl-C teardown path, so they pass `-n`
+# compiler runs cleanup on the Ctrl-C teardown path, so it passes `-n`
 # (non-interactive: a chown/unmount after the sudo timestamp expired fails fast
-# instead of hanging on a password prompt with no TTY). makepkg/packages run in
+# instead of hanging on a password prompt with no TTY). makepkg/downloader run in
 # the normal build flow where an interactive prompt is acceptable, so no `-n`.
-# All four collapse to [] when already root (no sudo binary needed).
+# All three collapse to [] when already root (no sudo binary needed).
 
 _SUDO_MODULES = [
-    ("build", build, ["sudo", "-n"]),
-    ("steps", steps, ["sudo", "-n"]),
+    ("compiler", compiler, ["sudo", "-n"]),
     ("makepkg", makepkg, ["sudo"]),
-    ("packages", packages, ["sudo"]),
+    ("downloader", downloader, ["sudo"]),
 ]
 
 
 @pytest.mark.parametrize("name,mod,expected_nonroot", _SUDO_MODULES,
                          ids=[m[0] for m in _SUDO_MODULES])
 def test_sudo_prefix_nonroot(name, mod, expected_nonroot, monkeypatch):
-    # paths is the single shared azarch.paths module object all four import by
+    # paths is the single shared paths module object all four import by
     # name, so patching is_root here reaches every _sudo() at once.
     monkeypatch.setattr(paths, "is_root", lambda: False)
     assert mod._sudo() == expected_nonroot
@@ -285,10 +286,9 @@ def test_teardown_modules_use_dash_n_build_modules_do_not(monkeypatch):
     # Locks the asymmetry as a single assertion so removing the `-n` from a
     # teardown module (re-introducing the password-prompt hang) fails loudly.
     monkeypatch.setattr(paths, "is_root", lambda: False)
-    assert "-n" in build._sudo()
-    assert "-n" in steps._sudo()
+    assert "-n" in compiler._sudo()
     assert "-n" not in makepkg._sudo()
-    assert "-n" not in packages._sudo()
+    assert "-n" not in downloader._sudo()
 
 
 # ---------------------------------------------------------------------------

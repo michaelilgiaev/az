@@ -46,11 +46,16 @@ DEFAULT_FULLTEXT = os.path.join(REPO_ROOT, "documentation",
 DEFAULT_HTML = os.path.join(REPO_ROOT, "documentation",
                             "SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html")
 DEFAULT_CACHE = os.path.join(REPO_ROOT, "cache", "specification-db")
-CONFIG_DIR = os.path.join(REPO_ROOT, "libraries", "azarch", "configuration")
-PROFILE_PY = os.path.join(CONFIG_DIR, "profile.py")
-PACMAN_PY = os.path.join(CONFIG_DIR, "pacman.py")
-LOCALE_PY = os.path.join(CONFIG_DIR, "locale.py")
-INSTALLER_PY = os.path.join(CONFIG_DIR, "installer.py")
+# These four modules are read as SOURCE TEXT for the regex extraction below (not
+# imported). After the libraries/ reclassification they no longer share one parent:
+# profile/pacman/installer are compiler config flat in libraries/, while locale is
+# the Calamares install-time locale block, which lives with the calamares patch. So
+# each path is built explicitly -- there is no single base dir any more.
+LIBRARIES_DIR = os.path.join(REPO_ROOT, "libraries")
+PROFILE_PY = os.path.join(LIBRARIES_DIR, "profile.py")
+PACMAN_PY = os.path.join(LIBRARIES_DIR, "pacman.py")
+INSTALLER_PY = os.path.join(LIBRARIES_DIR, "installer.py")
+LOCALE_PY = os.path.join(LIBRARIES_DIR, "patches", "calamares", "locale.py")
 
 
 def _read(path):
@@ -73,8 +78,10 @@ def read_endpoints():
     real configuration modules. Returns a list of (endpoint, purpose, context) rows so the
     specification stays honest if a mirror / service URL is changed.
 
-    Everything here is read from libraries/azarch/configuration/*.py -- the same strings
-    baked into the ISO -- so this is not a hand-maintained list that can drift.
+    Everything here is read from the real configuration modules (pacman.py,
+    installer.py in libraries/; locale.py in libraries/patches/calamares/) -- the
+    same strings baked into the ISO -- so this is not a hand-maintained list that
+    can drift.
     """
     rows = []
 

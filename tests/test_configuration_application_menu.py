@@ -1,4 +1,4 @@
-"""azarch.configuration.application_menu -- OUR application menu, baked into the ISO.
+"""packages.application_menu -- OUR application menu, baked into the ISO.
 
 KDE Plasma was removed; the desktop is OpenBox with no panel, so this menu is the
 WHOLE shell -- a borderless launcher CENTERED on the screen, opened by the Super key
@@ -6,7 +6,7 @@ WHOLE shell -- a borderless launcher CENTERED on the screen, opened by the Super
 
 These pin the contract that (a) the runtime files are emitted to the fixed system
 paths the launcher/session expect, (b) the constants shared with
-configuration/desktop.py agree, and (c) the emitted content is the real Tkinter menu
+patches/openbox/openbox.py agree, and (c) the emitted content is the real Tkinter menu
 wired to the launcher.
 
 They also pin the menu's look/behaviour: the window is borderless (overrideredirect,
@@ -27,14 +27,14 @@ import io
 import json
 import os
 
-from azarch.configuration import application_menu as am
-from azarch.configuration import desktop
+from packages.application_menu import application_menu as am
+from patches.openbox import openbox as desktop
 
 
 def test_emit_plan_targets_expected_system_paths():
-    # The panel icon (baked into desktop.plasma_appletsrc) points at
-    # MENU_DESKTOP_SYSTEM_PATH, whose Exec runs MENU_LAUNCHER_SYSTEM_PATH, which
-    # runs MENU_PY_SYSTEM_PATH. All three must be emitted, at these paths.
+    # The .desktop entry (MENU_DESKTOP_SYSTEM_PATH) and the Super-key binding both run
+    # MENU_LAUNCHER_SYSTEM_PATH, which starts the daemon that builds MENU_PY_SYSTEM_PATH.
+    # All three must be emitted, at these paths.
     dests = {e["dest"] for e in am.emit_plan()}
     assert am.MENU_PY_SYSTEM_PATH in dests
     assert am.MENU_LAUNCHER_SYSTEM_PATH in dests
@@ -58,8 +58,8 @@ def test_content_is_nonempty_and_is_the_tkinter_menu():
 
 
 def test_desktop_entry_launches_the_installed_launcher():
-    # The .desktop the icon points at must Exec the installed launcher and carry a
-    # menu icon, so clicking the panel icon runs our menu.
+    # The generated .desktop must Exec the installed launcher and carry a menu icon,
+    # so launching it by name (or the Super key) runs our menu.
     cp = configparser.ConfigParser(interpolation=None)
     cp.read_file(io.StringIO(am.menu_desktop()))
     entry = cp["Desktop Entry"]
@@ -68,7 +68,7 @@ def test_desktop_entry_launches_the_installed_launcher():
 
 
 def test_constants_match_desktop_module():
-    # desktop.py binds the Super key to the menu LAUNCHER and starts the DAEMON from the
+    # openbox.py binds the Super key to the menu LAUNCHER and starts the DAEMON from the
     # OpenBox autostart; a drift in these paths would wire the session to a path we never
     # installed.
     assert desktop.MENU_LAUNCHER == am.MENU_LAUNCHER_SYSTEM_PATH
@@ -80,14 +80,15 @@ def test_constants_match_desktop_module():
 
 def test_launcher_runs_the_daemon_which_runs_the_menu_module():
     # The menu now runs as a resident DAEMON (built once, kept hidden) so the icon
-    # opens it INSTANTLY. The launcher therefore execs daemon.py -- NOT menu.py
+    # opens it INSTANTLY. The launcher therefore starts daemon.py -- NOT menu.py
     # directly. This SUPERSEDES the earlier "launcher runs menu.py" contract, which
     # must not be re-asserted. The icon still opens our menu, just indirectly:
-    #   launcher (azarch-application-menu.sh) -> daemon.py -> imports menu.py
-    src = am.launcher_sh()
+    #   launcher (launcher.py, pure Python) -> daemon.py -> imports menu.py
+    src = am.launcher_py()
     # The launcher builds the daemon path as ${MENU_DIR}/daemon.py where MENU_DIR
     # defaults to MENU_LIB_DIR -- i.e. it resolves to MENU_DAEMON_PY_SYSTEM_PATH.
     # Assert both halves (the path is composed from a var, so it is not one literal).
+    assert src.startswith("#!/usr/bin/env python3")            # it is Python, not shell
     assert am.MENU_LIB_DIR in src                              # default install dir
     assert "daemon.py" in src                                  # ...runs daemon.py under it
     assert am.MENU_DAEMON_PY_SYSTEM_PATH == f"{am.MENU_LIB_DIR}/daemon.py"
@@ -111,9 +112,9 @@ def test_emit_ships_winwatch_module():
     # was launched -- that counting lives in winwatch.py, which daemon.py imports
     # (`from winwatch import ...`). So winwatch.py MUST be emitted into MENU_LIB_DIR
     # too, else the built ISO ships a daemon that dies at launch with
-    # `ImportError: No module named 'winwatch'`. This guards the second manifest
-    # (MENU_MODULES) staying in lock-step with the standalone install.sh: the repo
-    # tests would otherwise stay GREEN while the image shipped a broken daemon.
+    # `ImportError: No module named 'winwatch'`. This guards MENU_MODULES staying
+    # complete: the repo tests would otherwise stay GREEN while the image shipped a
+    # broken daemon.
     dests = {os.path.basename(e["dest"]) for e in am.emit_plan()}
     assert "winwatch.py" in dests
     assert f"{am.MENU_LIB_DIR}/winwatch.py" in {e["dest"] for e in am.emit_plan()}
@@ -126,7 +127,7 @@ def test_emit_ships_xfocus_module():
     # (ctypes/libX11 XSetInputFocus), which menu.py imports (`import xfocus`). It MUST
     # be emitted into MENU_LIB_DIR or the built ISO ships a menu.py that dies at launch
     # with `ImportError: No module named 'xfocus'`. Same manifest-drift guard as
-    # winwatch: keep MENU_MODULES in lock-step with the standalone install.sh.
+    # winwatch: keep MENU_MODULES complete.
     dests = {e["dest"] for e in am.emit_plan()}
     assert f"{am.MENU_LIB_DIR}/xfocus.py" in dests
     # menu.py really does depend on xfocus (so shipping it is not optional).
@@ -220,7 +221,7 @@ def test_usage_seed_matches_usagestore_format_and_is_home_owned():
     assert " " not in seed_txt  # compact form -> no spaces after ',' or ':'
 
     # It is emitted as a per-user (home-owned) data file so a fresh profile inherits
-    # it (and steps.py mirrors it into /etc/skel for Calamares-installed users).
+    # it (and compiler.py mirrors it into /etc/skel for Calamares-installed users).
     plan = {e["dest"]: e for e in desktop.emit_plan()}
     assert am.MENU_USAGE_SEED_SYSTEM_PATH in plan, am.MENU_USAGE_SEED_SYSTEM_PATH
     entry = plan[am.MENU_USAGE_SEED_SYSTEM_PATH]
@@ -231,11 +232,13 @@ def test_usage_seed_matches_usagestore_format_and_is_home_owned():
 
 
 def test_launcher_is_a_single_instance_toggle():
-    # A second click must CLOSE the menu, not open another: the launcher tracks a
-    # PID file and kills the live instance instead of stacking a new window.
-    src = am.launcher_sh()
+    # A second click must CLOSE the menu, not open another: the launcher (now pure
+    # Python) tracks a PID file and SIGUSR1-toggles the live instance instead of
+    # stacking a new window.
+    src = am.launcher_py()
     assert "PID_FILE" in src                        # tracks the running instance
     assert "azarch-application-menu.pid" in src
     assert "XDG_RUNTIME_DIR" in src                 # PID file under the runtime dir
-    assert "kill -0" in src                         # is the recorded instance alive?
-    assert "kill " in src                           # close-on-second-click path
+    assert "os.kill(pid, 0)" in src                 # is the recorded instance alive?
+    assert "SIGUSR1" in src                         # toggle (show/hide) on second click
+    assert "SIGUSR2" in src                         # force-show right after auto-start

@@ -1,4 +1,4 @@
-"""azarch.configuration.pacman -- the pacman.conf variants.
+"""patches.pacman -- the pacman.conf variants.
 
 These are pure string generators/transforms. The offline/online repo switching
 (switch_to_local_repo, append_local_repo) is exactly the brittle string surgery
@@ -8,7 +8,7 @@ contacts the network when it must not, or fails to find the local repo.
 
 from __future__ import annotations
 
-from azarch.configuration import pacman
+import pacman
 
 
 # --- download_conf: host-independent fetch configuration --------------------------

@@ -56,8 +56,9 @@ if [ ! -f "$STAMP" ] || [ "$(cat "$STAMP" 2>/dev/null)" != "$REQ_HASH" ]; then
 fi
 
 # --- 3. Run pytest. ----------------------------------------------------------
-# PYTHONPATH exposes both Python roots so tests can `import azarch.*` (the ISO
-# build driver, rooted at libraries/) and the flat spec_* modules (the
+# PYTHONPATH exposes both Python roots so tests can import the flat compiler
+# modules (compiler, paths, ...), the packages.* / patches.* packages (the ISO
+# build driver, rooted at libraries/) and the flat specification_* modules (the
 # specifications pipeline, rooted at scripts/libraries/). pytest options and
 # the test path live in pyproject.toml.
 export PYTHONPATH="$REPODIR/libraries:$REPODIR/scripts/libraries${PYTHONPATH:+:$PYTHONPATH}"

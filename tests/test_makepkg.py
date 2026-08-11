@@ -1,4 +1,4 @@
-"""azarch.makepkg -- the own-package build stage.
+"""makepkg -- the own-package build stage.
 
 The heavy lifting (makepkg, sudo, gpg) is io-heavy and not unit-tested here. The
 one pure, load-bearing branch is produced_names(): it decides which packages are
@@ -29,8 +29,8 @@ from pathlib import Path
 
 import pytest
 
-from azarch import makepkg
-from azarch.configuration import pkgbuild as pkgbuild_cfg
+import makepkg
+from packages.pkgbuild import pkgbuild as pkgbuild_cfg
 
 
 # A faithful slice of Arch's stock /etc/makepkg.conf DLAGENTS block: the local

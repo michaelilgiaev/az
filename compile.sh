@@ -3,8 +3,8 @@
 # azarch -- ISO build entrypoint (thin shim).
 #
 # The build itself is Python: everything (steps, staging, the package cache, the
-# progress bar, the ownership handback) lives in libraries/azarch/. This shim
-# only does the two things that genuinely must be bash BEFORE Python starts:
+# progress bar, the ownership handback) lives as flat modules in libraries/. This
+# shim only does the two things that genuinely must be bash BEFORE Python starts:
 #
 #   1. Prime sudo ONCE on the real controlling terminal. After the PTY re-exec
 #      below there is no interactive channel, so this is the only point a password
@@ -16,10 +16,10 @@
 #      (piping through plain tee makes them buffer and appear frozen for minutes
 #      during big downloads), and the process being a real tty is what lets the
 #      progress bar paint. `script` here writes its capture to /dev/null -- it is
-#      kept ONLY for the PTY. Python (azarch.logstream) owns logs/full.log itself,
+#      kept ONLY for the PTY. Python (logstream) owns logs/full.log itself,
 #      so the progress bar (painted to the raw terminal) never pollutes the log.
 #
-# Then it hands off to `python3 -m azarch.build`, which does the rest.
+# Then it hands off to `python3 -m compiler`, which does the rest.
 #
 # Every run builds BOTH ISO variants: the base `azarch` medium and the
 # `azarch-sshd` medium (identical contents, but named azarch-sshd-<ver>-x86_64.iso
@@ -43,7 +43,7 @@
 #                              --estimate-full-compile-only-network  full:    network only
 #                            The network variants run a short, timeout-bounded
 #                            bandwidth probe against an Arch mirror; still no sudo.
-# See azarch.build.
+# See compiler.py.
 
 set -o pipefail
 
@@ -57,9 +57,9 @@ mkdir -p "$LOGDIR"
 # Used at the very end to report how long the compile took, on success AND failure.
 # The SAME elapsed time also ticks LIVE during the build: _COMPILE_START (set below,
 # before the PTY re-exec) is exported through it, and the Python progress bar
-# (azarch.progress.ProgressBar) reads it to paint a once-a-second stopwatch inside
+# (progress.ProgressBar) reads it to paint a once-a-second stopwatch inside
 # the pinned bar -- so the duration is visible AS IT GROWS, not only at the end.
-# This bash helper mirrors azarch.progress.format_clock so both render identically.
+# This bash helper mirrors progress.format_clock so both render identically.
 _format_duration() {
     local secs=$1 h m s
     h=$(( secs / 3600 )); m=$(( (secs % 3600) / 60 )); s=$(( secs % 60 ))
@@ -79,7 +79,7 @@ for _arg in "$@"; do
     case "$_arg" in
         --estimate*)
             export PYTHONPATH="$REPODIR/libraries${PYTHONPATH:+:$PYTHONPATH}"
-            exec python3 -u -m azarch.build "$@"
+            exec python3 -u -m compiler "$@"
             ;;
     esac
 done
@@ -98,7 +98,7 @@ if [ -z "$_COMPILE_LOGGING" ]; then
     # reported. Whole seconds from the epoch (SECONDS/date are always available).
     export _COMPILE_START="$(date +%s)"
     # Truncate both logs so each launch overwrites the previous run's logs. Python
-    # (azarch.logstream / azarch.progress) reopens them in append mode afterwards.
+    # (logstream / progress) reopens them in append mode afterwards.
     : > "$FULL_LOG"
     : > "$STEPS_LOG"
     # Re-exec on a PTY. `script` flags: -q quiet, -e propagate child exit status,
@@ -115,15 +115,16 @@ if [ -z "$_COMPILE_LOGGING" ]; then
 fi
 
 # --- Under the PTY now: hand off to the Python build driver. ----------------
-# PYTHONPATH points at libraries/ so `import azarch` resolves. -u = unbuffered,
-# so the bar and build output interleave correctly on the PTY and in full.log.
+# PYTHONPATH points at libraries/ so the flat compiler modules (compiler, paths,
+# ...) and the patches.* packages resolve. -u = unbuffered, so the bar and build
+# output interleave correctly on the PTY and in full.log.
 export PYTHONPATH="$REPODIR/libraries${PYTHONPATH:+:$PYTHONPATH}"
 export _COMPILE_ONPTY
 # NOT exec'd (unlike before): the shell must OUTLIVE the Python build so it can stop
 # the stopwatch and report the elapsed time afterwards -- on success AND on failure.
 # We capture Python's exit code, print how long the compile took, then exit with that
 # same code so callers/CI still see the real build result.
-python3 -u -m azarch.build "$@"
+python3 -u -m compiler "$@"
 _rc=$?
 
 # Stop the stopwatch. _COMPILE_START was set before the PTY re-exec and exported

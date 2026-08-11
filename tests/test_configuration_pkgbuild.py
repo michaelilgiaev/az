@@ -1,4 +1,4 @@
-"""azarch.configuration.pkgbuild -- the Az'arch-authored package recipes.
+"""packages.pkgbuild -- the Az'arch-authored package recipes.
 
 These PKGBUILDs are Python f-strings emitted to disk and then fed verbatim to
 makepkg. Two failure modes here are silent and expensive:
@@ -39,7 +39,7 @@ from pathlib import Path
 
 import pytest
 
-from azarch.configuration import pkgbuild
+from packages.pkgbuild import pkgbuild
 
 
 _HEX = re.compile(r"\A[0-9a-fA-F]+\Z")
@@ -168,7 +168,7 @@ def test_librewolf_src_runs_bsys6_make_targets():
 def test_librewolf_src_make_build_caps_jobs():
     # `make build` alone lets Firefox's build spawn one job per core and pin the
     # whole machine. It must carry the -j cap fed via AZARCH_JOBS (exported by
-    # azarch.makepkg), defaulting to 1 when the var is unset.
+    # makepkg), defaulting to 1 when the var is unset.
     s = pkgbuild.pkgbuild_librewolf_src()
     assert 'make build -j"${AZARCH_JOBS:-1}"' in s
 
@@ -201,7 +201,7 @@ def test_calamares_pkgver_var_survives_brace_collapse():
 
 def test_calamares_cmake_build_caps_jobs():
     # `cmake --build build` auto-detects every core and pins the machine. It must
-    # carry the -j cap fed via AZARCH_JOBS (exported by azarch.makepkg), defaulting
+    # carry the -j cap fed via AZARCH_JOBS (exported by makepkg), defaulting
     # to 1 when unset. The brace pair in the recipe f-string must also have
     # collapsed to a single ${...} shell expansion.
     s = pkgbuild.pkgbuild_calamares()

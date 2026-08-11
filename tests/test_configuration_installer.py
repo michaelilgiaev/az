@@ -1,4 +1,4 @@
-"""azarch.configuration.installer -- the on-disk install pipeline scripts.
+"""patches.installer -- the on-disk install pipeline scripts.
 
 These generators emit the real .sh/.conf/.service files the ISO ships. They are
 pure string producers, but the strings are load-bearing in three brittle ways:
@@ -30,7 +30,7 @@ spot without depending on the locale module's exact content.
 
 from __future__ import annotations
 
-from azarch.configuration import installer
+import installer
 
 
 # --- every generator produces bash / configuration text ---------------------------

@@ -4,8 +4,8 @@ identical to the base one but named azarch-sshd-<ver>-x86_64.iso and auto-runnin
 
 A single `compile.sh` run builds BOTH ISOs (there is no build-time flag to pick
 one): every step up to mkarchiso is variant-independent, so the flow is
-compile.sh -> build.py -> steps.run(), which loops over steps.VARIANTS
-("base", "sshd") applying each variant's tiny differences via steps._apply_variant
+compile.sh -> compiler.py -> compiler.run(), which loops over compiler.VARIANTS
+("base", "sshd") applying each variant's tiny differences via compiler._apply_variant
 and running one mkarchiso pass each.
 
 The two observable per-variant effects, both checked here as pure data/emit (no
@@ -27,15 +27,16 @@ from __future__ import annotations
 import os
 import re
 
-from azarch import steps
-from azarch.configuration import profile, system
+import compiler
+import profile
+import system
 
 
 # --- both ISOs, no flag ------------------------------------------------------
 
 def test_variants_are_base_and_sshd():
     # A single build produces exactly these two ISOs, base first.
-    assert steps.VARIANTS == ("base", "sshd")
+    assert compiler.VARIANTS == ("base", "sshd")
 
 
 # --- profiledef iso_name per variant ----------------------------------------
@@ -119,14 +120,14 @@ def test_link_services_never_creates_the_sshd_link(tmp_path):
     # _link_services now only enables the variant-INDEPENDENT daemons; the sshd
     # enable-link is applied per-variant by _apply_variant, never here.
     root = tmp_path / "root"
-    steps._link_services(root)
+    compiler._link_services(root)
     assert not _link_dest(root).is_symlink()
     # The three always-on daemon links ARE created (sanity that the helper ran).
     always = root / "etc/systemd/system/multi-user.target.wants/NetworkManager.service"
     assert always.is_symlink()
 
 
-# --- steps._apply_variant: emit + enable only for the sshd variant ----------
+# --- compiler._apply_variant: emit + enable only for the sshd variant ----------
 
 def _svc_dest(airootfs):
     return airootfs / "etc/systemd/system/sshd-hypervisor-setup.service"
@@ -135,7 +136,7 @@ def _svc_dest(airootfs):
 def test_apply_variant_sshd_emits_and_enables_service(tmp_path):
     W = tmp_path / "profile"
     airootfs = W / "airootfs"
-    steps._apply_variant(W, airootfs, "sshd")
+    compiler._apply_variant(W, airootfs, "sshd")
     # The unit file is written...
     svc = _svc_dest(airootfs)
     assert svc.is_file()
@@ -151,7 +152,7 @@ def test_apply_variant_sshd_emits_and_enables_service(tmp_path):
 def test_apply_variant_base_has_no_sshd_service_or_link(tmp_path):
     W = tmp_path / "profile"
     airootfs = W / "airootfs"
-    steps._apply_variant(W, airootfs, "base")
+    compiler._apply_variant(W, airootfs, "base")
     assert not _svc_dest(airootfs).exists()
     assert not _link_dest(airootfs).is_symlink()
     assert _iso_name((W / "profiledef.sh").read_text()) == "azarch"
@@ -164,10 +165,10 @@ def test_apply_variant_base_after_sshd_removes_the_leftover(tmp_path):
     # _apply_variant("base") affirmatively removes both even when they pre-exist.
     W = tmp_path / "profile"
     airootfs = W / "airootfs"
-    steps._apply_variant(W, airootfs, "sshd")   # leave the sshd artifacts in place
+    compiler._apply_variant(W, airootfs, "sshd")   # leave the sshd artifacts in place
     assert _svc_dest(airootfs).is_file()
     assert _link_dest(airootfs).is_symlink()
-    steps._apply_variant(W, airootfs, "base")   # base pass must clean them up
+    compiler._apply_variant(W, airootfs, "base")   # base pass must clean them up
     assert not _svc_dest(airootfs).exists()
     assert not _link_dest(airootfs).is_symlink()
 
@@ -177,7 +178,7 @@ def test_run_signature_has_no_variant_param():
     # it must NOT take a `variant` argument (a stray one would resurrect the old
     # one-ISO-per-run behaviour).
     import inspect
-    params = inspect.signature(steps.run).parameters
+    params = inspect.signature(compiler.run).parameters
     assert "variant" not in params
 
 
@@ -186,7 +187,7 @@ def test_run_calls_mkarchiso_once_per_variant():
     # append each returned ISO. Assert the finalize loop iterates VARIANTS and calls
     # _run_mkarchiso inside it.
     import inspect
-    src = inspect.getsource(steps.run)
+    src = inspect.getsource(compiler.run)
     assert "for variant in VARIANTS" in src
     assert "_run_mkarchiso(" in src
     assert "_apply_variant(" in src
@@ -201,7 +202,7 @@ def test_mkarchiso_pass_resets_work_dir_before_running():
     # mkarchiso. Assert the reset (rm -rf of the work dir) happens in _run_mkarchiso
     # BEFORE the mkarchiso subprocess is spawned.
     import inspect
-    src = inspect.getsource(steps._run_mkarchiso)
+    src = inspect.getsource(compiler._run_mkarchiso)
     # A work-dir wipe must be present...
     assert 'rm", "-rf"' in src and 'W / "work"' in src, \
         "_run_mkarchiso must rm -rf the work dir so each variant is a fresh mkarchiso pass"
@@ -226,5 +227,5 @@ def test_iso_selection_glob_distinguishes_base_from_sshd():
     assert sshd_hits == ["azarch-sshd-2026.07.31-x86_64.iso"]
     # And the source really uses the digit-anchored glob (not a bare "-*.iso").
     import inspect
-    src = inspect.getsource(steps._run_mkarchiso)
+    src = inspect.getsource(compiler._run_mkarchiso)
     assert '{iso_name}-[0-9]*.iso' in src

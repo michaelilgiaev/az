@@ -1,4 +1,4 @@
-"""azarch.logstream -- the _Tee that mirrors build output into logs/full.log.
+"""logstream -- the _Tee that mirrors build output into logs/full.log.
 
 Why these tests matter: every print() and sys.stderr.write in the build funnels
 through the _Tee installed here. Two behaviors are load-bearing and have each
@@ -29,8 +29,8 @@ import sys
 
 import pytest
 
-from azarch import logstream
-from azarch.logstream import _Tee
+import logstream
+from logstream import _Tee
 
 
 # --- write(): mirror the SAME bytes to both streams ------------------------
