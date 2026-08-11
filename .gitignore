@@ -5,3 +5,6 @@ __pycache__/
 *.pycshould
 venv/
 .pytest_cache/
+libraries/packages/application_menu/*.o
+libraries/packages/application_menu/azarch-application-menu-daemon
+tests/test_apps

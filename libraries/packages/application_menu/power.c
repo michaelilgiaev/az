@@ -14,10 +14,48 @@ typedef struct {
     gboolean        hover;
     GtkWidget     **row;        /* the whole button row (borrowed), for sibling clear */
     int             row_n;
+    AzPowerHoverFn  hover_cb;   /* fired when this button becomes hovered (moves focus) */
+    gpointer        hover_user;
 } PowerBtn;
 
 static PowerBtn *btn_of(GtkWidget *w) {
     return g_object_get_data(G_OBJECT(w), "pbtn");
+}
+
+/* Horizontal OPAQUE bounds of a pixbuf: first (*x0) and last (*x1) column that
+ * contains any pixel with alpha above a small threshold. Breeze icons carry
+ * transparent padding that is NOT symmetric, so the icon's visible ink sits off-
+ * centre inside its pixbuf box; geometrically centring the box therefore pushes the
+ * ink a few px left of true centre (the "3-7px left-heavier" the user measured).
+ * Centring on THESE bounds instead lands the visible ink dead-centre.
+ *
+ * Returns FALSE (leaving the out-params untouched) when there is nothing to trim: no
+ * pixbuf, no alpha channel (every pixel opaque, e.g. the flat placeholder), or a
+ * fully-transparent image -- so the caller falls back to the full box, which is the
+ * correct behaviour in every one of those cases. */
+static gboolean icon_ink_hbounds(GdkPixbuf *p, int *x0, int *x1) {
+    if (!p || !gdk_pixbuf_get_has_alpha(p)) return FALSE;
+    int w = gdk_pixbuf_get_width(p);
+    int h = gdk_pixbuf_get_height(p);
+    int nch = gdk_pixbuf_get_n_channels(p);          /* 4 (RGBA) when has_alpha */
+    int stride = gdk_pixbuf_get_rowstride(p);
+    const guchar *base = gdk_pixbuf_read_pixels(p);
+    if (w <= 0 || h <= 0 || nch < 4 || !base) return FALSE;
+
+    const int ALPHA_MIN = 24;                        /* ignore near-transparent AA fringe */
+    int lo = w, hi = -1;
+    for (int y = 0; y < h; y++) {
+        const guchar *row = base + (gsize)y * stride;
+        for (int x = 0; x < w; x++) {
+            if (row[x * nch + 3] > ALPHA_MIN) {      /* channel 3 is alpha */
+                if (x < lo) lo = x;
+                if (x > hi) hi = x;
+            }
+        }
+    }
+    if (hi < lo) return FALSE;                        /* fully transparent */
+    *x0 = lo; *x1 = hi;
+    return TRUE;
 }
 
 /* True if any button in the row is currently hovered. */
@@ -42,9 +80,10 @@ static gboolean power_draw(GtkWidget *w, cairo_t *cr, gpointer data) {
      * Giving hover the same fill+outline makes mouse hover as obvious as TAB focus.
      *
      * Hover TAKES OVER from TAB: while the mouse is over any button, only that button is
-     * lit and the TAB-focused button goes dark; when the mouse leaves the row, the
-     * TAB-focused button lights again (its `focused` flag is untouched by hover, so TAB
-     * state is preserved unless TAB itself moves it). */
+     * lit and any other lit button goes dark. And the highlight STAYS PUT after the pointer
+     * leaves -- hovering a button moves the keyboard focus onto it (via hover_cb -> the
+     * menu), so on leave `hover` clears but `focused` is now this same button and it stays
+     * lit. No snap-back to a previous TAB position; a later TAB/arrow moves from here. */
     gboolean lit = pb->hover || (focused && !row_any_hover(pb));
     GdkRGBA c;
     gdk_rgba_parse(&c, lit ? AZ_SELECT_FILL : AZ_BG_COLOR);
@@ -77,17 +116,40 @@ static gboolean power_draw(GtkWidget *w, cairo_t *cr, gpointer data) {
     int tw, th;
     pango_layout_get_pixel_size(lay, &tw, &th);
 
+    /* Centre on the icon's OPTICAL INK, not its pixbuf box. The Breeze pixbuf has
+     * asymmetric transparent padding, so ink_x0 (first opaque column) and ink_x1 (last)
+     * bound the actually-visible glyph; ink_x0>0 means dead space on the left. We lay the
+     * block out on those bounds so the icon's left ink edge and the label's right edge sit
+     * an equal margin from the cell walls (per-cell left_margin == right_margin), and we
+     * meter the icon->text gap from the ink's RIGHT edge (ink_x1) rather than the box edge,
+     * so the visual space between glyph and text is exactly `gap` regardless of padding.
+     * Falls back to the full box (ink_x0=0, ink_x1=iw-1) when there is no ink to trim
+     * (no alpha channel or a fully-transparent pixbuf); the opaque placeholder has alpha
+     * so it is scanned and simply yields full-box bounds -- same geometric result.
+     * NOTE: the block's right edge is the text's LOGICAL width tw; this assumes the label
+     * has ~0 trailing side-bearing (true for the four session labels in Noto Sans, checked
+     * to <=1px). A relabel to a glyph with large right overhang would meter the right edge
+     * a hair early and could reintroduce a small right-lean -- re-check the ink margins. */
+    int ink_x0 = 0, ink_x1 = iw - 1;
+    if (pb->icon) icon_ink_hbounds(pb->icon, &ink_x0, &ink_x1);
+    int ink_w = pb->icon ? (ink_x1 - ink_x0 + 1) : 0;   /* visible icon width */
+
     int gap = pb->icon ? 8 : 0;           /* Tk icon padx=(0,8); no gap if no icon */
     double cy = a.height / 2.0;
-    int total = iw + gap + tw;            /* this block's true visible width */
-    double x0 = round((a.width - total) / 2.0);
+    /* Visible block = [icon ink][gap][text]; span it and centre that span. */
+    int visible = ink_w + gap + tw;
+    /* draw_x is the pixbuf's paint origin; the ink then begins at draw_x + ink_x0. Solve
+     * for equal margins: (draw_x + ink_x0) == a.width - (draw_x + ink_x0 + visible). */
+    double draw_x = round((a.width - visible) / 2.0) - ink_x0;
     if (pb->icon) {
-        gdk_cairo_set_source_pixbuf(cr, pb->icon, x0, round(cy - ih / 2.0));
+        gdk_cairo_set_source_pixbuf(cr, pb->icon, draw_x, round(cy - ih / 2.0));
         cairo_paint(cr);
     }
     gdk_rgba_parse(&c, AZ_TEXT_COLOR);
     cairo_set_source_rgba(cr, c.red, c.green, c.blue, c.alpha);
-    cairo_move_to(cr, x0 + iw + gap, round(cy - th / 2.0));
+    /* Text starts `gap` past the icon ink's right edge (draw_x + ink_x1 + 1). */
+    double text_x = pb->icon ? (draw_x + ink_x1 + 1 + gap) : draw_x;
+    cairo_move_to(cr, round(text_x), round(cy - th / 2.0));
     pango_cairo_show_layout(cr, lay);
 
     pango_font_description_free(fd);
@@ -117,8 +179,15 @@ static void redraw_row(PowerBtn *pb, GtkWidget *self) {
 
 /* Set this button hovered/not. When it becomes hovered, clear every sibling's hover so
  * at most one button is ever hovered (moving between adjacent buttons under the grab may
- * not deliver a leave to the one we left, which would otherwise leave it stuck lit). */
+ * not deliver a leave to the one we left, which would otherwise leave it stuck lit).
+ *
+ * On the rising edge (not-hovered -> hovered) we also fire hover_cb, which the menu uses
+ * to MOVE the keyboard focus onto this button. That is what makes the highlight STAY here
+ * after the pointer leaves: `hover` clears on leave but `focused` now points at this same
+ * button, so power_draw keeps it lit -- no snap-back to the old TAB position. Rising-edge
+ * only, so a stream of motion events over one button does not re-fire it. */
 static void set_hover(PowerBtn *pb, GtkWidget *w, gboolean on) {
+    gboolean rising = (on && !pb->hover);
     gboolean changed = (pb->hover != on);
     if (on && pb->row) {
         for (int i = 0; i < pb->row_n; i++) {
@@ -127,6 +196,7 @@ static void set_hover(PowerBtn *pb, GtkWidget *w, gboolean on) {
         }
     }
     if (pb->hover != on) pb->hover = on;
+    if (rising && pb->hover_cb) pb->hover_cb(pb->hover_user, w);
     if (changed) redraw_row(pb, w);
 }
 
@@ -184,6 +254,14 @@ void az_power_row_set_siblings(GtkWidget **btns, int n) {
     for (int i = 0; i < n; i++) {
         PowerBtn *pb = btn_of(btns[i]);
         if (pb) { pb->row = btns; pb->row_n = n; }
+    }
+}
+
+/* Register the hover->focus promotion callback on every button in the row. */
+void az_power_row_set_hover_cb(GtkWidget **btns, int n, AzPowerHoverFn cb, gpointer user) {
+    for (int i = 0; i < n; i++) {
+        PowerBtn *pb = btn_of(btns[i]);
+        if (pb) { pb->hover_cb = cb; pb->hover_user = user; }
     }
 }
 

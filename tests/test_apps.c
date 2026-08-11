@@ -1,6 +1,9 @@
 /* Az'arch application menu (C port) -- unit tests for the hidden-id / installer
- * swap and app scanning. Built with `make test` (see Makefile); links apps.o and
- * its deps. Pure asserts, no framework -- exits non-zero on first failure.
+ * swap and app scanning. Lives in the repo-root tests/ dir (the single home for the
+ * suite) and is built with `make -C tests test`, which compiles this against the
+ * SHIPPING apps.c from libraries/packages/application_menu/ (resolved via the tests
+ * Makefile's -I). The top-level `make test` delegates here. Pure asserts, no
+ * framework -- exits non-zero on first failure.
  *
  * The key contract (the installer fix): calamares.desktop is HIDDEN (its stock
  * "Install System" entry runs a dead `pkexec calamares` with no polkit agent),

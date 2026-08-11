@@ -18,6 +18,11 @@
 
 typedef void (*AzPowerAction)(void);          /* az_suspend / az_lock_session / ... */
 typedef void (*AzPowerBeforeFn)(gpointer);    /* run before the action (hide the menu) */
+/* Fired the moment the pointer settles on a button: `btn` is that button, `user` is the
+ * value handed to az_power_row_set_hover_cb. The menu uses it to MOVE the keyboard focus
+ * onto the hovered button, so when the pointer later leaves, the highlight stays put
+ * instead of snapping back to wherever TAB focus was. */
+typedef void (*AzPowerHoverFn)(gpointer user, GtkWidget *btn);
 
 /* Build one power button. `before(before_user)` runs first on click (to hide the
  * menu), then `action()`. `icons` resolves the Breeze icon at POWER_ICON_SIZE. */
@@ -32,8 +37,14 @@ void az_power_button_clear_hover(GtkWidget *btn);
 
 /* Give every button a reference to the whole row (borrowed array of `n` widgets) so
  * hover can (a) stay exclusive to one button and (b) take over the TAB-focus highlight
- * while the mouse is over the row, reverting to the focused button on leave. Call once
- * after all buttons are created and gridded. */
+ * while the mouse is over the row. On leave the highlight STAYS on the last-hovered
+ * button (the menu, via the hover callback below, moves focus there). Call once after all
+ * buttons are created and gridded. */
 void az_power_row_set_siblings(GtkWidget **btns, int n);
+
+/* Register the callback fired when the pointer settles on a button (see AzPowerHoverFn).
+ * Call once after the row is built. Passing cb=NULL disables promotion (hover then simply
+ * reverts to the TAB-focused button on leave, the old behaviour). */
+void az_power_row_set_hover_cb(GtkWidget **btns, int n, AzPowerHoverFn cb, gpointer user);
 
 #endif /* AZ_POWER_H */
