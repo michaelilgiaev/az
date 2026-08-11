@@ -14,8 +14,11 @@ typedef struct {
     gboolean        hover;
     GtkWidget     **row;        /* the whole button row (borrowed), for sibling clear */
     int             row_n;
-    AzPowerHoverFn  hover_cb;   /* fired when this button becomes hovered (moves focus) */
-    gpointer        hover_user;
+    /* The last button the pointer hovered, shared across the row (every button holds the
+     * same pointer). Once the pointer leaves the row this button STAYS lit, so the
+     * highlight does not snap back to the TAB-focused button. Cleared by az_power_row_
+     * clear_sticky when the keyboard moves focus. */
+    GtkWidget      *last_hover;
 } PowerBtn;
 
 static PowerBtn *btn_of(GtkWidget *w) {
@@ -79,12 +82,17 @@ static gboolean power_draw(GtkWidget *w, cairo_t *cr, gpointer data) {
      * at all" -- the user only ever saw the highlight on TAB, which drew the outline.
      * Giving hover the same fill+outline makes mouse hover as obvious as TAB focus.
      *
-     * Hover TAKES OVER from TAB: while the mouse is over any button, only that button is
-     * lit and any other lit button goes dark. And the highlight STAYS PUT after the pointer
-     * leaves -- hovering a button moves the keyboard focus onto it (via hover_cb -> the
-     * menu), so on leave `hover` clears but `focused` is now this same button and it stays
-     * lit. No snap-back to a previous TAB position; a later TAB/arrow moves from here. */
-    gboolean lit = pb->hover || (focused && !row_any_hover(pb));
+     * Hover TAKES OVER from TAB, and the highlight STICKS where the mouse last was:
+     *   - while the pointer is over the row, only the hovered button is lit;
+     *   - once the pointer leaves the row, the LAST-hovered button stays lit (last_hover),
+     *     rather than snapping back to the TAB-focused button;
+     *   - only if the pointer never touched the row does the plain TAB `focused` button
+     *     light. Pressing TAB/arrow calls az_power_row_clear_sticky, dropping last_hover so
+     *     the keyboard highlight cleanly takes over again.
+     * Precedence: live hover > last-hover sticky > TAB focus. */
+    GtkWidget *sticky = pb->last_hover;
+    gboolean lit = pb->hover ||
+                   (!row_any_hover(pb) && (sticky ? (w == sticky) : focused));
     GdkRGBA c;
     gdk_rgba_parse(&c, lit ? AZ_SELECT_FILL : AZ_BG_COLOR);
     cairo_set_source_rgba(cr, c.red, c.green, c.blue, c.alpha);
@@ -177,26 +185,34 @@ static void redraw_row(PowerBtn *pb, GtkWidget *self) {
         gtk_widget_queue_draw(pb->row[i]);
 }
 
+/* Point every button in the row at the same `sticky` widget (the last one hovered), so
+ * they all agree on which button stays lit once the pointer leaves the row. */
+static void row_set_last_hover(PowerBtn *pb, GtkWidget *sticky) {
+    if (!pb->row) { pb->last_hover = sticky; return; }
+    for (int i = 0; i < pb->row_n; i++) {
+        PowerBtn *o = btn_of(pb->row[i]);
+        if (o) o->last_hover = sticky;
+    }
+}
+
 /* Set this button hovered/not. When it becomes hovered, clear every sibling's hover so
  * at most one button is ever hovered (moving between adjacent buttons under the grab may
- * not deliver a leave to the one we left, which would otherwise leave it stuck lit).
- *
- * On the rising edge (not-hovered -> hovered) we also fire hover_cb, which the menu uses
- * to MOVE the keyboard focus onto this button. That is what makes the highlight STAY here
- * after the pointer leaves: `hover` clears on leave but `focused` now points at this same
- * button, so power_draw keeps it lit -- no snap-back to the old TAB position. Rising-edge
- * only, so a stream of motion events over one button does not re-fire it. */
+ * not deliver a leave to the one we left, which would otherwise leave it stuck lit), and
+ * record it as the row's last_hover so it STAYS lit after the pointer leaves (no snap-back
+ * to the TAB position). Leaving a button does NOT clear last_hover -- that is the whole
+ * point; the sticky highlight persists until the keyboard moves focus. */
 static void set_hover(PowerBtn *pb, GtkWidget *w, gboolean on) {
-    gboolean rising = (on && !pb->hover);
     gboolean changed = (pb->hover != on);
-    if (on && pb->row) {
-        for (int i = 0; i < pb->row_n; i++) {
-            PowerBtn *o = btn_of(pb->row[i]);
-            if (o && o != pb && o->hover) { o->hover = FALSE; changed = TRUE; }
+    if (on) {
+        if (pb->row) {
+            for (int i = 0; i < pb->row_n; i++) {
+                PowerBtn *o = btn_of(pb->row[i]);
+                if (o && o != pb && o->hover) { o->hover = FALSE; changed = TRUE; }
+            }
         }
+        if (pb->last_hover != w) { row_set_last_hover(pb, w); changed = TRUE; }
     }
     if (pb->hover != on) pb->hover = on;
-    if (rising && pb->hover_cb) pb->hover_cb(pb->hover_user, w);
     if (changed) redraw_row(pb, w);
 }
 
@@ -242,10 +258,14 @@ static void power_free(gpointer data, GClosure *closure) {
 
 void az_power_button_clear_hover(GtkWidget *btn) {
     PowerBtn *pb = g_object_get_data(G_OBJECT(btn), "pbtn");
-    if (pb && pb->hover) {
-        pb->hover = FALSE;
-        redraw_row(pb, btn);
-    }
+    if (!pb) return;
+    gboolean changed = FALSE;
+    if (pb->hover) { pb->hover = FALSE; changed = TRUE; }
+    /* Also drop the sticky "last hovered" highlight, so the menu does not RE-OPEN showing a
+     * button lit from a previous session's mouse position (the off-screen hide delivers no
+     * leave-notify to clear it otherwise -- the same reason hover itself is cleared here). */
+    if (pb->last_hover) { row_set_last_hover(pb, NULL); changed = TRUE; }
+    if (changed) redraw_row(pb, btn);
 }
 
 /* Tell every button about the full row so it can (a) keep at most one button hovered
@@ -257,11 +277,14 @@ void az_power_row_set_siblings(GtkWidget **btns, int n) {
     }
 }
 
-/* Register the hover->focus promotion callback on every button in the row. */
-void az_power_row_set_hover_cb(GtkWidget **btns, int n, AzPowerHoverFn cb, gpointer user) {
-    for (int i = 0; i < n; i++) {
-        PowerBtn *pb = btn_of(btns[i]);
-        if (pb) { pb->hover_cb = cb; pb->hover_user = user; }
+/* Drop the row's sticky "last hovered" highlight (repaints). Called by the menu when TAB
+ * or an arrow moves power-row focus, so the keyboard highlight takes over from a stale
+ * mouse-hover after-image. */
+void az_power_row_clear_sticky(GtkWidget *any_btn) {
+    PowerBtn *pb = btn_of(any_btn);
+    if (pb && pb->last_hover) {
+        row_set_last_hover(pb, NULL);
+        redraw_row(pb, any_btn);
     }
 }
 

@@ -301,25 +301,10 @@ static void set_focus_zone(AzMenu *m, FocusZone zone) {
 }
 
 static void move_power_focus(AzMenu *m, int delta) {
+    /* An explicit arrow press takes the highlight back from any mouse-hover after-image. */
+    az_power_row_clear_sticky(m->power_buttons[0]);
     m->power_index = CLAMP(m->power_index + delta, 0, 3);
     apply_power_focus(m);
-}
-
-/* Pointer settled on a power button -> make it the FOCUSED button. This moves keyboard
- * focus into the power row and onto the hovered button, so once the pointer leaves, the
- * highlight stays on it (power_draw keeps a `focused` button lit) instead of snapping back
- * to the previous TAB position. A later TAB/arrow then moves relative to here. */
-static void on_power_hover(gpointer user, GtkWidget *btn) {
-    AzMenu *m = user;
-    for (int i = 0; i < 4; i++) {
-        if (m->power_buttons[i] == btn) {
-            if (m->focus_zone == FOCUS_POWER && m->power_index == i)
-                return;                 /* already the focused button: nothing to do */
-            m->power_index = i;
-            set_focus_zone(m, FOCUS_POWER);
-            return;
-        }
-    }
 }
 
 /* Hide the menu before a power action fires (widgets.py PowerButton._do wrapper).
@@ -353,6 +338,8 @@ static gboolean on_key_press(GtkWidget *w, GdkEventKey *e, gpointer user) {
         hide_menu(m); return TRUE;
     }
     if (kv == GDK_KEY_Tab || kv == GDK_KEY_ISO_Left_Tab) {
+        /* An explicit TAB takes the highlight back from any mouse-hover after-image. */
+        az_power_row_clear_sticky(m->power_buttons[0]);
         if (m->focus_zone == FOCUS_APPS) {
             /* TAB into the power row lands on "Shut Down" (index 3), not wherever the
              * previous visit left the cursor. */
@@ -587,12 +574,10 @@ static void build_window(AzMenu *m) {
         m->power_buttons[i] = btn;
     }
     /* Each power button centres its own icon+label block in its equal-width cell
-     * (see power_draw), so no shared-column alignment pass is needed. Hand each button
-     * the whole row so mouse hover stays exclusive and takes over the TAB highlight, and
-     * register the hover->focus promotion so the highlight sticks where the mouse last was
-     * (on_power_hover moves keyboard focus onto the hovered button). */
+     * (see power_draw), so no shared-column alignment pass is needed. Hand each button the
+     * whole row so mouse hover stays exclusive, takes over the TAB highlight, and STICKS on
+     * the last-hovered button after the pointer leaves (see power.c). */
     az_power_row_set_siblings(m->power_buttons, 4);
-    az_power_row_set_hover_cb(m->power_buttons, 4, on_power_hover, m);
 
     gtk_widget_add_events(m->win, GDK_KEY_PRESS_MASK | GDK_BUTTON_PRESS_MASK);
     g_signal_connect(m->win, "key-press-event", G_CALLBACK(on_key_press), m);

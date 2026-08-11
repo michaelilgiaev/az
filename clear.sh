@@ -38,9 +38,33 @@ for d in "${targets[@]}"; do
   fi
 done
 
+# Sweep every __pycache__ directory in the project (pytest/imports scatter them under
+# tests/, libraries/, scripts/, ...). They are build junk, never tracked, and a stale one
+# can shadow a just-edited module -- so wipe them all on a clear. Reported like the dirs
+# above. Prune venv/ so we don't churn its thousands of cached stdlib entries.
 echo
-if [ "$deleted" -eq 0 ]; then
+pyc_found=0
+pyc_deleted=0
+while IFS= read -r -d '' pc; do
+  pyc_found=$((pyc_found + 1))
+  if rm -rf "$pc"; then
+    pyc_deleted=$((pyc_deleted + 1))
+  else
+    echo "  [ FAILED  ] $pc -- could not remove (permissions?); re-run: sudo ./clear.sh"
+  fi
+done < <(find . -type d -name venv -prune -o -type d -name __pycache__ -print0)
+
+if [ "$pyc_found" -eq 0 ]; then
+  echo "  [ skip    ] __pycache__ -- none found in the tree"
+else
+  echo "  [ deleted ] $pyc_deleted __pycache__ director$( [ "$pyc_deleted" -eq 1 ] && echo y || echo ies )"
+fi
+
+echo
+total=$((deleted + pyc_deleted))
+if [ "$total" -eq 0 ]; then
   echo "Nothing was deleted -- the tree was already clean."
 else
-  echo "Removed $deleted director$( [ "$deleted" -eq 1 ] && echo y || echo ies )."
+  echo "Removed $deleted build director$( [ "$deleted" -eq 1 ] && echo y || echo ies )" \
+       "and $pyc_deleted __pycache__ director$( [ "$pyc_deleted" -eq 1 ] && echo y || echo ies )."
 fi

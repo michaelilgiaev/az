@@ -1,18 +1,14 @@
 # Az'arch -- C test runner for the application-menu daemon.
 #
-# The C sources live in libraries/packages/application_menu/; this is the single
-# home for their tests (the Python pytest suite already lives here too). Two targets:
+# The C sources live in libraries/packages/application_menu/; this dir is the single home
+# for their tests (the Python pytest suite lives here too, run by `bash tests.sh`).
 #
-#   make -C tests test      headless unit tests (test_apps.c + the shipping apps.c);
+#   make -C tests test      headless C unit tests (test_apps.c + the shipping apps.c);
 #                           no GTK/X needed. This is what the top-level `make test` and
 #                           the package Makefile's `test` target both delegate to.
-#   make -C tests test-ui   interactive UI regression checks against the live hypervisor
-#                           (test_ui.sh); self-skips if the hypervisor/ffmpeg/XTEST are
-#                           unavailable, so it is kept out of the default `test`.
 #
-# APP_DIR points back at the daemon sources so test_apps.c can compile apps.c and
-# resolve "apps.h". The daemon binary itself is built by the package Makefile (test_ui.sh
-# invokes that); nothing here dirties the package tree.
+# APP_DIR points back at the daemon sources so test_apps.c can compile apps.c and resolve
+# "apps.h". Nothing here dirties the package tree.
 CC      ?= gcc
 APP_DIR  = ../libraries/packages/application_menu
 
@@ -27,10 +23,7 @@ $(TEST_BIN): test_apps.c $(APP_DIR)/apps.c $(APP_DIR)/apps.h
 test: $(TEST_BIN)
 	./$(TEST_BIN)
 
-test-ui:
-	./test_ui.sh
-
 clean:
 	rm -f $(TEST_BIN)
 
-.PHONY: test test-ui clean
+.PHONY: test clean
