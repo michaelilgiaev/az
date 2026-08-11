@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from patches.fastfetch import fastfetch
+from patches import fastfetch
 
 
 def test_config_jsonc_is_valid_json():

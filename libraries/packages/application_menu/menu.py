@@ -281,14 +281,57 @@ class AppMenu:
 
         Re-sorts self.all_apps, hands the new order to the list, then re-applies the
         CURRENT filter so both order and visibility stay correct regardless of an
-        active query. Safe to call standalone."""
+        active query. Safe to call standalone.
+
+        set_entries only rebuilds the (expensive) canvas rows when the order/app-set
+        actually changed and reports that back; when the sort produced the SAME order
+        (the common case -- the user re-opens the menu without having launched
+        anything new) it is a no-op and we skip the re-filter too, so re-showing the
+        menu stays instant instead of re-laying-out every row on each open."""
         self.all_apps = self.usage.sorted_apps(self.all_apps)
         if not self._populated or self.applist is None:
             # List not filled yet -> just fix the model order; populate() will fill in
             # this order.
             return
-        self.applist.set_entries(self.all_apps)
-        self.applist.apply_filter(self.search_var.get())
+        rebuilt = self.applist.set_entries(self.all_apps)
+        if rebuilt:
+            # Order/app-set changed -> re-apply the current filter over the new rows.
+            self.applist.apply_filter(self.search_var.get())
+
+    def refresh_apps(self) -> bool:
+        """Re-scan the installed .desktop files so apps installed (or removed) SINCE
+        the daemon started show up in the menu -- e.g. right after
+        `pacman -S firefox`, without restarting the session. Returns True if the set
+        of apps changed.
+
+        The daemon builds the app list ONCE at login; a long-lived menu that never
+        re-scanned would never list a newly installed package (the reported bug). We
+        re-scan on each open here. It is cheap: reading the ~100 .desktop files takes
+        a few ms, and downstream set_entries skips the expensive canvas rebuild unless
+        the app set actually changed -- so a rescan that finds nothing new costs
+        almost nothing and keeps the open instant.
+
+        Preserves launch-frequency order by re-sorting the fresh scan through the
+        usage store (resort() re-sorts again for the latest counts, so the order is
+        correct either way)."""
+        try:
+            scanned = scan_applications()
+        except Exception:
+            # A scan failure must never break re-showing the menu; keep the old list.
+            return False
+        # An EMPTY scan when we previously had apps is almost certainly a transient
+        # glitch (every XDG app dir briefly unreadable), not "every app was
+        # uninstalled" -- blanking the whole menu on it would be worse than showing a
+        # slightly stale list, so keep what we have and try again on the next open.
+        if not scanned and self.all_apps:
+            return False
+        fresh = self.usage.sorted_apps(scanned)
+        before = [e.desktop_id for e in self.all_apps]
+        after = [e.desktop_id for e in fresh]
+        if before == after:
+            return False
+        self.all_apps = fresh
+        return True
 
     def reset_view(self) -> None:
         """Return the menu to its just-opened state: list filled, search cleared (which
@@ -297,9 +340,13 @@ class AppMenu:
         by the daemon each time it re-shows the window so a stale query/scroll/focus
         from last time never lingers.
 
-        Also re-sorts by the latest launch counts (resort) so the app the user just
-        opened floats to the top on this open rather than only after a restart."""
+        Re-scans installed apps first (refresh_apps) so a package installed since the
+        daemon started appears, then re-sorts by the latest launch counts (resort) so
+        the app the user just opened floats to the top on this open rather than only
+        after a restart."""
         self.populate()  # no-op if already filled
+        # Pick up newly installed/removed packages before re-sorting/painting.
+        self.refresh_apps()
         # Focus always starts on the search box + app list (the default), even if the
         # user left the menu on the power row last time.
         self.set_focus_zone(FOCUS_APPS)

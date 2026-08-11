@@ -55,14 +55,26 @@ def test_our_packages_import_from_packages_bucket():
 def test_patches_bucket_holds_only_upstream():
     # After the reclassification, libraries/patches/ contains ONLY upstream software
     # we modify/configure. Anything WE author outright must have left it.
+    #
+    # The single-file patches (ckbcomp/fastfetch/openbox) were FLATTENED from a
+    # one-file dir (patches/openbox/openbox.py) to a flat module (patches/openbox.py),
+    # mirroring the earlier azarch/pkgbuild flattening. calamares stays a dir
+    # (multi-module: calamares.py + locale.py + calamares_shellprocess.py); librewolf
+    # is a dir holding our browser-policy patch (patches/librewolf/librewolf.py).
     patches = paths.PATCHESDIR
-    present = {p.name for p in patches.iterdir() if p.is_dir()}
-    # genuine upstream we tailor:
-    assert {"calamares", "ckbcomp", "fastfetch", "openbox"} <= present
+    names = {p.name for p in patches.iterdir()}
+    dirs = {p.name for p in patches.iterdir() if p.is_dir()}
+    # multi-module upstream patches stay as directories:
+    assert {"calamares", "librewolf"} <= dirs
+    # flattened single-file upstream patches are now flat modules (files), not dirs:
+    for flat in ("ckbcomp.py", "fastfetch.py", "openbox.py"):
+        assert flat in names, f"{flat} should be a flat patch module"
+        assert (paths.PATCHESDIR / flat).is_file()
+        assert flat[:-3] not in dirs, f"{flat[:-3]}/ dir should be gone after flattening"
     # our-own things that must NOT be under patches/ anymore:
     for ours in ("application_menu", "pkgbuild", "profile", "pacman", "installer",
                  "system", "desktop", "locale"):
-        assert ours not in present, f"{ours} is OURS -- it must not be a patch package"
+        assert ours not in names, f"{ours} is OURS -- it must not be a patch package"
 
 
 def test_locale_moved_into_calamares_patch():
@@ -75,10 +87,12 @@ def test_locale_moved_into_calamares_patch():
 
 def test_openbox_replaced_desktop():
     # desktop.py was renamed openbox.py (it configures the upstream openbox WM) and
-    # stays under patches/. The old patches.desktop must be gone.
-    from patches.openbox import openbox
+    # stays under patches/. It was then FLATTENED from patches/openbox/openbox.py to a
+    # flat module patches/openbox.py, so it imports as `from patches import openbox`.
+    # The old patches.desktop AND the nested patches.openbox.openbox must be gone.
+    from patches import openbox
 
-    assert openbox.__file__.endswith("libraries/patches/openbox/openbox.py")
+    assert openbox.__file__.endswith("libraries/patches/openbox.py")
     assert callable(openbox.emit_plan)
 
 

@@ -119,7 +119,7 @@ def test_customize_airootfs_brands_os_release():
 
 def test_customize_airootfs_has_no_plasma_leftovers():
     # KDE Plasma was removed and replaced with OpenBox; the desktop wallpaper is now
-    # painted by feh from the OpenBox session (patches/openbox/openbox.py), NOT here.
+    # painted by feh from the OpenBox session (patches/openbox.py), NOT here.
     # Guard that no Plasma-specific chroot step (wallpaper rewrite, notifications
     # applet / krunner / kmenuedit removal, etc.) ever creeps back into this hook.
     s = system.CUSTOMIZE_AIROOTFS.lower()

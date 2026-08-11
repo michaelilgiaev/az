@@ -292,6 +292,16 @@ class Daemon:
             self.visible = True
         except tk.TclError:
             pass
+        # az_show() re-scanned the .desktop files (menu.reset_view -> refresh_apps),
+        # so a package installed since login now appears in the LIST. The
+        # WindowWatcher keeps its OWN cached desktop index (to map a new window back
+        # to a .desktop for launch counting); drop it so it rebuilds from the fresh
+        # scan and can count launches of the newly-installed app too. Best-effort.
+        if self._watcher is not None:
+            try:
+                self._watcher.refresh_index()
+            except Exception:
+                pass
 
     def hide(self) -> None:
         try:

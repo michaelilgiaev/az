@@ -627,6 +627,41 @@ def test_overrides_disables_sanitize_on_shutdown():
     )
 
 
+def test_overrides_restore_session_needs_privacy_level_zero():
+    # Sessions must actually PERSIST across restarts. Turning sanitizeOnShutdown
+    # off is the master switch, but LibreWolf defaults browser.sessionstore.
+    # privacy_level to 2 ("save no session data for any site"), which brings tabs
+    # back LOGGED OUT -- so the restore also needs privacy_level=0 (store
+    # everything, the Firefox default) and browser.startup.page=3 (restore the
+    # previous session). Guard both, since privacy_level=0 is the easy-to-miss half.
+    cfg = pkgbuild.librewolf_overrides_cfg()
+    assert 'defaultPref("browser.startup.page", 3);' in cfg
+    assert 'defaultPref("browser.sessionstore.privacy_level", 0);' in cfg
+    # network.cookie.lifetimePolicy is OBSOLETE in modern Firefox/LibreWolf (the
+    # engine migrates it away and ClearUser()s it), so it must NOT be set anymore.
+    assert "network.cookie.lifetimePolicy" not in cfg
+
+
+def test_overrides_hide_bookmarks_toolbar_by_default():
+    # "For quick access" (the bookmarks toolbar, Ctrl+Shift+B) must be HIDDEN by
+    # default. LibreWolf ships browser.toolbars.bookmarks.visibility="always"; our
+    # override sets it to "never" (hides it on every window AND the new-tab page).
+    cfg = pkgbuild.librewolf_overrides_cfg()
+    assert (
+        'defaultPref("browser.toolbars.bookmarks.visibility", "never");' in cfg
+    )
+
+
+def test_overrides_content_is_owned_by_the_librewolf_patch():
+    # The overrides.cfg content is authored in the librewolf PATCH package (the
+    # single source of truth for our browser policy); pkgbuild.py ships it verbatim.
+    # A drift between the two would mean the recipe embeds stale policy.
+    from patches.librewolf import librewolf as lw_patch
+
+    assert lw_patch.__file__.endswith("libraries/patches/librewolf/librewolf.py")
+    assert pkgbuild.librewolf_overrides_cfg() == lw_patch.overrides_cfg()
+
+
 # --- recipe_dirs tier dispatch ---------------------------------------------
 
 def test_recipe_dirs_default_tier():

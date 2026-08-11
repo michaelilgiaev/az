@@ -25,8 +25,10 @@ def test_static_dirs_are_under_repodir():
 
 
 def test_ckbcomp_src_is_a_patch_package():
+    # ckbcomp was flattened from patches/ckbcomp/ckbcomp to the flat module
+    # patches/ckbcomp.py (it is still emitted to /usr/bin/ckbcomp without the suffix).
     assert paths.PATCHESDIR == paths.REPODIR / "libraries" / "patches"
-    assert paths.CKBCOMP_SRC == paths.PATCHESDIR / "ckbcomp" / "ckbcomp"
+    assert paths.CKBCOMP_SRC == paths.PATCHESDIR / "ckbcomp.py"
 
 
 def test_packagesdir_is_libraries_packages():

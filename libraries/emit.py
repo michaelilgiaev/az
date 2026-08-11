@@ -65,8 +65,8 @@ def copy_patch_file(rel: str, dest: Path, mode: int | None = None) -> Path:
     """Copy a verbatim file from a patch-package under libraries/patches/<rel>.
 
     Patches are existing UPSTREAM tools modified to fit Az'arch -- currently the
-    vendored ckbcomp (a Python 3 port of the upstream Perl ckbcomp), shipped as
-    libraries/patches/ckbcomp/ckbcomp and copied to /usr/bin/ckbcomp.
+    vendored ckbcomp (a Python 3 port of the upstream Perl ckbcomp), shipped as the
+    flat module libraries/patches/ckbcomp.py and copied to /usr/bin/ckbcomp.
     """
     src = paths.PATCHESDIR / rel
     dest = Path(dest)

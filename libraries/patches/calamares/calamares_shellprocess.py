@@ -53,8 +53,8 @@ INSTALLED_SKEL_OPENBOX_AUTOSTART = "/etc/skel/.config/openbox/autostart"
 
 # The staged "installed" autostart on the target (unpackfs copied the whole live rootfs,
 # so this root-owned system file is present in the target chroot). Kept as a module
-# constant, imported from patches/openbox, so the staging path and the copy agree.
-from patches.openbox import openbox as _openbox  # noqa: E402  (single source of truth for the path)
+# constant, imported from the flat patches/openbox.py, so the staging path and the copy agree.
+from patches import openbox as _openbox  # noqa: E402  (single source of truth for the path)
 
 INSTALLED_AUTOSTART_SRC = _openbox.INSTALLED_AUTOSTART_STAGING_PATH
 

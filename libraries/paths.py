@@ -9,7 +9,7 @@ Mirrors the directory scheme the old compile.sh used, so the Docker bind mounts
                            manifest (packages.x86_64), application_menu/, pkgbuild.py,
                            azarch.py -- all pure stdlib (no requirements.txt)
     libraries/patches/     ONLY upstream software we modify/configure (calamares,
-                           ckbcomp, fastfetch, openbox)
+                           ckbcomp, fastfetch, librewolf, openbox)
     cache/                 persistent download cache (git-ignored, survives builds)
       build/               WORKDIR on a NATIVE run: disposable mkarchiso scratch
       pkgs/                persistent package repo + synced DBs (the offline store)
@@ -44,7 +44,7 @@ PKGDIR = LIBDIR
 # compiler itself uses for its test/dev deps). Formerly libraries/data/; consolidated here.
 PACKAGESDIR = LIBDIR / "packages"
 # Existing UPSTREAM packages that are NOT ours -- we merely modify/configure/patch them
-# to fit Az'arch (calamares, ckbcomp, fastfetch, openbox). Anything WE author outright
+# to fit Az'arch (calamares, ckbcomp, fastfetch, librewolf, openbox). Anything WE author outright
 # is NOT here: it is either a compiler module (flat in libraries/) or one of our own
 # packages (libraries/packages/).
 PATCHESDIR = LIBDIR / "patches"
@@ -54,8 +54,10 @@ ASSETSDIR = REPODIR / "assets"
 # output, no Perl in the tree). Arch does not package it (Debian/Manjaro-only), yet
 # Calamares' keyboard-preview page shells out to `ckbcomp`, so we ship it in the repo
 # and copy it to /usr/bin at build time. It is an upstream tool modified to fit the
-# distribution, so it lives under libraries/patches/ as its own patch-package.
-CKBCOMP_SRC = PATCHESDIR / "ckbcomp" / "ckbcomp"
+# distribution, so it lives under libraries/patches/ as a flat patch module
+# (libraries/patches/ckbcomp.py). It is emitted to /usr/bin/ckbcomp (no .py suffix
+# there -- it is an executable script the keyboard page runs by name).
+CKBCOMP_SRC = PATCHESDIR / "ckbcomp.py"
 
 CACHEDIR = REPODIR / "cache"
 BUILDDIR = REPODIR / "output"

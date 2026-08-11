@@ -4,7 +4,7 @@ This is OUR application menu, and it is the WHOLE shell: KDE Plasma was removed 
 the desktop is OpenBox with no panel, so this menu -- a borderless, Breeze-styled
 Tkinter launcher CENTERED on the screen (search, launch-frequency ordering, power
 actions) -- is the only launcher surface. It is opened by the Super key (via xcape +
-the OpenBox rc.xml keybind); see patches/openbox/openbox.py.
+the OpenBox rc.xml keybind); see patches/openbox.py.
 
 It is a multi-module package: menu.py orchestrates and imports the siblings
 (widgets/theme/apps/icons/usage/actions/...) as flat modules, so the whole set MUST be
@@ -26,7 +26,7 @@ Layers:
   * BUILD wiring -- THIS module (application_menu.py, alongside the source) copies ALL
     the menu modules (launcher.py included) to fixed system paths in the airootfs,
     installs launcher.py to /usr/local/bin, and writes a generated .desktop entry. The
-    OpenBox session (patches/openbox/openbox.py) starts the daemon from its autostart and
+    OpenBox session (patches/openbox.py) starts the daemon from its autostart and
     binds the Super key to the launcher; there is no panel applet to bake.
 
 No pip dependencies: Tkinter is in the Python standard library (backed by the `tk`
@@ -57,7 +57,7 @@ MENU_DESKTOP_SYSTEM_PATH = (
 # --- Super/Meta key -> menu (handled by OpenBox, not KDE) --------------------
 # Pressing the Super key alone OPENS THIS MENU. Under OpenBox that is wired WITHOUT any
 # KDE machinery: xcape turns a lone Super_L tap into the chord Super_L+Menu and the
-# OpenBox rc.xml binds W-Menu to MENU_LAUNCHER_SYSTEM_PATH (see patches/openbox/openbox.py
+# OpenBox rc.xml binds W-Menu to MENU_LAUNCHER_SYSTEM_PATH (see patches/openbox.py
 # openbox_rc_xml + openbox_autostart). There is therefore NO X-KDE-Shortcuts .desktop
 # and NO kglobalaccel anymore -- the old KDE global-shortcut file was removed.
 #
@@ -72,7 +72,7 @@ MENU_DESKTOP_SYSTEM_PATH = (
 # Dolphin (descending) -- while leaving it fully dynamic: as the user opens apps the
 # WindowWatcher bumps these counts and the order re-sorts, so the seed only decides the
 # initial arrangement. Keyed by .desktop id (usage.py's key); counts are spaced so the
-# intended order is unambiguous. Emitted by patches/openbox/openbox.py as a home-owned
+# intended order is unambiguous. Emitted by patches/openbox.py as a home-owned
 # file (mirrored into /etc/skel).
 MENU_USAGE_SEED_SYSTEM_PATH = (
     "/home/main/.local/share/azarch-application-menu/usage.json"
@@ -167,7 +167,7 @@ def menu_desktop() -> str:
     /usr/local/share/applications so the menu can be launched by name and appears in app
     scans. GENERATED here (the package ships no .desktop files) -- Exec points at the
     launcher and Icon at MENU_ICON_NAME. (The Super key is bound by OpenBox's rc.xml, not
-    by this file -- see patches/openbox/openbox.py.)"""
+    by this file -- see patches/openbox.py.)"""
     return f"""\
 [Desktop Entry]
 Type=Application

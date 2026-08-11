@@ -2,7 +2,7 @@
 """Az'arch application menu -- TOGGLE launcher (INSTANT, via a daemon).
 
 Installed to /usr/local/bin/azarch-application-menu. Bound to the Super key by
-OpenBox (see patches/openbox/openbox.py) and pointed at by the menu's .desktop
+OpenBox (see patches/openbox.py) and pointed at by the menu's .desktop
 entry -- opening either runs this.
 
 The menu runs as a resident DAEMON (menu built once, kept hidden) so opening it is

@@ -77,7 +77,7 @@ LOGO=archlinux-logo
 #
 # Wallpaper: the desktop is OpenBox now (KDE Plasma was removed), and OpenBox paints no
 # wallpaper of its own -- feh sets the X root pixmap from the OpenBox autostart /
-# ~/.xinitrc (see patches/openbox/openbox.py). So there is NO Plasma org.kde.image default
+# ~/.xinitrc (see patches/openbox.py). So there is NO Plasma org.kde.image default
 # to rewrite here anymore, and no bundled Plasma "Next" wallpaper / notifications
 # plasmoid / krunner / kmenuedit to delete (those packages are gone from the manifest).
 # The two azarch wallpaper images ship as plain files under /usr/share/wallpapers via

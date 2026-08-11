@@ -6,7 +6,7 @@ WHOLE shell -- a borderless launcher CENTERED on the screen, opened by the Super
 
 These pin the contract that (a) the runtime files are emitted to the fixed system
 paths the launcher/session expect, (b) the constants shared with
-patches/openbox/openbox.py agree, and (c) the emitted content is the real Tkinter menu
+patches/openbox.py agree, and (c) the emitted content is the real Tkinter menu
 wired to the launcher.
 
 They also pin the menu's look/behaviour: the window is borderless (overrideredirect,
@@ -28,7 +28,7 @@ import json
 import os
 
 from packages.application_menu import application_menu as am
-from patches.openbox import openbox as desktop
+from patches import openbox as desktop
 
 
 def test_emit_plan_targets_expected_system_paths():
@@ -229,6 +229,54 @@ def test_usage_seed_matches_usagestore_format_and_is_home_owned():
     assert entry["mode"] == 0o644
     assert entry["dest"].startswith(desktop.HOME + "/")  # under /home/main
     assert entry["builder"]() == seed_txt
+
+
+def test_menu_open_is_instant_no_rebuild_when_order_unchanged():
+    # Opening the menu must be INSTANT. The daemon re-sorts the list on every show
+    # (resort -> set_entries), and set_entries used to unconditionally rebuild every
+    # canvas row AND reload a PhotoImage per app -- the dominant open cost -- so every
+    # open paid a full rebuild even when nothing changed. Now set_entries fingerprints
+    # the entry list (_signature) and SKIPS the rebuild when the drawn list is
+    # unchanged, and resort skips the re-filter when set_entries reports no rebuild.
+    applist = am._module_src("applist.py")
+    assert "_signature" in applist                       # cheap entry fingerprint
+    assert "_rows_signature" in applist                  # remembered across shows
+    # set_entries returns whether it rebuilt (so resort can skip re-laying-out).
+    assert "def set_entries(self, entries)" in applist
+    menu_src = am.menu_py()
+    assert "rebuilt = self.applist.set_entries" in menu_src
+    assert "if rebuilt:" in menu_src                     # only re-filter on a real change
+
+
+def test_menu_repopulates_newly_installed_apps_on_open():
+    # A long-lived daemon that scanned .desktop files only once at login would never
+    # show a package installed later (e.g. `pacman -S firefox`). reset_view now
+    # re-scans on every open (refresh_apps -> scan_applications) so new apps appear
+    # without restarting the session; set_entries only rebuilds if the set changed, so
+    # a rescan that finds nothing new stays instant.
+    menu_src = am.menu_py()
+    assert "def refresh_apps(self)" in menu_src
+    assert "scan_applications()" in menu_src
+    # reset_view (called by the daemon on each show) triggers the rescan.
+    assert "self.refresh_apps()" in menu_src
+    # The daemon also drops the WindowWatcher's cached desktop index on show, so a
+    # newly-installed app's launches get COUNTED too (not just listed).
+    daemon_src = am.daemon_py()
+    assert "refresh_index" in daemon_src
+
+
+def test_menu_pins_qalculate_first_for_calculator_query():
+    # Typing "calculator" (or any prefix of it) must surface Qalculate! FIRST, even
+    # though the app is named "Qalculate!". The alias table maps the target word to
+    # the .desktop id, and apply_filter floats that app to the top of the matches
+    # while the query is a prefix of the word -- and only when it is actually a match.
+    applist = am._module_src("applist.py")
+    assert "SEARCH_PIN_ALIASES" in applist
+    assert "qalculate-gtk.desktop" in applist            # the pinned app
+    assert '"calculator"' in applist                     # the trigger word
+    assert "_pinned_desktop_id_for_query" in applist     # prefix-of-word logic
+    # apply_filter honours the pin by moving the matched row to the front.
+    assert "pinned_id" in applist
 
 
 def test_launcher_is_a_single_instance_toggle():

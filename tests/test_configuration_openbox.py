@@ -29,7 +29,7 @@ import importlib.util
 
 import pytest
 
-from patches.openbox import openbox as desktop
+from patches import openbox as desktop
 
 
 def _load_azarch_cli():

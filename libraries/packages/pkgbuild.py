@@ -759,47 +759,19 @@ Exec=/opt/librewolf/librewolf --private-window %u
 
 def librewolf_overrides_cfg() -> str:
     """LibreWolf's officially-supported override file (loaded AFTER the stock
-    librewolf.cfg). Relaxes ONLY the sanitise-on-shutdown prefs so sessions and
-    cookies persist; every other LibreWolf hardening pref is left as upstream
-    ships it. https://librewolf.net/docs/settings/"""
-    return """\
-// Az'arch LibreWolf overrides -- session & cookie persistence
-//
-// LibreWolf ships privacy-hardened and by DEFAULT wipes cookies + history on
-// shutdown (privacy.sanitize.sanitizeOnShutdown = true, plus the clearOnShutdown
-// keys). Az'arch wants sessions and logins to PERSIST across restarts, so this
-// file -- LibreWolf's officially-supported override, loaded AFTER librewolf.cfg
-// -- turns that behaviour off. It ONLY relaxes the shutdown-sanitisation prefs;
-// every other LibreWolf hardening pref is left exactly as upstream ships it.
-//
-// AutoConfig files must begin with a comment line; the engine ignores line 1.
+    librewolf.cfg). Two Az'arch policies: sessions/cookies persist across
+    restarts, and the bookmarks toolbar ("For quick access") is hidden by
+    default. It relaxes/sets ONLY those specific prefs; every other LibreWolf
+    hardening pref is left as upstream ships it. https://librewolf.net/docs/settings/
 
-// --- Do not sanitise on shutdown ------------------------------------------
-defaultPref("privacy.sanitize.sanitizeOnShutdown", false);
+    The CONTENT is authored in the librewolf PATCH package
+    (patches/librewolf/librewolf.py) -- the single source of truth for our
+    browser policy, alongside the other upstream patches -- and read verbatim
+    here so the recipe stays self-contained. This mirrors how patches/openbox
+    pulls the country table from patches/calamares/locale."""
+    from patches.librewolf import librewolf as _librewolf  # noqa: E402 (patch pkg; local import keeps pkgbuild import-light)
 
-// --- Keep each data category on shutdown (new _v2 keys, FF/LW current) -----
-defaultPref("privacy.clearOnShutdown_v2.cookiesAndStorage", false);
-defaultPref("privacy.clearOnShutdown_v2.historyFormDataAndDownloads", false);
-defaultPref("privacy.clearOnShutdown_v2.browsingHistoryAndDownloads", false);
-defaultPref("privacy.clearOnShutdown_v2.cache", false);
-defaultPref("privacy.clearOnShutdown_v2.siteSettings", false);
-defaultPref("privacy.clearOnShutdown_v2.formdata", false);
-
-// --- Legacy keys (older builds still honour these) -------------------------
-defaultPref("privacy.clearOnShutdown.cookies", false);
-defaultPref("privacy.clearOnShutdown.history", false);
-defaultPref("privacy.clearOnShutdown.sessions", false);
-defaultPref("privacy.clearOnShutdown.cache", false);
-defaultPref("privacy.clearOnShutdown.offlineApps", false);
-defaultPref("privacy.clearOnShutdown.formdata", false);
-defaultPref("privacy.clearOnShutdown.siteSettings", false);
-
-// --- Cookies live their normal lifetime (0 = accept normally) --------------
-defaultPref("network.cookie.lifetimePolicy", 0);
-
-// --- Restore the previous session on start, so open tabs come back ---------
-defaultPref("browser.startup.page", 3);
-"""
+    return _librewolf.overrides_cfg()
 
 
 # ---------------------------------------------------------------------------

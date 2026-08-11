@@ -42,8 +42,8 @@ from progress import ProgressBar
 from packages.application_menu import application_menu
 from patches.calamares import calamares
 from patches.calamares import locale
-from patches.openbox import openbox
-from patches.fastfetch import fastfetch
+from patches import openbox
+from patches import fastfetch
 import installer
 import pacman
 import profile
@@ -198,11 +198,12 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # out to `ckbcomp`; without it the preview draws BLANK keys ("ckbcomp not found,
     # keyboard preview disabled"). `ckbcomp` is a self-contained Python 3 port of the
     # upstream (Debian/Manjaro) Perl ckbcomp -- byte-identical output, no Perl in the
-    # tree -- which Arch does NOT package, so we vendor it (as a patch-package under
-    # libraries/patches/ckbcomp/) into /usr/bin. It needs only python (in base) and the
+    # tree -- which Arch does NOT package, so we vendor it (as the flat patch module
+    # libraries/patches/ckbcomp.py) into /usr/bin. It needs only python (in base) and the
     # XKB data in /usr/share/X11/xkb (shipped by xkeyboard-config), both present. It
-    # lands in the live ISO and is copied to the target by unpackfs.
-    emit.copy_patch_file("ckbcomp/ckbcomp", airootfs / "usr/bin/ckbcomp", mode=0o755)
+    # lands in the live ISO (as /usr/bin/ckbcomp, no .py suffix) and is copied to the
+    # target by unpackfs.
+    emit.copy_patch_file("ckbcomp.py", airootfs / "usr/bin/ckbcomp", mode=0o755)
 
     # 9 -- Stage installed-system pacman and pkgs service.
     # The package-management unit of the installed system: its /etc/pacman.conf, the

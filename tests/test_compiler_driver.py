@@ -20,13 +20,13 @@ import paths
 
 def test_ckbcomp_asset_is_vendored_python_script():
     # Calamares' keyboard preview shells out to `ckbcomp` to render key legends;
-    # Arch does not package it, so we vendor it as a patch-package
-    # (libraries/patches/ckbcomp/ckbcomp) -- an upstream tool modified to fit
-    # Az'arch. It is a Python 3 port of the upstream Perl ckbcomp (byte-identical
-    # output, but no Perl in the tree). It must exist and be that Python script (not
-    # an empty placeholder).
+    # Arch does not package it, so we vendor it as a flat patch module
+    # (libraries/patches/ckbcomp.py) -- an upstream tool modified to fit Az'arch. It
+    # is a Python 3 port of the upstream Perl ckbcomp (byte-identical output, but no
+    # Perl in the tree). It must exist and be that Python script (not an empty
+    # placeholder).
     src = paths.CKBCOMP_SRC
-    assert src.is_file(), "libraries/patches/ckbcomp/ckbcomp is missing"
+    assert src.is_file(), "libraries/patches/ckbcomp.py is missing"
     head = src.read_text(errors="ignore")[:200]
     assert head.startswith("#!/usr/bin/env python3")
     assert "ckbcomp" in head  # the script's own banner names itself
@@ -36,7 +36,7 @@ def test_run_installs_ckbcomp_into_usr_bin():
     # run() must plant the vendored ckbcomp at /usr/bin/ckbcomp (executable) so the
     # keyboard preview finds it. Assert the copy_patch_file call is present in run().
     src = inspect.getsource(compiler.run)
-    assert 'copy_patch_file("ckbcomp/ckbcomp"' in src
+    assert 'copy_patch_file("ckbcomp.py"' in src
     assert 'usr/bin/ckbcomp' in src
 
 

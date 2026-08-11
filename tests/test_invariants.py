@@ -44,7 +44,7 @@ import downloader
 import paths
 
 from patches.calamares import calamares
-from patches.openbox import openbox as desktop
+from patches import openbox as desktop
 import installer
 from patches.calamares import locale
 import pacman

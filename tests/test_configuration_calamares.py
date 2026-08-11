@@ -400,7 +400,7 @@ def test_shellprocess_overwrites_openbox_autostart_so_region_keyboard_and_no_ins
     # autostart (home + skel) with the "installed" variant staged on the ISO, which drops
     # exactly those two lines while keeping wallpaper/xcape/menu-daemon.
     from patches.calamares import calamares_shellprocess as csp
-    from patches.openbox import openbox as desktop
+    from patches import openbox as desktop
     d = yaml.safe_load(calamares.shellprocess_conf())
     cmd = _installer_cleanup_command(d["script"])
     src = desktop.INSTALLED_AUTOSTART_STAGING_PATH
@@ -421,10 +421,10 @@ def test_shellprocess_overwrites_openbox_autostart_so_region_keyboard_and_no_ins
 
 def test_shellprocess_autostart_source_is_the_staged_shipped_file():
     # Guard against drift: the file the cleanup COPIES FROM must be the exact staging
-    # path patches/openbox/openbox.py emits the installed autostart to. If openbox.py's
+    # path patches/openbox.py emits the installed autostart to. If openbox.py's
     # staging dest ever moves, this catches it so the copy keeps sourcing a real file.
     from patches.calamares import calamares_shellprocess as csp
-    from patches.openbox import openbox as desktop
+    from patches import openbox as desktop
     assert csp.INSTALLED_AUTOSTART_SRC == desktop.INSTALLED_AUTOSTART_STAGING_PATH
     dests = {e["dest"] for e in desktop.emit_plan()}
     assert desktop.INSTALLED_AUTOSTART_STAGING_PATH in dests

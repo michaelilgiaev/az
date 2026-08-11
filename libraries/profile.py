@@ -89,7 +89,7 @@ FILE_PERMISSIONS = {
     # pinned.
     "/home/main/Desktop/azarch-install.desktop": "1000:998:755",
     "/etc/skel/Desktop/azarch-install.desktop": "0:0:755",
-    # Vendored ckbcomp (libraries/patches/ckbcomp/ckbcomp), a Python 3 port of the
+    # Vendored ckbcomp (libraries/patches/ckbcomp.py), a Python 3 port of the
     # upstream Perl ckbcomp. Same archiso mode-normalization as azarch-install above: without
     # an explicit 0755 here it ships 0644, Calamares' `QProcess::start("ckbcomp")`
     # cannot execute it, and the keyboard-page preview stays BLANK ("ckbcomp not

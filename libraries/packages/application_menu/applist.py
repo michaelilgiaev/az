@@ -43,6 +43,44 @@ import theme as T
 from widgets import KickoffScrollBar
 
 
+# --- Search aliases: pin a specific app to the top for a "typing toward X" query --
+# Some searches have an obvious intended answer that is not the app's own name. The
+# canonical case (requested): typing "calculator" should surface Qalculate! FIRST,
+# even though the app is named "Qalculate!" -- its Categories/GenericName make it the
+# calculator, so a user typing "calc..."/"calculator" clearly wants it on top.
+#
+# Each alias maps a TARGET WORD to the .desktop id to pin. The pin is active only
+# while the (case-folded) query is a non-empty PREFIX of the target word -- i.e.
+# WHILE the user is typing toward it -- and stops the moment the query diverges
+# ("until it's not what is being searched"): e.g. "c","ca",...,"calculator" pin
+# Qalculate; "calm"/"chrome" do not (not a prefix of "calculator"), so normal
+# frequency order resumes. The pinned app must ALSO be an actual match/visible row
+# (installed and not filtered out), so the pin never invents a row.
+SEARCH_PIN_ALIASES: tuple[tuple[str, str], ...] = (
+    ("calculator", "qalculate-gtk.desktop"),
+)
+
+
+def _pinned_desktop_id_for_query(query: str) -> str | None:
+    """The .desktop id to force to the top of the results for this query, or None.
+
+    Returns the alias target when the case-folded, stripped query is a NON-EMPTY
+    prefix of an alias word (the "typing toward it" window). Longest match wins if
+    a query is somehow a prefix of two alias words (not the case today). Pure and
+    unit-testable -- it does not look at the row list; apply_filter only honours the
+    pin if that id is actually among the matches."""
+    q = query.strip().casefold()
+    if not q:
+        return None
+    best: tuple[int, str] | None = None
+    for word, desktop_id in SEARCH_PIN_ALIASES:
+        if word.casefold().startswith(q):
+            # Prefer the alias whose word is the longest (most specific) match.
+            if best is None or len(word) > best[0]:
+                best = (len(word), desktop_id)
+    return best[1] if best else None
+
+
 class _RowItem:
     """The canvas item ids for one application row, plus its model entry. The
     items are created once and then only moved / recoloured / shown / hidden."""
@@ -84,6 +122,13 @@ class CanvasAppList:
         self._load_icon = icon_loader
         self._on_activate = on_activate
         self._entries = list(entries)
+        # Signature of the currently-built rows (see _signature). set_entries
+        # compares against it and SKIPS the expensive rebuild -- delete + recreate
+        # every canvas item and reload a PhotoImage per app -- when the entry list
+        # is unchanged. That rebuild ran on EVERY menu open (the daemon re-sorts on
+        # each show), which is exactly what made opening "not snappy"; with the same
+        # apps in the same order it is now a no-op.
+        self._rows_signature: tuple = ()
         self._rows: list[_RowItem] = []       # one per entry, canonical order
         self._visible: list[_RowItem] = []     # currently shown, in draw order
         self._selected = -1                    # index into self._visible
@@ -130,6 +175,22 @@ class CanvasAppList:
         self._build_rows()
 
     # -- construction ------------------------------------------------------
+    @staticmethod
+    def _signature(entries) -> tuple:
+        """A cheap, hashable fingerprint of an entry list -- the fields that affect
+        what the rows LOOK like, their ORDER, or what they DO when activated: desktop
+        id, name, subtitle, icon, and the launch command (exec_argv, tuple-ified so it
+        is hashable). set_entries compares this to skip a rebuild when nothing that
+        would change the drawn OR launched list has changed (a resort that produced
+        the same order, or a rescan that found the same apps). Including exec_argv
+        means a package upgrade that changes ONLY the Exec= line -- same name/icon/
+        category/id -- still forces a rebuild, so the menu never launches a stale
+        command within a long-lived daemon session."""
+        return tuple(
+            (e.desktop_id, e.name, e.type_label, e.icon, tuple(e.exec_argv))
+            for e in entries
+        )
+
     def _build_rows(self) -> None:
         """Create the canvas items for every entry ONCE. They start hidden and
         are positioned/shown by apply_filter. Rebuilt only when the entry set
@@ -164,15 +225,33 @@ class CanvasAppList:
                 font=(T.FONT_FAMILY, T.FONT_APP_TYPE), state="hidden",
             )
             self._rows.append(row)
+        # Remember what we just built so set_entries can detect an unchanged list.
+        self._rows_signature = self._signature(self._entries)
 
     # -- public API --------------------------------------------------------
     def set_entries(self, entries) -> None:
-        """Replace the entry set (e.g. after a usage resort) and rebuild items in
-        the new order. Caller re-applies the current filter afterwards."""
-        self._entries = list(entries)
+        """Replace the entry set (e.g. after a usage resort or an app rescan) and
+        rebuild items in the new order. Caller re-applies the current filter
+        afterwards.
+
+        Rebuilding recreates every canvas item and reloads a PhotoImage per app --
+        the dominant cost of opening the menu -- and the daemon calls this on EVERY
+        show (via resort). So when the incoming list is IDENTICAL to what is already
+        drawn (same apps, same order, same icons), we skip the rebuild entirely and
+        just keep the existing rows: the open stays instant. Only a genuine change
+        (a resort that moved something, or a newly installed/removed app) pays for a
+        rebuild. Returns True iff a rebuild happened, so the caller can tell whether
+        selection/scroll were reset."""
+        new_entries = list(entries)
+        if self._signature(new_entries) == self._rows_signature and self._rows:
+            # Nothing that affects the drawn list changed -> keep the built rows.
+            self._entries = new_entries
+            return False
+        self._entries = new_entries
         self._selected = -1
         self._hover_index = -1
         self._build_rows()
+        return True
 
     @property
     def selected_entry(self):
@@ -212,6 +291,20 @@ class CanvasAppList:
         never flicker."""
         q = query.strip().casefold()
         matches = [r for r in self._rows if self._matches(r, q)]
+
+        # Search alias: while the user is typing toward a word with a pinned answer
+        # (e.g. "calculator" -> Qalculate!), float that app to the TOP of the
+        # matches, keeping everything else in its existing order. Only applies when
+        # the pinned app is actually a match (installed + not filtered out), so it
+        # never fabricates a row; a diverging query returns None here and the order
+        # is untouched.
+        pinned_id = _pinned_desktop_id_for_query(query)
+        if pinned_id is not None:
+            for i, r in enumerate(matches):
+                if r.entry.desktop_id == pinned_id:
+                    if i != 0:
+                        matches.insert(0, matches.pop(i))
+                    break
 
         # Lay the matches out and show them; hide everything else. Because every
         # item already exists, this is pure itemconfigure/coords -- the canvas
