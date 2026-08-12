@@ -21,6 +21,9 @@ Python; it only shows up as a blank home page on the built ISO. These tests pin:
   * that patches/librewolf now makes the timedate URL the home + startup page,
   * page.render()'s self-contained HTML (seeds the time, embeds the system zone, ships
     the client-side Intl ticking script + /api/now re-sync -- pure stdlib, no Flask),
+    including its four end-user features: the 12-hour AM/PM digital readout, the round
+    analog clock (SVG hands), the navigable month calendar (page-through, display-only),
+    and the sun/moon horizon arc (client-side solar-position, seeded per-zone latitude),
   * the /etc/localtime -> IANA-zone resolution algorithm app.py uses to follow the
     system timezone live.
 """
@@ -54,6 +57,7 @@ def test_port_is_49154_everywhere():
 EXPECTED_PLAN = {
     "/usr/local/lib/azarch-timedate/app.py": 0o644,
     "/usr/local/lib/azarch-timedate/page.py": 0o644,
+    "/usr/local/lib/azarch-timedate/assets.py": 0o644,
     "/usr/local/bin/azarch-timedate": 0o755,
     "/etc/systemd/system/azarch-timedate.service": 0o644,
 }
@@ -71,6 +75,21 @@ def test_emit_plan_builders_are_callable_and_nonempty():
     for e in td.emit_plan():
         content = e["builder"]()
         assert isinstance(content, str) and content.strip(), e["dest"]
+
+
+def test_assets_module_is_installed_beside_page():
+    """page.py inlines the analog SVG / CSS / client script from assets.py via
+    `import assets`, so assets.py MUST be installed in LIB_DIR beside page.py or the app
+    crashes at import on the built ISO. Pin the dest/mode and that the source is real."""
+    plan = {e["dest"]: e for e in td.emit_plan()}
+    assert td.ASSETS_SYSTEM_PATH == f"{td.LIB_DIR}/assets.py"
+    assert td.ASSETS_SYSTEM_PATH in plan
+    assert plan[td.ASSETS_SYSTEM_PATH]["mode"] == 0o644
+    src = td.assets_py()
+    assert "def analog_svg()" in src and "def css()" in src and "def script(" in src
+    # page.py declares the import contract against assets (both runtime + package forms).
+    page_src = td.page_py()
+    assert "import assets" in page_src and "analog_svg" in page_src
 
 
 def test_emit_plan_is_pure():
@@ -165,11 +184,69 @@ def test_page_is_one_self_contained_html_document():
 
 def test_page_seeds_the_current_time_and_date():
     """The server seeds the first paint so there is no flash of a wrong time before JS
-    runs: HH/MM/SS and the day/month/year must be present in the initial markup."""
+    runs: the 12-hour AM/PM readout and the day/month/year must be present in the initial
+    markup. 14:05:09 -> 02:05:09 PM (the page shows a 12-hour clock with an AM/PM tag)."""
     html, now = _rendered()
-    assert ">14<" in html and ">05<" in html and ">09<" in html  # 14:05:09
+    assert ">02<" in html and ">05<" in html and ">09<" in html  # 02:05:09 (12-hour)
+    assert ">PM<" in html                                        # afternoon -> PM
     assert "August" in html and "2026" in html and "12" in html
     assert now.strftime("%A") in html  # weekday name
+
+
+def test_page_shows_am_pm_readout():
+    """The spec asks for an AM/PM clock: morning seeds render AM, afternoon PM, and the
+    hour is 12-hour (never > 12). Midnight and noon both read 12, not 00/24."""
+    zone = "Asia/Jerusalem"
+    morning = td_page.render(
+        zone_name=zone,
+        now=datetime.datetime(2026, 8, 12, 9, 30, 0, tzinfo=ZoneInfo(zone)),
+    )
+    assert ">09<" in morning and ">AM<" in morning
+    midnight = td_page.render(
+        zone_name=zone,
+        now=datetime.datetime(2026, 8, 12, 0, 0, 0, tzinfo=ZoneInfo(zone)),
+    )
+    assert ">12<" in midnight and ">AM<" in midnight  # 00:00 -> 12 AM
+    noon = td_page.render(
+        zone_name=zone,
+        now=datetime.datetime(2026, 8, 12, 12, 0, 0, tzinfo=ZoneInfo(zone)),
+    )
+    assert ">12<" in noon and ">PM<" in noon  # 12:00 -> 12 PM
+
+
+def test_page_has_round_analog_clock():
+    """The spec asks for a round clock too: an inline SVG face with three named hands the
+    script rotates, plus hour ticks. No external assets -- it is drawn in markup."""
+    html, _ = _rendered()
+    assert 'id="hHand"' in html and 'id="mHand"' in html and 'id="sHand"' in html
+    assert "Analog clock" in html                 # the SVG's aria-label
+    assert "setRot" in html and "rotate(" in html  # the script sweeps the hands
+
+
+def test_page_has_navigable_calendar():
+    """A calendar the user can PAGE through (prev/next month + jump-to-today), rendered
+    client-side into a Monday-first grid. It is a pure display -- no task recording."""
+    html, _ = _rendered()
+    assert 'id="calPrev"' in html and 'id="calNext"' in html
+    assert 'id="calTitle"' in html and 'id="calDays"' in html
+    assert "goMonth" in html and "goToday" in html   # navigation handlers
+    assert "buildCalendar" in html                   # grid builder
+    # Monday-first weekday header.
+    assert ">Mon<" in html and ">Sun<" in html
+    # The month/year title is seeded for the first paint.
+    assert "August 2026" in html
+    # It must NOT be a todo/task recorder -- no inputs, no persistence.
+    assert "<input" not in html and "localStorage" not in html
+
+
+def test_page_has_sun_moon_horizon_arc():
+    """A half-circle horizon with a body that rides across it -- sun while up, moon while
+    down -- as a visual time-of-day helper. Computed client-side (no geolocation prompt),
+    seeded with a per-zone latitude."""
+    html, _ = _rendered()
+    assert 'id="skySvg"' in html and 'id="arcPath"' in html
+    assert "renderSky" in html and "declination" in html and "daylight" in html
+    assert '"lat"' in html  # the seed carries a latitude for the arc
 
 
 def test_page_embeds_the_system_zone_and_ticks_in_it():

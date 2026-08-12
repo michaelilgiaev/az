@@ -115,13 +115,17 @@ def index() -> Response:
 @app.route("/api/now")
 def api_now() -> Response:
     """JSON snapshot of the server's wall clock in the system zone, so the page can
-    re-sync (drift correction) and re-read the zone if it changed. Small and cache-proof
-    (the client fetches it on a slow interval)."""
+    re-sync (drift correction), re-read the zone if it changed, and refine the sun/moon
+    arc's latitude for the (possibly new) zone. Small and cache-proof (the client fetches
+    it on a slow interval)."""
+    from page import seed_latitude  # local import: page.py sits beside this file
+
     name, tz = _system_zone()
     now = datetime.datetime.now(tz)
     return jsonify(
         {
             "zone": name,
+            "lat": seed_latitude(name),
             "iso": now.isoformat(),
             "epoch_ms": int(now.timestamp() * 1000),
             "year": now.year,

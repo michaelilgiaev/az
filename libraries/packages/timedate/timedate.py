@@ -18,10 +18,11 @@ compile): emit_plan() just copies the .py sources + the launcher + the .service 
 Layers:
   * SOURCE tree -- libraries/packages/timedate/ (paths.TIMEDATE_DIR):
       app.py      the Flask app (routes: / , /api/now , /healthz); reads the system zone
-      page.py     the self-contained HTML/CSS/JS the page renders
+      page.py     assembles the self-contained page (seed values + document)
+      assets.py   the bulky builders page.py inlines: analog-clock SVG, CSS, client script
       timedate.py THIS module -- the install paths, the systemd unit, and emit_plan()
   * INSTALLED layout (root-owned):
-      /usr/local/lib/azarch-timedate/{app,page}.py     the app
+      /usr/local/lib/azarch-timedate/{app,page,assets}.py   the app
       /usr/local/bin/azarch-timedate                    a 3-line launcher (python app.py)
       /etc/systemd/system/azarch-timedate.service       the background service (boot)
     The service enable-symlink (multi-user.target.wants) is added by compiler._link_services.
@@ -47,8 +48,11 @@ URL = f"http://localhost:{PORT}"
 LIB_DIR = "/usr/local/lib/azarch-timedate"
 APP_SYSTEM_PATH = f"{LIB_DIR}/app.py"
 PAGE_SYSTEM_PATH = f"{LIB_DIR}/page.py"
+# page.py imports the bulky markup/style/script builders from assets.py; it must land beside
+# app.py/page.py in LIB_DIR or the app crashes at `import assets`.
+ASSETS_SYSTEM_PATH = f"{LIB_DIR}/assets.py"
 # The bin entry point the systemd unit runs: a tiny wrapper that execs the app with the
-# system python, from LIB_DIR (so `import page` resolves). Executable.
+# system python, from LIB_DIR (so `import page` / `import assets` resolves). Executable.
 LAUNCHER_SYSTEM_PATH = "/usr/local/bin/azarch-timedate"
 SERVICE_NAME = "azarch-timedate.service"
 SERVICE_SYSTEM_PATH = f"/etc/systemd/system/{SERVICE_NAME}"
@@ -56,6 +60,7 @@ SERVICE_SYSTEM_PATH = f"/etc/systemd/system/{SERVICE_NAME}"
 # --- Source files (in the repo) ---------------------------------------------
 _SRC_APP = "app.py"
 _SRC_PAGE = "page.py"
+_SRC_ASSETS = "assets.py"
 
 
 def _read_source(name: str) -> str:
@@ -73,6 +78,13 @@ def page_py() -> str:
     """The page renderer (page.py), verbatim from the source tree. Installed to
     PAGE_SYSTEM_PATH beside app.py (app.py does `from page import render`)."""
     return _read_source(_SRC_PAGE)
+
+
+def assets_py() -> str:
+    """The presentation assets (assets.py) -- the analog-clock SVG, the stylesheet, and the
+    client script that page.py inlines. Verbatim from the source tree, installed to
+    ASSETS_SYSTEM_PATH beside page.py (page.py does `from assets import ...`)."""
+    return _read_source(_SRC_ASSETS)
 
 
 def launcher_sh() -> str:
@@ -161,6 +173,7 @@ _CONF = 0o644
 PLAN = [
     {"builder": app_py, "dest": APP_SYSTEM_PATH, "mode": _CONF},
     {"builder": page_py, "dest": PAGE_SYSTEM_PATH, "mode": _CONF},
+    {"builder": assets_py, "dest": ASSETS_SYSTEM_PATH, "mode": _CONF},
     {"builder": launcher_sh, "dest": LAUNCHER_SYSTEM_PATH, "mode": _EXEC},
     {"builder": service_unit, "dest": SERVICE_SYSTEM_PATH, "mode": _CONF},
 ]

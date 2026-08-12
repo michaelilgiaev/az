@@ -117,9 +117,10 @@ def test_emitter_family_covers_all_config_modules():
     # install wrapper, the azarch CLI -- plus the appended bash_profile) + 6 installer +
     # locale + profile + 4 pacman + 4 pkgbuild (calamares + librewolf.desktop + the two
     # librewolf PKGBUILD tiers) + 1 librewolf emit_plan builder (the AutoConfig override,
-    # now a home file at the profile path, not a packaged /opt file) + 4 timedate
-    # emit_plan builders (app.py, page.py, the launcher, the azarch-timedate.service unit).
-    assert len(_EMITTERS) == 19 + 12 + 6 + 1 + 1 + 4 + 4 + 1 + 4
+    # now a home file at the profile path, not a packaged /opt file) + 5 timedate
+    # emit_plan builders (app.py, page.py, assets.py, the launcher, the
+    # azarch-timedate.service unit).
+    assert len(_EMITTERS) == 19 + 12 + 6 + 1 + 1 + 4 + 4 + 1 + 5
 
 
 def test_recipe_dir_contents_are_nonempty_str_both_tiers():
