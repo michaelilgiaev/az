@@ -1,0 +1,8 @@
+[Plugin]
+Module=azarch-notepad
+IAge=3
+Name=Az'arch Notepad Mode
+Description=One window per file, no tabs, a minimal headerbar (hamburger + window controls only), and Ctrl+W exits.
+Authors=Az'arch
+Copyright=Copyright © 2026 Az'arch
+Website=https://gedit-text-editor.org/

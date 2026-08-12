@@ -453,26 +453,32 @@ def test_rc_xml_sets_a_larger_title_font():
 
 def test_theme_rc_grows_the_titlebar_padding_to_one_and_a_half():
     # The Az'arch themerc grows the titlebar-height fields vs stock Clearlooks to land the
-    # bar at ~1.5x stock (padding.height 2 -> 7, padding.width 3 -> 6) and keeps the resize
-    # handle proportional (3 -> 5). These are the size-driving lines; a drift shrinks or
-    # regrows the bar. (An earlier round used 12/8/6, which doubled the bar and overshot.)
+    # bar at ~1.5x stock (padding.height 2 -> 7, padding.width 3 -> 6). These are the
+    # size-driving lines; a drift shrinks or regrows the bar. (An earlier round used 12/8,
+    # which doubled the bar and overshot.)
     out = desktop.openbox_theme_rc()
     assert desktop.OPENBOX_THEME_PADDING_HEIGHT == 7
     assert desktop.OPENBOX_THEME_PADDING_WIDTH == 6
-    assert desktop.OPENBOX_THEME_HANDLE_WIDTH == 5
     assert f"padding.height: {desktop.OPENBOX_THEME_PADDING_HEIGHT}" in out
     assert f"padding.width: {desktop.OPENBOX_THEME_PADDING_WIDTH}" in out
-    assert f"window.handle.width: {desktop.OPENBOX_THEME_HANDLE_WIDTH}" in out
-    # Strictly larger than the stock Clearlooks originals (2 / 3 / 3), so the bar is grown.
+    # Strictly larger than the stock Clearlooks originals (2 / 3), so the bar is grown.
     assert desktop.OPENBOX_THEME_PADDING_HEIGHT > 2
     assert desktop.OPENBOX_THEME_PADDING_WIDTH > 3
-    assert desktop.OPENBOX_THEME_HANDLE_WIDTH > 3
-    # ...but strictly smaller than the earlier doubled values (12 / 8 / 6): this round
-    # scaled the overshot bar back DOWN toward 1.5x. If these creep back up the bar is
-    # doubled again.
+    # ...but strictly smaller than the earlier doubled values (12 / 8): this round scaled
+    # the overshot bar back DOWN toward 1.5x. If these creep back up the bar is doubled.
     assert desktop.OPENBOX_THEME_PADDING_HEIGHT < 12
     assert desktop.OPENBOX_THEME_PADDING_WIDTH < 8
-    assert desktop.OPENBOX_THEME_HANDLE_WIDTH < 6
+
+
+def test_theme_rc_removes_the_bottom_handle_bar():
+    # THE regression this fixes: OpenBox draws a HANDLE -- a full-width near-white
+    # (#eaebec) strip along the BOTTOM edge of every decorated window, sized by
+    # window.handle.width. The user asked for that "thin white bar under a window" gone,
+    # so window.handle.width must be 0 (a zero-height handle draws nothing). A drift back
+    # to a positive width regrows the bar.
+    out = desktop.openbox_theme_rc()
+    assert desktop.OPENBOX_THEME_HANDLE_WIDTH == 0
+    assert "window.handle.width: 0" in out
 
 
 def test_theme_rc_keeps_the_clearlooks_cyan_titlebar_colour():

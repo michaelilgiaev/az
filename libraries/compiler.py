@@ -46,6 +46,15 @@ from patches.calamares import locale
 from patches import openbox
 from patches import fastfetch
 from patches import librewolf
+# Per-application tweaks (each a self-contained patch module with an emit_plan()):
+#   kitty  -- swap the cat-in-a-terminal icon for a plain terminal icon
+#   vlc    -- suppress the first-run "metadata network access" dialog
+#   gimp   -- preload GIMP at login so it opens instantly (single-instance warm-up)
+#   gedit  -- notepad mode: one window per file, no multi-tab feature (+ schema override)
+from patches import kitty
+from patches import vlc
+from patches import gimp
+from patches import gedit
 import installer
 import pacman
 import profile
@@ -194,6 +203,7 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # into an OpenBox X11 session. The Calamares configuration tree lands under /etc/calamares.
     bar.step("Overlay OpenBox desktop and Calamares configuration")
     _emit_desktop(airootfs, home)
+    _emit_apps(airootfs, home)
     _emit_calamares(airootfs)
     _emit_tty1_autologin(airootfs)
     # ckbcomp: Calamares' keyboard page renders its on-screen key legends by shelling
@@ -409,6 +419,98 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
     subprocess.run(_sudo() + ["chown", "-R", "1000:998", str(home)], check=False)
 
 
+def _emit_apps(airootfs: Path, home: Path) -> None:
+    """Overlay the per-application tweaks (kitty/vlc/gimp/gedit), each a self-contained
+    patch module exposing emit_plan() in the same builder/dest/mode/owner shape as
+    openbox/librewolf. Several extras beyond the plain write loop, all driven by keys on
+    the plan entries so this stays declarative:
+
+      * owner "home" files are ALSO mirrored into /etc/skel (like _emit_desktop), so a
+        Calamares-created user inherits them; owner "root" files are system-wide.
+      * entries with "asset": <rel> COPY assets/<rel> verbatim to dest (kitty's scalable
+        icon SVG, whose single source of truth is the repo asset).
+      * entries with "render": {"asset","size"} RASTERIZE that SVG asset to a square PNG
+        at dest (kitty's in-window titlebar icon kitty.app.png).
+      * entries with "remove": True are DELETED from the airootfs rather than written
+        (kitty removes the two PNG icons that would otherwise outrank our SVG).
+      * entries with "compile_schemas": True trigger a glib-compile-schemas pass after
+        emit (gedit's gschema override is inert until the schemas are recompiled).
+
+    The gedit notepad-mode libgedit plugin (a compiled C .so that removes the New Tab
+    action, strips the headerbar buttons and makes Ctrl+W quit -- the only route on the
+    gedit-technology fork, which dropped Python plugins) is BUILT and installed here too,
+    right after the plan loop.
+
+    The /home/main subtree is re-chowned 1000:998 at the end (new user files were added).
+    All of this lands in the airootfs overlay, so the OFFLINE Calamares install carries it
+    onto the installed system with no separate installer step."""
+    skel = airootfs / "etc/skel"
+    need_compile_schemas = False
+
+    def _skel_mirror(entry: dict, dest_abs: str) -> Path | None:
+        """If entry is a HOME file, return its /etc/skel mirror path (else None)."""
+        if entry["owner"] == "home" and dest_abs.startswith(openbox.HOME + "/"):
+            return skel / dest_abs[len(openbox.HOME) + 1:]
+        return None
+
+    # kitty (icon: SVG asset copy + PNG removals + titlebar PNG render) | vlc (home vlcrc) |
+    # gimp (home autostart + helper) | gedit (system .desktop + gschema override). One loop
+    # over all four plans.
+    for entry in (kitty.emit_plan() + vlc.emit_plan()
+                  + gimp.emit_plan() + gedit.emit_plan()):
+        dest_abs = entry["dest"]                       # absolute path on the target
+        target = airootfs / dest_abs.lstrip("/")
+        # Removal entries (e.g. kitty's stale PNGs): unlink instead of writing, so the
+        # icon loader falls back to our SVG. missing_ok -- the file may not exist yet.
+        if entry.get("remove"):
+            target.unlink(missing_ok=True)
+            continue
+        skel_dest = _skel_mirror(entry, dest_abs)
+        # Asset-copy entries (e.g. kitty's scalable icon SVG): copy the repo asset verbatim.
+        if entry.get("asset"):
+            emit.copy_asset(entry["asset"], target, mode=entry["mode"])
+            if skel_dest is not None:
+                emit.copy_asset(entry["asset"], skel_dest, mode=entry["mode"])
+            continue
+        # Render entries (e.g. kitty's titlebar kitty.app.png): rasterize the SVG asset.
+        if entry.get("render"):
+            r = entry["render"]
+            emit.render_svg_png(r["asset"], target, r["size"], mode=entry["mode"])
+            if skel_dest is not None:
+                emit.render_svg_png(r["asset"], skel_dest, r["size"], mode=entry["mode"])
+            continue
+        content = entry["builder"]()
+        emit.write_text(target, content, mode=entry["mode"])
+        # Mirror HOME-relative user files into /etc/skel for installed-system users
+        # (same rule as _emit_desktop). System (root) files are not skel-mirrored.
+        if skel_dest is not None:
+            emit.write_text(skel_dest, content, mode=entry["mode"])
+        if entry.get("compile_schemas"):
+            need_compile_schemas = True
+    # Compile + install the gedit notepad-mode libpeas plugin (.so). This is the only
+    # mechanism on the gedit-technology fork that can remove the New Tab action, strip the
+    # headerbar buttons and make Ctrl+W exit (config/CSS/GSettings/accels cannot; Python
+    # plugins were dropped in gedit 49.0). Built from C like the application-menu daemon;
+    # the .plugin metadata that pairs with it is emitted by the plan loop above, and the
+    # gschema override's active-plugins enables it. Root-owned system path.
+    gedit.build_plugin(airootfs / gedit.GEDIT_PLUGIN_SO_DEST.lstrip("/"))
+    # gedit's glib schema override is inert until the machine-readable gschemas.compiled
+    # is regenerated. On the ISO the actual recompile happens LATER and for free: glib2 (a
+    # gedit dependency) ships /usr/share/libalpm/hooks/glib-compile-schemas.hook, which
+    # runs PostTransaction whenever a *.gschema.* file changes -- and by then our override
+    # has been copied in AND gedit's base schema is installed, so the hook compiles both
+    # together. This explicit pass is therefore a harmless no-op at profile-emit time
+    # (gedit's base schema is not installed yet, so glib-compile-schemas prints "No schema
+    # files found: doing nothing"); we keep it as belt-and-braces (and because the
+    # live-apply path, which drops the override onto an already-installed system, DOES need
+    # it). Use the command the gedit patch defines (single source of truth).
+    if need_compile_schemas:
+        schemas_dir = airootfs / gedit.GLIB_SCHEMAS_DIR.lstrip("/")
+        subprocess.run(_sudo() + ["glib-compile-schemas", str(schemas_dir)], check=False)
+    # re-assert ownership of the live user's tree (new home files were added under it).
+    subprocess.run(_sudo() + ["chown", "-R", "1000:998", str(home)], check=False)
+
+
 def _emit_calamares(airootfs: Path) -> None:
     """Write the whole Calamares configuration tree under /etc/calamares."""
     base = airootfs / "etc/calamares"
@@ -613,7 +715,11 @@ def _check_host_deps(sudo, offline: bool) -> None:
     # dev stack present here, that `make` dies with "gtk/gtk.h: No such file or directory"
     # and aborts the whole build. Listing them here also means the "already present"
     # early-return below cannot skip a host that is missing only the GTK3 dev stack.
-    host_pkgs = ["archiso", "git", "base-devel", "go"] + application_menu.MENU_BUILD_DEPS
+    # + the gedit notepad-mode plugin build deps (the `gedit` pkg-config module -> the
+    # gedit/GTK3/libpeas dev headers): _emit_apps COMPILES that libpeas plugin later in
+    # this run, so the dev stack must be present here or `make` dies on a missing header.
+    host_pkgs = (["archiso", "git", "base-devel", "go"]
+                 + application_menu.MENU_BUILD_DEPS + gedit.GEDIT_PLUGIN_BUILD_DEPS)
     if subprocess.run(["pacman", "-Qq", *host_pkgs],
                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
         print("    [+] Build-host dependencies already present, skipping sync (offline).")

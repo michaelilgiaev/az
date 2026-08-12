@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 from pathlib import Path
 
 import paths
@@ -75,6 +76,63 @@ def copy_patch_file(rel: str, dest: Path, mode: int | None = None) -> Path:
     if mode is not None:
         os.chmod(dest, mode)
     return dest
+
+
+# SVG->PNG rasterizers, in preference order. rsvg-convert is the cleanest and is present
+# on the build host AND the live/installed medium (librsvg is pulled in by the GTK stack);
+# ImageMagick `convert` and `inkscape` are fallbacks so the build does not hard-depend on a
+# single tool. Each entry builds the argv for "rasterize SRC to DEST at SIZExSIZE".
+def _rsvg_argv(src: str, dest: str, size: int) -> list[str]:
+    return ["rsvg-convert", "-w", str(size), "-h", str(size), src, "-o", dest]
+
+
+def _magick_argv(src: str, dest: str, size: int) -> list[str]:
+    # -background none keeps transparency; the geometry forces the square size.
+    return ["convert", "-background", "none", "-density", "384",
+            src, "-resize", f"{size}x{size}", dest]
+
+
+def _inkscape_argv(src: str, dest: str, size: int) -> list[str]:
+    return ["inkscape", src, "--export-type=png", f"--export-filename={dest}",
+            "-w", str(size), "-h", str(size)]
+
+
+_SVG_RASTERIZERS = (
+    ("rsvg-convert", _rsvg_argv),
+    ("convert", _magick_argv),
+    ("inkscape", _inkscape_argv),
+)
+
+
+def render_svg_png(rel_asset: str, dest: Path, size: int, mode: int = 0o644) -> Path:
+    """Rasterize the SVG asset assets/<rel_asset> to a square <size>px PNG at dest.
+
+    Used for icon PNGs whose single source of truth is a vector asset (e.g. kitty's
+    in-window titlebar icon kitty.app.png, derived from assets/icons/kitty.svg). Tries
+    rsvg-convert, then ImageMagick `convert`, then inkscape -- whichever is installed --
+    so the build does not hard-depend on one tool. Raises if none is available or the
+    conversion fails (a silently-missing icon would regress the feature)."""
+    src = paths.ASSETSDIR / rel_asset
+    dest = Path(dest)
+    _ensure_parent(dest)
+    last_err: Exception | None = None
+    for tool, argv_fn in _SVG_RASTERIZERS:
+        if shutil.which(tool) is None:
+            continue
+        argv = argv_fn(str(src), str(dest), size)
+        proc = subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        if proc.returncode == 0 and dest.is_file():
+            os.chmod(dest, mode)
+            return dest
+        last_err = RuntimeError(
+            f"{tool} failed to rasterize {src} -> {dest}: {proc.stderr.decode(errors='replace')}"
+        )
+    if last_err is not None:
+        raise last_err
+    raise RuntimeError(
+        f"no SVG rasterizer found (need one of: {', '.join(t for t, _ in _SVG_RASTERIZERS)}) "
+        f"to render {src} -> {dest}"
+    )
 
 
 def copy_tree(src: Path, dest: Path) -> None:
