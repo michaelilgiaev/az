@@ -40,6 +40,7 @@ import paths
 from ownership import Ownership
 from progress import ProgressBar
 from packages.application_menu import application_menu
+from packages.timedate import timedate
 from patches.calamares import calamares
 from patches.calamares import locale
 from patches import openbox
@@ -391,6 +392,19 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
             entry["builder"](),
             mode=entry["mode"],
         )
+    # Az'arch timedate (OUR Flask Time + Calendar home page -- the site LibreWolf lands
+    # on at localhost:49154). A pure-Python app: emit_plan() copies the app sources
+    # (app.py/page.py), the launcher, and the azarch-timedate.service unit to their fixed
+    # root-owned system paths. The service ENABLE-symlink is added in _link_services (like
+    # the other azarch units); the OFFLINE Calamares install rsyncs all of it onto the
+    # installed system so the home page also runs at boot there. Its runtime dep
+    # (python-flask) is in the manifest. See packages/timedate/timedate.py.
+    for entry in timedate.emit_plan():
+        emit.write_text(
+            airootfs / entry["dest"].lstrip("/"),
+            entry["builder"](),
+            mode=entry["mode"],
+        )
     # re-assert ownership of the live user's tree (new files were added under it).
     subprocess.run(_sudo() + ["chown", "-R", "1000:998", str(home)], check=False)
 
@@ -707,6 +721,11 @@ def _link_services(airootfs: Path) -> None:
     # unplug. See _emit_power / libraries/system.py.
     emit.link("/etc/systemd/system/azarch-sleep-policy.service",
               base / "multi-user.target.wants/azarch-sleep-policy.service")
+    # Az'arch timedate home page service: the Flask Time + Calendar site (localhost:49154)
+    # LibreWolf lands on. Enabled on BOTH ISOs (and, via unpackfs, the installed system)
+    # so the home page is listening at boot. See timedate.service_unit() / _emit_desktop.
+    emit.link(timedate.SERVICE_SYSTEM_PATH,
+              base / f"multi-user.target.wants/{timedate.SERVICE_NAME}")
 
 
 def _switch_offline(W: Path, conf: str, localrepo: Path) -> None:

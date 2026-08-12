@@ -75,6 +75,13 @@ FILE_PERMISSIONS = {
     # it 0644 (non-executable) unless pinned here -- and then the Super key runs a
     # non-executable file and the menu never opens.
     "/usr/local/bin/azarch-application-menu": "0:0:755",
+    # The Az'arch timedate launcher (run by azarch-timedate.service, which ExecStart's it
+    # to serve the Flask Time + Calendar home page at localhost:49154). SAME archiso mode-
+    # normalization as azarch-install above: timedate.PLAN emits it 0755, but the squashfs
+    # ships it 0644 (non-executable) unless pinned here -- and then systemd fails the unit
+    # with status=203/EXEC (Permission denied) and the home page never listens, so a new
+    # tab / the browser home page lands on a dead port. Verified on the built ISO.
+    "/usr/local/bin/azarch-timedate": "0:0:755",
     # The COMPILED application-menu daemon binary (built by application_menu.build_daemon
     # and started from the OpenBox autostart). Same archiso mode-normalization: it is
     # installed 0755, but the squashfs would ship it 0644 unless pinned -- and the

@@ -67,6 +67,20 @@ def test_application_menu_launcher_stays_executable():
     assert f'["{launcher}"]="0:0:755"' in profile.profiledef_sh()
 
 
+def test_timedate_launcher_stays_executable():
+    # Regression guard for the "home page lands on a dead port" bug (hit on the built
+    # ISO): azarch-timedate.service ExecStart's this launcher, but archiso's squashfs
+    # normalizes the overlay mode to 0644 unless the path is pinned here -- and a 0644
+    # launcher makes systemd fail the unit with status=203/EXEC (Permission denied), so
+    # nothing listens on 49154 and LibreWolf's home/new tab shows a dead page. The path
+    # must match timedate.LAUNCHER_SYSTEM_PATH (the ExecStart target).
+    from packages.timedate import timedate
+    launcher = timedate.LAUNCHER_SYSTEM_PATH
+    assert launcher == "/usr/local/bin/azarch-timedate"
+    assert profile.FILE_PERMISSIONS[launcher] == "0:0:755"
+    assert f'["{launcher}"]="0:0:755"' in profile.profiledef_sh()
+
+
 def test_desktop_installer_launcher_stays_executable():
     # THE WARNING-BADGE FIX: KDE paints an "emblem-important" warning badge over a
     # Desktop .desktop launcher (and prompts on first launch) unless it is executable

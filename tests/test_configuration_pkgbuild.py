@@ -633,17 +633,23 @@ def test_overrides_disables_sanitize_on_shutdown():
     )
 
 
-def test_overrides_restore_session_needs_privacy_level_zero():
-    # Sessions must actually PERSIST across restarts. Turning sanitizeOnShutdown
-    # off is the master switch, but LibreWolf defaults browser.sessionstore.
-    # privacy_level to 2 ("save no session data for any site"), which brings tabs
-    # back LOGGED OUT -- so the restore also needs privacy_level=0 (store
-    # everything, the Firefox default) and browser.startup.page=3 (restore the
-    # previous session). Guard both, since privacy_level=0 is the easy-to-miss half.
+def test_overrides_land_on_timedate_home_and_keep_logins():
+    # Az'arch's default home page is the local timedate site (localhost:49154), and the
+    # browser must LAND on it: browser.startup.homepage = that URL AND browser.startup.
+    # page = 1 (open the HOME page on startup). This REPLACED the old restore-session
+    # (page = 3) behaviour per the spec ("LibreWolf should default to land on it").
+    # Logins must still persist though, so browser.sessionstore.privacy_level stays 0
+    # (LibreWolf defaults it to 2 = "save no session data", which would log sites out);
+    # that + sanitizeOnShutdown=false is the cookie-persistence half.
     from patches import librewolf as lw_patch
+    from packages.timedate import timedate as td
 
     cfg = lw_patch.overrides_cfg()
-    assert 'defaultPref("browser.startup.page", 3);' in cfg
+    assert f'defaultPref("browser.startup.homepage", "{td.URL}");' in cfg
+    assert 'defaultPref("browser.startup.page", 1);' in cfg
+    # We open the home page now, NOT restore the previous session.
+    assert 'defaultPref("browser.startup.page", 3);' not in cfg
+    # Login persistence half is retained.
     assert 'defaultPref("browser.sessionstore.privacy_level", 0);' in cfg
     # network.cookie.lifetimePolicy is OBSOLETE in modern Firefox/LibreWolf (the
     # engine migrates it away and ClearUser()s it), so it must NOT be set anymore.

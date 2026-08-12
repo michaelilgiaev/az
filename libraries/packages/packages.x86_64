@@ -170,6 +170,7 @@ unzip
 jq
 python
 python-pip
+python-flask
 tk
 pipewire
 pipewire-pulse

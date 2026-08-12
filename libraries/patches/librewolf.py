@@ -23,22 +23,30 @@ compiler.py mirrors it into /etc/skel so a Calamares-created user inherits it).
 The PKGBUILD does NOT ship it -- packaging it under /opt was the dead-letter bug.
 OVERRIDES_PROFILE_PATH is the single source of truth for the path.
 
-Everything else is stock LibreWolf. We change exactly two things (both requested):
+Everything else is stock LibreWolf. We change exactly three things (all requested):
 
-  1. SESSION + COOKIE PERSISTENCE. LibreWolf ships privacy-hardened and, by
-     default, wipes cookies + history on shutdown (privacy.sanitize.
-     sanitizeOnShutdown = true) and does NOT restore the previous window/tabs.
-     Az'arch wants logins and open tabs to SURVIVE a restart, so we:
+  0. DEFAULT HOME + NEW-TAB PAGE = the Az'arch timedate site (localhost:49154). The
+     distro's default home page is the local Flask Time + Calendar site the
+     azarch-timedate service serves on loopback; LibreWolf should LAND on it. We set
+     browser.startup.homepage to that URL (the Home button target) and
+     browser.startup.page = 1 (open the HOME page on startup), so every launch lands on
+     the timedate page, and we quieten the Firefox Home / new-tab dashboard. The URL is
+     imported from the timedate package (packages.timedate.timedate.URL) so the browser
+     and the service can never disagree on the port. NOTE: modern Firefox has no
+     supported pref that force-loads an arbitrary URL into Ctrl+T (browser.newtab.url was
+     removed in FF41), and we deliberately do NOT disable the AutoConfig sandbox to hack
+     it; the guarantee is startup + Home = timedate page.
+
+  1. COOKIE PERSISTENCE. LibreWolf ships privacy-hardened and, by default, wipes
+     cookies + history on shutdown (privacy.sanitize.sanitizeOnShutdown = true).
+     Az'arch wants logins to SURVIVE a restart, so we:
        * turn off shutdown sanitisation (the master switch), and belt-and-braces
          clear the per-category clearOnShutdown_v2 cookie flag;
-       * restore the previous session on startup (browser.startup.page = 3);
-       * set browser.sessionstore.privacy_level = 0. THIS ONE IS LOAD-BEARING and
-         easy to miss: LibreWolf defaults it to 2 ("save no session data for any
-         site"), which keeps the session store URL-only and drops the cookies /
-         form data a real "restore previous session" needs -- so with the stock
-         value the tabs come back logged OUT. 0 is the Firefox default (store
-         everything) and is LibreWolf's own documented fix for pinned-tab /
-         session loss. Without it, sanitizeOnShutdown=false alone is not enough.
+       * set browser.sessionstore.privacy_level = 0 (the Firefox default: store
+         everything) so the session store keeps the cookies/form data logins need --
+         LibreWolf defaults it to 2 ("save no session data for any site"). We open the
+         home page on startup rather than restoring tabs (see 0), but this still governs
+         what the session store retains, so logins persist.
      We deliberately do NOT set network.cookie.lifetimePolicy: that pref is
      OBSOLETE in modern Firefox/LibreWolf (the engine migrates it away and
      ClearUser()s it on startup), so writing it does nothing useful. Keeping
@@ -67,6 +75,14 @@ from __future__ import annotations
 # defaultPref in it overrides LibreWolf's own defaultPref for the same key.
 OVERRIDES_FILENAME = "librewolf.overrides.cfg"
 
+# The Az'arch timedate home page (the Flask Time + Calendar site served on loopback by
+# the azarch-timedate service). LibreWolf lands here on startup AND via the Home button.
+# Single source of truth for the URL is the timedate package's PORT; import it so the
+# browser and the service can never disagree on the port.
+from packages.timedate import timedate as _timedate  # noqa: E402 (our package)
+
+TIMEDATE_URL = _timedate.URL  # "http://localhost:49154"
+
 # The live user's home (matches openbox.HOME / the airootfs /home/main tree).
 HOME = "/home/main"
 
@@ -90,8 +106,8 @@ def overrides_cfg() -> str:
 
     AutoConfig files MUST begin with a comment line -- the engine ignores line 1
     -- so the leading `//` banner is required, not decoration."""
-    return """\
-// Az'arch LibreWolf overrides -- session/cookie persistence + hidden bookmarks bar
+    return f"""\
+// Az'arch LibreWolf overrides -- home/new-tab page + cookie persistence + hidden bookmarks bar
 //
 // LibreWolf's officially-supported AutoConfig override file, loaded AFTER the
 // stock librewolf.cfg, so a defaultPref here beats LibreWolf's own defaultPref for
@@ -102,9 +118,43 @@ def overrides_cfg() -> str:
 //
 // AutoConfig files must begin with a comment line; the engine ignores line 1.
 
-// === 1. Sessions & cookies persist across restarts ========================
-// LibreWolf wipes cookies + history on shutdown and does not restore tabs by
-// default; Az'arch wants logins and open tabs to survive a restart.
+// === 1. Home + new-tab page = the Az'arch timedate site ({TIMEDATE_URL}) ===
+// Az'arch's default home page is the local Flask Time + Calendar site the
+// azarch-timedate service serves on loopback. LibreWolf should LAND on it, so:
+//
+//   * browser.startup.homepage -> the timedate URL: this is the Home button target
+//     AND (with startup.page = 1 below) the page opened on every launch. Confirmed the
+//     correct, current pref (Firefox browser/app/profile/firefox.js); LibreWolf's own
+//     librewolf.cfg does not touch it, so this value sticks.
+//   * browser.startup.page = 1 -> open the HOME page on startup. (0 = blank, 1 = home,
+//     3 = restore previous session.) The spec wants the browser to default to the
+//     timedate page, so we open the home page rather than restoring the last session.
+//   * browser.newtabpage.* -> point the Firefox Home / new-tab (Activity Stream) page's
+//     custom top area at the timedate URL and strip the built-in noise (top sites,
+//     Pocket/stories, search hero), so a fresh tab shows the timedate site's spirit
+//     rather than the default dashboard. NOTE: modern Firefox removed the plain
+//     "custom new-tab URL" pref (browser.newtab.url, gone since FF41) and there is no
+//     supported defaultPref that force-loads an arbitrary URL into Ctrl+T without an
+//     extension or disabling the AutoConfig sandbox; we deliberately do NOT weaken the
+//     sandbox. The load-bearing, security-neutral guarantee is therefore: EVERY LAUNCH
+//     and the Home button land on the timedate page (startup.page=1 + homepage), which
+//     satisfies "LibreWolf should default to land on it."
+defaultPref("browser.startup.homepage", "{TIMEDATE_URL}");
+defaultPref("browser.startup.page", 1);
+// Home button also goes to the timedate page (redundant with homepage, explicit).
+defaultPref("browser.startup.homepage_override.mstone", "ignore");
+// Quieten the Firefox Home / new-tab dashboard so a new tab is calm, not the default
+// grid of top sites + sponsored stories.
+defaultPref("browser.newtabpage.activity-stream.feeds.topsites", false);
+defaultPref("browser.newtabpage.activity-stream.showSponsoredTopSites", false);
+defaultPref("browser.newtabpage.activity-stream.feeds.section.topstories", false);
+defaultPref("browser.newtabpage.activity-stream.showSponsored", false);
+defaultPref("browser.newtabpage.activity-stream.feeds.snippets", false);
+
+// === 2. Cookies persist across restarts ====================================
+// LibreWolf wipes cookies + history on shutdown by default; Az'arch wants logins to
+// survive a restart (the open-tabs restore was dropped in favour of landing on the
+// timedate home page above, but LOGINS should still persist).
 
 // --- Master switch: do not sanitise anything on shutdown -------------------
 defaultPref("privacy.sanitize.sanitizeOnShutdown", false);
@@ -115,18 +165,14 @@ defaultPref("privacy.sanitize.sanitizeOnShutdown", false);
 // legacy/dead once migrated, so we do not set them.)
 defaultPref("privacy.clearOnShutdown_v2.cookiesAndStorage", false);
 
-// --- Restore the previous session on start, so open tabs come back ---------
-defaultPref("browser.startup.page", 3);
-
-// --- LOAD-BEARING: let the session store keep cookies/form data ------------
+// --- Let the session store keep cookies/form data (login persistence) ------
 // LibreWolf defaults browser.sessionstore.privacy_level to 2 ("save no session
-// data for any site"), which makes the restored session URL-only -- tabs come
-// back LOGGED OUT. 0 (the Firefox default: store everything) is required for a
-// real "restore previous session", and is LibreWolf's own documented fix for
-// pinned-tab/session loss. Without this, sanitizeOnShutdown=false is not enough.
+// data for any site"). 0 (the Firefox default: store everything) keeps cookies/
+// form data so logins survive a restart. Kept even though we open the home page on
+// startup rather than restoring tabs -- it governs what the session store retains.
 defaultPref("browser.sessionstore.privacy_level", 0);
 
-// === 2. Hide the bookmarks toolbar ("For quick access") by default =========
+// === 3. Hide the bookmarks toolbar ("For quick access") by default =========
 // LibreWolf ships this as "always"; Az'arch wants the "For quick access, place
 // your bookmarks here on the bookmarks toolbar" strip (Ctrl+Shift+B) hidden by
 // default. "never" hides it on every window AND the new-tab page. The user can

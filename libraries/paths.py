@@ -111,6 +111,12 @@ PACKAGES_FILE = PACKAGESDIR / "packages.x86_64"
 # pure-Python launcher (launcher.py), and generates the .desktop entry. The whole menu
 # is OURS, so it is a package here, not a patch.
 APPLICATION_MENU_DIR = PACKAGESDIR / "application_menu"
+# The Az'arch timedate package (Flask Time + Calendar home page): the app sources
+# (app.py + page.py) live directly here alongside timedate.py, the build wiring that
+# copies them into the airootfs, installs the launcher, and ships the systemd service.
+# It is OUR package (a website we author), so it lives under libraries/packages/, not
+# patches/. Served at localhost:49154; LibreWolf's default home/new-tab page.
+TIMEDATE_DIR = PACKAGESDIR / "timedate"
 # The `azarch` guest CLI is a single Python module, libraries/packages/azarch.py.
 # It is installed to /usr/local/bin/azarch by the compiler, which injects the
 # country->locale table from patches/calamares/locale.py into it. See

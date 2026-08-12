@@ -50,6 +50,7 @@ import installer
 from patches.calamares import locale
 import pacman
 from packages import pkgbuild
+from packages.timedate import timedate
 import profile
 import specification_classify
 import specification_content
@@ -88,6 +89,10 @@ _EMITTERS = [
     # The LibreWolf AutoConfig override, now delivered as a home file at the profile
     # path (not packaged under /opt) -- exercise its emit_plan builder too.
     *[(f"librewolf:{e['dest']}", e["builder"]) for e in librewolf.emit_plan()],
+    # The Az'arch timedate home page (Flask Time + Calendar at localhost:49154): its 4
+    # emit_plan builders (app.py, page.py, the launcher, the systemd service) all return
+    # real content that compiler.py writes into the airootfs.
+    *[(f"timedate:{e['dest']}", e["builder"]) for e in timedate.emit_plan()],
 ]
 
 
@@ -112,8 +117,9 @@ def test_emitter_family_covers_all_config_modules():
     # install wrapper, the azarch CLI -- plus the appended bash_profile) + 6 installer +
     # locale + profile + 4 pacman + 4 pkgbuild (calamares + librewolf.desktop + the two
     # librewolf PKGBUILD tiers) + 1 librewolf emit_plan builder (the AutoConfig override,
-    # now a home file at the profile path, not a packaged /opt file).
-    assert len(_EMITTERS) == 19 + 12 + 6 + 1 + 1 + 4 + 4 + 1
+    # now a home file at the profile path, not a packaged /opt file) + 4 timedate
+    # emit_plan builders (app.py, page.py, the launcher, the azarch-timedate.service unit).
+    assert len(_EMITTERS) == 19 + 12 + 6 + 1 + 1 + 4 + 4 + 1 + 4
 
 
 def test_recipe_dir_contents_are_nonempty_str_both_tiers():
