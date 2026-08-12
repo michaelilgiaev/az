@@ -77,11 +77,17 @@ def css() -> str:
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   html, body {{ height: 100%; }}
   body {{
+    /* Lock to the viewport: everything is arranged to FIT on one screen, no scrolling.
+       The layout is two columns -- the clocks on the left, the sun/moon arc + calendar on
+       the right -- centred in the viewport. On narrow/portrait screens the columns stack
+       (see the media query) and the whole thing is scaled to still fit. */
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 100vh;
-    padding: 2rem 1rem;
+    height: 100vh;
+    width: 100vw;
+    padding: clamp(0.75rem, 2.5vmin, 2rem);
+    overflow: hidden;               /* no scroll: content is sized to fit */
     font-family: "Cantarell", "Noto Sans", system-ui, -apple-system, sans-serif;
     color: var(--fg);
     background: radial-gradient(1200px 700px at 50% -10%, var(--bg-1) 0%, var(--bg-0) 60%),
@@ -91,23 +97,39 @@ def css() -> str:
   }}
   .wrap {{
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1.6rem;
-    width: 100%;
-    max-width: 640px;
-    user-select: none;
-  }}
-  .clocks {{
-    display: flex;
+    flex-direction: row;
     align-items: center;
     justify-content: center;
-    gap: clamp(1rem, 5vw, 2.8rem);
-    flex-wrap: wrap;
+    gap: clamp(1.5rem, 5vw, 4rem);
+    width: 100%;
+    height: 100%;
+    max-width: 1100px;
+    user-select: none;
+  }}
+  .col {{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }}
+  .col-left {{ flex: 0 1 auto; }}
+  .col-right {{
+    flex: 0 1 auto;
+    gap: clamp(0.75rem, 2.2vmin, 1.4rem);
+  }}
+  /* Left column: analog above the digital readout, stacked and centred. */
+  .clocks {{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(0.75rem, 2.5vmin, 1.6rem);
   }}
   .analog {{ flex: 0 0 auto; }}
   .analog-svg {{
-    width: clamp(150px, 34vw, 200px);
+    /* Scale with the smaller viewport dimension so it shrinks on short screens and the
+       whole layout keeps fitting without scroll. */
+    width: clamp(140px, 24vmin, 230px);
     height: auto;
     filter: drop-shadow(0 6px 22px rgba(0,0,0,0.45));
   }}
@@ -118,14 +140,15 @@ def css() -> str:
   .digital {{
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
-    gap: 0.5rem;
+    align-items: center;
+    text-align: center;
+    gap: clamp(0.3rem, 1vmin, 0.55rem);
   }}
   .time {{
     font-family: "JetBrains Mono", "DejaVu Sans Mono", "Liberation Mono", ui-monospace,
                  monospace;
     font-weight: 600;
-    font-size: clamp(2.4rem, 9vw, 4.6rem);
+    font-size: clamp(2.2rem, 7vmin, 4.6rem);
     line-height: 1;
     letter-spacing: 0.02em;
     display: flex;
@@ -144,14 +167,14 @@ def css() -> str:
     margin-top: 0.15em;
   }}
   .dayname {{
-    font-size: clamp(0.95rem, 3.5vw, 1.5rem);
+    font-size: clamp(0.9rem, 2.6vmin, 1.5rem);
     font-weight: 600;
     letter-spacing: 0.26em;
     text-transform: uppercase;
     color: var(--accent);
   }}
   .date {{
-    font-size: clamp(1rem, 4vw, 1.9rem);
+    font-size: clamp(1rem, 3vmin, 1.9rem);
     font-weight: 300;
     letter-spacing: 0.04em;
     color: var(--fg);
@@ -163,9 +186,11 @@ def css() -> str:
     color: var(--fg-dim);
     text-transform: uppercase;
   }}
+  /* The right column (arc + calendar) shares one width so they line up, sized to the
+     viewport so it fits without scrolling. */
+  .col-right {{ --col-w: clamp(300px, 42vmin, 420px); }}
   .horizon {{
-    width: 100%;
-    max-width: 400px;
+    width: var(--col-w);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -178,19 +203,19 @@ def css() -> str:
     box-shadow: 0 6px 22px rgba(0,0,0,0.35);
   }}
   .sky-caption {{
-    margin-top: 0.4rem;
-    font-size: 0.78rem;
+    margin-top: 0.35rem;
+    font-size: clamp(0.68rem, 1.5vmin, 0.82rem);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--fg-dim);
   }}
   .calendar {{
-    width: 100%;
-    max-width: 400px;
+    width: var(--col-w);
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 14px;
-    padding: 0.9rem 1rem 1.1rem;
+    padding: clamp(0.6rem, 1.6vmin, 0.95rem) clamp(0.7rem, 1.8vmin, 1rem)
+             clamp(0.7rem, 1.8vmin, 1.1rem);
   }}
   .cal-head {{
     display: flex;
@@ -198,6 +223,26 @@ def css() -> str:
     justify-content: space-between;
     margin-bottom: 0.7rem;
   }}
+  /* "Jump to current" -- shown by the script only when the viewed month is not the
+     current one (see toggleTodayBtn); hidden via the native [hidden] attribute otherwise
+     so it takes no space and cannot be tabbed to. A small accent pill under the header. */
+  .cal-today {{
+    display: block;
+    margin: -0.2rem auto 0.7rem;
+    padding: 0.3rem 0.9rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    background: rgba(6,184,253,0.10);
+    border: 1px solid rgba(6,184,253,0.35);
+    border-radius: 999px;
+    cursor: pointer;
+    animation: calTodayIn 0.18s ease-out;
+  }}
+  .cal-today:hover {{ background: rgba(6,184,253,0.18); }}
+  .cal-today[hidden] {{ display: none; }}
+  @keyframes calTodayIn {{ from {{ opacity: 0; transform: translateY(-3px); }} }}
   .cal-title {{
     font-size: 1.1rem;
     font-weight: 600;
@@ -232,19 +277,20 @@ def css() -> str:
     text-align: center;
   }}
   #calDow span {{
-    font-size: 0.72rem;
+    font-size: clamp(0.6rem, 1.4vmin, 0.72rem);
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--fg-dim);
-    padding: 0.3rem 0;
+    padding: clamp(0.15rem, 0.6vmin, 0.3rem) 0;
   }}
   .cal-days .cell {{
-    aspect-ratio: 1 / 1;
+    /* Slightly shorter than square so a 6-row month fits the viewport without scroll. */
+    aspect-ratio: 7 / 6;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.95rem;
+    font-size: clamp(0.78rem, 1.9vmin, 0.98rem);
     color: var(--fg);
     border-radius: 8px;
   }}
@@ -266,8 +312,22 @@ def css() -> str:
     .calendar {{ background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.08); }}
     .cal-days .cell.today {{ color: #eef3f8; }}
   }}
-  @media (max-width: 440px) {{
-    .digital {{ align-items: center; text-align: center; }}
+  /* Portrait or narrow screens: the two side-by-side columns will not fit, so stack them
+     (clocks on top, arc + calendar below) and centre. Everything is still sized in vmin,
+     so it keeps trying to fit; if the screen is genuinely too short for the stack we allow
+     scrolling as a graceful last resort rather than clipping. */
+  @media (max-aspect-ratio: 1 / 1), (max-width: 720px) {{
+    body {{ overflow-y: auto; }}
+    .wrap {{
+      flex-direction: column;
+      height: auto;
+      min-height: 100%;
+      justify-content: center;
+      gap: clamp(1rem, 3.5vmin, 2rem);
+      padding: clamp(0.75rem, 2.5vmin, 1.5rem) 0;
+    }}
+    .analog-svg {{ width: clamp(140px, 34vw, 210px); }}
+    .col-right {{ --col-w: min(420px, 88vw); }}
   }}"""
 
 
@@ -353,7 +413,8 @@ def script(seed_json: str) -> str:
     calTitle: document.getElementById("calTitle"),
     calDays: document.getElementById("calDays"),
     calPrev: document.getElementById("calPrev"),
-    calNext: document.getElementById("calNext")
+    calNext: document.getElementById("calNext"),
+    calToday: document.getElementById("calToday")
   }};
 
   // ================= DIGITAL + ANALOG CLOCKS =================
@@ -524,6 +585,17 @@ def script(seed_json: str) -> str:
       frag.appendChild(cell);
     }});
     el.calDays.appendChild(frag);
+    toggleTodayBtn();
+  }}
+
+  // Show the "Jump to current" button only while the viewed month is NOT the current one;
+  // hide it (native [hidden], so it takes no space) the moment we are back on today's
+  // month. Called from buildCalendar, so it stays correct after every navigation and after
+  // a midnight date-rollover. Guards until the live date has seeded (today.y set).
+  function toggleTodayBtn() {{
+    if (!el.calToday) return;
+    var onToday = (today.y !== null && viewY === today.y && viewM === today.m);
+    el.calToday.hidden = onToday;
   }}
 
   function goMonth(delta) {{
@@ -544,6 +616,7 @@ def script(seed_json: str) -> str:
   el.calPrev.addEventListener("click", function () {{ goMonth(-1); }});
   el.calNext.addEventListener("click", function () {{ goMonth(1); }});
   el.calTitle.addEventListener("click", goToday);
+  if (el.calToday) el.calToday.addEventListener("click", goToday);
   document.addEventListener("keydown", function (e) {{
     if (e.key === "ArrowLeft") goMonth(-1);
     else if (e.key === "ArrowRight") goMonth(1);

@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import datetime
 import os
+import re
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -182,6 +183,21 @@ def test_page_is_one_self_contained_html_document():
     assert "src=" not in html and "href=" not in html  # no external CSS/JS/links
 
 
+def test_page_fits_viewport_in_two_columns():
+    """The page is a NO-SCROLL, full-viewport layout: the clocks on the left, the sun/moon
+    arc + calendar on the right, locked to 100vh with overflow hidden (it stacks on
+    narrow/portrait screens via a media query). Pin the structure so it cannot regress to
+    the old tall, scrolling single column."""
+    html, _ = _rendered()
+    # Two explicit columns wrap the three sections.
+    assert 'class="col col-left"' in html and 'class="col col-right"' in html
+    # Locked to the viewport, no scroll, laid out as a row.
+    assert "height: 100vh" in html and "overflow: hidden" in html
+    assert "flex-direction: row" in html
+    # A responsive fallback stacks the columns on narrow/portrait screens.
+    assert "max-aspect-ratio" in html or "max-width: 720px" in html
+
+
 def test_page_seeds_the_current_time_and_date():
     """The server seeds the first paint so there is no flash of a wrong time before JS
     runs: the 12-hour AM/PM readout and the day/month/year must be present in the initial
@@ -237,6 +253,21 @@ def test_page_has_navigable_calendar():
     assert "August 2026" in html
     # It must NOT be a todo/task recorder -- no inputs, no persistence.
     assert "<input" not in html and "localStorage" not in html
+
+
+def test_page_has_jump_to_current_button():
+    """A 'Jump to current' button that the script reveals only while the viewed month is
+    not the current one (hidden by default via the native [hidden] attribute) and hides
+    again once back on today's month. It jumps home (goToday)."""
+    html, _ = _rendered()
+    # Present but hidden in the initial markup (seed renders on the current month).
+    assert 'id="calToday"' in html
+    m = re.search(r'<button id="calToday"[^>]*>', html)
+    assert m and "hidden" in m.group(0), "the button must start hidden"
+    assert "Jump to current" in html
+    # The script toggles it by month and wires it to jump home.
+    assert "toggleTodayBtn" in html
+    assert ".cal-today" in html  # its styling is present
 
 
 def test_page_has_sun_moon_horizon_arc():

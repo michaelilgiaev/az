@@ -122,6 +122,7 @@ def render(*, zone_name: str, now: datetime.datetime) -> str:
 </head>
 <body>
   <main class="wrap" role="main" aria-label="Current time and date">
+   <div class="col col-left">
     <section class="clocks">
       <div class="analog" aria-hidden="true">
 {analog_block}
@@ -135,7 +136,9 @@ def render(*, zone_name: str, now: datetime.datetime) -> str:
         <div class="zone" id="zone" title="System timezone">{safe_zone}</div>
       </div>
     </section>
+   </div>
 
+   <div class="col col-right">
     <section class="horizon" aria-label="Sun and moon position">
       <svg id="skySvg" viewBox="0 0 400 210" width="400" height="210"
            preserveAspectRatio="xMidYMax meet" role="img"
@@ -171,11 +174,14 @@ def render(*, zone_name: str, now: datetime.datetime) -> str:
         <button id="calNext" class="cal-nav" type="button"
                 aria-label="Next month">&#8250;</button>
       </div>
+      <button id="calToday" class="cal-today" type="button" hidden
+              aria-label="Jump to the current month">Jump to current</button>
       <div class="cal-grid" id="calDow" aria-hidden="true">
         <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
       </div>
       <div class="cal-grid cal-days" id="calDays"></div>
     </section>
+   </div>
   </main>
 
 <script>
