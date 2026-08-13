@@ -1,6 +1,6 @@
 /* Az'arch application menu (C port) -- application discovery + category typing.
  *
- * Port of apps.py. Scans freedesktop .desktop files and turns each visible one
+ * Port of the original applications.py. Scans freedesktop .desktop files and turns each visible one
  * into an AzAppEntry the menu renders: display Name, Exec argv (field codes
  * stripped), Icon name, a human "type" label derived from Categories=, the
  * .desktop id (basename), and StartupWMClass.

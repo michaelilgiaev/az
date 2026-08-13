@@ -10,7 +10,7 @@
 
 #include <glib.h>
 #include "usage.h"
-#include "apps.h"
+#include "applications.h"
 
 typedef struct AzWatcher AzWatcher;
 

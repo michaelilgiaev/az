@@ -23,7 +23,7 @@
 #include <fcntl.h>
 
 #include "theme.h"
-#include "apps.h"
+#include "applications.h"
 #include "usage.h"
 #include "icons.h"
 #include "actions.h"

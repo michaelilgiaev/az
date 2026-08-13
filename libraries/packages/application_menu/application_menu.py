@@ -22,7 +22,7 @@ Layers:
   * SOURCE tree -- libraries/packages/application_menu/ (paths.APPLICATION_MENU_DIR).
     The C sources live DIRECTLY in this dir, next to this build-wiring module:
       menu.c                     the GTK3 menu + resident daemon (main())
-      {applist,apps,usage,icons,actions,winwatch,kscroll,power}.{c,h}  its modules
+      {applist,applications,usage,icons,actions,winwatch,kscroll,power}.{c,h}  its modules
       theme.h                    the shared colours/sizes header
       Makefile                   builds azarch-application-menu-daemon (+ `make test`)
       launcher.py                the launcher (signals the daemon), pure Python
@@ -103,7 +103,7 @@ MENU_ICON_NAME = "application-menu"
 
 # --- Source files (in the repo) ---------------------------------------------
 # The menu is a C / GTK3 program: menu.c holds main() (the resident daemon) and pulls in
-# the sibling translation units (applist/apps/usage/icons/actions/winwatch/kscroll/power)
+# the sibling translation units (applist/applications/usage/icons/actions/winwatch/kscroll/power)
 # via the Makefile, which produces the single binary named below. launcher.py (the bin
 # entry point) is pure Python and rides along. The Makefile is the single source of truth
 # for HOW the binary is linked; this module just drives it and installs the result.

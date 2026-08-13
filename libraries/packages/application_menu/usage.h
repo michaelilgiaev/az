@@ -8,7 +8,7 @@
 #define AZ_USAGE_H
 
 #include <glib.h>
-#include "apps.h"
+#include "applications.h"
 
 typedef struct AzUsage AzUsage;
 

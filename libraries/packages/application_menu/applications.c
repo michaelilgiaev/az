@@ -1,6 +1,6 @@
 /* Az'arch application menu (C port) -- application discovery + category typing.
- * One-to-one port of apps.py. See apps.h. */
-#include "apps.h"
+ * One-to-one port of the original applications.py. See applications.h. */
+#include "applications.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -402,7 +402,7 @@ GPtrArray *az_scan_applications(void) {
         GDir *dir = g_dir_open(d, 0, &err);
         if (!dir) { if (err) g_error_free(err); continue; }
 
-        /* Collect + sort filenames (apps.py: sorted(os.listdir(d)) -> byte/
+        /* Collect + sort filenames (applications.py: sorted(os.listdir(d)) -> byte/
          * codepoint order, NOT casefolded). */
         GPtrArray *names = g_ptr_array_new_with_free_func(g_free);
         const char *fn;

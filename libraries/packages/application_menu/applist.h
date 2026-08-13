@@ -12,7 +12,7 @@
 #define AZ_APPLIST_H
 
 #include <gtk/gtk.h>
-#include "apps.h"
+#include "applications.h"
 #include "icons.h"
 
 typedef struct AzAppList AzAppList;

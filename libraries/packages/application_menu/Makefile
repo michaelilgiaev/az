@@ -8,12 +8,13 @@ CFLAGS  += -O2 -Wall -Wextra -std=c11 -Wno-deprecated-declarations \
            $(shell pkg-config --cflags $(PKGS))
 LDFLAGS += $(shell pkg-config --libs $(PKGS)) -lm
 
-OBJS = menu.o applist.o apps.o usage.o icons.o actions.o winwatch.o kscroll.o power.o
+OBJS = menu.o applist.o applications.o usage.o icons.o actions.o winwatch.o kscroll.o power.o
 BIN  = azarch-application-menu-daemon
 
 # The tests now live in the repo-root tests/ dir (their single home). The `test` target
 # here just delegates there so `make test` still works from this dir; tests/Makefile
-# compiles test_apps.c against this dir's apps.c. This Makefile stays the source of truth
+# compiles test_applications.c against this dir's applications.c. This Makefile stays the
+# source of truth
 # for BUILDING the daemon (build_daemon() copies only these C sources + this Makefile into
 # its scratch dir and runs `make $(BIN)`), which is unaffected.
 TESTS_DIR = ../../../tests

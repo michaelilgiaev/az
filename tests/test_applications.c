@@ -1,7 +1,7 @@
 /* Az'arch application menu (C port) -- unit tests for the hidden-id / installer
  * swap and app scanning. Lives in the repo-root tests/ dir (the single home for the
  * suite) and is built with `make -C tests test`, which compiles this against the
- * SHIPPING apps.c from libraries/packages/application_menu/ (resolved via the tests
+ * SHIPPING applications.c from libraries/packages/application_menu/ (resolved via the tests
  * Makefile's -I). The top-level `make test` delegates here. Pure asserts, no
  * framework -- exits non-zero on first failure.
  *
@@ -11,7 +11,7 @@
  * is SHOWN so the menu launches/re-opens it. This mirrors what the C daemon ships
  * and must stay swapped relative to the old Python behaviour.
  */
-#include "apps.h"
+#include "applications.h"
 #include <glib.h>
 #include <stdio.h>
 #include <string.h>

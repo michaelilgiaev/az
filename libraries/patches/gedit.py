@@ -58,11 +58,11 @@
              (RUN_COMPILE_SCHEMAS is the single source of truth for the command).
 
     C. The plugin metadata -- /usr/lib/gedit/plugins/azarch-notepad.plugin
-       (plugin_metadata(), read verbatim from the source tree). The libpeas .plugin INI
-       that registers the module name so gedit lists/loads it.
+       (plugin_metadata(), GENERATED from Python -- no static .plugin file). The libpeas
+       .plugin INI that registers the module name so gedit lists/loads it.
 
     D. The compiled plugin -- /usr/lib/gedit/plugins/libazarch-notepad.so. NOT a content
-       string: build_plugin() compiles gedit_plugin/azarch-notepad.c against the gedit +
+       string: build_plugin() compiles gedit/azarch-notepad.c against the gedit +
        GTK3 + libpeas dev stack (pkg-config `gedit`) and installs the .so. compiler.py
        calls it during _emit_apps (like application_menu.build_daemon). Its activate():
          1. disables win.new-tab (the "+" button goes dead, Ctrl+T no-ops);
@@ -114,14 +114,30 @@ NOTEPAD_PLUGIN_MODULE = "azarch-notepad"      # the .plugin Module= / active-plu
 ACTIVE_PLUGINS = GEDIT_DEFAULT_PLUGINS + [NOTEPAD_PLUGIN_MODULE]
 
 # --- The compiled libpeas plugin (notepad mode) -----------------------------
-# The plugin source tree (C + Makefile + .plugin), built by build_plugin() into the .so.
-# It lives beside this module under patches/gedit_plugin/ (the same "sources next to the
-# build-wiring module" layout the application-menu package uses).
-GEDIT_PLUGIN_SRC_DIR = paths.PATCHESDIR / "gedit_plugin"
+# The plugin source tree (C + Makefile), built by build_plugin() into the .so. It lives
+# beside this module under patches/gedit/ (the same "sources next to the build-wiring
+# module" layout the application-menu package uses). The .plugin INI is NOT a source file:
+# plugin_metadata() below generates it from Python (edit the Python, not a static file).
+GEDIT_PLUGIN_SRC_DIR = paths.PATCHESDIR / "gedit"
 GEDIT_PLUGIN_SO_NAME = "libazarch-notepad.so"           # the built shared object
 GEDIT_PLUGIN_SO_DEST = f"/usr/lib/gedit/plugins/{GEDIT_PLUGIN_SO_NAME}"
-GEDIT_PLUGIN_METADATA_NAME = "azarch-notepad.plugin"    # the libpeas .plugin INI
+GEDIT_PLUGIN_METADATA_NAME = "azarch-notepad.plugin"    # the libpeas .plugin INI (generated)
 GEDIT_PLUGIN_METADATA_DEST = f"/usr/lib/gedit/plugins/{GEDIT_PLUGIN_METADATA_NAME}"
+
+# The libpeas .plugin manifest fields. libpeas REQUIRES a .plugin INI on disk beside the .so
+# or gedit will not list/load the plugin; plugin_metadata() emits it (there is no static
+# .plugin in the source tree -- this Python is the single source of truth). Module MUST equal
+# NOTEPAD_PLUGIN_MODULE (the active-plugins id) or the override enables a plugin gedit can't
+# find.
+GEDIT_PLUGIN_NAME = "Az'arch Notepad Mode"
+GEDIT_PLUGIN_DESCRIPTION = (
+    "One window per file, no tabs, a minimal headerbar (hamburger + window controls only), "
+    "and Ctrl+W exits."
+)
+GEDIT_PLUGIN_AUTHORS = "Az'arch"
+GEDIT_PLUGIN_COPYRIGHT = "Copyright © 2026 Az'arch"
+GEDIT_PLUGIN_WEBSITE = "https://gedit-text-editor.org/"
+GEDIT_PLUGIN_IAGE = 3   # libpeas interface age gedit 50 loads against
 
 # Host BUILD dependencies for compiling the plugin (Arch package names). Present on the
 # build HOST only (NOT shipped in the ISO -- the live system carries the compiled .so plus
@@ -197,10 +213,20 @@ active-plugins={plugins_literal}
 
 
 def plugin_metadata() -> str:
-    """/usr/lib/gedit/plugins/azarch-notepad.plugin -- the libpeas .plugin INI, read
-    verbatim from the source tree (single source of truth). Registers the module name so
-    gedit lists/loads the compiled plugin. The active-plugins override (above) enables it."""
-    return (GEDIT_PLUGIN_SRC_DIR / GEDIT_PLUGIN_METADATA_NAME).read_text(encoding="utf-8")
+    """/usr/lib/gedit/plugins/azarch-notepad.plugin -- the libpeas .plugin INI, GENERATED
+    here (this Python is the single source of truth; there is no static .plugin file).
+    Registers the module name so gedit lists/loads the compiled plugin. Module= equals
+    NOTEPAD_PLUGIN_MODULE, which the active-plugins override (above) enables."""
+    return f"""\
+[Plugin]
+Module={NOTEPAD_PLUGIN_MODULE}
+IAge={GEDIT_PLUGIN_IAGE}
+Name={GEDIT_PLUGIN_NAME}
+Description={GEDIT_PLUGIN_DESCRIPTION}
+Authors={GEDIT_PLUGIN_AUTHORS}
+Copyright={GEDIT_PLUGIN_COPYRIGHT}
+Website={GEDIT_PLUGIN_WEBSITE}
+"""
 
 
 # --- Build the plugin .so ---------------------------------------------------
@@ -208,7 +234,9 @@ def plugin_metadata() -> str:
 # app emit; it runs `make` against a private copy of the C sources (so the repo tree is
 # never dirtied with .o/.so artifacts) and installs the resulting .so into the airootfs.
 def _plugin_src_files() -> list[Path]:
-    """The plugin build inputs (C sources + Makefile) copied into the scratch build dir."""
+    """The plugin build inputs (C sources + Makefile) copied into the scratch build dir. The
+    .plugin INI is NOT here -- it is generated by plugin_metadata() and installed as a content
+    string, not compiled."""
     d = GEDIT_PLUGIN_SRC_DIR
     names = sorted(
         p.name
@@ -250,8 +278,8 @@ _CONF = 0o644
 
 def emit_plan() -> list[dict]:
     """Return the emit plan for notepad-mode gedit: the launcher override, the glib schema
-    override (show-tabs-mode + active-plugins; carries compile_schemas), and the plugin
-    metadata .plugin file.
+    override (show-tabs-mode + active-plugins; carries compile_schemas), and the generated
+    plugin metadata (.plugin INI).
 
     Shape matches openbox.emit_plan()/librewolf.emit_plan() (builder/dest/mode/owner), with
     the "compile_schemas" flag on the override entry. The compiled plugin .so itself is NOT

@@ -47,7 +47,7 @@ def test_python_menu_modules_are_deleted():
     # when the C port landed. Only the pure-Python LAUNCHER and this build-wiring module
     # remain as Python in the package. Guard against any of them creeping back.
     gone = [
-        "menu.py", "applist.py", "widgets.py", "theme.py", "apps.py", "winwatch.py",
+        "menu.py", "applist.py", "widgets.py", "theme.py", "applications.py", "winwatch.py",
         "icons.py", "usage.py", "actions.py", "editing.py", "xfocus.py", "daemon.py",
         "test_menu.py", "conftest.py",
     ]
@@ -66,7 +66,7 @@ def test_csrc_dir_is_flattened_up():
     assert (CSRC_DIR / "Makefile").is_file()
     assert (CSRC_DIR / "theme.h").is_file()
     # A representative spread of the sibling translation units is present at top level.
-    for name in ("applist.c", "apps.c", "usage.c", "icons.c", "actions.c",
+    for name in ("applist.c", "applications.c", "usage.c", "icons.c", "actions.c",
                  "winwatch.c", "kscroll.c", "power.c"):
         assert (CSRC_DIR / name).is_file(), name
 
