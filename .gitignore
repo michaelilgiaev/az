@@ -7,4 +7,7 @@ venv/
 .pytest_cache/
 libraries/packages/application_menu/*.o
 libraries/packages/application_menu/azarch-application-menu-daemon
+libraries/packages/azarch_tui/*.o
+libraries/packages/azarch_tui/azarch-tui
 tests/test_applications
+tests/test_tui_model

@@ -111,6 +111,12 @@ PACKAGES_FILE = PACKAGESDIR / "packages.x86_64"
 # pure-Python launcher (launcher.py), and generates the .desktop entry. The whole menu
 # is OURS, so it is a package here, not a patch.
 APPLICATION_MENU_DIR = PACKAGESDIR / "application_menu"
+# The Az'arch bare-`azarch` TERMINAL UI package (C port): the C sources (main.c/render.c/
+# model.c/preview.c, tui.h + siblings, Makefile) live DIRECTLY here alongside azarch_tui.py
+# -- the build wiring that COMPILES them into the azarch-tui binary and installs it under
+# /usr/local/lib/azarch-tui. The bare `azarch` command execs that binary (see
+# packages/azarch/tui.py). It is OURS (a program we author), so it is a package here.
+AZARCH_TUI_DIR = PACKAGESDIR / "azarch_tui"
 # The Az'arch timedate package (Flask Time + Calendar home page): the app sources
 # (app.py + page.py) live directly here alongside timedate.py, the build wiring that
 # copies them into the airootfs, installs the launcher, and ships the systemd service.

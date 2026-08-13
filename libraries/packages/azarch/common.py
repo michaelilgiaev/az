@@ -11,17 +11,17 @@ So everything below lands in ONE module namespace at runtime; that is why the la
 call these helpers by bare name with no intra-package import.
 
 Only the standard library is used (urllib + json for the geolocation query; subprocess for
-the privileged steps). No curl/jq, no pip packages.
+the privileged steps). No curl/jq, no pip packages. NOTE: urllib.request and random are
+imported LAZILY where they are used (resolver.py), NOT here in the shared header -- so the
+bare `azarch` fast path (which execs the C TUI) never pays their import cost at startup.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import random
 import subprocess
 import sys
-import urllib.request
 
 # BUNDLE_START -- everything ABOVE this line is the bundle header (shebang + docstring +
 # imports), emitted once from THIS module; the bundler drops each later module's own

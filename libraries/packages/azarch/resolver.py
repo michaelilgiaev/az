@@ -39,6 +39,7 @@ def resolve_via_server() -> tuple[str, str] | None:
     """Prompt the user to choose one of the 5 shuffled servers, query it, and return
     (COUNTRY, TIMEZONE) with the country uppercased. Returns None on any failure (no
     network, bad/empty response). Prompts/errors go to stderr."""
+    import random              # lazy, like urllib below: keep bare-`azarch` startup lean.
     servers = list(RESOLVER_SERVERS)
     random.shuffle(servers)
     _err("Pick a server to geolocate this machine (1-5):")
@@ -57,6 +58,8 @@ def resolve_via_server() -> tuple[str, str] | None:
     label, url, cpath, tpath = servers[int(choice) - 1]
     _err(f"Querying {label} ...")
     try:
+        import urllib.request     # lazy: only the (rare) geolocate path needs it, so bare
+        # `azarch` (the TUI) never pays the ~25ms urllib import at startup.
         with urllib.request.urlopen(url, timeout=15) as resp:
             payload = json.loads(resp.read().decode("utf-8", "replace"))
     except Exception:
