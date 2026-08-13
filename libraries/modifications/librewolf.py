@@ -105,9 +105,15 @@ def overrides_cfg(dark: bool = True) -> str:
     This is the single source of truth; emit_plan() ships it to OVERRIDES_PROFILE_PATH (the
     path LibreWolf actually reads) and compiler.py mirrors it into /etc/skel.
 
-    The dark theme prefs also make LibreWolf report a DARK prefers-color-scheme to web
+    The theme prefs also make LibreWolf report the matching prefers-color-scheme to web
     content, which is what drives the Az'arch timedate home page (it has a
-    `prefers-color-scheme` stylesheet) to render dark too.
+    `prefers-color-scheme` stylesheet) to follow the system theme. THIS ONLY WORKS because
+    we also swap LibreWolf's default RFP for FPP-minus-CSSPrefersColorScheme (section 5
+    below): stock LibreWolf ships privacy.resistFingerprinting=true, and RFP hard-forces
+    prefers-color-scheme to LIGHT for every site regardless of ui.systemUsesDarkTheme /
+    layout.css.prefers-color-scheme.content-override -- so WITHOUT that swap the timedate
+    page (and every dark-mode site) is stuck light even in the dark system theme. This was
+    the "timedate is only ever white" bug.
 
     AutoConfig files MUST begin with a comment line -- the engine ignores line 1
     -- so the leading `//` banner is required, not decoration."""
@@ -204,6 +210,25 @@ defaultPref("browser.theme.toolbar-theme", {theme_val});
 defaultPref("browser.theme.content-theme", {theme_val});
 defaultPref("ui.systemUsesDarkTheme", {sys_dark});
 defaultPref("layout.css.prefers-color-scheme.content-override", {prefers_val});
+
+// === 5. Let web content see the real prefers-color-scheme (RFP -> FPP) ======
+// THE FIX for "the timedate home page is only ever white": stock LibreWolf ships
+// privacy.resistFingerprinting = true, and RFP HARD-FORCES prefers-color-scheme to LIGHT
+// for every website, ignoring ui.systemUsesDarkTheme AND
+// layout.css.prefers-color-scheme.content-override (the prefs section 4 flips). So the
+// timedate page's `@media (prefers-color-scheme: light)` block always matched and it was
+// stuck light even in the dark system theme -- section 4 was dead on this build.
+//
+// The documented LibreWolf-community remedy is to swap RFP for Fingerprinting Protection
+// (FPP) with EVERY target enabled EXCEPT the colour-scheme spoof: FPP's overrides list
+// only affects FPP (it does NOT lift RFP's own colour-scheme lock), so RFP must be OFF and
+// FPP ON for the exemption to take effect. `+AllTargets` keeps the full protection surface;
+// `-CSSPrefersColorScheme` is the one carve-out that lets prefers-color-scheme reflect the
+// real theme -- so section 4 (and `azarch theme --dark/--white`) now actually reach content
+// and the timedate page follows the system theme. Every other hardening pref is untouched.
+defaultPref("privacy.resistFingerprinting", false);
+defaultPref("privacy.fingerprintingProtection", true);
+defaultPref("privacy.fingerprintingProtection.overrides", "+AllTargets,-CSSPrefersColorScheme");
 """
 
 

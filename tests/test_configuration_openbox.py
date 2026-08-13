@@ -194,13 +194,19 @@ def test_installer_launchers_all_use_the_azarch_icon():
 
 
 def test_installer_icon_paths_are_standard_system_locations():
-    # The icon is installed to /usr/share/pixmaps and hicolor 256x256 apps so the
-    # basename Icon= resolves; both must be absolute system paths.
+    # The icon is installed to /usr/share/pixmaps and hicolor 256x256 apps (rasterized
+    # PNGs) plus the hicolor SCALABLE apps dir (the SVG master) so the basename Icon=
+    # resolves at any size; all must be absolute system paths.
     assert desktop.INSTALLER_ICON_PIXMAP == "/usr/share/pixmaps/azarch-installer.png"
     assert desktop.INSTALLER_ICON_HICOLOR == (
         "/usr/share/icons/hicolor/256x256/apps/azarch-installer.png"
     )
-    assert desktop.INSTALLER_ICON_ASSET == "icons/azarch_installer_icon.png"
+    assert desktop.INSTALLER_ICON_SCALABLE == (
+        "/usr/share/icons/hicolor/scalable/apps/azarch-installer.svg"
+    )
+    # The icon is standardized as a scalable vector master (azarch.svg), like kitty.svg.
+    assert desktop.INSTALLER_ICON_ASSET == "icons/azarch.svg"
+    assert desktop.INSTALLER_ICON_PNG_SIZE == 256
 
 
 def test_home_owned_dests_live_under_home():
@@ -281,9 +287,13 @@ def test_xinitrc_prepaints_wallpaper_before_exec():
     # No-flash contract: feh paints the SAME wallpaper onto the X root BEFORE the
     # exec that starts OpenBox, so the first visible frame is the wallpaper and the
     # autostart's own feh repaint is invisible (identical pixels). feh needs the
-    # actual image FILE (it cannot take a directory).
+    # actual image FILE (it cannot take a directory). The image is chosen by the
+    # per-user `azarch wallpaper` pointer, defaulting to the shipped "years" image.
     out = desktop.xinitrc()
-    assert "feh --no-fehbg --bg-fill '" + desktop.WALLPAPER_IMAGE_FILE + "'" in out
+    # Reads the pointer and falls back to the WALLPAPER_IMAGE_FILE default, then paints it.
+    assert 'cat "$HOME/.config/azarch/wallpaper"' in out
+    assert "|| _azwp='" + desktop.WALLPAPER_IMAGE_FILE + "'" in out
+    assert 'feh --no-fehbg --bg-fill "$_azwp"' in out
     feh_idx = out.index("feh --no-fehbg --bg-fill")
     exec_idx = out.index("exec openbox-session")
     assert feh_idx < exec_idx
@@ -571,8 +581,12 @@ def test_theme_rc_entries_are_home_owned_conf():
 def test_autostart_repaints_wallpaper_with_feh():
     # The autostart repaints the SAME image ~/.xinitrc pre-painted (no flash; also
     # covers a re-login where the root pixmap was reset). feh owns the root pixmap.
+    # The image follows the per-user `azarch wallpaper` pointer (default "years"), and
+    # feh is backgrounded (&) so the autostart continues.
     out = desktop.openbox_autostart()
-    assert "feh --no-fehbg --bg-fill '" + desktop.WALLPAPER_IMAGE_FILE + "'" in out
+    assert 'cat "$HOME/.config/azarch/wallpaper"' in out
+    assert "|| _azwp='" + desktop.WALLPAPER_IMAGE_FILE + "'" in out
+    assert 'feh --no-fehbg --bg-fill "$_azwp" &' in out
 
 
 def test_autostart_applies_us_and_hebrew_layouts_with_alt_shift():

@@ -169,6 +169,44 @@ def test_librewolf_keeps_cookie_persistence():
     assert 'defaultPref("browser.sessionstore.privacy_level", 0);' in cfg
 
 
+# --- the timedate page ADHERES to the system theme (white/dark) --------------
+def test_page_css_is_dark_by_default_and_light_via_media_query():
+    """The page's own styling follows the system theme: the :root defaults DARK (the
+    Az'arch default) and an `@media (prefers-color-scheme: light)` block overrides to a
+    light palette. So a browser reporting dark -> dark page; light -> light page."""
+    css = td.assets_py()
+    # :root is the DARK palette (dark background, light foreground).
+    root = css.split(":root", 1)[1]
+    assert "--bg-0: #0b0f14" in root      # dark background in :root
+    assert "--fg: #e8eef4" in root        # light foreground in :root
+    # The light theme is the media-query override, not the default.
+    assert "@media (prefers-color-scheme: light)" in css
+    light = css.split("@media (prefers-color-scheme: light)", 1)[1]
+    assert "--bg-0: #eef3f8" in light     # light background only under the media query
+    assert "--fg: #1b2430" in light
+
+
+def test_librewolf_lets_the_page_see_the_real_color_scheme():
+    """The bug this fixes: stock LibreWolf's resistFingerprinting FORCES
+    prefers-color-scheme=light for every site, so the timedate page was stuck light even in
+    the dark system theme. The overrides swap RFP for FPP-minus-CSSPrefersColorScheme so the
+    page's `@media (prefers-color-scheme: light)` follows the actual system theme, and
+    ui.systemUsesDarkTheme / content-override (which `azarch theme` flips) reach content."""
+    cfg = librewolf.overrides_cfg()
+    assert 'defaultPref("privacy.resistFingerprinting", false);' in cfg
+    assert 'defaultPref("privacy.fingerprintingProtection", true);' in cfg
+    assert (
+        'defaultPref("privacy.fingerprintingProtection.overrides", '
+        '"+AllTargets,-CSSPrefersColorScheme");' in cfg
+    )
+    # Dark is the default; white flips the reported scheme.
+    assert 'defaultPref("layout.css.prefers-color-scheme.content-override", 0);' in cfg
+    assert (
+        'defaultPref("layout.css.prefers-color-scheme.content-override", 1);'
+        in librewolf.overrides_cfg(dark=False)
+    )
+
+
 # --- page.render(): self-contained, seeded, zone-aware, ticking -------------
 def _rendered(zone="Asia/Jerusalem"):
     now = datetime.datetime(2026, 8, 12, 14, 5, 9, tzinfo=ZoneInfo(zone))

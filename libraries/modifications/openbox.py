@@ -72,6 +72,21 @@ WALLPAPER_IMAGE_FILE = (
 # writes that image, so the default resolves to a file that exists.
 WALLPAPER_ASSET = "wallpapers/years.png"
 
+def _feh_wallpaper_line() -> str:
+    """A POSIX-sh snippet that paints the wallpaper with feh, honouring the per-user pointer
+    `azarch wallpaper` writes: read the pointer file; if it names an existing file use it,
+    otherwise fall back to the shipped "years" default. Shared by ~/.xinitrc and the OpenBox
+    autostart so the pre-paint (no-flash) and the session repaint choose the SAME image, and
+    both follow an `azarch wallpaper` choice. `$HOME` (the SHELL variable) is used so the
+    same line works for any user that inherited the config via /etc/skel."""
+    # NB: the pointer path is expressed with $HOME so it resolves per-user; the default is
+    # the fixed shipped path. Guard on feh existing so a missing tool never breaks startup.
+    return (
+        f'_azwp="$(cat "$HOME/.config/azarch/wallpaper" 2>/dev/null)"\n'
+        f'[ -n "$_azwp" ] && [ -f "$_azwp" ] || _azwp=\'{WALLPAPER_IMAGE_FILE}\'\n'
+        f'[ -x /usr/bin/feh ] && feh --no-fehbg --bg-fill "$_azwp"'
+    )
+
 
 def wallpaper_metadata_json(wp_id: str) -> str:
     """Minimal metadata.json shipped alongside each wallpaper image.
@@ -121,25 +136,44 @@ CALAMARES_WM_CLASS = "Calamares"  # res_class (applicationName, CAPITAL C)
 # entry that ships it and the shellprocess step that deletes it cannot drift.
 INSTALL_MENU_DESKTOP_PATH = "/usr/share/applications/azarch-install.desktop"
 
-# Installer launcher icon. compiler.py copies assets/icons/azarch_installer_icon.png (the
-# "Az'" wordmark rendered as a 256x256 app tile) to SYSTEM icon paths so the Desktop
-# launcher and the application-menu entry can name it. The Az'arch icon is standardized
-# under assets/icons/ (alongside kitty.svg), the single place icons live. Installed to
-# /usr/share/pixmaps (a standard icon search path) AND to the hicolor 256x256 apps dir;
-# the .desktop files name it by its basename ("azarch-installer") so the icon loader
-# resolves either. It is ALSO the Calamares window icon (branding.desc productIcon), so
-# the OpenBox titlebar shows it -- see modifications/calamares/calamares.py.
-INSTALLER_ICON_ASSET = "icons/azarch_installer_icon.png"
+# Installer launcher icon. The Az'arch icon is standardized as a SCALABLE VECTOR,
+# assets/icons/azarch.svg (the "Az'" wordmark on the dark app tile), living under
+# assets/icons/ alongside kitty.svg -- the single place icons live, and the same
+# vector-master convention kitty follows. compiler.py copies that SVG to the hicolor
+# SCALABLE apps dir (the master the icon loader rasterizes) AND rasterizes it to PNGs at
+# /usr/share/pixmaps and the hicolor 256x256 apps dir, so the Desktop launcher and the
+# application-menu entry (Icon=azarch-installer) resolve it regardless of which path/size
+# the icon loader consults. It is ALSO the Calamares window icon (branding.desc
+# productIcon, a rasterized PNG QIcon can load), so the OpenBox titlebar shows it -- see
+# modifications/calamares/calamares.py.
+INSTALLER_ICON_ASSET = "icons/azarch.svg"
 INSTALLER_ICON_NAME = "azarch-installer"
 INSTALLER_ICON_PIXMAP = f"/usr/share/pixmaps/{INSTALLER_ICON_NAME}.png"
 INSTALLER_ICON_HICOLOR = (
     f"/usr/share/icons/hicolor/256x256/apps/{INSTALLER_ICON_NAME}.png"
 )
+# The scalable (SVG) master installed alongside the PNG rasterizations, so the icon loader
+# has a vector source at any size (exactly like kitty.svg -> hicolor/scalable/apps).
+INSTALLER_ICON_SCALABLE = (
+    f"/usr/share/icons/hicolor/scalable/apps/{INSTALLER_ICON_NAME}.svg"
+)
+# Square px the PNG rasterizations are rendered at (a standard icon size; the source SVG
+# is 256x256 so this is 1:1 for the raster fallbacks).
+INSTALLER_ICON_PNG_SIZE = 256
 
 # Home directory of the live user; the overlay root for HOME-relative entries.
 HOME = "/home/main"
 # uid:gid for the live user tree (autologin group gid 998).
 HOME_OWNER = (1000, 998)
+
+# The per-user wallpaper POINTER file `azarch wallpaper` writes (packages/azarch/wallpaper.py):
+# a one-line file holding the chosen image's absolute path. The session's wallpaper step
+# (_feh_wallpaper_line, used by ~/.xinitrc + the OpenBox autostart) reads it and paints that
+# image if it exists, else falls back to the "years" default -- so a fresh user gets "years"
+# while `azarch wallpaper --decades.png` sticks across a re-login. Under ~/.config
+# (XDG_CONFIG_HOME the session exports). Kept in lock-step with the CLI's _state_file() (a
+# test pins the two). The session reads it via the $HOME shell variable (per-user via skel).
+WALLPAPER_POINTER_FILE = f"{HOME}/.config/azarch/wallpaper"
 
 
 # --- Application menu wiring (single source of truth in application_menu.py) --
@@ -185,7 +219,8 @@ export DESKTOP_SESSION=openbox
 # wallpaper, not a solid color. The OpenBox autostart repaints the same image moments
 # later (identical pixels -> no visible transition, no flash). feh is shipped in the
 # manifest; it owns the root pixmap under OpenBox (OpenBox draws no wallpaper itself).
-[ -x /usr/bin/feh ] && feh --no-fehbg --bg-fill '""" + WALLPAPER_IMAGE_FILE + """'
+# The image honours the per-user `azarch wallpaper` pointer, falling back to "years".
+""" + _feh_wallpaper_line() + """
 
 # Replace this shell with the OpenBox X11 session; when OpenBox exits, X exits and
 # control returns to the login shell (which, per bash_profile, logs out the tty).
@@ -878,8 +913,10 @@ KEYBOARD_TOGGLE = "grp:alt_shift_toggle"  # Alt+Shift cycles layouts
 def _openbox_autostart_common() -> str:
     return f"""\
 # 1. Wallpaper: repaint the same image ~/.xinitrc pre-painted (no flash; also covers a
-#    re-login where the X root pixmap was reset). feh owns the root pixmap on OpenBox.
-[ -x /usr/bin/feh ] && feh --no-fehbg --bg-fill '{WALLPAPER_IMAGE_FILE}' &
+#    re-login where the X root pixmap was reset). feh owns the root pixmap on OpenBox. The
+#    image honours the per-user `azarch wallpaper` pointer, falling back to the "years"
+#    default -- so an `azarch wallpaper --decades.png` choice survives a re-login.
+{_feh_wallpaper_line()} &
 
 # 2. Super key -> application menu. OpenBox cannot bind a lone modifier, so xcape turns
 #    a solo Super_L tap into the chord Super_L+Menu, which rc.xml binds to the menu

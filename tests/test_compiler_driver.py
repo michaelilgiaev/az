@@ -49,12 +49,14 @@ def test_emit_calamares_ships_the_window_icon_into_branding():
     from modifications import openbox
 
     src = inspect.getsource(compiler._emit_calamares)
-    assert "copy_asset" in src
+    # The productIcon is rasterized from the standardized SVG master to a real PNG
+    # (Calamares' QIcon loads a raster file directly).
+    assert "render_svg_png" in src
     assert "INSTALLER_ICON_ASSET" in src
     assert "PRODUCT_ICON_FILE" in src
     # The branding.desc names that same file in productIcon.
     assert calamares.PRODUCT_ICON_FILE == "productIcon.png"
-    assert openbox.INSTALLER_ICON_ASSET == "icons/azarch_installer_icon.png"
+    assert openbox.INSTALLER_ICON_ASSET == "icons/azarch.svg"
 
 
 # --- power management emission + enablement (Tasks 1 & 2) -------------------

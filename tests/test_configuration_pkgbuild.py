@@ -668,6 +668,32 @@ def test_overrides_hide_bookmarks_toolbar_by_default():
     )
 
 
+def test_overrides_follow_system_theme_and_report_prefers_color_scheme():
+    # The browser follows the system theme (dark by default), AND -- the fix for the
+    # "timedate home page is only ever white" bug -- it must report the REAL
+    # prefers-color-scheme to web content. Stock LibreWolf's RFP hard-forces
+    # prefers-color-scheme=light, so we swap RFP for FPP with every target except the
+    # colour-scheme spoof; only then do ui.systemUsesDarkTheme / content-override (and the
+    # timedate page) actually follow the theme.
+    from modifications import librewolf as lw_patch
+
+    dark = lw_patch.overrides_cfg(dark=True)
+    light = lw_patch.overrides_cfg(dark=False)
+    # The theme prefs flip with dark/white.
+    assert 'defaultPref("ui.systemUsesDarkTheme", 1);' in dark
+    assert 'defaultPref("layout.css.prefers-color-scheme.content-override", 0);' in dark
+    assert 'defaultPref("ui.systemUsesDarkTheme", 0);' in light
+    assert 'defaultPref("layout.css.prefers-color-scheme.content-override", 1);' in light
+    # The RFP -> FPP swap (constant in both) that makes prefers-color-scheme reach content.
+    for cfg in (dark, light):
+        assert 'defaultPref("privacy.resistFingerprinting", false);' in cfg
+        assert 'defaultPref("privacy.fingerprintingProtection", true);' in cfg
+        assert (
+            'defaultPref("privacy.fingerprintingProtection.overrides", '
+            '"+AllTargets,-CSSPrefersColorScheme");' in cfg
+        )
+
+
 def test_overrides_delivered_to_profile_path_not_opt():
     # THE load-bearing fact (this was the regression): LibreWolf's AutoConfig loader
     # reads librewolf.overrides.cfg from the user's PROFILE/CONFIG dir

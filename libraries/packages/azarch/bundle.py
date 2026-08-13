@@ -39,6 +39,7 @@ MODULE_ORDER = [
     "country_table.py",
     "resolver.py",
     "theme.py",
+    "wallpaper.py",
     "sshd.py",
     "cli.py",
 ]

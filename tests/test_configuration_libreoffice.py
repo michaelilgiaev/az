@@ -53,10 +53,24 @@ def test_registrymodifications_disables_whatsnew_and_update_check():
     assert 'oor:name="AutoCheckEnabled"' in out
 
 
+def test_registrymodifications_suppresses_welcome_first_launch_dialog():
+    # THE fix for the popup the e2e caught: the "Welcome to LibreOffice!" first-launch dialog
+    # is version-gated on ooSetupLastVersion (shown when the stored version differs from the
+    # running one -- a fresh profile always differs). Seeding it to the shipped major.minor
+    # (verified: LibreOffice 26.2.5 writes "26.2") makes a first run look already-seen so the
+    # window never opens. It must sit under the real /org.openoffice.Setup/Product path.
+    out = lo.registrymodifications_xcu()
+    assert lo.LIBREOFFICE_LAST_VERSION == "26.2"
+    assert 'oor:path="/org.openoffice.Setup/Product"' in out
+    assert 'oor:name="ooSetupLastVersion"' in out
+    assert f"<value>{lo.LIBREOFFICE_LAST_VERSION}</value>" in out
+
+
 def test_registrymodifications_uses_real_oor_paths():
     # The nodes must sit under LibreOffice's real oor config paths or the items are ignored.
     out = lo.registrymodifications_xcu()
     assert 'oor:path="/org.openoffice.Setup/Office"' in out
+    assert 'oor:path="/org.openoffice.Setup/Product"' in out
     assert 'oor:path="/org.openoffice.Office.Common/Misc"' in out
     # It is an oor:items document with the openoffice registry namespace.
     assert 'xmlns:oor="http://openoffice.org/2001/registry"' in out

@@ -92,9 +92,10 @@ PRODUCT = "Az'arch Linux"
 # component dir into an absolute path (componentDir.absoluteFilePath), so QIcon(path) loads
 # it; a bare theme name would only pass load-time validation (via QIcon::fromTheme) yet come
 # back out of imagePath() as the bare name, and QIcon("azarch-installer") then reads it as a
-# missing file -> no titlebar icon. Hence a shipped file. compiler.py copies the standardized
-# assets/icons/azarch_installer_icon.png (see modifications/openbox.INSTALLER_ICON_ASSET) to
-# branding/azarch/PRODUCT_ICON_FILE, so the window icon matches the .desktop launcher icon.
+# missing file -> no titlebar icon. Hence a shipped file. compiler.py rasterizes the
+# standardized vector assets/icons/azarch.svg (see modifications/openbox.INSTALLER_ICON_ASSET)
+# to a PNG at branding/azarch/PRODUCT_ICON_FILE, so the window icon matches the .desktop
+# launcher icon (both derive from the one SVG master).
 PRODUCT_ICON_FILE = "productIcon.png"
 
 # The live archiso SquashFS image. On a booted archiso medium the boot device is

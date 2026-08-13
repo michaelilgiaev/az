@@ -373,13 +373,18 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
         if entry["owner"] == "home" and dest_abs.startswith(openbox.HOME + "/"):
             rel = dest_abs[len(openbox.HOME) + 1:]   # path under the home dir
             emit.write_text(skel / rel, content, mode=mode)
-    # Installer launcher icon ("Az'" app tile). Copied to BOTH /usr/share/pixmaps
-    # and the hicolor 256x256 apps dir so the Desktop/menu/autostart .desktop files
-    # (Icon=azarch-installer) resolve it regardless of which path the icon loader
+    # Installer launcher icon ("Az'" app tile), standardized as the scalable vector
+    # assets/icons/azarch.svg. Ship the SVG to the hicolor SCALABLE apps dir (the vector
+    # master, like kitty.svg) AND rasterize it to PNGs at /usr/share/pixmaps and the
+    # hicolor 256x256 apps dir, so the Desktop/menu/autostart .desktop files
+    # (Icon=azarch-installer) resolve it regardless of which path/size the icon loader
     # consults, with no theme-cache rebuild needed. Root-owned system paths.
+    emit.copy_asset(openbox.INSTALLER_ICON_ASSET,
+                    airootfs / openbox.INSTALLER_ICON_SCALABLE.lstrip("/"), mode=0o644)
     for icon_dest in (openbox.INSTALLER_ICON_PIXMAP, openbox.INSTALLER_ICON_HICOLOR):
-        emit.copy_asset(openbox.INSTALLER_ICON_ASSET,
-                        airootfs / icon_dest.lstrip("/"), mode=0o644)
+        emit.render_svg_png(openbox.INSTALLER_ICON_ASSET,
+                            airootfs / icon_dest.lstrip("/"),
+                            openbox.INSTALLER_ICON_PNG_SIZE, mode=0o644)
     # The two Az'arch wallpaper images ("years", "decades") under /usr/share/wallpapers.
     # Each ships as contents/images/<res>.png (+ a screenshot.png thumbnail and an inert
     # metadata.json kept for self-description). feh paints the "years" image as the X
@@ -545,15 +550,18 @@ def _emit_calamares(airootfs: Path) -> None:
     base = airootfs / "etc/calamares"
     for rel, content in calamares.emit_map().items():
         emit.write_text(base / rel, content)
-    # The Calamares WINDOW ICON: ship the standardized "Az'" app tile as a REAL PNG inside
-    # the branding component dir (branding/azarch/productIcon.png). branding.desc names it
-    # by that branding-relative filename in `productIcon`, so Calamares resolves it to an
-    # absolute path and QIcon() loads it as the window icon -- which OpenBox draws on the
-    # titlebar (rc.xml titleLayout's `N`). Same source asset as the .desktop launcher icon
+    # The Calamares WINDOW ICON: rasterize the standardized "Az'" vector app tile to a REAL
+    # PNG inside the branding component dir (branding/azarch/productIcon.png). branding.desc
+    # names it by that branding-relative filename in `productIcon`, so Calamares resolves it
+    # to an absolute path and QIcon() loads it as the window icon -- which OpenBox draws on
+    # the titlebar (rc.xml titleLayout's `N`). Calamares wants a real raster FILE here (a
+    # PNG QIcon loads directly -- see calamares.py PRODUCT_ICON_FILE), so we rasterize the
+    # SVG rather than shipping the vector. Same source asset as the .desktop launcher icon
     # (modifications/openbox.INSTALLER_ICON_ASSET), so the topbar icon matches the launcher.
-    emit.copy_asset(
+    emit.render_svg_png(
         openbox.INSTALLER_ICON_ASSET,
         base / "branding" / calamares.BRANDING / calamares.PRODUCT_ICON_FILE,
+        openbox.INSTALLER_ICON_PNG_SIZE,
         mode=0o644,
     )
 

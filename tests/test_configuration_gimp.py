@@ -25,10 +25,20 @@ def test_emit_plan_is_single_home_gimprc():
 
 
 def test_gimprc_disables_welcome_dialog():
-    # (show-welcome-dialog no) turns off the fresh-profile "Welcome to GIMP" dialog. (GIMP's
-    # separate version-update welcome window is out of scope for config-only -- see gimp.py.)
+    # (show-welcome-dialog no) turns off the "show each time" Welcome dialog.
     out = gimp.gimprc()
     assert "(show-welcome-dialog no)" in out
+
+
+def test_gimprc_seeds_config_version_to_suppress_version_welcome_window():
+    # The version-gated "Welcome to GIMP <ver>" window is shown whenever gimprc's
+    # config-version differs from GIMP's own version (a fresh profile, absent key, always
+    # differs). Seeding config-version to the shipped GIMP version makes a first run look
+    # like the version was already seen, so that window never opens. This is the fix for the
+    # "GIMP welcome popup was never removed" regression. Pin the version to the shipped gimp.
+    out = gimp.gimprc()
+    assert gimp.GIMP_CONFIG_VERSION == "3.2.4"
+    assert f'(config-version "{gimp.GIMP_CONFIG_VERSION}")' in out
 
 
 def test_gimprc_disables_tips_dialog():
