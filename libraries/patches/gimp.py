@@ -17,14 +17,18 @@ did NOT (all verified live on the hypervisor):
      ~/.config/GIMP/3.2/, not 3.0/) turning both off: (show-welcome-dialog no)
      (show-tips no). `--console-messages` keeps plug-in warnings off-screen too.
 
-  2. INSTANT, CLEAN OPEN (no transparent middle). The old approach started the window
-     ICONIC (minimized/unmapped). An unmapped GTK/GEGL window never paints its canvas, so
-     the first un-minimize showed a HALF-DRAWN, transparent-middle window for ~1-2s -- the
-     exact bug the user reported. The fix: keep the warm window MAPPED but OFF-SCREEN. A
-     mapped off-screen window renders fully (GTK3 client-side surfaces), so when the user
-     opens GIMP we just move it back on-screen already-painted -> instant and clean. The
-     move is done by azarch-gimp-winmove, a tiny X11 helper using ONLY libX11 via ctypes
-     (python is in base, libX11 ships with X) -- no xdotool/wmctrl dependency.
+  2. INSTANT, CLEAN OPEN (no transparent middle) + TRULY INVISIBLE WHEN WARM. The old
+     approach started the window ICONIC (minimized/unmapped). An unmapped GTK/GEGL window
+     never paints its canvas, so the first un-minimize showed a HALF-DRAWN, transparent-middle
+     window for ~1-2s -- the exact bug the user reported. A later attempt kept the warm window
+     MAPPED but merely moved OFF-SCREEN; that fixed the transparent middle but did NOT hide
+     it: OpenBox clamps a mostly-off-screen window so a ~79x25px GIMP corner (mascot +
+     "File Edit") stays visible on the desktop. The real fix does BOTH: let the warm window
+     map and PAINT (nudged off-screen to cut the flash to that corner), then ICONIFY it, which
+     sets _NET_WM_STATE_HIDDEN so it vanishes ENTIRELY. Because it already painted, the open
+     (de-iconify + move on-screen) is instant and clean. All of this -- iconify/map/move/
+     welcome-close -- is done by azarch-gimp-winmove, a tiny X11 helper using ONLY libX11 via
+     ctypes (python is in base, libX11 ships with X) -- no xdotool/wmctrl dependency.
 
   3. RE-WARM ON CLOSE. When the user closes GIMP the process exits; a plain `exec gimp` had
      nothing left to relaunch. Instead the preload is a SUPERVISE LOOP: it launches the
@@ -33,15 +37,15 @@ did NOT (all verified live on the hypervisor):
      GIMP re-warms invisibly and is ready again.
 
 HOW OPENING WORKS. The gimp.desktop launcher Exec is replaced with the azarch-gimp wrapper:
-it moves the warm window ON-SCREEN (azarch-gimp-winmove show) and then runs `gimp-3.2 "$@"`
-which -- single-instance -- present()s/raises that window (and loads any file). Result: an
-instant, fully-painted GIMP. If no warm instance exists yet (e.g. mid-re-warm), the wrapper
-just starts GIMP normally.
+it de-iconifies + moves the warm window ON-SCREEN (azarch-gimp-winmove show) and then runs
+`gimp-3.2 "$@"` which -- single-instance -- present()s/raises that window (and loads any
+file). Result: an instant, fully-painted GIMP. If no warm instance exists yet (e.g.
+mid-re-warm), the wrapper just starts GIMP normally.
 
 OPENBOX. patches/openbox.py's GIMP window rule no longer uses <iconic> (which caused the
 transparent middle). It keeps the warm window unfocused and off the taskbar/pager
-(<focus>no>, <skip_taskbar>, <skip_pager>); the OFF-SCREEN hide is what keeps it invisible.
-GIMP_WM_CLASS_MATCH here is the shared constant that rule targets.
+(<focus>no>, <skip_taskbar>, <skip_pager>); the winmove ICONIFY (after paint) is what keeps
+it invisible. GIMP_WM_CLASS_MATCH here is the shared constant that rule targets.
 
 WHERE THINGS GO (all HOME files unless noted; compiler.py chowns them 1000:998 and mirrors
 them into /etc/skel so a Calamares-created user inherits the same behaviour):
@@ -147,14 +151,29 @@ while :; do
     gpid=$!
 
     # As soon as the main window maps, move it OFF-SCREEN so it paints invisibly (no flash,
-    # and a clean instant reveal on open). Poll briefly; give up quietly if it never appears
-    # (e.g. GIMP crashed) -- the wait below then handles the exit.
+    # and a clean instant reveal on open). `hide` ALSO closes GIMP's version-update "Welcome
+    # to GIMP" dialog (gimprc cannot suppress it) -- which may map a beat AFTER the main
+    # window -- so once the main window is hidden we keep calling `hide` for a short grace
+    # window to catch a late welcome. Poll for the main window for up to ~10s; give up quietly
+    # if it never appears (e.g. GIMP crashed) -- the wait below then handles the exit.
     i=0
+    hidden=0
     while [ $i -lt 100 ]; do
         out=$("{WINMOVE_HELPER_PATH}" hide 2>/dev/null || true)
         case "$out" in
-            HID*) break ;;
+            *HID*) hidden=1 ;;
         esac
+        # Once the main window is off-screen, do ~2s more of hide passes (welcome-dialog
+        # sweeps) and then stop -- the warm instance is invisible.
+        if [ "$hidden" = 1 ]; then
+            grace=0
+            while [ $grace -lt 20 ]; do
+                "{WINMOVE_HELPER_PATH}" hide >/dev/null 2>&1 || true
+                grace=$((grace + 1))
+                sleep 0.1
+            done
+            break
+        fi
         i=$((i + 1))
         sleep 0.1
     done
@@ -194,6 +213,22 @@ def open_wrapper_sh() -> str:
 # Bring the warm (off-screen) GIMP window on-screen, then let gimp-3.2 present/raise it (and
 # open any file). Single-instance, so this reuses the warm process -- instant and clean.
 "{WINMOVE_HELPER_PATH}" show >/dev/null 2>&1 || true
+
+# COLD-START SAFETY: if there is no warm instance yet (mid re-warm), gimp-3.2 below starts a
+# fresh process and GIMP's version-update "Welcome to GIMP" dialog (which gimprc cannot
+# suppress) would pop in the user's face. Fire a short background sweeper that closes that
+# dialog if it appears in the next few seconds. On the normal warm path the dialog was
+# already closed at login, so this finds nothing and exits.
+(
+    n=0
+    while [ $n -lt 30 ]; do
+        out=$("{WINMOVE_HELPER_PATH}" hide-welcome 2>/dev/null || true)
+        case "$out" in *CLOSED_WELCOME*) break ;; esac
+        n=$((n + 1))
+        sleep 0.1
+    done
+) >/dev/null 2>&1 &
+
 exec {GIMP_BINARY} "$@"
 """
 

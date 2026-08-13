@@ -41,7 +41,9 @@ binary. kitty's documented override is ~/.config/kitty/kitty.app.png: if present
 loads it at startup and uses it as the window icon (the top-left titlebar/Alt-Tab image
 the WM shows). So we rasterize the SAME asset SVG to a PNG and ship it there (owner
 "home", mirrored into /etc/skel), giving the open kitty window the clean "> _" instead
-of the cat.
+of the cat. It is rasterized at 128px because X11 caps the OS-window icon at 128x128 --
+kitty refuses a larger PNG and falls back to the WM's broken/default icon (see
+KITTY_APP_ICON_SIZE).
 
 compiler._emit_apps iterates emit_plan() (builder/dest/mode/owner shape), now honouring
 three declarative extras so this module stays pure-data:
@@ -75,9 +77,12 @@ ICON_PNG_PIXMAP_PATH = "/usr/share/pixmaps/kitty.png"
 # (owner "home"): compiler.py chowns it 1000:998 and mirrors it into /etc/skel.
 HOME = "/home/main"
 KITTY_APP_ICON_PATH = f"{HOME}/.config/kitty/kitty.app.png"
-# Square size (px) the titlebar PNG is rasterized to. 256 matches the desktop icon's
-# native size and is plenty for any titlebar/Alt-Tab surface (WMs downscale as needed).
-KITTY_APP_ICON_SIZE = 256
+# Square size (px) the titlebar PNG is rasterized to. MUST be 128: on X11 the maximum
+# OS-window icon is 128x128, and kitty REFUSES a larger one -- it prints "The window icon
+# is too large (256x256). On X11 max window icon size is: 128x128" and leaves the window
+# with the WM's broken/default icon (the exact titlebar bug that was reported when this was
+# 256). 128px fills any titlebar/Alt-Tab surface, so cap it here.
+KITTY_APP_ICON_SIZE = 128
 
 
 # --- Emit plan --------------------------------------------------------------

@@ -1,16 +1,19 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!-- Az'arch kitty icon: the cleanest possible monochrome terminal glyph.
-     Black and white ONLY, no window chrome, no color: literally a chevron then an
-     underscore cursor on a transparent field. A single minimal shell-prompt mark
-     that reads instantly as a terminal. Single source of truth for the kitty icon
-     (patches/kitty.py copies this asset to the system icon paths and rasterizes it
-     for the in-window titlebar icon). 256x256, pure black on transparent so it stays
-     crisp and unambiguous at every rasterized size. -->
+<!-- Az'arch kitty icon: a clean terminal-window mark. A horizontal (landscape)
+     rounded rectangle with a BLACK background and a WHITE shell prompt inside it,
+     literally a chevron then an underscore cursor: "> _". Black and white ONLY, no
+     color, no mascot. It reads instantly as a terminal window. Single source of truth
+     for the kitty icon (patches/kitty.py copies this asset to the system icon paths
+     and rasterizes it for the in-window titlebar icon). 256x256 canvas, pure black
+     and white so it stays crisp and unambiguous at every rasterized size. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <!-- The chevron: two strokes meeting at a point, left of center. -->
-  <path d="M72 92 L128 128 L72 164"
-        fill="none" stroke="#000000" stroke-width="20"
+  <!-- The terminal window: a horizontal black rectangle, rounded corners, centered.
+       Wider than tall (landscape) so it reads as a terminal, not a square tile. -->
+  <rect x="20" y="58" width="216" height="140" rx="18" ry="18" fill="#000000"/>
+  <!-- The chevron ">" : two strokes meeting at a point, left of center, white. -->
+  <path d="M64 104 L104 128 L64 152"
+        fill="none" stroke="#ffffff" stroke-width="16"
         stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- The underscore cursor: a short bar on the baseline, right of the chevron. -->
-  <rect x="138" y="154" width="56" height="18" rx="9" ry="9" fill="#000000"/>
+  <!-- The underscore cursor "_" : a short white bar on the baseline, right of the chevron. -->
+  <rect x="120" y="146" width="52" height="15" rx="7" ry="7" fill="#ffffff"/>
 </svg>

@@ -62,6 +62,36 @@ def test_gimprc_disables_welcome_and_tips():
     assert "(show-tips no)" in out
 
 
+def test_winmove_helper_closes_the_welcome_dialog():
+    # VERIFIED ON THE GUEST: (show-welcome-dialog no) does NOT actually suppress GIMP 3.2.4's
+    # version-update "Welcome to GIMP" dialog, and it is a SEPARATE top-level window, so moving
+    # the main window off-screen leaves it centered on the desktop. The winmove helper must
+    # therefore be able to CLOSE it: it matches the "Welcome to GIMP" title and sends a polite
+    # _NET_CLOSE_WINDOW (which leaves the main GIMP process alive). It also exposes a
+    # `hide-welcome` verb (close ONLY the dialog) for the wrapper's cold-start sweep.
+    out = gimp.winmove_helper_py()
+    assert "_NET_CLOSE_WINDOW" in out
+    assert "welcome to gimp" in out.lower()
+    assert '"hide-welcome"' in out
+    assert "_NET_WM_NAME" in out                         # reads titles to find the dialog
+
+
+def test_preload_sweeps_the_welcome_after_hiding_the_main_window():
+    # The welcome dialog can map a beat AFTER the main window, so once the main window is
+    # off-screen the preload keeps calling `hide` for a short grace window to catch it.
+    out = gimp.preload_helper_sh()
+    assert f'"{gimp.WINMOVE_HELPER_PATH}" hide' in out
+    # The grace sweep loop after the main window is hidden (a second, bounded hide loop).
+    assert "grace" in out
+
+
+def test_open_wrapper_sweeps_welcome_on_cold_start():
+    # If no warm instance exists yet (mid re-warm), the wrapper's gimp-3.2 starts cold and the
+    # welcome dialog would pop in the user's face; a short background sweeper closes it.
+    out = gimp.open_wrapper_sh()
+    assert "hide-welcome" in out
+
+
 def test_preload_is_a_rewarm_loop_not_exec():
     # Re-warm on close needs a supervise loop (launch -> wait -> relaunch), NOT `exec` (which
     # would leave nothing to relaunch). It must warm the same binary silently, hide the window
@@ -92,6 +122,17 @@ def test_desktop_exec_uses_the_wrapper():
     assert out.splitlines()[0] == "[Desktop Entry]"
     assert f"Exec={gimp.OPEN_WRAPPER_PATH} %U" in out
     assert "StartupWMClass=gimp" in out
+
+
+def test_winmove_hide_iconifies_not_just_moves_offscreen():
+    # An off-screen move ALONE does not hide the window: OpenBox clamps a mostly-off-screen
+    # window so a corner stays visible (verified live -- a ~79x25px GIMP corner peeked). The
+    # helper MUST iconify (XIconifyWindow -> _NET_WM_STATE_HIDDEN) to truly hide it, and
+    # de-iconify (XMapWindow) on show. Iconify happens only after the window has painted, so
+    # the show stays clean.
+    out = gimp.winmove_helper_py()
+    assert "XIconifyWindow" in out          # the real hide
+    assert "XMapWindow" in out              # de-iconify on show
 
 
 def test_winmove_helper_is_shipped_verbatim_and_x11_only():

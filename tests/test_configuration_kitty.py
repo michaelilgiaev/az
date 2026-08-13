@@ -74,7 +74,10 @@ def test_titlebar_icon_is_rendered_from_the_asset_into_home():
     assert entry["dest"].startswith(kitty.HOME + "/")
     assert entry["builder"] is None
     assert entry.get("render") == {"asset": kitty.ICON_ASSET, "size": kitty.KITTY_APP_ICON_SIZE}
-    assert kitty.KITTY_APP_ICON_SIZE >= 128          # plenty for any titlebar surface
+    # X11 caps the OS-window icon at 128x128: kitty REFUSES a larger one ("window icon is
+    # too large (256x256). On X11 max window icon size is: 128x128") and the WM then shows a
+    # broken/default icon -- exactly the titlebar bug reported. So the render MUST be 128px.
+    assert kitty.KITTY_APP_ICON_SIZE == 128
     assert entry["owner"] == "home"
 
 
@@ -85,18 +88,31 @@ def test_icon_asset_is_wellformed_xml():
     ET.fromstring(_asset_svg_text())
 
 
-def test_icon_asset_is_a_clean_bw_prompt_glyph_not_a_cat():
-    # The whole point: the cleanest monochrome "> _" prompt -- a chevron (a stroked path)
-    # plus an underscore cursor (a rect), BLACK on transparent, no window chrome, no color,
-    # no cat. Assert the structural bits are present and nothing colored/mascot slipped in.
+def test_icon_asset_is_a_clean_bw_terminal_not_a_cat():
+    # The whole point (user's exact ask): a terminal-window mark -- a horizontal BLACK
+    # rectangle (the window) with a WHITE "> _" prompt inside (a chevron stroked path + an
+    # underscore cursor rect). Black and white ONLY, no color, no cat. Assert the structural
+    # bits are present and nothing colored/mascot slipped in.
     svg = _asset_svg_text().lower()
     assert "<svg" in svg and "</svg>" in svg
     assert 'viewbox="0 0 256 256"' in svg
-    assert "<path" in svg          # the chevron ">"
-    assert "<rect" in svg          # the underscore cursor "_"
+    assert svg.count("<rect") >= 2  # the black window rectangle + the "_" underscore cursor
+    assert "<path" in svg           # the chevron ">"
     assert "cat" not in svg and "whisker" not in svg
-    # Black and white only: black ink, and NO stray colors (the old icon used red/yellow/
-    # green titlebar dots + a green prompt -- none of those hexes may appear).
-    assert "#000000" in svg
+    # Black and white only: a black window fill and a white prompt, and NO stray colors (the
+    # old rejected icon used red/yellow/green titlebar dots + a green prompt).
+    assert "#000000" in svg         # black background rectangle
+    assert "#ffffff" in svg         # white prompt "> _"
     for banned in ("#e06c75", "#e5c07b", "#98c379", "#3fd07f", "#1b1f24", "#2b3038"):
         assert banned not in svg
+
+
+def test_icon_asset_window_is_a_horizontal_rectangle():
+    # The window must read as a terminal: a LANDSCAPE (wider-than-tall) rectangle, not a
+    # square tile. Parse the background rect and assert width > height.
+    root = ET.fromstring(_asset_svg_text())
+    ns = "{http://www.w3.org/2000/svg}"
+    rects = root.findall(f"{ns}rect")
+    assert rects, "expected at least the background window rect"
+    bg = rects[0]  # first rect is the window background
+    assert float(bg.get("width")) > float(bg.get("height"))
