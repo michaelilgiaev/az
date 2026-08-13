@@ -142,10 +142,37 @@ _CUSTOM_EXAMPLE = """\
 """
 
 
+# Per-application system files Az'arch REPLACES or SUPPRESSES. Each is owned by the
+# app's own package (kitty/gedit/gimp), so it hits the SAME file-conflict wall as
+# os-release below -- pre-placing our version in the airootfs overlay aborts pacstrap
+# with "exists in filesystem". The identical two-step cure applies: NoExtract the path
+# (so the package never owns/lays it down) and, for the ones we REPLACE, plant our
+# version post-pacstrap (compiler stages the content under /root/azarch/apps/ and the
+# customize hook / installer copy it into place -- see app_override_cp_sh()).
+#
+# Each entry: (staged_basename | None, target_abs, remove).
+#   staged_basename -- file under /root/azarch/apps/ to install at target_abs (our
+#                      replacement). None means we ship no replacement -- the path is
+#                      only SUPPRESSED (the two stale kitty cat PNGs, which must stay
+#                      gone so the scalable "> _" SVG wins; NoExtract alone keeps them
+#                      out, no post-pacstrap step needed).
+#   remove          -- True for the suppress-only PNGs (no replacement planted).
+# The kitty scalable SVG + the gedit/gimp .desktop are the three the pacstrap log named
+# as conflicts; the two PNGs are added so the kitty patch's icon-removal intent actually
+# holds on the ISO (otherwise pacstrap re-installs the cat PNGs the overlay had removed).
+ISO_APP_OVERRIDES = [
+    ("kitty.svg", "/usr/share/icons/hicolor/scalable/apps/kitty.svg", False),
+    (None, "/usr/share/icons/hicolor/256x256/apps/kitty.png", True),
+    (None, "/usr/share/pixmaps/kitty.png", True),
+    ("org.gnome.gedit.desktop", "/usr/share/applications/org.gnome.gedit.desktop", False),
+    ("gimp.desktop", "/usr/share/applications/gimp.desktop", False),
+]
+
 # Files the ISO overrides / suppresses. pacstrap must NOT extract the owning
 # package's version:
 #   usr/lib/os-release   owned by `filesystem`; we replace it with the Az'arch-branded
 #                        file, planted post-pacstrap by customize_airootfs.sh.
+#   the ISO_APP_OVERRIDES paths (kitty icon + gedit/gimp .desktop) -- see above.
 # This MUST be NoExtract'd (not just overlaid): pacman's file-conflict check runs
 # BEFORE extraction and is not suppressed by NoExtract, so pre-placing our copy in the
 # airootfs overlay aborts pacstrap with "exists in filesystem". NoExtract keeps the
@@ -153,7 +180,26 @@ _CUSTOM_EXAMPLE = """\
 # pacstrap, conflict-free (see system.CUSTOMIZE_AIROOTFS + compiler.py step 7).
 _ISO_NOEXTRACT = [
     "usr/lib/os-release",
+    *[target.lstrip("/") for _basename, target, _remove in ISO_APP_OVERRIDES],
 ]
+
+
+def app_override_cp_sh(prefix: str = "", src_dir: str = "/root/azarch/apps") -> str:
+    """Shell snippet that plants the ISO_APP_OVERRIDES into a pacstrapped root.
+
+    Runs AFTER pacstrap (the NoExtract'd paths are absent, so there is no conflict):
+    installs each replacement from ``src_dir`` to ``prefix``+target (0644), and removes
+    any suppress-only target that a package might still have dropped. ``prefix`` is "" for
+    the live customize_airootfs.sh (chroot-relative) and "/mnt" for the on-disk installer.
+    The lines mirror the os-release `cp` both hooks already do."""
+    lines = []
+    for basename, target, remove in ISO_APP_OVERRIDES:
+        dst = f"{prefix}{target}"
+        if remove:
+            lines.append(f"rm -f {dst}")
+        else:
+            lines.append(f"install -Dm644 {src_dir}/{basename} {dst}")
+    return "\n".join(lines) + "\n"
 
 
 def _options_block(cachedir: str | None, noextract: list[str] | None = None) -> str:

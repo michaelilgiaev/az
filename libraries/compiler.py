@@ -191,7 +191,14 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # pacstrap). The branded file is staged read-only under root/azarch/os-release and
     # the hook copies it into place inside the pacstrapped rootfs.
     emit.write_text(ea / "os-release", system.OS_RELEASE)
-    emit.write_exec(airootfs / "root/customize_airootfs.sh", system.CUSTOMIZE_AIROOTFS)
+    # The per-app system files kitty/gedit/gimp override (kitty icon SVG, the two stale
+    # cat PNGs, the gedit/gimp .desktop) are owned by their own packages, so they hit the
+    # SAME conflict wall -- planting them in the overlay aborts pacstrap. They get the
+    # identical after-pacstrap cure: NoExtract'd (libraries/pacman.py) and copied in by the
+    # customize hook. The replacement bodies are staged under root/azarch/apps/ in
+    # _emit_apps (step 8); here we append their plant/remove lines to the hook.
+    emit.write_exec(airootfs / "root/customize_airootfs.sh",
+                    system.CUSTOMIZE_AIROOTFS + pacman.app_override_cp_sh())
     # Overlay the releng `archiso` hostname with `azarch` (prompt + fastfetch title).
     emit.write_text(airootfs / "etc/hostname", system.HOSTNAME)
 
@@ -203,7 +210,7 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # into an OpenBox X11 session. The Calamares configuration tree lands under /etc/calamares.
     bar.step("Overlay OpenBox desktop and Calamares configuration")
     _emit_desktop(airootfs, home)
-    _emit_apps(airootfs, home)
+    _emit_apps(airootfs, home, ea)
     _emit_calamares(airootfs)
     _emit_tty1_autologin(airootfs)
     # ckbcomp: Calamares' keyboard page renders its on-screen key legends by shelling
@@ -419,7 +426,7 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
     subprocess.run(_sudo() + ["chown", "-R", "1000:998", str(home)], check=False)
 
 
-def _emit_apps(airootfs: Path, home: Path) -> None:
+def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
     """Overlay the per-application tweaks (kitty/vlc/gimp/gedit), each a self-contained
     patch module exposing emit_plan() in the same builder/dest/mode/owner shape as
     openbox/librewolf. Several extras beyond the plain write loop, all driven by keys on
@@ -445,7 +452,17 @@ def _emit_apps(airootfs: Path, home: Path) -> None:
     All of this lands in the airootfs overlay, so the OFFLINE Calamares install carries it
     onto the installed system with no separate installer step."""
     skel = airootfs / "etc/skel"
+    apps_stage = ea / "apps"                            # staged bodies for the customize hook
     need_compile_schemas = False
+
+    # Package-owned system paths we REPLACE/SUPPRESS cannot go in the airootfs overlay:
+    # pacstrap's file-conflict check would abort (see libraries/pacman.py). They are
+    # NoExtract'd and planted post-pacstrap instead. Map override target -> staged basename
+    # (None == suppress-only, no body to stage). A replacement entry writes its body under
+    # root/azarch/apps/<basename> (the hook installs it); a suppress-only entry is dropped
+    # here entirely (NoExtract keeps the package file out -- no overlay action needed).
+    _override_basename = {target: basename
+                          for basename, target, _remove in pacman.ISO_APP_OVERRIDES}
 
     def _skel_mirror(entry: dict, dest_abs: str) -> Path | None:
         """If entry is a HOME file, return its /etc/skel mirror path (else None)."""
@@ -459,13 +476,22 @@ def _emit_apps(airootfs: Path, home: Path) -> None:
     for entry in (kitty.emit_plan() + vlc.emit_plan()
                   + gimp.emit_plan() + gedit.emit_plan()):
         dest_abs = entry["dest"]                       # absolute path on the target
-        target = airootfs / dest_abs.lstrip("/")
-        # Removal entries (e.g. kitty's stale PNGs): unlink instead of writing, so the
-        # icon loader falls back to our SVG. missing_ok -- the file may not exist yet.
-        if entry.get("remove"):
-            target.unlink(missing_ok=True)
-            continue
-        skel_dest = _skel_mirror(entry, dest_abs)
+        # Package-owned override path? Redirect its body to the post-pacstrap staging dir
+        # (or drop it if suppress-only) instead of writing into the conflicting overlay.
+        if dest_abs in _override_basename:
+            basename = _override_basename[dest_abs]
+            if basename is None:                       # suppress-only (kitty cat PNGs)
+                continue                               # NoExtract handles it; nothing to write
+            target = apps_stage / basename             # plant body for app_override_cp_sh()
+            skel_dest = None                           # system file -- never skel-mirrored
+        else:
+            target = airootfs / dest_abs.lstrip("/")
+            # Removal entries with no override mapping: unlink instead of writing. (Kept for
+            # completeness; the kitty PNG removals are handled via the override map above.)
+            if entry.get("remove"):
+                target.unlink(missing_ok=True)
+                continue
+            skel_dest = _skel_mirror(entry, dest_abs)
         # Asset-copy entries (e.g. kitty's scalable icon SVG): copy the repo asset verbatim.
         if entry.get("asset"):
             emit.copy_asset(entry["asset"], target, mode=entry["mode"])

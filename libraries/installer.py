@@ -15,12 +15,13 @@ back on later, not here.
 
 from __future__ import annotations
 
+import pacman
 from patches.calamares.locale import _detect_and_apply_locale_block
 
 
 # --- The disk installer (runs in the live session) --------------------------
 def installer_sh() -> str:
-    return """\
+    body = """\
 #!/bin/bash
 
 set -o pipefail
@@ -202,6 +203,13 @@ echo "[*] Branding os-release as Az'arch Linux..."
 # system is "Az'arch Linux" and fastfetch's OS line matches the live ISO.
 cp /root/azarch/os-release /mnt/usr/lib/os-release
 
+echo "[*] Planting per-app overrides (kitty icon, gedit/gimp launchers)..."
+# The installed-system pacstrap NoExtracts these package-owned paths too (see pacman.py),
+# so the kitty/gedit/gimp packages never lay down their stock icon/.desktop -- plant our
+# versions from /root/azarch/apps/ (staged into the ISO alongside os-release) and remove
+# the suppressed cat PNGs, exactly as the live customize hook does.
+%APP_OVERRIDES%
+
 echo "[*] Copying first boot configuration files..."
 mkdir -p /mnt/home/main/.config/first-boot
 mkdir -p /mnt/etc/systemd/system
@@ -220,6 +228,10 @@ rm /mnt/chroot-setup.sh
 
 umount -R /mnt
 """
+    # Splice in the per-app override plant/remove lines (single source of truth in
+    # pacman.py, shared with the live customize hook). Prefix /mnt: the installer targets
+    # the mounted new root, not the live chroot.
+    return body.replace("%APP_OVERRIDES%", pacman.app_override_cp_sh("/mnt").rstrip("\n"))
 
 
 # --- Runs inside the arch-chroot after pacstrap -----------------------------

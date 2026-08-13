@@ -44,12 +44,19 @@ FROM archlinux:latest
 # must be present in THIS image or that compile fails with "gtk/gtk.h: No such file or
 # directory" and aborts the build. This is unlike the makepkg makedepends: those are
 # installed at build time by makepkg, but the menu compile happens BEFORE that step, so
-# its deps have to be baked in here. Keep in sync with
-# application_menu.MENU_BUILD_DEPS (compiler._check_host_deps installs the same set on a
-# non-Docker Arch host):
+# its deps have to be baked in here. The gedit notepad-mode libpeas plugin
+# (libazarch-notepad.so) is COMPILED the same way during _emit_apps, so ITS dev headers
+# must be present here too. Keep in sync with application_menu.MENU_BUILD_DEPS +
+# gedit.GEDIT_PLUGIN_BUILD_DEPS (compiler._check_host_deps installs the same set on a
+# non-Docker Arch host); missing any of these aborts step 2/16 "Sync host toolchain"
+# with "Missing build-host dependencies" (offline) or dies later in `make`:
 #   gtk3       -> the GTK3 dev headers + gtk+-3.0.pc and the whole -3.0 pkg-config stack
 #                 the menu Makefile resolves (gdk/glib/pango/cairo/gdk-pixbuf come as deps).
 #   pkgconf    -> pkg-config, which the Makefile shells out to (also in base-devel).
+#   gedit      -> the gedit-50 dev headers + gedit.pc / libpeas the notepad plugin's
+#                 Makefile resolves (compiler._check_host_deps requires the `gedit` pkg).
+#   gcc        -> the compiler both Makefiles invoke (provided by base-devel; listed in
+#                 the code's dep sets, present here via base-devel).
 #
 # PINNED to an Arch Linux Archive (ALA) snapshot instead of the rolling live mirrors.
 # The live `core`/`extra` repos are periodically INTERNALLY INCONSISTENT for short
@@ -77,6 +84,7 @@ RUN printf 'Server = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n' "$
         gnupg \
         gtk3 \
         pkgconf \
+        gedit \
     && pacman -Scc --noconfirm
 
 # Initialize pacman's trust database. Installing archlinux-keyring above only

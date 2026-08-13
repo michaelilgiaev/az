@@ -332,24 +332,18 @@ def test_rc_xml_menu_window_is_undecorated():
     assert "<decor>no</decor>" in out
 
 
-def _strip_xml_comments(text: str) -> str:
-    # OpenBox's XML parser is lenient and our generated comments intentionally contain
-    # an em-dash rendered as "--" ("... desktop -- edit the Python ..."), which the
-    # strict XML spec forbids INSIDE a comment. We want the wellformedness check to
-    # validate the ELEMENT tree OpenBox actually reads (balanced tags), not the comment
-    # prose, so drop comments before handing the document to ElementTree.
-    import re
-
-    return re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
-
-
 def test_rc_xml_is_wellformed_xml():
-    # A stray unbalanced tag from the f-string would make OpenBox ignore the file and
-    # fall back to stock keybinds (no Super -> menu). Parse the comment-stripped
-    # document to prove the element tree is valid XML.
+    # Parse the FULL document, COMMENTS INCLUDED. OpenBox parses rc.xml with libxml2,
+    # which is NOT lenient about comment content: a "--" (double hyphen) inside a
+    # <!-- --> comment is a FATAL XML error, and OpenBox pops a blocking "Openbox Syntax
+    # Error" dialog and falls back to stock keybinds (no Super -> menu). A previous version
+    # of this test stripped comments before parsing "so the prose can contain --", which
+    # let exactly that bug ship (a "opens cleanly -- an <iconic>..." comment). Parsing the
+    # raw document is the whole point: it validates what OpenBox actually reads, so an
+    # illegal double hyphen (or any malformed comment/tag) fails HERE, not on the guest.
     import xml.etree.ElementTree as ET
 
-    ET.fromstring(_strip_xml_comments(desktop.openbox_rc_xml()))
+    ET.fromstring(desktop.openbox_rc_xml())
 
 
 # --- OpenBox root menu removed: no menu.xml builder at all ------------------

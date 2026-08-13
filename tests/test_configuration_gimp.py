@@ -101,8 +101,13 @@ def test_winmove_helper_is_shipped_verbatim_and_x11_only():
     assert "ctypes" in out
     assert "libX11" in out or "find_library" in out
     assert '"hide"' in out and '"show"' in out
-    # No dependency on external window tools.
-    assert "xdotool" not in out and "wmctrl" not in out
+    # No dependency on external window tools: the helper must talk to X11 DIRECTLY and
+    # never shell out. We check it spawns NO subprocess (which is how it would call
+    # xdotool/wmctrl) rather than banning the strings outright -- the docstring names
+    # xdotool/wmctrl precisely to document that it does NOT use them, so a substring ban
+    # would flag its own explanation.
+    for spawn in ("subprocess", "os.system", "os.exec", "Popen", "os.spawn"):
+        assert spawn not in out, f"winmove helper must not shell out ({spawn} found)"
 
 
 def test_openbox_parks_the_preloaded_gimp_offscreen_not_iconic():

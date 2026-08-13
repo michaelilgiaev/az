@@ -629,7 +629,7 @@ def openbox_rc_xml() -> str:
     </application>
     <!-- GIMP is PRELOADED at login (patches/gimp.py) so it opens instantly. The warm-up
          window is kept MAPPED but moved OFF-SCREEN by the preload (so it paints fully and
-         opens cleanly -- an <iconic>/unmapped window painted half-drawn with a transparent
+         opens cleanly; an iconic/unmapped window painted half-drawn with a transparent
          middle, the bug we removed). Here we only make sure it never steals focus and never
          shows in the taskbar/pager while it is parked off-screen. When the user opens GIMP
          the azarch-gimp wrapper moves it back on-screen and the single instance present()s
