@@ -88,8 +88,9 @@ FILE_PERMISSIONS = {
     # autostart's `[ -x ... ]` guard would then skip it, so the menu is never pre-built
     # and the first Super press does nothing / starts nothing.
     "/usr/local/lib/azarch-application-menu/azarch-application-menu-daemon": "0:0:755",
-    # The COMPILED bare-`azarch` TERMINAL UI binary (built by azarch_tui.build_tui and
-    # EXEC'd by the `azarch` CLI for the no-argument case). Same archiso mode-normalization
+    # The COMPILED bare-`azarch` TERMINAL UI binary (built by tui_build.build_tui from the
+    # azarch package's C sources and EXEC'd by the `azarch` CLI for the no-argument case).
+    # Same archiso mode-normalization
     # as the menu daemon above: it is installed 0755, but the squashfs would ship it 0644
     # unless pinned -- and then the `azarch` launcher's os.access(..., X_OK) guard fails and
     # bare `azarch` silently falls back to the pointer message instead of opening the UI.

@@ -1,7 +1,8 @@
 # Az'arch -- C test runner for the compiled C packages.
 #
-# The C sources live in libraries/packages/{application_menu,azarch_tui}/; this dir is the
-# single home for their tests (the Python pytest suite lives here too, run by `bash tests.sh`).
+# The C sources live in libraries/packages/{application_menu,azarch}/ (the bare-`azarch` TUI
+# is C inside the azarch package now); this dir is the single home for their tests (the Python
+# pytest suite lives here too, run by `bash tests.sh`).
 #
 #   make -C tests test      headless C unit tests -- the application-menu (test_applications.c
 #                           + the shipping applications.c) AND the bare-`azarch` TUI model
@@ -13,7 +14,7 @@
 # translation units and resolve their headers. Nothing here dirties the package trees.
 CC      ?= gcc
 APP_DIR  = ../libraries/packages/application_menu
-TUI_DIR  = ../libraries/packages/azarch_tui
+TUI_DIR  = ../libraries/packages/azarch
 
 TEST_BIN    = test_applications
 TEST_PKGS   = glib-2.0

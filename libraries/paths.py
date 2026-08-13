@@ -111,12 +111,6 @@ PACKAGES_FILE = PACKAGESDIR / "packages.x86_64"
 # pure-Python launcher (launcher.py), and generates the .desktop entry. The whole menu
 # is OURS, so it is a package here, not a patch.
 APPLICATION_MENU_DIR = PACKAGESDIR / "application_menu"
-# The Az'arch bare-`azarch` TERMINAL UI package (C port): the C sources (main.c/render.c/
-# model.c/preview.c, tui.h + siblings, Makefile) live DIRECTLY here alongside azarch_tui.py
-# -- the build wiring that COMPILES them into the azarch-tui binary and installs it under
-# /usr/local/lib/azarch-tui. The bare `azarch` command execs that binary (see
-# packages/azarch/tui.py). It is OURS (a program we author), so it is a package here.
-AZARCH_TUI_DIR = PACKAGESDIR / "azarch_tui"
 # The Az'arch timedate package (Flask Time + Calendar home page): the app sources
 # (app.py + page.py) live directly here alongside timedate.py, the build wiring that
 # copies them into the airootfs, installs the launcher, and ships the systemd service.
@@ -130,6 +124,13 @@ TIMEDATE_DIR = PACKAGESDIR / "timedate"
 # bundle.bundle_source(); the compiler then injects the country->locale table from
 # modifications/calamares/locale.py between the AZARCH_CC markers (which now live in
 # country_table.py). See modifications/openbox openbox.azarch_cli().
+#
+# This dir ALSO holds the bare-`azarch` TERMINAL UI's C sources (main.c/render.c/model.c/
+# preview.c, tui.h + siblings, Makefile) -- there is only ONE program, `azarch`, and the UI
+# is C for speed, so it lives next to the Python CLI it drives rather than in a separate
+# package. packages/azarch/tui_build.py is the build wiring that compiles them into the
+# azarch-tui binary; bare `azarch` execs it (see packages/azarch/tui.py). tui_build's
+# _csrc_files() picks up only the C inputs, never the .py modules, so the two coexist here.
 AZARCH_CLI_DIR = PACKAGESDIR / "azarch"
 # The module whose source carries the AZARCH_CC_TABLE_START/END markers (the compiler
 # regenerates the COUNTRY_TABLE literal between them from the single source of truth).

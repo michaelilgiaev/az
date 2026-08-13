@@ -283,81 +283,108 @@ int az_row_matches(const AzRow *r, const char *q)
 /* Actions are shell command lines run through the installed `azarch` CLI. main.c runs
  * them with the terminal restored so prompts/output are visible, then shows a result. */
 
+/* All rows use DESIGNATED initializers: any field not named is zero (NULL / AZ_PV_NONE /
+ * quiet==0), so adding a field never forces touching every row and the intent of each row is
+ * self-documenting. `.quiet = 1` marks an apply that runs silently inside the UI. */
+
+/* Network is FIRST (it is what a fresh machine needs first). The main rows keep their live
+ * status -- it is a genuine at-a-glance summary of the sub-screen (e.g. "firewall active"),
+ * NOT a redundant echo, and the main screen has no "Current:" line of its own. */
 static const AzRow ROWS_MAIN[] = {
-    {"Theme",     AZ_ACT_SCREEN, "theme",     az_status_theme,     AZ_PV_NONE, NULL, NULL},
-    {"Wallpaper", AZ_ACT_SCREEN, "wallpaper", az_status_wallpaper, AZ_PV_NONE, NULL, NULL},
-    {"Network",   AZ_ACT_SCREEN, "network",   az_status_network,   AZ_PV_NONE, NULL, NULL},
+    {.label="Network",   .kind=AZ_ACT_SCREEN, .target="network",   .status=az_status_network},
+    {.label="Theme",     .kind=AZ_ACT_SCREEN, .target="theme",     .status=az_status_theme},
+    {.label="Wallpaper", .kind=AZ_ACT_SCREEN, .target="wallpaper", .status=az_status_wallpaper},
 };
 
+/* Theme / Wallpaper rows carry NO per-row status: the live state is shown ONCE as the
+ * "Current:" line at the top of the screen (the screen's `current` probe), so echoing
+ * "white"/"years" after each option would just be noise -- exactly what the spec calls out.
+ * They are `.quiet = 1`: applying a theme/wallpaper needs no sudo/tty, so it runs silently and
+ * NO CLI text flashes over the UI. */
 static const AzRow ROWS_THEME[] = {
-    {"Dark",  AZ_ACT_APPLY, "azarch theme --dark",  az_status_theme, AZ_PV_THEME, "dark",
-     "The default. Everything follows it (kitty is exempt)."},
-    {"White", AZ_ACT_APPLY, "azarch theme --white", az_status_theme, AZ_PV_THEME, "white",
-     "Kitty keeps its own look regardless of the system theme."},
+    {.label="Dark",  .kind=AZ_ACT_APPLY, .target="azarch theme --dark",
+     .preview=AZ_PV_THEME, .preview_arg="dark",
+     .hint="The default. Everything follows it (kitty is exempt).", .quiet=1},
+    {.label="White", .kind=AZ_ACT_APPLY, .target="azarch theme --white",
+     .preview=AZ_PV_THEME, .preview_arg="white",
+     .hint="Kitty keeps its own look regardless of the system theme.", .quiet=1},
 };
 
 static const AzRow ROWS_WALLPAPER[] = {
-    {"Years",   AZ_ACT_APPLY, "azarch wallpaper --years.png",
-     az_status_wallpaper, AZ_PV_WALLPAPER, "years",   NULL},
-    {"Decades", AZ_ACT_APPLY, "azarch wallpaper --decades.png",
-     az_status_wallpaper, AZ_PV_WALLPAPER, "decades", NULL},
+    {.label="Years",   .kind=AZ_ACT_APPLY, .target="azarch wallpaper --years.png",
+     .preview=AZ_PV_WALLPAPER, .preview_arg="years",   .quiet=1},
+    {.label="Decades", .kind=AZ_ACT_APPLY, .target="azarch wallpaper --decades.png",
+     .preview=AZ_PV_WALLPAPER, .preview_arg="decades", .quiet=1},
 };
 
 static const AzRow ROWS_NETWORK[] = {
-    {"Wifi",          AZ_ACT_SCREEN, "network.wifi",      az_status_wifi,      AZ_PV_NONE, NULL, NULL},
-    {"Wired",         AZ_ACT_SCREEN, "network.wired",     az_status_wired,     AZ_PV_NONE, NULL, NULL},
-    {"Bluetooth",     AZ_ACT_SCREEN, "network.bluetooth", az_status_bluetooth, AZ_PV_NONE, NULL, NULL},
-    {"Airplane mode", AZ_ACT_SCREEN, "network.airplane",  az_status_airplane,  AZ_PV_NONE, NULL, NULL},
-    {"Firewall",      AZ_ACT_SCREEN, "network.firewall",  az_status_firewall,  AZ_PV_NONE, NULL, NULL},
+    {.label="Wifi",          .kind=AZ_ACT_SCREEN, .target="network.wifi",      .status=az_status_wifi},
+    {.label="Wired",         .kind=AZ_ACT_SCREEN, .target="network.wired",     .status=az_status_wired},
+    {.label="Bluetooth",     .kind=AZ_ACT_SCREEN, .target="network.bluetooth", .status=az_status_bluetooth},
+    {.label="Airplane mode", .kind=AZ_ACT_SCREEN, .target="network.airplane",  .status=az_status_airplane},
+    {.label="Firewall",      .kind=AZ_ACT_SCREEN, .target="network.firewall",  .status=az_status_firewall},
 };
 
 static const AzRow ROWS_WIFI[] = {
-    {"Turn wifi on",         AZ_ACT_APPLY, "azarch network wifi on",      az_status_wifi, AZ_PV_NONE, NULL, NULL},
-    {"Turn wifi off",        AZ_ACT_APPLY, "azarch network wifi off",     az_status_wifi, AZ_PV_NONE, NULL, NULL},
-    {"Scan / list networks", AZ_ACT_APPLY, "azarch network wifi list",    az_status_wifi, AZ_PV_NONE, NULL, NULL},
-    {"Disconnect",           AZ_ACT_APPLY, "azarch network wifi disconnect", az_status_wifi, AZ_PV_NONE, NULL,
-     "To connect: azarch network wifi connect <name> <password>"},
+    {.label="Turn wifi on",         .kind=AZ_ACT_APPLY, .target="azarch network wifi on",         .status=az_status_wifi},
+    {.label="Turn wifi off",        .kind=AZ_ACT_APPLY, .target="azarch network wifi off",        .status=az_status_wifi},
+    {.label="Scan / list networks", .kind=AZ_ACT_APPLY, .target="azarch network wifi list",       .status=az_status_wifi},
+    {.label="Disconnect",           .kind=AZ_ACT_APPLY, .target="azarch network wifi disconnect", .status=az_status_wifi,
+     .hint="To connect: azarch network wifi connect <name> <password>"},
 };
 
 static const AzRow ROWS_WIRED[] = {
-    {"Turn wired on",  AZ_ACT_APPLY, "azarch network wired on",  az_status_wired, AZ_PV_NONE, NULL, NULL},
-    {"Turn wired off", AZ_ACT_APPLY, "azarch network wired off", az_status_wired, AZ_PV_NONE, NULL, NULL},
+    {.label="Turn wired on",  .kind=AZ_ACT_APPLY, .target="azarch network wired on",  .status=az_status_wired},
+    {.label="Turn wired off", .kind=AZ_ACT_APPLY, .target="azarch network wired off", .status=az_status_wired},
 };
 
 static const AzRow ROWS_BLUETOOTH[] = {
-    {"Turn bluetooth on",  AZ_ACT_APPLY, "azarch network bluetooth on",   az_status_bluetooth, AZ_PV_NONE, NULL, NULL},
-    {"Turn bluetooth off", AZ_ACT_APPLY, "azarch network bluetooth off",  az_status_bluetooth, AZ_PV_NONE, NULL, NULL},
-    {"Scan / list devices",AZ_ACT_APPLY, "azarch network bluetooth scan", az_status_bluetooth, AZ_PV_NONE, NULL,
-     "Pair a device with: azarch network bluetooth pair <mac>"},
+    {.label="Turn bluetooth on",   .kind=AZ_ACT_APPLY, .target="azarch network bluetooth on",   .status=az_status_bluetooth},
+    {.label="Turn bluetooth off",  .kind=AZ_ACT_APPLY, .target="azarch network bluetooth off",  .status=az_status_bluetooth},
+    {.label="Scan / list devices", .kind=AZ_ACT_APPLY, .target="azarch network bluetooth scan", .status=az_status_bluetooth,
+     .hint="Pair a device with: azarch network bluetooth pair <mac>"},
 };
 
 static const AzRow ROWS_AIRPLANE[] = {
-    {"Turn airplane mode on",  AZ_ACT_APPLY, "azarch network airplane on",  az_status_airplane, AZ_PV_NONE, NULL,
-     "Kills every radio at once."},
-    {"Turn airplane mode off", AZ_ACT_APPLY, "azarch network airplane off", az_status_airplane, AZ_PV_NONE, NULL, NULL},
+    {.label="Turn airplane mode on",  .kind=AZ_ACT_APPLY, .target="azarch network airplane on",  .status=az_status_airplane,
+     .hint="Kills every radio at once."},
+    {.label="Turn airplane mode off", .kind=AZ_ACT_APPLY, .target="azarch network airplane off", .status=az_status_airplane},
 };
 
 static const AzRow ROWS_FIREWALL[] = {
-    {"Enable firewall",          AZ_ACT_APPLY, "azarch network firewall enable",  az_status_firewall, AZ_PV_NONE, NULL, NULL},
-    {"Disable firewall",         AZ_ACT_APPLY, "azarch network firewall disable", az_status_firewall, AZ_PV_NONE, NULL, NULL},
-    {"List ports (with titles)", AZ_ACT_APPLY, "azarch network firewall port list", az_status_firewall, AZ_PV_NONE, NULL,
-     "Open/close/delete a port: azarch network firewall port ..."},
+    {.label="Enable firewall",          .kind=AZ_ACT_APPLY, .target="azarch network firewall enable",    .status=az_status_firewall},
+    {.label="Disable firewall",         .kind=AZ_ACT_APPLY, .target="azarch network firewall disable",   .status=az_status_firewall},
+    {.label="List ports (with titles)", .kind=AZ_ACT_APPLY, .target="azarch network firewall port list", .status=az_status_firewall,
+     .hint="Open/close/delete a port: azarch network firewall port ..."},
 };
 
 #define AZN(a) (int)(sizeof(a) / sizeof((a)[0]))
 
+/* Only Theme and Wallpaper set `.current` (the top "Current:" line); every other screen
+ * leaves it NULL. The main screen's subtitle is empty (the spec removed the "Move with the
+ * arrow keys..." line -- the nav hints at the bottom already say how to move). Designated
+ * initializers throughout, so the NULL terminator is simply an empty pair of braces. */
 static const AzScreen SCREENS[] = {
-    {"main",      "Settings",      "Move with the arrow keys, Enter to open.", ROWS_MAIN,      AZN(ROWS_MAIN)},
-    {"theme",     "Theme",         "Kitty does not follow the system theme (it keeps its own look).",
-                                                                                ROWS_THEME,     AZN(ROWS_THEME)},
-    {"wallpaper", "Wallpaper",     "Saved in: " AZ_WALLPAPERS_DIR,             ROWS_WALLPAPER, AZN(ROWS_WALLPAPER)},
-    {"network",   "Network",       "Everything network related.",              ROWS_NETWORK,   AZN(ROWS_NETWORK)},
-    {"network.wifi",      "Wifi",      "Wireless.",  ROWS_WIFI,      AZN(ROWS_WIFI)},
-    {"network.wired",     "Wired",     "Ethernet.",  ROWS_WIRED,     AZN(ROWS_WIRED)},
-    {"network.bluetooth", "Bluetooth", "Off by default.", ROWS_BLUETOOTH, AZN(ROWS_BLUETOOTH)},
-    {"network.airplane",  "Airplane mode", "One switch for all radios.", ROWS_AIRPLANE, AZN(ROWS_AIRPLANE)},
-    {"network.firewall",  "Firewall",  "ufw front-end.", ROWS_FIREWALL, AZN(ROWS_FIREWALL)},
-    {NULL, NULL, NULL, NULL, 0},
+    {.id="main",      .title="Az'arch Settings", .subtitle="",
+     .rows=ROWS_MAIN, .nrows=AZN(ROWS_MAIN)},
+    {.id="theme",     .title="Theme",
+     .subtitle="Kitty does not follow the system theme (it keeps its own look).",
+     .current=az_status_theme,     .rows=ROWS_THEME,     .nrows=AZN(ROWS_THEME)},
+    {.id="wallpaper", .title="Wallpaper", .subtitle="Saved in: " AZ_WALLPAPERS_DIR,
+     .current=az_status_wallpaper, .rows=ROWS_WALLPAPER, .nrows=AZN(ROWS_WALLPAPER)},
+    {.id="network",   .title="Network", .subtitle="Everything network related.",
+     .rows=ROWS_NETWORK, .nrows=AZN(ROWS_NETWORK)},
+    {.id="network.wifi",      .title="Wifi",      .subtitle="Wireless.",
+     .rows=ROWS_WIFI,      .nrows=AZN(ROWS_WIFI)},
+    {.id="network.wired",     .title="Wired",     .subtitle="Ethernet.",
+     .rows=ROWS_WIRED,     .nrows=AZN(ROWS_WIRED)},
+    {.id="network.bluetooth", .title="Bluetooth", .subtitle="Off by default.",
+     .rows=ROWS_BLUETOOTH, .nrows=AZN(ROWS_BLUETOOTH)},
+    {.id="network.airplane",  .title="Airplane mode", .subtitle="One switch for all radios.",
+     .rows=ROWS_AIRPLANE,  .nrows=AZN(ROWS_AIRPLANE)},
+    {.id="network.firewall",  .title="Firewall",  .subtitle="ufw front-end.",
+     .rows=ROWS_FIREWALL,  .nrows=AZN(ROWS_FIREWALL)},
+    { 0 },
 };
 
 const AzScreen *az_screens(void) { return SCREENS; }

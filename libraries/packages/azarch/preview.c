@@ -1,0 +1,173 @@
+/* Az'arch bare-`azarch` TUI (C) -- preview pane. See preview.h.
+ *
+ * BOTH previews are now REAL images placed with kitty's `kitten icat --place` (this is
+ * kitty; it can do it):
+ *
+ *   WALLPAPER -- the actual wallpaper PNG for the hovered choice.
+ *   THEME     -- two shipped SCREENSHOTS side by side: LibreWolf on the timedate home page
+ *                and the Dolphin file manager, in the dark or the white variant to match the
+ *                hovered choice. The images live in AZ_PREVIEW_DIR (installed from
+ *                assets/previews/ by tui_build.install_previews) and are used UNMODIFIED --
+ *                kitty scales each into the reserved half-rectangle at draw time, so swapping
+ *                the files (same names) needs no code change. There is NO caption under the
+ *                previews and NO per-app ANSI mock-up anymore.
+ *
+ * SPEED. Placing an image forks `kitten`, which is not free, so we MEMOISE: a frame that
+ * would place the exact same preview (same kind + arg + rectangle) as the last one placed is
+ * a no-op. So holding a key or typing in the search box never re-forks kitten; only actually
+ * moving the selection onto a different preview does. Every real placement first clears the
+ * previous images (one `--clear`) so nothing ever stacks, then places without `--clear`.
+ */
+/* POSIX APIs (fork/execlp/waitpid) under -std=c11. */
+#define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE 1
+
+#include "preview.h"
+
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+
+/* Where the theme-preview screenshots live on the installed system. MUST match
+ * tui_build.TUI_PREVIEW_SYSTEM_DIR (a test pins the two together). The filenames are the
+ * contract: <what>_<variant>.png with what in {timedate, files} and variant in {dark, white}. */
+#define AZ_PREVIEW_DIR "/usr/local/lib/azarch-tui/previews"
+
+/* --- emit ANSI straight to stdout (the renderer already flushed its buffer) --- */
+static void outf(const char *fmt, ...)
+{
+    char buf[512];
+    va_list ap; va_start(ap, fmt);
+    int n = vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+    if (n > 0) { ssize_t w = write(STDOUT_FILENO, buf, (size_t)n); (void)w; }
+}
+static void mv(int row, int col) { outf("\033[%d;%dH", row, col); }
+
+/* --- memo of the last placed preview (so we don't re-fork kitten every keystroke) --- */
+static char g_last_sig[256] = "";
+
+/* --- kitty graphics --------------------------------------------------------- */
+/* Low-level: place one image file into WxH cells at (col0,row0) (0-based, as kitty wants),
+ * WITHOUT --clear (the caller clears once up front so multiple images can coexist). */
+static void icat_place(const char *img, int w, int h, int col0, int row0)
+{
+    /* kitty --place syntax is <width>x<height>@<left>x<top> -- the offset separator is 'x',
+     * NOT a comma (a comma silently mis-places / drops the image on kitty, which is why the
+     * hovered preview wasn't appearing). Origin (0,0) is the top-left, in cells. */
+    char place[64];
+    snprintf(place, sizeof place, "%dx%d@%dx%d", w, h, col0, row0);
+    pid_t pid = fork();
+    if (pid == 0) {
+        int dn = open("/dev/null", O_RDWR);
+        if (dn >= 0) { dup2(dn, 0); dup2(dn, 2); }   /* keep stdout: icat writes graphics there */
+        execlp("kitten", "kitten", "icat",
+               "--silent",
+               "--transfer-mode", "file",
+               "--stdin", "no",
+               "--scale-up",
+               "--place", place,
+               img, (char *)NULL);
+        _exit(127);
+    } else if (pid > 0) {
+        int st = 0; waitpid(pid, &st, 0);
+    }
+}
+
+void az_preview_clear(void)
+{
+    /* Remove all images. Best-effort; if kitten is missing this is a no-op fork. Also drop
+     * the memo so the next real preview is placed fresh. */
+    g_last_sig[0] = '\0';
+    pid_t pid = fork();
+    if (pid == 0) {
+        int dn = open("/dev/null", O_RDWR);
+        if (dn >= 0) { dup2(dn, 0); dup2(dn, 1); dup2(dn, 2); }
+        execlp("kitten", "kitten", "icat", "--clear", "--silent", (char *)NULL);
+        _exit(127);
+    } else if (pid > 0) {
+        waitpid(pid, NULL, 0);
+    }
+}
+
+/* --- wallpaper preview (the hovered wallpaper image) ------------------------ */
+static int wallpaper_preview(const AzRow *row, const AzRect *r)
+{
+    if (!row->preview_arg) return 0;
+    char img[512];
+    az_wallpaper_image(row->preview_arg, img, sizeof img);
+    if (access(img, R_OK) != 0) {
+        mv(r->row, r->col);
+        outf("\033[%sm(preview unavailable: %s)\033[0m", AZ_SGR_DIM, img);
+        return 0;
+    }
+    /* one image filling the whole reserved rectangle, centred by kitty */
+    icat_place(img, r->w, r->h, r->col - 1, r->row - 1);
+    return 1;
+}
+
+/* --- theme preview (two real screenshots: timedate + files) ---------------- */
+static int theme_preview(const AzRow *row, const AzRect *r)
+{
+    const char *variant = (row->preview_arg && strcmp(row->preview_arg, "dark") == 0)
+                          ? "dark" : "white";
+    char tdate[512], files[512];
+    snprintf(tdate, sizeof tdate, "%s/timedate_%s.png", AZ_PREVIEW_DIR, variant);
+    snprintf(files, sizeof files, "%s/files_%s.png",    AZ_PREVIEW_DIR, variant);
+
+    int have_t = access(tdate, R_OK) == 0;
+    int have_f = access(files, R_OK) == 0;
+    if (!have_t && !have_f) {
+        mv(r->row, r->col);
+        outf("\033[%sm(theme previews not installed in %s)\033[0m", AZ_SGR_DIM, AZ_PREVIEW_DIR);
+        return 0;
+    }
+
+    /* Two half-width panes side by side inside the rectangle (a small gutter between). If it
+     * is too narrow for two, show just the timedate shot across the whole width. kitty scales
+     * each screenshot into its pane, preserving aspect, so they read at any terminal size. */
+    int gap = 2;
+    int half = (r->w - gap) / 2;
+    if (half >= 16 && have_t && have_f) {
+        icat_place(tdate, half, r->h, r->col - 1, r->row - 1);
+        icat_place(files, half, r->h, r->col - 1 + half + gap, r->row - 1);
+    } else {
+        const char *only = have_t ? tdate : files;
+        icat_place(only, r->w, r->h, r->col - 1, r->row - 1);
+    }
+    return 1;
+}
+
+int az_preview_draw(const AzUI *ui, const AzRect *r)
+{
+    if (!r || !r->valid) return 0;
+    const AzRow *vis[64];
+    int nvis = az_visible_rows(ui, vis, 64);
+    if (ui->sel < 0 || ui->sel >= nvis) return 0;
+    const AzRow *row = vis[ui->sel];
+    if (row->preview == AZ_PV_NONE) return 0;
+
+    /* MEMO: if this exact preview (kind + arg + rectangle) is already on screen, do nothing --
+     * no kitten fork. Only a genuine change re-places. */
+    char sig[256];
+    snprintf(sig, sizeof sig, "%d|%s|%d,%d,%d,%d",
+             (int)row->preview, row->preview_arg ? row->preview_arg : "",
+             r->row, r->col, r->w, r->h);
+    if (strcmp(sig, g_last_sig) == 0) return 1;   /* unchanged -> still an image on screen */
+
+    /* A real change: clear whatever was there (so nothing stacks), then place. */
+    az_preview_clear();          /* also resets g_last_sig */
+
+    int drew = 0;
+    switch (row->preview) {
+        case AZ_PV_WALLPAPER: drew = wallpaper_preview(row, r); break;
+        case AZ_PV_THEME:     drew = theme_preview(row, r);     break;
+        default:              drew = 0;                          break;
+    }
+    if (drew) snprintf(g_last_sig, sizeof g_last_sig, "%s", sig);
+    return drew;
+}

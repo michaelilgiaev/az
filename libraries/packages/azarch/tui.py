@@ -4,10 +4,10 @@
 WHY THIS IS NOW A THIN SHIM. Running `azarch` with no arguments opens a full-screen text
 UI for the three things a fresh machine needs tuned -- the colour Theme, the desktop
 Wallpaper, and the Network. It used to be implemented HERE in Python/curses, but that felt
-laggy: every keystroke redrew through the interpreter. The UI was rewritten in C
-(libraries/packages/azarch_tui/, built to /usr/local/lib/azarch-tui/azarch-tui) so it drives
-the terminal with raw ANSI + termios and feels INSTANT. This module is now just the launch
-path: bare `azarch` EXECs that binary.
+laggy: every keystroke redrew through the interpreter. The UI was rewritten in C (the C
+sources now live in THIS package, libraries/packages/azarch/, built to
+/usr/local/lib/azarch-tui/azarch-tui) so it drives the terminal with raw ANSI + termios and
+feels INSTANT. This module is now just the launch path: bare `azarch` EXECs that binary.
 
 WHY exec (not subprocess). os.execv REPLACES this Python process with the C UI, so there is
 no lingering interpreter, no extra process, and the C program owns the real terminal
@@ -31,8 +31,8 @@ from __future__ import annotations
 
 # BUNDLE_START
 
-# The compiled C UI binary (built + installed by packages.azarch_tui.build_tui; a test pins
-# this against azarch_tui.TUI_BIN_SYSTEM_PATH so the launcher and the build cannot drift).
+# The compiled C UI binary (built + installed by packages.azarch.tui_build.build_tui; a test
+# pins this against tui_build.TUI_BIN_SYSTEM_PATH so the launcher and the build cannot drift).
 TUI_BIN = "/usr/local/lib/azarch-tui/azarch-tui"
 
 

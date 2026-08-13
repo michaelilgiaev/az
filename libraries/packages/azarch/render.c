@@ -97,15 +97,25 @@ int az_visible_rows(const AzUI *ui, const AzRow **out, int cap)
 /* --- the navigation line ---------------------------------------------------- */
 /* The keys are UPPERCASED and COLOURED (accent); the explanation labels stay as-is and
  * muted, exactly as the spec asks. az_nav_plain gives the same content without colour for
- * the tests. The key GROUPS: movement (WASD / HJKL / arrows) then the verbs. */
+ * the tests. The key GROUPS: movement (WASD / HJKL / arrows, packed) then the verbs. */
 
-/* one coloured "cap": the key glyph in accent, a hair of spacing. */
-static void cap(Buf *b, const char *k)
+/* A run of key glyphs drawn as ONE tight coloured group with NO internal spacing (e.g.
+ * "WASD"), then a single trailing space. `keys` is a NUL-terminated array of glyph strings.
+ * The spec wants the clusters packed ("WASD HJKL ←↑→↓ move"), not spaced out. */
+static void capgroup(Buf *b, const char *const *keys)
 {
     sgr(b, AZ_SGR_KEYCAP);
-    buf_str(b, k);
+    for (const char *const *k = keys; *k; k++) buf_str(b, *k);
     reset(b);
     buf_str(b, " ");
+}
+
+/* a coloured verb: one key-cap + a space + a dim label + trailing gap. */
+static void verb(Buf *b, const char *key, const char *label)
+{
+    sgr(b, AZ_SGR_KEYCAP); buf_str(b, key); reset(b);
+    buf_str(b, " ");
+    sgr(b, AZ_SGR_DIM); buf_str(b, label); reset(b);
 }
 
 static void draw_nav(Buf *b, const AzUI *ui, int row)
@@ -115,28 +125,32 @@ static void draw_nav(Buf *b, const AzUI *ui, int row)
     Buf t = {0};
     if (ui->searching) {
         sgr(&t, AZ_SGR_KEYCAP); buf_str(&t, "TYPE"); reset(&t);
-        sgr(&t, AZ_SGR_DIM); buf_str(&t, " to filter    "); reset(&t);
+        sgr(&t, AZ_SGR_DIM); buf_str(&t, " to filter   "); reset(&t);
         sgr(&t, AZ_SGR_KEYCAP); buf_str(&t, "ENTER"); reset(&t);
         buf_str(&t, "/");
         sgr(&t, AZ_SGR_KEYCAP); buf_str(&t, "ESC"); reset(&t);
         sgr(&t, AZ_SGR_DIM); buf_str(&t, " leave search"); reset(&t);
     } else {
-        /* movement keys */
-        cap(&t, "W"); cap(&t, "A"); cap(&t, "S"); cap(&t, "D");
-        buf_str(&t, " ");
-        cap(&t, "H"); cap(&t, "J"); cap(&t, "K"); cap(&t, "L");
-        buf_str(&t, " ");
-        cap(&t, "\xe2\x86\x90"); cap(&t, "\xe2\x86\x91");   /* <- ^ */
-        cap(&t, "\xe2\x86\x92"); cap(&t, "\xe2\x86\x93");   /* -> v */
-        sgr(&t, AZ_SGR_DIM); buf_str(&t, "move    "); reset(&t);
-        cap(&t, "ENTER");
-        sgr(&t, AZ_SGR_DIM); buf_str(&t, "open    "); reset(&t);
-        cap(&t, "ESC");
-        sgr(&t, AZ_SGR_DIM);
-        buf_str(&t, ui->depth == 1 ? "quit    " : "back    ");
-        reset(&t);
-        cap(&t, "/");
-        sgr(&t, AZ_SGR_DIM); buf_str(&t, "search"); reset(&t);
+        /* movement: three tight clusters "WASD HJKL ←↑→↓" then the dim "move" label, exactly
+         * as the spec spells it. */
+        static const char *wasd[]  = {"W", "A", "S", "D", NULL};
+        static const char *hjkl[]  = {"H", "J", "K", "L", NULL};
+        static const char *arrows[] = {"\xe2\x86\x90", "\xe2\x86\x91",   /* <- ^ */
+                                       "\xe2\x86\x92", "\xe2\x86\x93", NULL}; /* -> v */
+        capgroup(&t, wasd);
+        capgroup(&t, hjkl);
+        capgroup(&t, arrows);
+        sgr(&t, AZ_SGR_DIM); buf_str(&t, "move"); reset(&t);
+        buf_str(&t, "   ");
+        verb(&t, "ENTER", "open");
+        buf_str(&t, "   ");
+        verb(&t, "Q", "quit");
+        buf_str(&t, "   ");
+        /* ESC goes BACK a screen; at the top it quits (so the label reads "back" everywhere
+         * but the deepest verb the user has is quit -- both keys quit from the root). */
+        verb(&t, "ESC", ui->depth == 1 ? "quit" : "back");
+        buf_str(&t, "   ");
+        verb(&t, "/", "search");
     }
     /* Measure visible width: strip SGR escapes when counting. */
     int w = 0;
@@ -156,10 +170,11 @@ static void draw_nav(Buf *b, const AzUI *ui, int row)
 
 const char *az_nav_plain(char *buf, size_t n)
 {
-    /* Uncoloured content for tests: the movement keys and the verbs. */
+    /* Uncoloured content for tests: the packed movement clusters + the verbs, matching what
+     * draw_nav renders ("WASD HJKL ←↑→↓ move   ENTER open   Q quit   ESC back   / search"). */
     snprintf(buf, n,
-             "W A S D  H J K L  \xe2\x86\x90 \xe2\x86\x91 \xe2\x86\x92 \xe2\x86\x93 "
-             "move  ENTER open  ESC back  / search");
+             "WASD HJKL \xe2\x86\x90\xe2\x86\x91\xe2\x86\x92\xe2\x86\x93 "
+             "move   ENTER open   Q quit   ESC back   / search");
     return buf;
 }
 
@@ -168,9 +183,10 @@ void az_render(const AzUI *ui, AzRect *preview_out)
 {
     if (preview_out) preview_out->valid = 0;
     Buf b = {0};
-    /* Clear + home. We repaint the whole screen each frame (it is small) so there are no
-     * stale cells; the single flush keeps it flicker-free. */
-    buf_str(&b, "\033[2J\033[H");
+    /* Hide the cursor (re-asserted every frame so it can NEVER reappear blinking after an
+     * apply/preview subprocess re-enabled it), then clear + home. We repaint the whole screen
+     * each frame (it is small) so there are no stale cells; the single flush is flicker-free. */
+    buf_str(&b, "\033[?25l\033[2J\033[H");
 
     const AzScreen *scr = az_ui_screen(ui);
     const AzRow *vis[64];
@@ -213,17 +229,16 @@ void az_render(const AzUI *ui, AzRect *preview_out)
         for (int i = 0; i < boxw - 2; i++) buf_str(&b, hbar);
         buf_str(&b, "\xe2\x95\xae");          /* ╮ */
         reset(&b);
-        /* middle: "│ / query_ …padding… │" */
+        /* middle: "│ query_ …padding… │". No leading "/" glyph inside the box -- the spec
+         * says leave it as just "search" (the "/" still lives on the nav line as the key). */
         at(&b, y + 1, col);
         sgr(&b, ui->searching ? AZ_SGR_ACCENT : AZ_SGR_DIM);
         buf_str(&b, "\xe2\x94\x82 ");         /* │ */
         reset(&b);
-        sgr(&b, AZ_SGR_KEYCAP); buf_str(&b, "/"); reset(&b);
-        buf_str(&b, " ");
-        /* query text (truncate to inner-2) + a caret when focused */
+        /* query text (truncate to fit) + a caret when focused */
         char shown[sizeof ui->query];
         snprintf(shown, sizeof shown, "%s", ui->query);
-        int avail = inner - 2;
+        int avail = inner;
         int qw = vwidth(shown);
         if (qw > avail) { shown[avail] = '\0'; qw = avail; }
         if (ui->query[0]) { sgr(&b, AZ_SGR_TEXT); buf_str(&b, shown); reset(&b); }
@@ -249,11 +264,12 @@ void az_render(const AzUI *ui, AzRect *preview_out)
         y += 2;
     }
 
-    /* 4. "Current: X" line (accent) -- Wallpaper/Theme want the current shown at the top.
-     * We show it for every screen whose first row carries a status (harmless, helpful). */
-    if (scr && scr->nrows > 0 && scr->rows[0].status) {
+    /* 4. "Current: X" line (accent) -- Theme/Wallpaper want the current state shown ONCE at
+     * the top. It comes from the screen's own `current` probe (NOT a per-row status), so the
+     * rows below stay label-only with no "white"/"years" echo trailing each option. */
+    if (scr && scr->current) {
         char sb[128];
-        const char *cur = scr->rows[0].status(sb, sizeof sb);
+        const char *cur = scr->current(sb, sizeof sb);
         char line[160];
         snprintf(line, sizeof line, "Current: %s", cur ? cur : "");
         put_center(&b, ui, y, AZ_SGR_ACCENT ";" AZ_SGR_BOLD, line);
@@ -336,8 +352,11 @@ void az_render(const AzUI *ui, AzRect *preview_out)
     }
     draw_nav(&b, ui, rows - 1);
 
-    /* park the cursor off the content (bottom-right) so it doesn't sit mid-row */
-    at(&b, rows, ui->cols);
+    /* Park the cursor at HOME and hide it again at the very end of the buffer. Home (not the
+     * bottom row) means that even on a terminal that ignores the hide, there is no stray
+     * cursor blinking under the nav line -- the exact artifact the spec called out. */
+    at(&b, 1, 1);
+    buf_str(&b, "\033[?25l");
 
     if (b.p) { ssize_t w = write(STDOUT_FILENO, b.p, b.len); (void)w; }
     free(b.p);

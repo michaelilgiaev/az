@@ -19,17 +19,17 @@ static int failures = 0;
     if (!(cond)) { printf("FAIL: %s (line %d)\n", #cond, __LINE__); failures++; } \
 } while (0)
 
-/* The three top-level subsystems, in order, and nothing else. */
-static void test_top_level_is_theme_wallpaper_network(void)
+/* The three top-level subsystems, in order (Network FIRST per the spec), and nothing else. */
+static void test_top_level_is_network_theme_wallpaper(void)
 {
     const AzScreen *m = az_screen_find("main");
     CHECK(m != NULL);
     CHECK(m->nrows == 3);
-    CHECK(strcmp(m->rows[0].label, "Theme") == 0);
-    CHECK(strcmp(m->rows[1].label, "Wallpaper") == 0);
-    CHECK(strcmp(m->rows[2].label, "Network") == 0);
-    /* the entry title carries NO branding */
-    CHECK(strcmp(m->title, "Settings") == 0);
+    CHECK(strcmp(m->rows[0].label, "Network") == 0);   /* Network is the first option */
+    CHECK(strcmp(m->rows[1].label, "Theme") == 0);
+    CHECK(strcmp(m->rows[2].label, "Wallpaper") == 0);
+    /* the entry title is the (re)named "Az'arch Settings" */
+    CHECK(strcmp(m->title, "Az'arch Settings") == 0);
 }
 
 /* Exactly the three subsystems + the network sub-screens are reachable -- no extras. */
@@ -72,6 +72,27 @@ static void test_theme_rows_are_applies(void)
     /* both request the theme preview */
     CHECK(t->rows[0].preview == AZ_PV_THEME);
     CHECK(t->rows[1].preview == AZ_PV_THEME);
+    /* both apply QUIETLY (no sudo/tty needed -> no CLI text flashes over the UI) */
+    CHECK(t->rows[0].quiet == 1);
+    CHECK(t->rows[1].quiet == 1);
+}
+
+/* The "Current:" line comes from the SCREEN, not a per-row status: Theme and Wallpaper set
+ * a `.current` probe and their rows carry NO status (so no "white"/"years" echoes trail each
+ * option), while other screens have no `.current` line at all. */
+static void test_current_is_screen_level_not_per_row(void)
+{
+    const AzScreen *t = az_screen_find("theme");
+    const AzScreen *w = az_screen_find("wallpaper");
+    const AzScreen *m = az_screen_find("main");
+    CHECK(t->current != NULL);
+    CHECK(w->current != NULL);
+    CHECK(m->current == NULL);              /* main has no "Current:" line */
+    /* Theme/Wallpaper rows are label-only (no trailing status echo). */
+    for (int i = 0; i < t->nrows; i++) CHECK(t->rows[i].status == NULL);
+    for (int i = 0; i < w->nrows; i++) CHECK(w->rows[i].status == NULL);
+    /* main's rows DO keep a status (the at-a-glance sub-screen summary). */
+    CHECK(m->rows[0].status != NULL);
 }
 
 /* Wallpaper rows request the image preview and carry the right ids. */
@@ -116,10 +137,11 @@ static void test_wallpaper_image_path(void)
 
 int main(void)
 {
-    test_top_level_is_theme_wallpaper_network();
+    test_top_level_is_network_theme_wallpaper();
     test_screen_set_is_exactly_expected();
     test_network_rows_descend();
     test_theme_rows_are_applies();
+    test_current_is_screen_level_not_per_row();
     test_wallpaper_rows_preview();
     test_row_matches();
     test_wallpaper_image_path();

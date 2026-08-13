@@ -25,6 +25,7 @@
 #include "preview.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,6 +41,9 @@ static volatile sig_atomic_t g_resized = 0;
 static int g_had_image = 0;      /* did the last frame place a kitty image? */
 
 /* --- terminal mode ---------------------------------------------------------- */
+/* write a NUL-terminated control string (length computed, so it can never drift). */
+static void wr(const char *s) { ssize_t w = write(STDOUT_FILENO, s, strlen(s)); (void)w; }
+
 static void enter_raw(void)
 {
     if (g_raw) return;
@@ -50,16 +54,19 @@ static void enter_raw(void)
     t.c_cc[VMIN] = 1;
     t.c_cc[VTIME] = 0;
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &t);
-    /* alt screen on, hide cursor */
-    ssize_t w = write(STDOUT_FILENO, "\033[?1049h\033[?25l", 13); (void)w;
+    /* Alt screen ON, then WIPE it (2J) and the scrollback (3J) and home the cursor, then
+     * hide the cursor. The 2J+3J is what makes launching `azarch` leave NO trace of whatever
+     * was on the terminal before -- the previous CLI output is gone, not just scrolled. */
+    wr("\033[?1049h\033[2J\033[3J\033[H\033[?25l");
     g_raw = 1;
 }
 static void leave_raw(void)
 {
     if (!g_raw) return;
-    /* clear any kitty image, show cursor, leave alt screen, restore cooked mode */
+    /* Clear any kitty image, wipe the alt screen so nothing flashes as we drop back, SHOW the
+     * cursor again, leave the alt screen, restore cooked mode. */
     az_preview_clear();
-    ssize_t w = write(STDOUT_FILENO, "\033[?25h\033[?1049l", 13); (void)w;
+    wr("\033[2J\033[H\033[?25h\033[?1049l");
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &g_orig_termios);
     g_raw = 0;
 }
@@ -123,13 +130,14 @@ static int read_key(void)
     return c;
 }
 
-/* --- run an apply command (terminal restored) ------------------------------ */
-static void run_apply(AzUI *ui, const char *cmdline)
+/* --- run an apply command, VISIBLY (terminal restored) --------------------- */
+/* For applies that may prompt (sudo password) or print output worth seeing -- network /
+ * firewall. We drop out of the alt screen so the command's I/O is on the real terminal, run
+ * it, wait for a key, then come back and report. */
+static void run_apply_visible(AzUI *ui, const char *cmdline)
 {
-    /* Leave the alt screen + raw mode so the command's output/prompt is on the real
-     * terminal, run it via `sh -c`, then come back and report. */
     az_preview_clear();
-    ssize_t w = write(STDOUT_FILENO, "\033[?25h\033[?1049l", 13); (void)w;
+    wr("\033[?25h\033[?1049l");
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &g_orig_termios);
     g_raw = 0;
 
@@ -155,6 +163,29 @@ static void run_apply(AzUI *ui, const char *cmdline)
              rc == 0 ? "Done." : "That reported an error (see above).");
 }
 
+/* --- run an apply command, SILENTLY (stay on the UI) ----------------------- */
+/* For applies that never need a tty -- theme, wallpaper (they configure the user session, no
+ * sudo). We run the command with stdin/stdout/stderr on /dev/null WITHOUT leaving the alt
+ * screen, so NO raw CLI text ever flashes over the UI; the next frame just redraws with the
+ * new "Current:" state and a one-line result. This is the fix for the "changing themes is
+ * buggy, CLI text appears" report -- the toggle now stays entirely inside the UI. */
+static void run_apply_quiet(AzUI *ui, const char *cmdline)
+{
+    int rc = -1;
+    pid_t pid = fork();
+    if (pid == 0) {
+        int dn = open("/dev/null", O_RDWR);
+        if (dn >= 0) { dup2(dn, 0); dup2(dn, 1); dup2(dn, 2); if (dn > 2) close(dn); }
+        execl("/bin/sh", "sh", "-c", cmdline, (char *)NULL);
+        _exit(127);
+    } else if (pid > 0) {
+        int st = 0; waitpid(pid, &st, 0);
+        rc = WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+    }
+    snprintf(ui->message, sizeof ui->message, "%s",
+             rc == 0 ? "Done." : "That reported an error.");
+}
+
 /* --- navigation ------------------------------------------------------------- */
 static void go_back(AzUI *ui)
 {
@@ -174,7 +205,8 @@ static void activate(AzUI *ui)
             ui->sel = 0; ui->query[0] = '\0'; ui->message[0] = '\0';
         }
     } else {
-        run_apply(ui, row->target);
+        if (row->quiet) run_apply_quiet(ui, row->target);
+        else            run_apply_visible(ui, row->target);
     }
 }
 

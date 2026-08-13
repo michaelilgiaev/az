@@ -75,12 +75,23 @@ typedef struct {
     AzPreviewKind preview;
     const char *preview_arg;    /* wallpaper id / theme name for the preview           */
     const char *hint;           /* optional one-line help shown under the list         */
+    /* quiet: run this apply SILENTLY -- capture its output and stay on the alt screen,
+     * showing only a one-line result -- instead of dropping to the real terminal. Set for
+     * applies that never need a tty (theme, wallpaper: they configure the user session with
+     * no sudo), so switching them does NOT flash raw CLI text over the UI. Applies that may
+     * prompt for a sudo password (network/firewall) leave quiet==0 so the prompt is visible. */
+    int quiet;
 } AzRow;
 
 typedef struct {
     const char *id;             /* screen id ("main", "network.firewall", ...)         */
     const char *title;          /* shown in the breadcrumb                             */
     const char *subtitle;       /* context line (e.g. the wallpaper directory path)    */
+    /* current: a probe for the "Current: X" line the renderer draws at the TOP of the
+     * screen (Theme/Wallpaper want the live state shown once, up top). NULL == no line.
+     * This is SEPARATE from the per-row status so the rows themselves can stay label-only
+     * (no "white"/"years" echo trailing each option) while "Current:" still shows it. */
+    const char *(*current)(char *buf, size_t n);
     const AzRow *rows;
     int nrows;
 } AzScreen;
