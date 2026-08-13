@@ -100,6 +100,10 @@ def test_services_conf_schema_only_units():
     assert names == {"NetworkManager", "bluetooth", "cups"}
     nm = next(u for u in doc["units"] if u["name"] == "NetworkManager")
     assert nm["mandatory"] is True
+    # Bluetooth is OFF by default on the installed system too (matches the live ISO):
+    # the unit is present but with action=disable so Calamares disables it on the target.
+    bt = next(u for u in doc["units"] if u["name"] == "bluetooth")
+    assert bt["action"] == "disable"
 
 
 # --- settings.conf sequence -------------------------------------------------

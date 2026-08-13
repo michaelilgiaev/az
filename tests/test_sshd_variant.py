@@ -96,7 +96,7 @@ def test_sshd_service_targets_main_via_sudo_user():
 
 def test_sshd_service_ordering_is_sane():
     svc = system.SSHD_HYPERVISOR_SETUP_SERVICE
-    # After pkgs-setup (whose `ufw enable` default-rejects incoming) so our
+    # After pkgs-setup (whose `ufw enable` default-denies incoming) so our
     # `ufw allow ssh` wins and :22 is reachable.
     assert "After=pkgs-setup.service" in svc
     assert "WantedBy=multi-user.target" in svc

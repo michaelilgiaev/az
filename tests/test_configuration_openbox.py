@@ -533,6 +533,28 @@ def test_theme_rc_removes_the_bottom_handle_bar():
     assert "window.handle.width: 0" in out
 
 
+def test_theme_rc_active_separator_blends_into_the_titlebar():
+    # THE regression this fixes: OpenBox draws a FLAT 1px line at the titlebar's BOTTOM edge
+    # (between titlebar and client) via window.active.title.separator.color. The dark theme
+    # used #1f6c93, which rendered as a stray bright-CYAN bar under a focused, non-maximized
+    # window (the reported visual bug -- sampled pixel #1e688d).
+    #
+    # The titlebar background is a splitvertical GRADIENT, so the separator must match the
+    # gradient's BOTTOM-edge value (title_bg_to_split), NOT the top colour -- matching the top
+    # would leave a faint light hairline exactly where the cyan was. Dark bottom = #2a2e32,
+    # light bottom = #7AA1D1, so those are the pinned separator colours (zero contrast, no line).
+    dark = desktop.openbox_theme_rc(dark=True)
+    light = desktop.openbox_theme_rc(dark=False)
+    assert "window.active.title.separator.color: #2a2e32" in dark
+    assert "window.active.title.separator.color: #7AA1D1" in light
+    # The separator matches the titlebar gradient's colorTo split (its bottom edge) in each.
+    for rc, bottom in ((dark, "#2a2e32"), (light, "#7AA1D1")):
+        assert f"*.title.bg.colorTo.splitTo: {bottom}" in rc
+    # The old cyan-ish separator values must NOT come back as the active separator.
+    assert "window.active.title.separator.color: #1f6c93" not in dark
+    assert "window.active.title.separator.color: #4e76a8" not in light
+
+
 def test_light_theme_keeps_the_clearlooks_cyan_titlebar_colour():
     # The LIGHT ("Azarch") theme keeps its familiar "cyan'ish" Clearlooks look: it must
     # carry the Clearlooks title gradient base colour (#8CB0DC). The DARK theme (default)
@@ -812,7 +834,7 @@ def test_azarch_sshd_refuses_bare_root_target():
 
 
 def test_azarch_sshd_opens_firewall_before_starting_sshd():
-    # setup-pkgs.sh sets 'ufw default reject incoming', so without an explicit allow
+    # setup-pkgs.sh sets 'ufw default deny incoming', so without an explicit allow
     # the forwarded host->guest :22 is dropped even though sshd listens. The allow must
     # come BEFORE sshd starts so the port is reachable the instant it listens.
     out = desktop.azarch_cli()

@@ -22,6 +22,9 @@ def usage() -> None:
         "`azarch theme --help`\n"
         "  wallpaper [--years.png|--decades.png]  Set the desktop wallpaper; no option\n"
         "                          prints the current one. See `azarch wallpaper --help`\n"
+        "  network <wifi|wired|bluetooth|airplane|firewall|ip|status>  Everything\n"
+        "                          network related; no option prints an overview. See "
+        "`azarch network --help`\n"
         "  --sshd-hypervisor    Install host pubkey from ~/shared/authorized_keys "
         "and start sshd\n"
         "  --resolve-region     Geolocate by IP (pick a server) and set BOTH "
@@ -50,6 +53,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_theme(argv[1:])
     if cmd == "wallpaper":
         return cmd_wallpaper(argv[1:])
+    if cmd == "network":
+        return cmd_network(argv[1:])
     if cmd == "--sshd-hypervisor":
         return sshd_hypervisor()
     if cmd == "--resolve-date-time":

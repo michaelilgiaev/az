@@ -324,7 +324,12 @@ _OB_LIGHT = {
     "menu_sep": "#aaaaaa",
     "handle_bg": "#eaebec", "grip_bg": "#eaebec",
     "win_border": "#585a5d",
-    "active_sep": "#4e76a8",
+    # active_sep is the FLAT 1px line OpenBox draws at the titlebar's BOTTOM edge (between
+    # titlebar and client). The title bg is a splitvertical GRADIENT, so its bottom-edge pixel
+    # is the colorTo split (#7AA1D1), NOT the top color -- the separator must match THAT end or
+    # a faint hairline shows where the old cyan line was. Pinned to title_bg_to_split so it is
+    # invisible (same "drop the thin bar under the window" intent as window.handle.width 0).
+    "active_sep": "#7AA1D1",
     "title_bg": "#8CB0DC", "title_bg_split": "#99BAE3",
     "title_bg_to": "#86ABD9", "title_bg_to_split": "#7AA1D1",
     "active_text": "#ffffff",
@@ -362,7 +367,14 @@ _OB_DARK = {
     "menu_sep": "#3a3f44",
     "handle_bg": "#2a2e32", "grip_bg": "#2a2e32",
     "win_border": "#15181b",
-    "active_sep": "#1f6c93",
+    # active_sep is the FLAT 1px line OpenBox draws at the titlebar's BOTTOM edge (between
+    # titlebar and client). It USED to be #1f6c93, a stray bright-cyan bar under a focused,
+    # non-maximized window (the reported visual bug). The title bg is a splitvertical GRADIENT
+    # whose bottom-edge pixel is the colorTo split (#2a2e32) -- matching the top color (#3b4045)
+    # would leave a faint LIGHT hairline where the cyan was, so it is pinned to the BOTTOM value
+    # (#2a2e32) instead; the line then draws the same colour as the titlebar pixel above it and
+    # is invisible (same "drop the thin bar under the window" intent as window.handle.width 0).
+    "active_sep": "#2a2e32",
     "title_bg": "#3b4045", "title_bg_split": "#42474c",
     "title_bg_to": "#31363b", "title_bg_to_split": "#2a2e32",
     "active_text": "#ffffff",

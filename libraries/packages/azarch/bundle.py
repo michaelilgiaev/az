@@ -40,6 +40,7 @@ MODULE_ORDER = [
     "resolver.py",
     "theme.py",
     "wallpaper.py",
+    "network.py",
     "sshd.py",
     "cli.py",
 ]

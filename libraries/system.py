@@ -470,7 +470,7 @@ SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_TYPE}=="Mains", ACTION=="change", RU
 # still hand the key files to `main`.
 #
 # It orders After the pkgs-setup oneshot because setup-pkgs.sh runs `ufw enable`
-# with a default-reject-incoming policy; running after it means our `ufw allow ssh`
+# with a default-deny-incoming policy; running after it means our `ufw allow ssh`
 # is the final word and the forwarded host->guest :22 is actually reachable.
 # NOTE: no `After=multi-user.target` -- this unit is itself WantedBy that target, and
 # ordering after the target that pulls it in would push it past boot completion (or

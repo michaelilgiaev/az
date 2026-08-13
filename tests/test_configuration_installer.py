@@ -214,11 +214,17 @@ def test_installer_sh_pacstrap_sed_matches_manifest_parsing():
 # --- setup_pkgs: firewall direction ----------------------------------------
 
 def test_setup_pkgs_firewall_direction():
-    # Default-reject inbound, default-allow outbound. Swapping these silently
-    # either firewalls off the machine's own traffic or opens it to the world.
+    # Default-DENY inbound (silent drop -- no ICMP advertising the box), default-allow
+    # outbound. Swapping these silently either firewalls off the machine's own traffic or
+    # opens it to the world. The timedate port (49154) is explicitly denied so the local
+    # home page stays reachable only by the machine itself.
     s = installer.setup_pkgs_sh()
-    assert "sudo ufw default reject incoming" in s
+    assert "sudo ufw enable" in s
+    assert "sudo ufw default deny incoming" in s
     assert "sudo ufw default allow outgoing" in s
+    assert "sudo ufw deny 49154" in s
+    # The old 'reject' policy must not linger (the spec asks for Deny).
+    assert "reject incoming" not in s
 
 
 # --- first-boot systemd unit -----------------------------------------------

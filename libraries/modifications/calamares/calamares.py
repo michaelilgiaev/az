@@ -631,7 +631,9 @@ configure:
 # --- 6d. modules/services.conf ---------------------------------------------
 def services_conf() -> str:
     """Enable NetworkManager on the installed system (Az'arch networks via NM,
-    not dhcpcd/systemd-networkd).
+    not dhcpcd/systemd-networkd), and DISABLE bluetooth (off by default -- matches the
+    live ISO, where compiler._link_services leaves bluetooth.service out of
+    multi-user.target.wants; `azarch network bluetooth on` turns it on on demand).
 
     NOTE: in Calamares 3.4.2 this module's real name is `services-systemd` (its
     module.desc `name:` field, verified against the installed module). The configuration
@@ -648,6 +650,7 @@ units:
     - name: NetworkManager
       mandatory: true
     - name: bluetooth
+      action: disable
       mandatory: false
     - name: cups
       mandatory: false

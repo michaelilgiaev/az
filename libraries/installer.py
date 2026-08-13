@@ -300,14 +300,25 @@ echo -e "\\e[94mazarch disk installation complete, you can reboot now.\\e[0m"
 
 # --- Live-ISO post-boot tweaks ----------------------------------------------
 def setup_pkgs_sh() -> str:
-    """Live-ISO oneshot: firewall setup + SSH host keys."""
+    """Live-ISO oneshot: firewall setup + SSH host keys.
+
+    Firewall baseline (the Az'arch default the `azarch network firewall` command later
+    manages live): ENABLED, incoming DENY (silent drop, not reject -- no ICMP telling a
+    scanner the box is here), outgoing ALLOW, and port 49154 explicitly DENIED. 49154 is
+    the Az'arch timedate home page (Flask on localhost:49154); it must stay reachable ONLY
+    by the machine itself, so the deny rule guarantees it is never exposed off-box even if a
+    later rule loosens the default. The sshd variant opens :22 afterwards via its own oneshot
+    (system.SSHD_HYPERVISOR_SETUP_SERVICE runs `ufw allow ssh`), so ssh works there without
+    weakening this base policy."""
     return """\
 #!/bin/bash
 
 # Fix firewall configuration
 sudo ufw enable
-sudo ufw default reject incoming
+sudo ufw default deny incoming
 sudo ufw default allow outgoing
+# Close the timedate home-page port (localhost:49154) to everything off-box.
+sudo ufw deny 49154
 
 # Generate SSH host keys so sshd can complete the handshake
 sudo ssh-keygen -A

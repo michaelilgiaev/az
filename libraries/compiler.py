@@ -865,7 +865,11 @@ def _link_services(airootfs: Path) -> None:
     # _apply_variant, just before that variant's mkarchiso pass.
     base = airootfs / "etc/systemd/system"
     emit.mkdir(base / "multi-user.target.wants")
-    for svc in ("NetworkManager.service", "bluetooth.service", "org.cups.cupsd.service"):
+    # bluetooth.service is DELIBERATELY NOT enabled here: Bluetooth is OFF by default on
+    # Az'arch. `azarch network bluetooth on` enables + starts it (and rfkill-unblocks the
+    # radio) on demand; leaving it out of multi-user.target.wants keeps the radio down at
+    # boot. NetworkManager (the network stack) and CUPS (printing) stay auto-enabled.
+    for svc in ("NetworkManager.service", "org.cups.cupsd.service"):
         emit.link(f"/usr/lib/systemd/system/{svc}", base / f"multi-user.target.wants/{svc}")
     emit.link("/etc/systemd/system/locale-setup.service", base / "multi-user.target.wants/locale-setup.service")
     emit.link("/etc/systemd/system/pkgs-setup.service", base / "multi-user.target.wants/pkgs-setup.service")

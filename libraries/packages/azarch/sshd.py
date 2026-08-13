@@ -64,7 +64,7 @@ def sshd_hypervisor() -> int:
     rc = _sudo("ssh-keygen", "-A", check=False)
     if rc != 0:
         return rc
-    # setup-pkgs.sh sets 'ufw default reject incoming', so open :22 BEFORE starting
+    # setup-pkgs.sh sets 'ufw default deny incoming', so open :22 BEFORE starting
     # sshd (so the forwarded host->guest port is reachable the moment it listens).
     rc = _sudo("ufw", "allow", "ssh", check=False)
     if rc != 0:
