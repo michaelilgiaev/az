@@ -1,19 +1,18 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!-- Az'arch kitty icon: a clean terminal-window mark. A horizontal (landscape)
-     rounded rectangle with a BLACK background and a WHITE shell prompt inside it,
-     literally a chevron then an underscore cursor: "> _". Black and white ONLY, no
-     color, no mascot. It reads instantly as a terminal window. Single source of truth
-     for the kitty icon (patches/kitty.py copies this asset to the system icon paths
-     and rasterizes it for the in-window titlebar icon). 256x256 canvas, pure black
-     and white so it stays crisp and unambiguous at every rasterized size. -->
+<!-- Az'arch kitty icon: a clean terminal-window mark. A classic filled terminal
+     RECTANGLE (black, heavily rounded corners) with a WHITE shell prompt inside it: a
+     chevron then an underscore cursor, "> _". Black and white ONLY, no color, no mascot.
+     Single source of truth for the kitty icon (patches/kitty.py copies this asset to the
+     system icon paths and rasterizes it for the in-window titlebar icon). 256x256 canvas
+     so it stays crisp at every rasterized size. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <!-- The terminal window: a horizontal black rectangle, rounded corners, centered.
-       Wider than tall (landscape) so it reads as a terminal, not a square tile. -->
-  <rect x="20" y="58" width="216" height="140" rx="18" ry="18" fill="#000000"/>
-  <!-- The chevron ">" : two strokes meeting at a point, left of center, white. -->
-  <path d="M64 104 L104 128 L64 152"
-        fill="none" stroke="#ffffff" stroke-width="16"
+  <!-- The terminal window: a black rounded rectangle filling the canvas with a small even
+       margin and generously rounded corners. -->
+  <rect x="14" y="30" width="228" height="196" rx="52" ry="52" fill="#000000"/>
+  <!-- The chevron ">" : two thick strokes meeting at a point, upper-left, white. -->
+  <path d="M60 82 L104 112 L60 142"
+        fill="none" stroke="#ffffff" stroke-width="22"
         stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- The underscore cursor "_" : a short white bar on the baseline, right of the chevron. -->
-  <rect x="120" y="146" width="52" height="15" rx="7" ry="7" fill="#ffffff"/>
+  <!-- The underscore cursor "_" : a chunky white bar just below and right of the chevron. -->
+  <rect x="98" y="140" width="64" height="22" rx="11" ry="11" fill="#ffffff"/>
 </svg>
