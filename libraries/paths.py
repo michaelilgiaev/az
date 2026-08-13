@@ -39,7 +39,7 @@ PKGDIR = LIBDIR
 # Az'arch's OWN packages (the things WE build/ship, baked into the ISO): the package
 # manifest (packages.x86_64), the application-menu source tree + its build wiring
 # (application_menu/), our own package recipes (pkgbuild.py), and the `azarch` guest CLI
-# (azarch.py). Our packages are pure Python standard library, so there is NO shared
+# (the azarch/ package). Our packages are pure Python standard library, so there is NO shared
 # requirements.txt here (the only one in the repo is the repo-root requirements.txt the
 # compiler itself uses for its test/dev deps). Formerly libraries/data/; consolidated here.
 PACKAGESDIR = LIBDIR / "packages"
@@ -117,11 +117,17 @@ APPLICATION_MENU_DIR = PACKAGESDIR / "application_menu"
 # It is OUR package (a website we author), so it lives under libraries/packages/, not
 # patches/. Served at localhost:49154; LibreWolf's default home/new-tab page.
 TIMEDATE_DIR = PACKAGESDIR / "timedate"
-# The `azarch` guest CLI is a single Python module, libraries/packages/azarch.py.
-# It is installed to /usr/local/bin/azarch by the compiler, which injects the
-# country->locale table from patches/calamares/locale.py into it. See
-# patches/openbox openbox.azarch_cli().
-AZARCH_CLI_SRC = PACKAGESDIR / "azarch.py"
+# The `azarch` guest CLI is a Python PACKAGE now (libraries/packages/azarch/): it grew a
+# `theme` subcommand (and more to come), so the single module was split into small modules
+# (common, country_table, resolver, theme, sshd, cli). The single /usr/local/bin/azarch
+# script that ships to the guest is reassembled from those modules by the package's
+# bundle.bundle_source(); the compiler then injects the country->locale table from
+# patches/calamares/locale.py between the AZARCH_CC markers (which now live in
+# country_table.py). See patches/openbox openbox.azarch_cli().
+AZARCH_CLI_DIR = PACKAGESDIR / "azarch"
+# The module whose source carries the AZARCH_CC_TABLE_START/END markers (the compiler
+# regenerates the COUNTRY_TABLE literal between them from the single source of truth).
+AZARCH_CLI_TABLE_MODULE = AZARCH_CLI_DIR / "country_table.py"
 
 # Inside the archiso profile tree, the airootfs root and the azarch payload dir
 # baked into the live/installed system.

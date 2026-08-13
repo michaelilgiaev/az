@@ -47,12 +47,14 @@ from patches import openbox
 from patches import fastfetch
 from patches import librewolf
 # Per-application tweaks (each a self-contained patch module with an emit_plan()):
-#   kitty  -- swap the cat-in-a-terminal icon for a plain terminal icon
-#   vlc    -- suppress the first-run "metadata network access" dialog
-#   gedit  -- notepad mode: one window per file, no multi-tab feature (+ schema override)
+#   kitty       -- swap the cat-in-a-terminal icon for a plain terminal icon
+#   vlc         -- suppress the first-run "metadata network access" dialog + follow theme
+#   gedit       -- notepad mode: one window per file, no multi-tab feature (+ schema override)
+#   libreoffice -- skip the first-run / introduction popups (Tip of the Day, first-start ...)
 from patches import kitty
 from patches import vlc
 from patches import gedit
+from patches import libreoffice
 import installer
 import pacman
 import profile
@@ -469,9 +471,10 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
         return None
 
     # kitty (icon: SVG asset copy + PNG removals + titlebar PNG render) | vlc (home vlcrc) |
-    # gedit (system .desktop + gschema override). One loop over all three plans.
+    # gedit (system .desktop + gschema override) | libreoffice (home registrymodifications.xcu,
+    # skips the first-run popups). One loop over all four plans.
     for entry in (kitty.emit_plan() + vlc.emit_plan()
-                  + gedit.emit_plan()):
+                  + gedit.emit_plan() + libreoffice.emit_plan()):
         dest_abs = entry["dest"]                       # absolute path on the target
         # Package-owned override path? Redirect its body to the post-pacstrap staging dir
         # (or drop it if suppress-only) instead of writing into the conflicting overlay.

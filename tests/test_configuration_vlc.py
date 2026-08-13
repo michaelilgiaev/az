@@ -53,3 +53,17 @@ def test_vlcrc_is_nonempty_and_ini_shaped():
     assert isinstance(out, str) and out.strip()
     # INI comments start with '#'; the banner line must be a comment, not a stray key.
     assert out.lstrip().startswith("#")
+
+
+def test_vlcrc_follows_system_theme_dark_by_default():
+    # VLC follows the system theme via qt-palette-mode (2 = dark, 1 = light). Az'arch
+    # defaults dark; the light build flips it to 1. The line lives under [qt] (before [core]).
+    dark = vlc.vlcrc()
+    light = vlc.vlcrc(dark=False)
+    assert "qt-palette-mode=2" in dark
+    assert "qt-palette-mode=1" in light
+    assert vlc.VLC_PALETTE_DARK == 2 and vlc.VLC_PALETTE_LIGHT == 1
+    # under [qt], before [core]
+    assert dark.index("[qt]") < dark.index("qt-palette-mode=2") < dark.index("[core]")
+    # the privacy suppression is unaffected by the theme in either mode
+    assert "qt-privacy-ask=0" in dark and "qt-privacy-ask=0" in light

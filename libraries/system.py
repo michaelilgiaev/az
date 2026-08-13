@@ -89,6 +89,15 @@ set -euo pipefail
 # Brand the live system as Az'arch Linux. /etc/os-release symlinks to this path.
 cp /root/azarch/os-release /usr/lib/os-release
 chmod 0644 /usr/lib/os-release
+
+# System theme DEFAULT (dark): compile the dconf keyfile (color-scheme='prefer-dark',
+# from patches/openbox) into the binary /etc/dconf/db/local so the freedesktop appearance
+# default is dark for every user out of the box. Runs here (post-pacstrap) because dconf is
+# only installed inside the pacstrapped rootfs, not the airootfs overlay. A per-user
+# `gsettings set` from `azarch theme` overrides this system default and persists.
+if command -v dconf >/dev/null 2>&1; then
+    dconf update || true
+fi
 """
 
 # getty@tty1 autologin override. The releng base autologins ROOT on tty1; the

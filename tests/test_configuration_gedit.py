@@ -115,6 +115,21 @@ def test_schema_override_sets_editor_font_to_18():
     assert "editor-font='Monospace 18'" in out
 
 
+def test_schema_override_sets_dark_and_light_editor_style_schemes():
+    # gedit follows the system theme: the GTK dark flag handles the chrome, and gedit 50 keeps
+    # TWO editor style-scheme keys (dark + light variant) and auto-picks between them by that
+    # flag. Seed BOTH with schemes the fork actually ships ('oblivion' dark / 'classic' light);
+    # 'classic-dark' does NOT exist in this fork, so it must not be used.
+    out = gedit.gschema_override()
+    assert gedit.GEDIT_STYLE_SCHEME_DARK == "oblivion"
+    assert gedit.GEDIT_STYLE_SCHEME_LIGHT == "classic"
+    assert gedit.GEDIT_STYLE_SCHEME_DARK_KEY == "style-scheme-for-dark-theme-variant"
+    assert gedit.GEDIT_STYLE_SCHEME_LIGHT_KEY == "style-scheme-for-light-theme-variant"
+    assert "style-scheme-for-dark-theme-variant='oblivion'" in out
+    assert "style-scheme-for-light-theme-variant='classic'" in out
+    assert "classic-dark" not in out
+
+
 def test_schema_override_entry_triggers_recompile():
     # A glib override file is INERT until glib-compile-schemas runs; the override entry must
     # carry the flag compiler._emit_apps keys off, and the command must target the schemas

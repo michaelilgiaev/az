@@ -120,6 +120,19 @@ GEDIT_EDITOR_SCHEMA = "org.gnome.gedit.preferences.editor"
 GEDIT_USE_DEFAULT_FONT = False   # false so editor-font (below) actually takes effect
 GEDIT_FONT_SIZE = 18
 GEDIT_EDITOR_FONT = f"Monospace {GEDIT_FONT_SIZE}"   # Pango font description: family + size
+# The GtkSourceView editor STYLE SCHEME (the text-area colours), so gedit's editor follows
+# the system theme too. gedit 50 (the gedit-technology fork) keeps TWO scheme keys and picks
+# between them AUTOMATICALLY by the GTK dark flag (gtk-application-prefer-dark-theme): the
+# "...for-dark-theme-variant" when the app is dark, the "...for-light-theme-variant" when
+# light. So Az'arch just seeds BOTH and gedit follows the system theme for free -- no per-
+# toggle GSetting flip needed (the GTK dark flag, which `azarch theme` sets, drives it). The
+# scheme ids MUST be ones the fork's libgedit-gtksourceview actually ships: 'oblivion' (dark
+# grey, kind="dark", matching the Az'arch dark look) and 'classic' (kind="light-only"). There
+# is NO 'classic-dark' in this fork, so we do not use it.
+GEDIT_STYLE_SCHEME_DARK_KEY = "style-scheme-for-dark-theme-variant"
+GEDIT_STYLE_SCHEME_LIGHT_KEY = "style-scheme-for-light-theme-variant"
+GEDIT_STYLE_SCHEME_DARK = "oblivion"    # shipped GtkSourceView dark scheme (dark grey)
+GEDIT_STYLE_SCHEME_LIGHT = "classic"    # shipped GtkSourceView light scheme
 GEDIT_PLUGINS_SCHEMA = "org.gnome.gedit.plugins"
 # gedit 50's shipped default active-plugins (from its gschema); we KEEP these and ADD ours,
 # so notepad mode does not disable the editor's stock plugins.
@@ -212,6 +225,9 @@ def gschema_override() -> str:
       * org.gnome.gedit.preferences.editor use-default-font = false + editor-font =
         'Monospace 18' (a fixed 18pt editor font; use-default-font MUST be false or gedit
         ignores editor-font and uses the system fixed-width font).
+      * org.gnome.gedit.preferences.editor style-scheme-for-{dark,light}-theme-variant =
+        'oblivion' / 'classic' (the editor text-area style schemes; gedit auto-picks the dark
+        one when the app is dark and the light one when light, following the system theme).
     MUST be compiled afterwards with `glib-compile-schemas` (see RUN_COMPILE_SCHEMAS) or it
     has no effect. The 90_ prefix sorts it AFTER the stock schema so our values win."""
     plugins_literal = "[" + ", ".join(f"'{p}'" for p in ACTIVE_PLUGINS) + "]"
@@ -224,6 +240,8 @@ def gschema_override() -> str:
 #   headerbar to hamburger + window controls, makes Ctrl+W exit).
 # use-default-font/editor-font: use a fixed {GEDIT_FONT_SIZE}pt editor font (default off so
 #   editor-font wins over the system fixed-width font).
+# style-scheme-for-*-theme-variant: dark ('oblivion') / light ('classic') editor schemes;
+#   gedit picks between them by the GTK dark flag, so the editor follows the system theme.
 [{GEDIT_UI_SCHEMA}]
 show-tabs-mode='{SHOW_TABS_MODE}'
 
@@ -233,6 +251,8 @@ active-plugins={plugins_literal}
 [{GEDIT_EDITOR_SCHEMA}]
 use-default-font={use_default_font_literal}
 editor-font='{GEDIT_EDITOR_FONT}'
+{GEDIT_STYLE_SCHEME_DARK_KEY}='{GEDIT_STYLE_SCHEME_DARK}'
+{GEDIT_STYLE_SCHEME_LIGHT_KEY}='{GEDIT_STYLE_SCHEME_LIGHT}'
 """
 
 

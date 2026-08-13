@@ -221,39 +221,137 @@ fi
 # OpenBox draws bigger buttons, so the min/max/close targets grow with the bar.
 # Everything else (the #8CB0DC cyan gradient, the button gradients/hover/pressed states,
 # the menu/osd styling) is copied verbatim so the look is identical, only 1.5x larger.
-OPENBOX_THEME_NAME = "Azarch"
+# Az'arch ships TWO OpenBox titlebar themes -- a LIGHT one ("Azarch", the classic
+# Clearlooks-cyan look) and a DARK one ("Azarch-Dark", the default). Both are generated
+# from openbox_theme_rc(dark) below: identical GEOMETRY (the ~1.5x titlebar + no bottom
+# handle), only the colour palette differs. rc.xml's <theme><name> selects one, and
+# `azarch theme --dark|--white` rewrites that name + `openbox --reconfigure`s. Dark is the
+# out-of-the-box default (rc.xml ships <name>Azarch-Dark</name>).
+OPENBOX_THEME_NAME = "Azarch"            # the LIGHT theme name (classic Clearlooks-cyan)
+OPENBOX_THEME_NAME_DARK = "Azarch-Dark"  # the DARK theme name (the default)
 OPENBOX_THEME_DIR = f"{HOME}/.themes/{OPENBOX_THEME_NAME}/openbox-3"
 OPENBOX_THEME_THEMERC = f"{OPENBOX_THEME_DIR}/themerc"
+OPENBOX_THEME_DIR_DARK = f"{HOME}/.themes/{OPENBOX_THEME_NAME_DARK}/openbox-3"
+OPENBOX_THEME_THEMERC_DARK = f"{OPENBOX_THEME_DIR_DARK}/themerc"
+# The theme OpenBox uses out of the box (dark is the Az'arch default). rc.xml names it.
+OPENBOX_THEME_DEFAULT = OPENBOX_THEME_NAME_DARK
 
 # The two padding fields (in px) that set the titlebar height, and the resize-handle
 # width. The padding fields are pinned so a test can prove the bar was grown to ~1.5x
 # stock; each lands halfway between stock Clearlooks and the earlier (overshot) doubled
 # value. The handle width is 0 to REMOVE the near-white bottom handle bar entirely (the
 # "thin white bar under a window" the user asked to drop); resizing is unaffected (the
-# rc.xml edge/corner mouse contexts do not depend on the visible handle).
+# rc.xml edge/corner mouse contexts do not depend on the visible handle). Shared by BOTH
+# the light and dark themes (only colours differ between them).
 OPENBOX_THEME_PADDING_HEIGHT = 7    # stock Clearlooks: 2 (was 12 when doubled)
 OPENBOX_THEME_PADDING_WIDTH = 6     # stock Clearlooks: 3 (was 8 when doubled)
 OPENBOX_THEME_HANDLE_WIDTH = 0      # stock Clearlooks: 3 -> 0 removes the bottom bar
 
+# The LIGHT palette: the stock Clearlooks colours (unchanged -- this is the classic cyan
+# "white theme" look). The DARK palette: a coherent dark grey/blue set matching the
+# Az'arch application menu (bg #2a2e32 / surface #31363b / text #eff0f1) with the same
+# Breeze highlight blue (#3daee9) for the active menu item, so the whole shell reads dark.
+# openbox_theme_rc(dark) picks one; every field below has a light and a dark value.
+_OB_LIGHT = {
+    "menu_border": "#aaaaaa",
+    "menu_title_bg": "#E6E7E6", "menu_title_text": "#111111",
+    "menu_items_bg": "#ffffff", "menu_items_text": "#111111",
+    "menu_items_disabled": "#aaaaaa",
+    "menu_active_bg": "#97b8e2", "menu_active_bg_split": "#a8c5e9",
+    "menu_active_bg_to": "#91b3de", "menu_active_bg_to_split": "#80a7d6",
+    "menu_active_border": "#4b6e99", "menu_active_text": "#ffffff",
+    "menu_sep": "#aaaaaa",
+    "handle_bg": "#eaebec", "grip_bg": "#eaebec",
+    "win_border": "#585a5d",
+    "active_sep": "#4e76a8",
+    "title_bg": "#8CB0DC", "title_bg_split": "#99BAE3",
+    "title_bg_to": "#86ABD9", "title_bg_to_split": "#7AA1D1",
+    "active_text": "#ffffff",
+    "abtn_bg": "#92B4DF", "abtn_bg_split": "#B0CAEB",
+    "abtn_bg_to": "#86ABD9", "abtn_bg_to_split": "#769FD0",
+    "abtn_border": "#49678B", "abtn_image": "#F4F5F6",
+    "abtn_hover_bg": "#b5d3ef", "abtn_hover_bg_split": "#b5d3ef",
+    "abtn_hover_bg_to": "#9cbae7", "abtn_hover_bg_to_split": "#8caede",
+    "abtn_hover_border": "#4A658C", "abtn_hover_image": "#ffffff",
+    "abtn_pressed_bg": "#7aa1d2",
+    "inactive_sep": "#96999d",
+    "ititle_bg": "#E3E2E0", "ititle_bg_split": "#EBEAE9",
+    "ititle_bg_to": "#DEDCDA", "ititle_bg_to_split": "#D5D3D1",
+    "inactive_text": "#70747d",
+    "ibtn_bg": "#ffffff", "ibtn_bg_split": "#ffffff",
+    "ibtn_bg_to": "#F9F8F8", "ibtn_bg_to_split": "#E9E7E6",
+    "ibtn_border": "#928F8B", "ibtn_image": "#6D6C6C",
+    "osd_border": "#aaaaaa",
+    "osd_bg": "#F0EFEE", "osd_bg_split": "#f5f5f4",
+    "osd_bg_to": "#EAEBEC", "osd_bg_to_split": "#E7E5E4",
+    "osd_bg_border": "#ffffff",
+    "osd_label_bg": "#efefef", "osd_label_border": "#9c9e9c", "osd_label_text": "#444",
+    "osd_ilabel_text": "#70747d",
+    "osd_hi_bg": "#9ebde5", "osd_hi_bg_to": "#749dcf",
+    "osd_unhi_bg": "#BABDB6", "osd_unhi_bg_to": "#efefef",
+}
+_OB_DARK = {
+    "menu_border": "#1b1e21",
+    "menu_title_bg": "#31363b", "menu_title_text": "#eff0f1",
+    "menu_items_bg": "#2a2e32", "menu_items_text": "#eff0f1",
+    "menu_items_disabled": "#6a6f75",
+    "menu_active_bg": "#3daee9", "menu_active_bg_split": "#4fb8ec",
+    "menu_active_bg_to": "#2b9fdd", "menu_active_bg_to_split": "#2596d4",
+    "menu_active_border": "#1f6c93", "menu_active_text": "#ffffff",
+    "menu_sep": "#3a3f44",
+    "handle_bg": "#2a2e32", "grip_bg": "#2a2e32",
+    "win_border": "#15181b",
+    "active_sep": "#1f6c93",
+    "title_bg": "#3b4045", "title_bg_split": "#42474c",
+    "title_bg_to": "#31363b", "title_bg_to_split": "#2a2e32",
+    "active_text": "#ffffff",
+    "abtn_bg": "#3b4045", "abtn_bg_split": "#42474c",
+    "abtn_bg_to": "#31363b", "abtn_bg_to_split": "#2a2e32",
+    "abtn_border": "#15181b", "abtn_image": "#eff0f1",
+    "abtn_hover_bg": "#3daee9", "abtn_hover_bg_split": "#4fb8ec",
+    "abtn_hover_bg_to": "#2b9fdd", "abtn_hover_bg_to_split": "#2596d4",
+    "abtn_hover_border": "#1f6c93", "abtn_hover_image": "#ffffff",
+    "abtn_pressed_bg": "#2596d4",
+    "inactive_sep": "#15181b",
+    "ititle_bg": "#2a2e32", "ititle_bg_split": "#31363b",
+    "ititle_bg_to": "#26292d", "ititle_bg_to_split": "#212427",
+    "inactive_text": "#9aa0a6",
+    "ibtn_bg": "#2a2e32", "ibtn_bg_split": "#31363b",
+    "ibtn_bg_to": "#26292d", "ibtn_bg_to_split": "#212427",
+    "ibtn_border": "#15181b", "ibtn_image": "#9aa0a6",
+    "osd_border": "#1b1e21",
+    "osd_bg": "#2a2e32", "osd_bg_split": "#31363b",
+    "osd_bg_to": "#26292d", "osd_bg_to_split": "#212427",
+    "osd_bg_border": "#15181b",
+    "osd_label_bg": "#31363b", "osd_label_border": "#15181b", "osd_label_text": "#eff0f1",
+    "osd_ilabel_text": "#9aa0a6",
+    "osd_hi_bg": "#3daee9", "osd_hi_bg_to": "#2b9fdd",
+    "osd_unhi_bg": "#3a3f44", "osd_unhi_bg_to": "#31363b",
+}
 
-def openbox_theme_rc() -> str:
-    """~/.themes/Azarch/openbox-3/themerc -- the Az'arch OpenBox theme.
 
-    The stock Clearlooks themerc with the titlebar-height fields grown
-    (padding.height/width) and the bottom resize handle REMOVED (window.handle.width 0,
-    so the near-white bottom bar does not draw); every colour/gradient/state line is
-    the Clearlooks original so the bar keeps its familiar cyan look, just ~1.5x the
-    height. Paired with the larger title <font> in rc.xml (size 12), this grows the
-    bar to about 1.5x stock and the min/max/close buttons OpenBox sizes to the label.
+def openbox_theme_rc(dark: bool = True) -> str:
+    """One Az'arch OpenBox themerc -- the DARK palette (default) when dark=True, else the
+    LIGHT (classic Clearlooks-cyan) palette.
 
-    Shipped to ~/.themes (a user theme search path OpenBox scans alongside
-    /usr/share/themes) and mirrored into /etc/skel so the installed user inherits it."""
+    Both share the stock Clearlooks GEOMETRY with the titlebar-height fields grown
+    (padding.height/width) and the bottom resize handle REMOVED (window.handle.width 0, so
+    the near-white bottom bar does not draw). Paired with the larger title <font> in rc.xml
+    (size 12), this grows the bar to about 1.5x stock and the min/max/close buttons OpenBox
+    sizes to the label. ONLY the colours differ between dark and light (see _OB_DARK /
+    _OB_LIGHT); the light theme keeps the exact Clearlooks originals.
+
+    Shipped to ~/.themes/<name>/openbox-3/themerc (a user theme search path OpenBox scans
+    alongside /usr/share/themes) and mirrored into /etc/skel so the installed user inherits
+    both themes. rc.xml names the dark one by default; `azarch theme` swaps between them."""
+    c = _OB_DARK if dark else _OB_LIGHT
+    variant = "DARK (the default)" if dark else "LIGHT (classic Clearlooks-cyan)"
     return f"""\
-# Az'arch OpenBox theme -- Clearlooks with a ~1.5x titlebar and NO bottom handle.
-# Generated by patches.openbox (edit the Python, not this file). Only the size-driving
-# fields differ from stock Clearlooks: padding.height/width grown for a taller titlebar,
-# and window.handle.width set to 0 to remove the near-white bottom bar. The larger title
-# FONT is set in rc.xml's <theme>. All colours are the Clearlooks originals.
+# Az'arch OpenBox theme -- {variant}. ~1.5x titlebar, NO bottom handle.
+# Generated by patches.openbox (edit the Python, not this file). Geometry matches stock
+# Clearlooks (padding.height/width grown; window.handle.width 0 removes the bottom bar);
+# only the colour palette differs between the dark and light Az'arch themes. The larger
+# title FONT is set in rc.xml's <theme>.
 
 # Fonts (halos)
 *.font: shadow=n
@@ -288,123 +386,210 @@ window.*.handle.bg.highlight: 50
 window.*.handle.bg.shadow:    30
 
 # Menu settings
-menu.border.color: #aaaaaa
+menu.border.color: {c["menu_border"]}
 menu.border.width: 1
 
 menu.title.bg: solid flat
-menu.title.bg.color: #E6E7E6
-menu.title.text.color: #111111
+menu.title.bg.color: {c["menu_title_bg"]}
+menu.title.text.color: {c["menu_title_text"]}
 
 menu.items.bg: Flat Solid
-menu.items.bg.color: #ffffff
-menu.items.text.color: #111111
-menu.items.disabled.text.color: #aaaaaa
+menu.items.bg.color: {c["menu_items_bg"]}
+menu.items.text.color: {c["menu_items_text"]}
+menu.items.disabled.text.color: {c["menu_items_disabled"]}
 
 menu.items.active.bg: Flat Gradient splitvertical border
 
-menu.items.active.bg.color: #97b8e2
-menu.items.active.bg.color.splitTo: #a8c5e9
+menu.items.active.bg.color: {c["menu_active_bg"]}
+menu.items.active.bg.color.splitTo: {c["menu_active_bg_split"]}
 
-menu.items.active.bg.colorTo: #91b3de
-menu.items.active.bg.colorTo.splitTo: #80a7d6
-menu.items.active.bg.border.color: #4b6e99
-menu.items.active.text.color: #ffffff
+menu.items.active.bg.colorTo: {c["menu_active_bg_to"]}
+menu.items.active.bg.colorTo.splitTo: {c["menu_active_bg_to_split"]}
+menu.items.active.bg.border.color: {c["menu_active_border"]}
+menu.items.active.text.color: {c["menu_active_text"]}
 
 menu.separator.width: 1
 menu.separator.padding.width: 0
 menu.separator.padding.height: 3
-menu.separator.color: #aaaaaa
+menu.separator.color: {c["menu_sep"]}
 
 # handles
 window.*.handle.bg: Raised solid
-window.*.handle.bg.color: #eaebec
+window.*.handle.bg.color: {c["handle_bg"]}
 
 window.*.grip.bg: Raised solid
-window.*.grip.bg.color: #eaebec
+window.*.grip.bg.color: {c["grip_bg"]}
 
 # Active
-window.*.border.color: #585a5d
+window.*.border.color: {c["win_border"]}
 
-window.active.title.separator.color: #4e76a8
+window.active.title.separator.color: {c["active_sep"]}
 
 *.title.bg: Raised Gradient splitvertical
-*.title.bg.color: #8CB0DC
-*.title.bg.color.splitTo: #99BAE3
-*.title.bg.colorTo: #86ABD9
-*.title.bg.colorTo.splitTo: #7AA1D1
+*.title.bg.color: {c["title_bg"]}
+*.title.bg.color.splitTo: {c["title_bg_split"]}
+*.title.bg.colorTo: {c["title_bg_to"]}
+*.title.bg.colorTo.splitTo: {c["title_bg_to_split"]}
 
 window.active.label.bg: Parentrelative
-window.active.label.text.color: #ffffff
+window.active.label.text.color: {c["active_text"]}
 
 window.active.button.*.bg: Flat Gradient splitvertical Border
 
-window.active.button.*.bg.color: #92B4DF
-window.active.button.*.bg.color.splitTo: #B0CAEB
-window.active.button.*.bg.colorTo: #86ABD9
-window.active.button.*.bg.colorTo.splitTo: #769FD0
+window.active.button.*.bg.color: {c["abtn_bg"]}
+window.active.button.*.bg.color.splitTo: {c["abtn_bg_split"]}
+window.active.button.*.bg.colorTo: {c["abtn_bg_to"]}
+window.active.button.*.bg.colorTo.splitTo: {c["abtn_bg_to_split"]}
 
-window.active.button.*.bg.border.color: #49678B
-window.active.button.*.image.color: #F4F5F6
+window.active.button.*.bg.border.color: {c["abtn_border"]}
+window.active.button.*.image.color: {c["abtn_image"]}
 
-window.active.button.hover.bg.color: #b5d3ef
-window.active.button.hover.bg.color.splitTo: #b5d3ef
-window.active.button.hover.bg.colorTo: #9cbae7
-window.active.button.hover.bg.colorTo.splitTo: #8caede
-window.active.button.hover.bg.border.color: #4A658C
-window.active.button.hover.image.color: #ffffff
+window.active.button.hover.bg.color: {c["abtn_hover_bg"]}
+window.active.button.hover.bg.color.splitTo: {c["abtn_hover_bg_split"]}
+window.active.button.hover.bg.colorTo: {c["abtn_hover_bg_to"]}
+window.active.button.hover.bg.colorTo.splitTo: {c["abtn_hover_bg_to_split"]}
+window.active.button.hover.bg.border.color: {c["abtn_hover_border"]}
+window.active.button.hover.image.color: {c["abtn_hover_image"]}
 
 window.active.button.pressed.bg: Flat solid Border
-window.active.button.pressed.bg.color: #7aa1d2
-
-window.active.button.hover.bg.border.color: #4A658C
+window.active.button.pressed.bg.color: {c["abtn_pressed_bg"]}
 
 # inactive
-window.inactive.title.separator.color: #96999d
+window.inactive.title.separator.color: {c["inactive_sep"]}
 
 window.inactive.title.bg: Raised Gradient splitvertical
-window.inactive.title.bg.color: #E3E2E0
-window.inactive.title.bg.color.splitTo: #EBEAE9
-window.inactive.title.bg.colorTo: #DEDCDA
-window.inactive.title.bg.colorTo.splitTo: #D5D3D1
+window.inactive.title.bg.color: {c["ititle_bg"]}
+window.inactive.title.bg.color.splitTo: {c["ititle_bg_split"]}
+window.inactive.title.bg.colorTo: {c["ititle_bg_to"]}
+window.inactive.title.bg.colorTo.splitTo: {c["ititle_bg_to_split"]}
 
 window.inactive.label.bg: Parentrelative
-window.inactive.label.text.color: #70747d
+window.inactive.label.text.color: {c["inactive_text"]}
 
 window.inactive.button.*.bg: Flat Gradient splitVertical Border
-window.inactive.button.*.bg.color: #ffffff
-window.inactive.button.*.bg.color.splitto: #ffffff
-window.inactive.button.*.bg.colorTo: #F9F8F8
-window.inactive.button.*.bg.colorTo.splitto: #E9E7E6
-window.inactive.button.*.bg.border.color: #928F8B
-window.inactive.button.*.image.color: #6D6C6C
+window.inactive.button.*.bg.color: {c["ibtn_bg"]}
+window.inactive.button.*.bg.color.splitto: {c["ibtn_bg_split"]}
+window.inactive.button.*.bg.colorTo: {c["ibtn_bg_to"]}
+window.inactive.button.*.bg.colorTo.splitto: {c["ibtn_bg_to_split"]}
+window.inactive.button.*.bg.border.color: {c["ibtn_border"]}
+window.inactive.button.*.image.color: {c["ibtn_image"]}
 
 # osd
 osd.border.width: 1
-osd.border.color:  #aaaaaa
+osd.border.color:  {c["osd_border"]}
 
 osd.bg: flat border gradient splitvertical
-osd.bg.color: #F0EFEE
-osd.bg.color.splitto: #f5f5f4
-osd.bg.colorTo: #EAEBEC
-osd.bg.colorTo.splitto: #E7E5E4
+osd.bg.color: {c["osd_bg"]}
+osd.bg.color.splitto: {c["osd_bg_split"]}
+osd.bg.colorTo: {c["osd_bg_to"]}
+osd.bg.colorTo.splitto: {c["osd_bg_to_split"]}
 
-osd.bg.border.color: #ffffff
+osd.bg.border.color: {c["osd_bg_border"]}
 
 osd.active.label.bg: parentrelative
-osd.active.label.bg.color: #efefef
-osd.active.label.bg.border.color: #9c9e9c
-osd.active.label.text.color: #444
+osd.active.label.bg.color: {c["osd_label_bg"]}
+osd.active.label.bg.border.color: {c["osd_label_border"]}
+osd.active.label.text.color: {c["osd_label_text"]}
 
 osd.inactive.label.bg: parentrelative
-osd.inactive.label.text.color: #70747d
+osd.inactive.label.text.color: {c["osd_ilabel_text"]}
 
 osd.hilight.bg: flat vertical gradient
-osd.hilight.bg.color: #9ebde5
-osd.hilight.bg.colorTo: #749dcf
+osd.hilight.bg.color: {c["osd_hi_bg"]}
+osd.hilight.bg.colorTo: {c["osd_hi_bg_to"]}
 osd.unhilight.bg: flat vertical gradient
-osd.unhilight.bg.color: #BABDB6
-osd.unhilight.bg.colorTo: #efefef
+osd.unhilight.bg.color: {c["osd_unhi_bg"]}
+osd.unhilight.bg.colorTo: {c["osd_unhi_bg_to"]}
 """
+
+
+def openbox_theme_rc_dark() -> str:
+    """PLAN builder for the DARK Az'arch OpenBox theme (the default)."""
+    return openbox_theme_rc(dark=True)
+
+
+def openbox_theme_rc_light() -> str:
+    """PLAN builder for the LIGHT Az'arch OpenBox theme (classic Clearlooks-cyan)."""
+    return openbox_theme_rc(dark=False)
+
+
+# --- 2c. System theme DEFAULT: the freedesktop / GTK dark standard ----------
+# Az'arch ships DARK as the default, using the EXISTING freedesktop / GTK standard so any
+# downloaded app that honours it is configured for free. Three layers, all defaulting dark:
+#   * The GTK theme files (gtk-3.0/gtk-4.0 settings.ini + ~/.gtkrc-2.0): Adwaita-dark +
+#     gtk-application-prefer-dark-theme=1. GTK2/3/4 apps read these at startup. HOME files
+#     (skel-mirrored). These are the DEFAULT; `azarch theme --white` rewrites them to light.
+#   * The dconf SYSTEM default for org.gnome.desktop.interface color-scheme='prefer-dark'
+#     (the freedesktop "appearance" signal GTK4/libadwaita/portal apps read). Shipped as a
+#     /etc/dconf keyfile + profile and compiled by `dconf update` in the customize hook
+#     (post-pacstrap, where dconf exists). A per-user `gsettings set` from `azarch theme`
+#     OVERRIDES this system default and persists, so a user who picks white keeps white.
+# These builders MUST stay byte-for-byte in lock-step with the azarch CLI's theme.py dark
+# output (a test bundles the CLI and asserts equality) so the shipped default and a later
+# `azarch theme --dark` produce identical files.
+GTK3_SETTINGS_PATH = f"{HOME}/.config/gtk-3.0/settings.ini"
+GTK4_SETTINGS_PATH = f"{HOME}/.config/gtk-4.0/settings.ini"
+GTKRC2_PATH = f"{HOME}/.gtkrc-2.0"
+# The dconf system-default keyfile + profile + the marker the customize hook greps for.
+DCONF_THEME_KEYFILE_PATH = "/etc/dconf/db/local.d/00-azarch-theme"
+DCONF_PROFILE_USER_PATH = "/etc/dconf/profile/user"
+
+
+def gtk3_settings_ini_default() -> str:
+    """~/.config/gtk-3.0/settings.ini shipped default (DARK). Matches theme.gtk3_settings_ini(True)."""
+    return (
+        "# Az'arch GTK3 theme. Generated by `azarch theme` (edit via the command, not\n"
+        "# this file). gtk-application-prefer-dark-theme is the GTK3 dark switch.\n"
+        "[Settings]\n"
+        "gtk-theme-name=Adwaita-dark\n"
+        "gtk-application-prefer-dark-theme=1\n"
+        "gtk-icon-theme-name=Adwaita\n"
+    )
+
+
+def gtk4_settings_ini_default() -> str:
+    """~/.config/gtk-4.0/settings.ini shipped default (DARK). Matches theme.gtk4_settings_ini(True)."""
+    return (
+        "# Az'arch GTK4 theme. Generated by `azarch theme`.\n"
+        "[Settings]\n"
+        "gtk-theme-name=Adwaita-dark\n"
+        "gtk-application-prefer-dark-theme=1\n"
+        "gtk-icon-theme-name=Adwaita\n"
+    )
+
+
+def gtkrc2_default() -> str:
+    """~/.gtkrc-2.0 shipped default (DARK). Matches theme.gtkrc2(True)."""
+    return (
+        "# Az'arch GTK2 theme. Generated by `azarch theme`.\n"
+        'gtk-theme-name="Adwaita-dark"\n'
+        'gtk-icon-theme-name="Adwaita"\n'
+    )
+
+
+def dconf_theme_keyfile() -> str:
+    """/etc/dconf/db/local.d/00-azarch-theme -- the dconf SYSTEM default that makes the
+    freedesktop color-scheme 'prefer-dark' for every user out of the box. A per-user
+    `gsettings set` (what `azarch theme` runs) overrides it and persists. Compiled into the
+    binary db by `dconf update` in the customize hook (post-pacstrap, dconf present)."""
+    return (
+        "# Az'arch dark theme -- freedesktop color-scheme system default. Compiled by\n"
+        "# `dconf update`. A per-user `gsettings set` (azarch theme) overrides this.\n"
+        "[org/gnome/desktop/interface]\n"
+        "color-scheme='prefer-dark'\n"
+        "gtk-theme='Adwaita-dark'\n"
+    )
+
+
+def dconf_profile_user() -> str:
+    """/etc/dconf/profile/user -- the dconf profile so the `local` system db (above) backs
+    the user db. Without this profile, the system default keyfile is never consulted."""
+    return (
+        "# Az'arch dconf profile: user db on top, the system `local` db (color-scheme\n"
+        "# default) beneath it. Generated by patches.openbox.\n"
+        "user-db:user\n"
+        "system-db:local\n"
+    )
 
 
 # --- 3. ~/.config/openbox/rc.xml --------------------------------------------
@@ -473,10 +658,12 @@ def openbox_rc_xml() -> str:
     <primaryMonitor>1</primaryMonitor>
   </placement>
   <theme>
-    <!-- The Az'arch theme: Clearlooks with a ~1.5x-height titlebar (openbox_theme_rc,
-         shipped to ~/.themes/Azarch). titleLayout NLIMC = icon, label, iconify,
-         maximize, close. -->
-    <name>{OPENBOX_THEME_NAME}</name>
+    <!-- The Az'arch theme with a ~1.5x-height titlebar (openbox_theme_rc, shipped to
+         ~/.themes/{OPENBOX_THEME_NAME} and ~/.themes/{OPENBOX_THEME_NAME_DARK}). DARK is
+         the default; `azarch theme` (white / dark) rewrites this name element to
+         "{OPENBOX_THEME_NAME}" or "{OPENBOX_THEME_NAME_DARK}". titleLayout NLIMC = icon,
+         label, iconify, maximize, close. -->
+    <name>{OPENBOX_THEME_DEFAULT}</name>
     <titleLayout>NLIMC</titleLayout>
     <keepBorder>yes</keepBorder>
     <animateIconify>yes</animateIconify>
@@ -741,12 +928,27 @@ def openbox_environment() -> str:
 
     A minimal, stable place for session env vars. We re-assert XDG_CURRENT_DESKTOP
     (also set in ~/.xinitrc) so it is correct even if OpenBox is started by some other
-    path than our startx, and keep the XDG base dirs defined."""
+    path than our startx, keep the XDG base dirs defined, AND bridge Qt apps onto the
+    system theme.
+
+    QT_QPA_PLATFORMTHEME=gtk3 is the SYSTEM-THEME bridge for Qt: without a KDE/Plasma
+    stack (no kdeglobals, no qt6ct, no xdg-desktop-portal on this medium), Qt6/KF6 apps
+    like Dolphin (the file manager) and Calamares would otherwise render with Qt's stock
+    LIGHT Fusion palette regardless of the freedesktop color-scheme. The Qt `gtk3`
+    platform theme plugin (libqgtk3.so, shipped with qt6-base) makes those Qt apps read
+    the GTK theme instead -- so they follow the SAME Adwaita-dark/Adwaita + prefer-dark
+    signal `azarch theme` sets for GTK, and switch dark<->light with the rest of the
+    session. This is what makes Dolphin (and any downloaded Qt app) obey `azarch theme`."""
     return """\
 # ~/.config/openbox/environment -- sourced by openbox-session before autostart.
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 export XDG_CURRENT_DESKTOP=openbox
+# Bridge Qt/KF6 apps (Dolphin, Calamares, any downloaded Qt app) onto the system theme:
+# the Qt gtk3 platform theme makes them follow the GTK theme (Adwaita-dark/Adwaita) that
+# `azarch theme` sets, so they honour dark/white like everything else. Without this Qt
+# apps render light regardless of the freedesktop color-scheme (no KDE/portal stack here).
+export QT_QPA_PLATFORMTHEME=gtk3
 """
 
 
@@ -805,36 +1007,41 @@ Keywords=install;calamares;setup;
 
 
 # --- 8. /usr/local/bin/azarch (guest-side CLI) ------------------------------
-# The `azarch` guest CLI is its OWN Python module, libraries/packages/azarch.py
-# (all Python -- no shell). This module no longer AUTHORS the CLI; it reads that
-# module's source, injects the country->locale table from patches/calamares/locale (the
-# single source of truth) between the AZARCH_CC markers, and ships the result to
-# /usr/local/bin/azarch. See paths.AZARCH_CLI_SRC and packages/azarch.py.
+# The `azarch` guest CLI is its OWN Python PACKAGE now, libraries/packages/azarch/ (all
+# Python -- no shell). It grew a `theme` subcommand (and more to come), so the single module
+# was split into small modules (common/country_table/resolver/theme/sshd/cli). This module
+# no longer AUTHORS the CLI; it (a) asks the package to BUNDLE those modules into one
+# self-contained script (bundle.bundle_source()), then (b) injects the country->locale table
+# from patches/calamares/locale (the single source of truth) between the AZARCH_CC markers,
+# and ships the result to /usr/local/bin/azarch. See paths.AZARCH_CLI_DIR and packages/azarch/.
 AZARCH_BIN_PATH = "/usr/local/bin/azarch"
 
-# Marker lines in cli.py bracketing the generated COUNTRY_TABLE literal.
+# Marker lines (in the bundled source, originally from country_table.py) bracketing the
+# generated COUNTRY_TABLE literal.
 _AZARCH_CC_START = "# AZARCH_CC_TABLE_START"
 _AZARCH_CC_END = "# AZARCH_CC_TABLE_END"
 
 
 def azarch_cli() -> str:
-    """The `azarch` guest CLI (Python), read verbatim from libraries/packages/azarch.py
-    and shipped to /usr/local/bin/azarch. The COUNTRY_TABLE dict literal between the
-    AZARCH_CC markers is REGENERATED from patches/calamares/locale.RESOLVER_COUNTRY_TABLE so
-    the guest resolver's country->locale/layout map stays in lock-step with that single
-    source of truth. cli.py already carries a working copy of the table, so the file is
-    self-contained/runnable on its own; this re-injection just guarantees no drift.
+    """The `azarch` guest CLI (Python), BUNDLED from the libraries/packages/azarch/ package
+    into one self-contained script and shipped to /usr/local/bin/azarch. The COUNTRY_TABLE
+    dict literal between the AZARCH_CC markers is REGENERATED from
+    patches/calamares/locale.RESOLVER_COUNTRY_TABLE so the guest resolver's
+    country->locale/layout map stays in lock-step with that single source of truth. The
+    package already carries a working copy of the table, so it is self-contained/runnable on
+    its own; this re-injection just guarantees no drift.
 
-    Subcommands (see packages/azarch.py for the full behavior):
+    Subcommands (see packages/azarch/ for the full behavior):
+      theme [--dark|--white]  set the system colour theme (dark default); no arg prints it
       --sshd-hypervisor   install host pubkey from ~/shared/authorized_keys, start sshd
       --resolve-date-time geolocate by IP (pick a server) and set the timezone
       --resolve-language  geolocate by IP and set English + the region language
       --resolve-region    do both
     """
-    import paths  # noqa: E402 (local import; openbox.py has no module-level paths)
     from patches.calamares.locale import resolver_country_table_py  # noqa: E402 (locale lives with the calamares patch)
+    from packages.azarch.bundle import bundle_source  # noqa: E402 (the CLI package's bundler)
 
-    src = paths.AZARCH_CLI_SRC.read_text(encoding="utf-8")
+    src = bundle_source()
     start = src.index(_AZARCH_CC_START) + len(_AZARCH_CC_START)
     end = src.index(_AZARCH_CC_END)
     generated = (
@@ -924,14 +1131,61 @@ PLAN = [
         "owner": "home",
     },
     {
-        # The Az'arch OpenBox THEME (Clearlooks with a doubled-height titlebar). Ships to
-        # ~/.themes/Azarch/openbox-3/themerc (a user theme search path); rc.xml's <theme>
-        # names it "Azarch". Home-owned; mirrored into /etc/skel. Plain data (0o644).
-        # (Replaces the removed menu.xml entry -- the OpenBox root menu is gone.)
-        "builder": openbox_theme_rc,
+        # The DARK Az'arch OpenBox THEME (the default; ~1.5x-height titlebar). Ships to
+        # ~/.themes/Azarch-Dark/openbox-3/themerc (a user theme search path); rc.xml's
+        # <theme> names it "Azarch-Dark" out of the box. Home-owned; mirrored into
+        # /etc/skel. Plain data (0o644).
+        "builder": openbox_theme_rc_dark,
+        "dest": OPENBOX_THEME_THEMERC_DARK,
+        "mode": _CONF,
+        "owner": "home",
+    },
+    {
+        # The LIGHT Az'arch OpenBox THEME (classic Clearlooks-cyan). Ships to
+        # ~/.themes/Azarch/openbox-3/themerc so `azarch theme --white` can switch rc.xml's
+        # <theme><name> to "Azarch" and have the themerc already present. Home-owned;
+        # mirrored into /etc/skel. Plain data (0o644).
+        "builder": openbox_theme_rc_light,
         "dest": OPENBOX_THEME_THEMERC,
         "mode": _CONF,
         "owner": "home",
+    },
+    {
+        # System theme DEFAULT (DARK) -- GTK3 theme file. The freedesktop/GTK standard any
+        # downloaded GTK3 app reads at startup; `azarch theme --white` rewrites it. Home file.
+        "builder": gtk3_settings_ini_default,
+        "dest": GTK3_SETTINGS_PATH,
+        "mode": _CONF,
+        "owner": "home",
+    },
+    {
+        # System theme DEFAULT (DARK) -- GTK4 theme file (same, for GTK4 apps that read it).
+        "builder": gtk4_settings_ini_default,
+        "dest": GTK4_SETTINGS_PATH,
+        "mode": _CONF,
+        "owner": "home",
+    },
+    {
+        # System theme DEFAULT (DARK) -- GTK2 theme file (~/.gtkrc-2.0, older GTK2 apps).
+        "builder": gtkrc2_default,
+        "dest": GTKRC2_PATH,
+        "mode": _CONF,
+        "owner": "home",
+    },
+    {
+        # System theme DEFAULT (DARK) -- dconf keyfile making color-scheme 'prefer-dark' the
+        # system default (compiled by `dconf update` in the customize hook). Root-owned /etc.
+        "builder": dconf_theme_keyfile,
+        "dest": DCONF_THEME_KEYFILE_PATH,
+        "mode": _CONF,
+        "owner": "root",
+    },
+    {
+        # The dconf profile so the system `local` db backs the user db. Root-owned /etc.
+        "builder": dconf_profile_user,
+        "dest": DCONF_PROFILE_USER_PATH,
+        "mode": _CONF,
+        "owner": "root",
     },
     {
         # OpenBox session autostart: wallpaper (feh), keyboard layouts (setxkbmap),

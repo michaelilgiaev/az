@@ -33,44 +33,50 @@ from patches import openbox as desktop
 
 
 def _load_azarch_cli():
-    """Import the `azarch` guest CLI (libraries/packages/azarch.py) as a module by
-    file path.
+    """Load the `azarch` guest CLI as a single module namespace.
 
-    We load it under a distinct module name (`azarch_guest_cli`) rather than as
-    `packages.azarch`, so the on-disk source is exercised exactly as the compiler
-    ships it (verbatim, before the country-table re-injection) and no import-cache
-    aliasing can mask drift. The imported module carries the on-disk COUNTRY_TABLE and
-    the real functions (main/resolve_via_server/apply_*), so tests can both read its
-    data and drive it."""
-    import paths
+    The CLI is now a PACKAGE (libraries/packages/azarch/) that is BUNDLED into one
+    self-contained script for shipping (packages.azarch.bundle.bundle_source). We exec that
+    bundle text in a fresh namespace -- exactly the artifact the compiler ships, before the
+    country-table re-injection -- so tests exercise the real functions (main/
+    resolve_via_server/apply_*/cmd_theme/...) and data (COUNTRY_TABLE/RESOLVER_SERVERS) in
+    the single namespace they run in on the guest, and no import-cache aliasing masks drift.
 
-    spec = importlib.util.spec_from_file_location("azarch_guest_cli", paths.AZARCH_CLI_SRC)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    Returned as a types.ModuleType so monkeypatch.setattr / attribute access work like a
+    normal module."""
+    import types
+    from packages.azarch.bundle import bundle_source
+
+    mod = types.ModuleType("azarch_guest_cli")
+    exec(compile(bundle_source(), "azarch_guest_cli", "exec"), mod.__dict__)
     return mod
 
 
 # --- PLAN mode/owner/dest table --------------------------------------------
 
-def test_plan_has_exactly_eleven_entries():
+def test_plan_has_exactly_seventeen_entries():
     # compiler.py iterates PLAN; a dropped/extra entry silently un-emits a file. The
-    # panel-less OpenBox session ships exactly eleven files via PLAN:
-    #   1. ~/.xinitrc                          (startx -> openbox-session)
-    #   2. ~/.config/openbox/rc.xml            (keybinds, theme, titlebar-button binds)
-    #   3. ~/.themes/Azarch/openbox-3/themerc  (Az'arch theme: doubled-height titlebar)
-    #   4. ~/.config/openbox/autostart         (feh, setxkbmap, xcape, menu daemon, installer)
-    #   5. ~/.config/openbox/environment       (XDG_CURRENT_DESKTOP=openbox)
-    #   6. /usr/local/share/azarch/openbox-autostart-installed (staged "installed"
-    #      autostart the Calamares install copies over the target's; no keyboard/installer)
-    #   7. ~/.local/share menu usage seed       (default menu ordering)
-    #   8. /usr/share/applications/azarch-install.desktop (menu re-open entry, system)
-    #   9. ~/Desktop/azarch-install.desktop     (double-clickable installer launcher)
-    #  10. /usr/local/bin/azarch-install         (privileged Calamares wrapper)
-    #  11. /usr/local/bin/azarch                 (guest-side CLI)
-    # The OpenBox root menu (menu.xml) was REMOVED at the user's request; its PLAN slot
-    # is now the Az'arch theme's themerc. The .bash_profile snippet is appended by
-    # emit_plan(), NOT part of PLAN.
-    assert len(desktop.PLAN) == 11
+    # panel-less OpenBox session ships exactly seventeen files via PLAN:
+    #   1. ~/.xinitrc                               (startx -> openbox-session)
+    #   2. ~/.config/openbox/rc.xml                 (keybinds, theme, titlebar-button binds)
+    #   3. ~/.themes/Azarch-Dark/openbox-3/themerc  (DARK Az'arch theme -- the default)
+    #   4. ~/.themes/Azarch/openbox-3/themerc       (LIGHT Az'arch theme -- for `theme --white`)
+    #   5. ~/.config/gtk-3.0/settings.ini           (GTK3 dark theme default)
+    #   6. ~/.config/gtk-4.0/settings.ini           (GTK4 dark theme default)
+    #   7. ~/.gtkrc-2.0                              (GTK2 dark theme default)
+    #   8. /etc/dconf/db/local.d/00-azarch-theme     (dconf color-scheme=prefer-dark default)
+    #   9. /etc/dconf/profile/user                   (dconf profile so the system db backs user)
+    #  10. ~/.config/openbox/autostart              (feh, setxkbmap, xcape, menu daemon, installer)
+    #  11. ~/.config/openbox/environment            (XDG_CURRENT_DESKTOP=openbox)
+    #  12. /usr/local/share/azarch/openbox-autostart-installed (staged "installed" autostart)
+    #  13. ~/.local/share menu usage seed            (default menu ordering)
+    #  14. /usr/share/applications/azarch-install.desktop (menu re-open entry, system)
+    #  15. ~/Desktop/azarch-install.desktop          (double-clickable installer launcher)
+    #  16. /usr/local/bin/azarch-install             (privileged Calamares wrapper)
+    #  17. /usr/local/bin/azarch                      (guest-side CLI)
+    # (entries 3-9 are the system theme: dark is the default; `azarch theme` toggles it.)
+    # The .bash_profile snippet is appended by emit_plan(), NOT part of PLAN.
+    assert len(desktop.PLAN) == 17
 
 
 def test_plan_entries_have_the_four_declared_keys():
@@ -105,7 +111,8 @@ def test_scripts_are_exec_configs_are_conf():
     assert by_builder["xinitrc"]["mode"] == 0o755
     assert by_builder["openbox_autostart"]["mode"] == 0o755
     assert by_builder["openbox_rc_xml"]["mode"] == 0o644
-    assert by_builder["openbox_theme_rc"]["mode"] == 0o644
+    assert by_builder["openbox_theme_rc_dark"]["mode"] == 0o644
+    assert by_builder["openbox_theme_rc_light"]["mode"] == 0o644
     assert by_builder["openbox_environment"]["mode"] == 0o644
     assert by_builder["install_menu_desktop"]["mode"] == 0o644
     # The Desktop launcher is the exception among data files: it must be EXECUTABLE so a
@@ -135,20 +142,21 @@ def test_openbox_rc_xml_entry_is_home_owned_conf():
     assert entry["builder"] is desktop.openbox_rc_xml
 
 
-def test_root_owned_dests_are_wrapper_cli_menu_entry_and_installed_autostart():
-    # Exactly four PLAN entries are root-owned: the azarch CLI, the installer wrapper
+def test_root_owned_dests_are_wrapper_cli_menu_entry_installed_autostart_and_dconf():
+    # Exactly six PLAN entries are root-owned: the azarch CLI, the installer wrapper
     # (both /usr/local/bin), the system-wide installer menu .desktop
-    # (/usr/share/applications), and the STAGED "installed" OpenBox autostart the
-    # Calamares install copies onto the target (a system path, not a per-user file).
-    # (The old KDE Super-key shortcut .desktop is GONE -- OpenBox binds the Super key in
-    # rc.xml, not via a /usr/share/applications file.) Everything else is a /home/main
-    # dotfile handed to the live user (uid 1000, gid 998).
+    # (/usr/share/applications), the STAGED "installed" OpenBox autostart the Calamares
+    # install copies onto the target, and the TWO dconf system-theme files (the
+    # color-scheme=prefer-dark keyfile + the dconf profile) under /etc. Everything else is a
+    # /home/main dotfile handed to the live user (uid 1000, gid 998).
     root_dests = [e["dest"] for e in desktop.PLAN if e["owner"] == "root"]
     assert set(root_dests) == {
         desktop.INSTALL_WRAPPER_PATH,
         desktop.AZARCH_BIN_PATH,
         "/usr/share/applications/azarch-install.desktop",
         desktop.INSTALLED_AUTOSTART_STAGING_PATH,
+        desktop.DCONF_THEME_KEYFILE_PATH,
+        desktop.DCONF_PROFILE_USER_PATH,
     }
 
 
@@ -211,10 +219,10 @@ def test_home_owner_gid_is_autologin_group():
 
 # --- emit_plan(): PLAN + bash_profile, without mutating PLAN ----------------
 
-def test_emit_plan_length_is_twelve():
-    # 11 PLAN entries + the appended .bash_profile snippet = 12. emit_plan() is the
+def test_emit_plan_length_is_eighteen():
+    # 17 PLAN entries + the appended .bash_profile snippet = 18. emit_plan() is the
     # single sequence compiler.py iterates.
-    assert len(desktop.emit_plan()) == 12
+    assert len(desktop.emit_plan()) == 18
 
 
 def test_emit_plan_prefix_is_plan():
@@ -241,7 +249,7 @@ def test_emit_plan_does_not_mutate_module_plan():
     before = len(desktop.PLAN)
     desktop.emit_plan()
     desktop.emit_plan()
-    assert len(desktop.PLAN) == before == 11
+    assert len(desktop.PLAN) == before == 17
 
 
 # --- xinitrc: OpenBox X11 session, no flash ---------------------------------
@@ -424,12 +432,14 @@ def test_rc_xml_keeps_alt_right_drag_resize_on_frame():
 
 # --- Titlebar doubled: Az'arch theme + larger title font ---------------------
 
-def test_rc_xml_uses_the_azarch_theme():
-    # rc.xml must name the Az'arch theme (Clearlooks with a doubled titlebar), not stock
-    # Clearlooks, so the taller bar is actually used.
+def test_rc_xml_uses_the_azarch_dark_theme_by_default():
+    # rc.xml must name the Az'arch DARK theme by default (dark is the Az'arch default), not
+    # stock Clearlooks. `azarch theme --white` rewrites this <name> to the light "Azarch".
     out = desktop.openbox_rc_xml()
     assert desktop.OPENBOX_THEME_NAME == "Azarch"
-    assert f"<name>{desktop.OPENBOX_THEME_NAME}</name>" in out
+    assert desktop.OPENBOX_THEME_NAME_DARK == "Azarch-Dark"
+    assert desktop.OPENBOX_THEME_DEFAULT == "Azarch-Dark"
+    assert f"<name>{desktop.OPENBOX_THEME_DEFAULT}</name>" in out
     assert "<name>Clearlooks</name>" not in out
 
 
@@ -475,30 +485,47 @@ def test_theme_rc_removes_the_bottom_handle_bar():
     assert "window.handle.width: 0" in out
 
 
-def test_theme_rc_keeps_the_clearlooks_cyan_titlebar_colour():
-    # The bar keeps its familiar "cyan'ish" look: the theme must carry the Clearlooks
-    # title gradient base colour (#8CB0DC) unchanged -- we only grew the size, not the
-    # colours.
-    out = desktop.openbox_theme_rc()
-    assert "*.title.bg.color: #8CB0DC" in out
+def test_light_theme_keeps_the_clearlooks_cyan_titlebar_colour():
+    # The LIGHT ("Azarch") theme keeps its familiar "cyan'ish" Clearlooks look: it must
+    # carry the Clearlooks title gradient base colour (#8CB0DC). The DARK theme (default)
+    # replaces it with the dark grey/blue palette -- so the cyan must NOT be in the dark one.
+    light = desktop.openbox_theme_rc(dark=False)
+    dark = desktop.openbox_theme_rc(dark=True)
+    assert "*.title.bg.color: #8CB0DC" in light
+    assert "#8CB0DC" not in dark
+    # The dark theme uses the Az'arch dark surface palette (matching the application menu).
+    assert "#2a2e32" in dark
+    # Both keep the shared geometry (grown padding + no bottom handle).
+    for out in (light, dark):
+        assert "padding.height: 7" in out
+        assert "window.handle.width: 0" in out
 
 
-def test_theme_rc_dest_is_a_user_theme_search_path():
-    # The theme ships to ~/.themes/<name>/openbox-3/themerc -- a user theme search path
-    # OpenBox scans alongside /usr/share/themes -- so naming it in rc.xml resolves it.
+def test_theme_rc_dests_are_user_theme_search_paths():
+    # Both themes ship to ~/.themes/<name>/openbox-3/themerc -- a user theme search path
+    # OpenBox scans alongside /usr/share/themes -- so naming one in rc.xml resolves it.
     assert desktop.OPENBOX_THEME_DIR == f"{desktop.HOME}/.themes/Azarch/openbox-3"
     assert desktop.OPENBOX_THEME_THEMERC == (
         f"{desktop.HOME}/.themes/Azarch/openbox-3/themerc"
     )
+    assert desktop.OPENBOX_THEME_DIR_DARK == f"{desktop.HOME}/.themes/Azarch-Dark/openbox-3"
+    assert desktop.OPENBOX_THEME_THEMERC_DARK == (
+        f"{desktop.HOME}/.themes/Azarch-Dark/openbox-3/themerc"
+    )
 
 
-def test_theme_rc_entry_is_home_owned_conf():
-    entry = next(
+def test_theme_rc_entries_are_home_owned_conf():
+    # Both the dark (default) and light themerc PLAN entries are home-owned 0o644 data.
+    dark_entry = next(
+        e for e in desktop.PLAN if e["dest"] == desktop.OPENBOX_THEME_THEMERC_DARK
+    )
+    assert dark_entry["builder"] is desktop.openbox_theme_rc_dark
+    assert dark_entry["mode"] == 0o644 and dark_entry["owner"] == "home"
+    light_entry = next(
         e for e in desktop.PLAN if e["dest"] == desktop.OPENBOX_THEME_THEMERC
     )
-    assert entry["builder"] is desktop.openbox_theme_rc
-    assert entry["mode"] == 0o644
-    assert entry["owner"] == "home"
+    assert light_entry["builder"] is desktop.openbox_theme_rc_light
+    assert light_entry["mode"] == 0o644 and light_entry["owner"] == "home"
 
 
 # --- OpenBox autostart: wallpaper, keyboard, xcape, menu daemon, installer ---
@@ -562,6 +589,15 @@ def test_environment_exports_openbox_desktop():
     assert "export XDG_CURRENT_DESKTOP=openbox" in desktop.openbox_environment()
 
 
+def test_environment_bridges_qt_apps_onto_the_gtk_system_theme():
+    # QT_QPA_PLATFORMTHEME=gtk3 is the system-theme bridge for Qt/KF6 apps (Dolphin,
+    # Calamares, any downloaded Qt app): without a KDE/portal stack they render LIGHT
+    # regardless of the freedesktop color-scheme, so the Qt gtk3 platform theme makes them
+    # follow the GTK theme (Adwaita-dark/Adwaita) `azarch theme` sets -- i.e. Qt apps obey
+    # the system dark/white toggle too. Regression guard: dropping this un-themes Dolphin.
+    assert "export QT_QPA_PLATFORMTHEME=gtk3" in desktop.openbox_environment()
+
+
 # --- OpenBox config files land under home, correct modes --------------------
 
 def test_openbox_config_files_are_home_owned_with_correct_modes():
@@ -572,7 +608,8 @@ def test_openbox_config_files_are_home_owned_with_correct_modes():
     by_dest = {e["dest"]: e for e in desktop.PLAN}
     expected = {
         f"{desktop.HOME}/.config/openbox/rc.xml": (desktop.openbox_rc_xml, 0o644),
-        desktop.OPENBOX_THEME_THEMERC: (desktop.openbox_theme_rc, 0o644),
+        desktop.OPENBOX_THEME_THEMERC_DARK: (desktop.openbox_theme_rc_dark, 0o644),
+        desktop.OPENBOX_THEME_THEMERC: (desktop.openbox_theme_rc_light, 0o644),
         f"{desktop.HOME}/.config/openbox/environment": (desktop.openbox_environment, 0o644),
         f"{desktop.HOME}/.config/openbox/autostart": (desktop.openbox_autostart, 0o755),
     }

@@ -692,6 +692,12 @@ static GPtrArray *entries_provider(gpointer user) {
 
 int main(int argc, char **argv) {
     gtk_init(&argc, &argv);
+    /* Latch the system theme (dark by default) BEFORE anything is styled: install_css()
+     * and build_window() below read the AZ_*_COLOR macros, which resolve to the dark or
+     * light palette per what az_theme_init() reads from the freedesktop color-scheme. The
+     * daemon is restarted by `azarch theme` when the theme flips, so re-reading here on
+     * launch is enough. */
+    az_theme_init();
     g_timing = (g_getenv("AZ_TIMING") != NULL);
 
     char *pidfile = pid_path();

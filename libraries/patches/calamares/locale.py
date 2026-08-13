@@ -205,8 +205,9 @@ def resolver_country_table_py() -> str:
     """Render RESOLVER_COUNTRY_TABLE as the body of the `azarch` CLI's COUNTRY_TABLE
     dict literal: one ``    'CC': ('locale', 'layout', 'keymap', english),`` line per
     country (english as the literal int 1/0). The compiler substitutes this between the
-    AZARCH_CC markers in cli.py so the guest resolver's table stays in lock-step with
-    this single source of truth."""
+    AZARCH_CC markers in the azarch CLI (country_table.py, bundled into the shipped
+    script) so the guest resolver's table stays in lock-step with this single source of
+    truth."""
     out = []
     for cc, (loc, layout, keymap, english) in RESOLVER_COUNTRY_TABLE.items():
         out.append(f"    {cc!r}: ({loc!r}, {layout!r}, {keymap!r}, {1 if english else 0}),")

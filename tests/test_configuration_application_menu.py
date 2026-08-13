@@ -67,8 +67,44 @@ def test_csrc_dir_is_flattened_up():
     assert (CSRC_DIR / "theme.h").is_file()
     # A representative spread of the sibling translation units is present at top level.
     for name in ("applist.c", "applications.c", "usage.c", "icons.c", "actions.c",
-                 "winwatch.c", "kscroll.c", "power.c"):
+                 "winwatch.c", "kscroll.c", "power.c", "theme.c"):
         assert (CSRC_DIR / name).is_file(), name
+
+
+# --- The menu follows the system theme (dark by default) --------------------
+
+def test_menu_theme_is_runtime_selected_not_hardcoded():
+    # The menu must FOLLOW the system dark/light theme at runtime, not bake one palette in.
+    # theme.h declares the runtime accessor + roles; theme.c carries BOTH palettes and reads
+    # the freedesktop color-scheme; the AZ_*_COLOR macros expand to the accessor so every
+    # existing call site is theme-correct.
+    h = (CSRC_DIR / "theme.h").read_text(encoding="utf-8")
+    c = (CSRC_DIR / "theme.c").read_text(encoding="utf-8")
+    # theme.h: the accessor + the macros resolving to it (not a bare hex literal anymore).
+    assert "const char *az_color(AzColorRole role);" in h
+    assert "int az_theme_init(void);" in h
+    assert "#define AZ_BG_COLOR" in h and "az_color(AZ_C_BG)" in h
+    # theme.c: both palettes + the color-scheme probe + the dark default.
+    assert "AZ_PALETTE_DARK" in c and "AZ_PALETTE_LIGHT" in c
+    assert "org.gnome.desktop.interface color-scheme" in c   # the freedesktop signal
+    assert "prefer-dark" in c
+    # dark is the fallback default (az_dark initialised to 1).
+    assert "static int az_dark = 1;" in c
+
+
+def test_menu_main_latches_theme_before_styling():
+    # main() must call az_theme_init() (so the AZ_*_COLOR macros resolve to the right
+    # palette) BEFORE build_window()/install_css() style anything.
+    src = (CSRC_DIR / "menu.c").read_text(encoding="utf-8")
+    init_idx = src.index("az_theme_init()")
+    build_idx = src.index("build_window(m)")
+    assert init_idx < build_idx, "az_theme_init() must run before build_window()"
+
+
+def test_menu_makefile_builds_theme_object():
+    # theme.o must be in the Makefile OBJS or the runtime-theme code is never linked.
+    mk = (CSRC_DIR / "Makefile").read_text(encoding="utf-8")
+    assert "theme.o" in mk
 
 
 # --- Emit plan: the launcher + .desktop (the daemon binary is compiled) ------

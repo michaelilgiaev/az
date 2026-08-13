@@ -15,9 +15,11 @@ without the module shadowing the directory (or vice versa). If someone renames
 that, and the "patches holds only upstream" invariant, at unit-test time.
 
 `packages/` carries no `__init__.py` -- it (like `patches/`) is an implicit
-namespace package, resolved off PYTHONPATH (= libraries/). That is why the flat
-modules `packages/pkgbuild.py` and `packages/azarch.py` import as `packages.pkgbuild`
-/ `packages.azarch` with no package __init__ anywhere under libraries/.
+namespace package, resolved off PYTHONPATH (= libraries/). The flat module
+`packages/pkgbuild.py` imports as `packages.pkgbuild`; the `azarch` guest CLI grew a
+`theme` subcommand and became a REGULAR sub-package (`packages/azarch/` with its own
+__init__.py), importing as `packages.azarch` -- both resolve under the namespace
+`packages` (which itself still has no top-level __init__.py).
 """
 
 from __future__ import annotations

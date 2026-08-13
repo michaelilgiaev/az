@@ -1,11 +1,16 @@
 /* Az'arch application menu (C/GTK3) -- shared palette + geometry constants.
  *
- * The Breeze-ish dark palette and the geometry numbers, in ONE place so every
- * module (window, app list, power row, search box) reads the same values. No
- * behaviour here -- just constants.
+ * The geometry numbers and font sizes are compile-time constants. The COLOURS are
+ * RUNTIME-selected so the menu follows the system theme (dark by default, light when the
+ * user runs `azarch theme --white`): every colour is an az_color(role) accessor that
+ * returns the dark or light hex string depending on the system color-scheme, read ONCE at
+ * startup by az_theme_init(). The AZ_*_COLOR names below are kept as macros that expand to
+ * that accessor, so every existing call site (widget_bg(w, AZ_BG_COLOR),
+ * gdk_rgba_parse(&c, AZ_TEXT_COLOR), the CSS g_strdup_printf, ...) keeps working unchanged
+ * -- it still receives a const char* hex string, just the theme-correct one.
  *
- * The menu is a fixed-size borderless window CENTERED on the screen (OpenBox,
- * no panel); menu.c centers it via (screen - size) / 2.
+ * The menu is a fixed-size borderless window CENTERED on the screen (OpenBox, no panel);
+ * menu.c centers it via (screen - size) / 2.
  */
 #ifndef AZ_THEME_H
 #define AZ_THEME_H
@@ -20,33 +25,61 @@
  * menu.c reads this in hide_menu/warmup. */
 #define AZ_OFFSCREEN_MARGIN 4000
 
-/* --- Breeze-ish palette (hex strings, parsed via gdk_rgba_parse) --------- */
-#define AZ_BG_COLOR         "#2a2e32"   /* window background */
-#define AZ_SURFACE_COLOR    "#31363b"   /* lighter surface (search box, buttons) */
-#define AZ_HOVER_COLOR      "#3b4045"   /* row hover background */
-#define AZ_DIVIDER_COLOR    "#3a3f44"   /* subtle separators */
-#define AZ_TEXT_COLOR       "#eff0f1"   /* near-white -- big app names */
-#define AZ_SUBTEXT_COLOR    "#9aa0a6"   /* muted -- the type subtitle */
-#define AZ_PLACEHOLDER_COLOR "#7f858a"  /* search placeholder text */
+/* --- Runtime theme colours ----------------------------------------------- */
+/* Colour ROLES. az_color(role) returns the dark or light hex string for the role,
+ * selected by the system theme az_theme_init() reads at startup. Keep in sync with the
+ * palette tables in theme.c (AZ_PALETTE_DARK / AZ_PALETTE_LIGHT). */
+typedef enum {
+    AZ_C_BG = 0,        /* window background */
+    AZ_C_SURFACE,       /* lighter surface (search box, buttons) */
+    AZ_C_HOVER,         /* row hover background */
+    AZ_C_DIVIDER,       /* subtle separators */
+    AZ_C_TEXT,          /* big app names */
+    AZ_C_SUBTEXT,       /* muted -- the type subtitle */
+    AZ_C_PLACEHOLDER,   /* search placeholder text */
+    AZ_C_BORDER,        /* Breeze highlight blue (focus border) */
+    AZ_C_SELECT_BORDER, /* outline of selected row / focused button */
+    AZ_C_SELECT_FILL,   /* subtle fill inside selected/hovered control */
+    AZ_C_SELECT_TEXT,   /* text on a selected row */
+    AZ_C_SEL_BG,        /* search-box selection background */
+    AZ_C_SEL_FG,        /* search-box selection text */
+    AZ_C_SCROLL_THUMB,  /* scrollbar thumb */
+    AZ_C_SCROLL_THUMB_HOVER,
+    AZ_C_SCROLL_GROOVE,
+    AZ_C_COUNT
+} AzColorRole;
 
-#define AZ_BORDER_COLOR     "#3daee9"   /* Breeze highlight blue */
-#define AZ_SELECT_BORDER    "#3daee9"   /* outline of selected row / focused button */
-#define AZ_SELECT_FILL      "#31383e"   /* subtle fill inside selected/hovered control */
-#define AZ_SELECT_TEXT      "#ffffff"   /* text on a selected row */
+/* Read the system color-scheme (freedesktop gsettings / GTK settings) and latch whether
+ * the menu should render dark. Call ONCE early in main() before any widget is styled.
+ * Returns 1 if dark, 0 if light. */
+int az_theme_init(void);
+/* 1 if the latched theme is dark, else 0 (valid after az_theme_init()). */
+int az_theme_is_dark(void);
+/* The hex colour string for a role under the latched theme (never NULL). */
+const char *az_color(AzColorRole role);
 
-/* Search-box text-selection colours. These match the light selection the earlier
- * Tk-based menu rendered (an unstyled tk.Entry's defaults, measured on the target:
- * selectbackground #c3c3c3, selectforeground #000000), kept so the search box
- * highlight looks identical across the port. */
-#define AZ_SEL_BG        "#c3c3c3"   /* search-box selection background */
-#define AZ_SEL_FG        "#000000"   /* search-box selection text       */
+/* The AZ_*_COLOR names as they were, now resolving to the runtime accessor so every
+ * existing call site is unchanged. */
+#define AZ_BG_COLOR          az_color(AZ_C_BG)
+#define AZ_SURFACE_COLOR     az_color(AZ_C_SURFACE)
+#define AZ_HOVER_COLOR       az_color(AZ_C_HOVER)
+#define AZ_DIVIDER_COLOR     az_color(AZ_C_DIVIDER)
+#define AZ_TEXT_COLOR        az_color(AZ_C_TEXT)
+#define AZ_SUBTEXT_COLOR     az_color(AZ_C_SUBTEXT)
+#define AZ_PLACEHOLDER_COLOR az_color(AZ_C_PLACEHOLDER)
+#define AZ_BORDER_COLOR      az_color(AZ_C_BORDER)
+#define AZ_SELECT_BORDER     az_color(AZ_C_SELECT_BORDER)
+#define AZ_SELECT_FILL       az_color(AZ_C_SELECT_FILL)
+#define AZ_SELECT_TEXT       az_color(AZ_C_SELECT_TEXT)
+#define AZ_SEL_BG            az_color(AZ_C_SEL_BG)
+#define AZ_SEL_FG            az_color(AZ_C_SEL_FG)
+#define AZ_SCROLL_THUMB_COLOR  az_color(AZ_C_SCROLL_THUMB)
+#define AZ_SCROLL_THUMB_HOVER  az_color(AZ_C_SCROLL_THUMB_HOVER)
+#define AZ_SCROLL_GROOVE_COLOR az_color(AZ_C_SCROLL_GROOVE)
 
-/* --- Scrollbar (arrow-less rounded pill, Kickoff style) ------------------ */
+/* --- Scrollbar geometry (arrow-less rounded pill, Kickoff style) --------- */
 #define AZ_SCROLL_THUMB_WIDTH  6
 #define AZ_SCROLL_TRACK_WIDTH  12
-#define AZ_SCROLL_THUMB_COLOR  "#5c6166"
-#define AZ_SCROLL_THUMB_HOVER  "#93989c"
-#define AZ_SCROLL_GROOVE_COLOR "#33383d"
 #define AZ_SCROLL_THUMB_MIN    32
 
 /* --- Fonts --------------------------------------------------------------- */

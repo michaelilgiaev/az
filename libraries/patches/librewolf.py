@@ -96,16 +96,27 @@ HOME = "/home/main"
 OVERRIDES_PROFILE_PATH = f"{HOME}/.config/librewolf/librewolf/{OVERRIDES_FILENAME}"
 
 
-def overrides_cfg() -> str:
+def overrides_cfg(dark: bool = True) -> str:
     """Return the full text of librewolf.overrides.cfg (see the module docstring).
 
-    Two policies: (1) sessions + cookies persist across restarts, (2) the
-    bookmarks toolbar ("For quick access") is hidden by default. This is the
-    single source of truth; emit_plan() ships it to OVERRIDES_PROFILE_PATH (the
+    Policies: (1) sessions + cookies persist across restarts, (2) the bookmarks toolbar
+    ("For quick access") is hidden by default, (3) the browser follows the system theme
+    -- DARK by default (matching the system dark default); `azarch theme --white` flips it.
+    This is the single source of truth; emit_plan() ships it to OVERRIDES_PROFILE_PATH (the
     path LibreWolf actually reads) and compiler.py mirrors it into /etc/skel.
+
+    The dark theme prefs also make LibreWolf report a DARK prefers-color-scheme to web
+    content, which is what drives the Az'arch timedate home page (it has a
+    `prefers-color-scheme` stylesheet) to render dark too.
 
     AutoConfig files MUST begin with a comment line -- the engine ignores line 1
     -- so the leading `//` banner is required, not decoration."""
+    # Firefox theme prefs: 0 = dark, 1 = light for the theme selectors; the
+    # prefers-color-scheme content-override uses 0 = dark, 1 = light. ui.systemUsesDarkTheme
+    # is 1 for dark, 0 for light.
+    sys_dark = 1 if dark else 0
+    theme_val = 0 if dark else 1          # toolbar-theme / content-theme (0 dark, 1 light)
+    prefers_val = 0 if dark else 1        # prefers-color-scheme.content-override
     return f"""\
 // Az'arch LibreWolf overrides -- home/new-tab page + cookie persistence + hidden bookmarks bar
 //
@@ -178,6 +189,21 @@ defaultPref("browser.sessionstore.privacy_level", 0);
 // default. "never" hides it on every window AND the new-tab page. The user can
 // still toggle it back on with Ctrl+Shift+B. (Values: "always"/"newtab"/"never".)
 defaultPref("browser.toolbars.bookmarks.visibility", "never");
+
+// === 4. Follow the system theme (DARK by default) ==========================
+// Az'arch defaults to a dark system theme; LibreWolf follows it here. `azarch theme
+// --white` regenerates this file with the light values (and --dark back). These prefs
+// also make LibreWolf report a dark prefers-color-scheme to web content, which drives the
+// Az'arch timedate home page (prefers-color-scheme stylesheet) to render dark as well.
+//   * browser.theme.toolbar-theme / content-theme: the Firefox built-in theme (0 = dark,
+//     1 = light). Both set so chrome AND in-content pages (about:*) match.
+//   * ui.systemUsesDarkTheme: report the OS as dark (1) / light (0) to content + widgets.
+//   * layout.css.prefers-color-scheme.content-override: force the prefers-color-scheme web
+//     content sees (0 = dark, 1 = light) so sites (incl. the timedate page) follow suit.
+defaultPref("browser.theme.toolbar-theme", {theme_val});
+defaultPref("browser.theme.content-theme", {theme_val});
+defaultPref("ui.systemUsesDarkTheme", {sys_dark});
+defaultPref("layout.css.prefers-color-scheme.content-override", {prefers_val});
 """
 
 
