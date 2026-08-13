@@ -91,12 +91,28 @@ def test_schema_override_enables_the_notepad_plugin():
     out = gedit.gschema_override()
     assert gedit.GEDIT_PLUGINS_SCHEMA == "org.gnome.gedit.plugins"
     assert f"[{gedit.GEDIT_PLUGINS_SCHEMA}]" in out
-    assert gedit.NOTEPAD_PLUGIN_MODULE == "azarch-notepad"
+    assert gedit.MODIFICATIONS_PLUGIN_MODULE == "gedit-modifications"
     # our module is present AND gedit's stock defaults are kept.
-    assert "'azarch-notepad'" in out
+    assert "'gedit-modifications'" in out
     for stock in gedit.GEDIT_DEFAULT_PLUGINS:
         assert f"'{stock}'" in out
-    assert gedit.ACTIVE_PLUGINS[-1] == "azarch-notepad"
+    assert gedit.ACTIVE_PLUGINS[-1] == "gedit-modifications"
+
+
+def test_schema_override_sets_editor_font_to_18():
+    # Az'arch pins a fixed 18pt editor font. use-default-font MUST be false (else gedit
+    # ignores editor-font and uses the system fixed-width font), and editor-font is the
+    # Pango description 'Monospace 18', under the editor preferences schema.
+    out = gedit.gschema_override()
+    assert gedit.GEDIT_EDITOR_SCHEMA == "org.gnome.gedit.preferences.editor"
+    assert f"[{gedit.GEDIT_EDITOR_SCHEMA}]" in out
+    assert gedit.GEDIT_FONT_SIZE == 18
+    assert gedit.GEDIT_EDITOR_FONT == "Monospace 18"
+    assert gedit.GEDIT_USE_DEFAULT_FONT is False
+    # use-default-font off (so editor-font wins) and editor-font set to 18pt.
+    assert "use-default-font=false" in out
+    assert "use-default-font=true" not in out
+    assert "editor-font='Monospace 18'" in out
 
 
 def test_schema_override_entry_triggers_recompile():
@@ -122,10 +138,10 @@ def test_plugin_metadata_is_generated_from_python():
     # active-plugins id or the override enables a plugin gedit cannot find.
     entry = next(e for e in gedit.emit_plan() if e["dest"] == gedit.GEDIT_PLUGIN_METADATA_DEST)
     assert entry["builder"] is gedit.plugin_metadata
-    assert gedit.GEDIT_PLUGIN_METADATA_DEST == "/usr/lib/gedit/plugins/azarch-notepad.plugin"
+    assert gedit.GEDIT_PLUGIN_METADATA_DEST == "/usr/lib/gedit/plugins/gedit-modifications.plugin"
     out = gedit.plugin_metadata()
     assert out.splitlines()[0] == "[Plugin]"
-    assert f"Module={gedit.NOTEPAD_PLUGIN_MODULE}" in out
+    assert f"Module={gedit.MODIFICATIONS_PLUGIN_MODULE}" in out
     # The descriptive fields come through so gedit's plugin list is populated.
     assert f"Name={gedit.GEDIT_PLUGIN_NAME}" in out
     assert f"Description={gedit.GEDIT_PLUGIN_DESCRIPTION}" in out
@@ -145,12 +161,12 @@ def test_plugin_source_tree_is_present_and_buildable():
     # .plugin manifest is generated (see test_plugin_metadata_is_generated_from_python), not a
     # build input.
     srcs = {p.name for p in gedit._plugin_src_files()}
-    assert "azarch-notepad.c" in srcs
+    assert "gedit_modifications.c" in srcs
     assert "Makefile" in srcs
-    assert gedit.GEDIT_PLUGIN_SO_DEST == "/usr/lib/gedit/plugins/libazarch-notepad.so"
+    assert gedit.GEDIT_PLUGIN_SO_DEST == "/usr/lib/gedit/plugins/libgedit-modifications.so"
     # The plugin C source must actually do the three notepad-mode jobs (guards against a
     # stubbed-out plugin): disable new-tab, strip the headerbar buttons, rebind close.
-    csrc = (gedit.GEDIT_PLUGIN_SRC_DIR / "azarch-notepad.c").read_text(encoding="utf-8")
+    csrc = (gedit.GEDIT_PLUGIN_SRC_DIR / "gedit_modifications.c").read_text(encoding="utf-8")
     assert "GeditWindowActivatable" in csrc
     assert "new-tab" in csrc
     assert "win.open" in csrc and "win.save" in csrc      # headerbar buttons hidden

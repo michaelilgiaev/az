@@ -25,11 +25,11 @@ def _asset_svg_text() -> str:
     return (paths.ASSETSDIR / kitty.ICON_ASSET).read_text(encoding="utf-8")
 
 
-def test_emit_plan_has_four_entries():
-    # SVG asset copy + two PNG removals + the titlebar PNG render. A dropped entry either
-    # fails to replace the cat SVG, leaves a stale PNG that outranks it, or drops the
-    # in-window titlebar icon.
-    assert len(kitty.emit_plan()) == 4
+def test_emit_plan_has_five_entries():
+    # SVG asset copy + two PNG removals + the titlebar PNG render + the kitty.conf font
+    # config. A dropped entry either fails to replace the cat SVG, leaves a stale PNG that
+    # outranks it, drops the in-window titlebar icon, or drops the font-size config.
+    assert len(kitty.emit_plan()) == 5
 
 
 def test_emit_plan_entries_have_expected_keys():
@@ -81,6 +81,29 @@ def test_titlebar_icon_is_rendered_from_the_asset_into_home():
     assert entry["owner"] == "home"
 
 
+def test_kitty_conf_sets_font_size_18_in_home():
+    # A partial kitty.conf (owner "home", so chowned + skel-mirrored) sets ONLY font_size,
+    # to 18 -- matching gedit's editor font size. kitty.conf syntax is `<name> <value>`
+    # (space-separated, no '='), and kitty merges it over its defaults.
+    entry = next(e for e in kitty.emit_plan() if e["dest"] == kitty.KITTY_CONF_PATH)
+    assert entry["dest"] == "/home/main/.config/kitty/kitty.conf"
+    assert entry["dest"].startswith(kitty.HOME + "/")
+    assert entry["builder"] is kitty.kitty_conf
+    assert entry["owner"] == "home"
+    assert entry["mode"] == 0o644
+    assert kitty.KITTY_FONT_SIZE == 18
+    out = kitty.kitty_conf()
+    assert "font_size 18" in out
+    # kitty.conf uses space-separated options, not INI '=' assignments.
+    assert "font_size=" not in out
+
+
+def test_kitty_conf_font_size_matches_gedit():
+    # The whole point of pinning both: the terminal and the editor render at the same size.
+    from patches import gedit
+    assert kitty.KITTY_FONT_SIZE == gedit.GEDIT_FONT_SIZE
+
+
 def test_icon_asset_is_wellformed_xml():
     # A broken SVG makes the icon loader fall back to a generic icon; parse it to prove the
     # element tree is valid. (XML comments must not contain "--"; that gotcha raised during
@@ -89,30 +112,86 @@ def test_icon_asset_is_wellformed_xml():
 
 
 def test_icon_asset_is_a_clean_bw_terminal_not_a_cat():
-    # The whole point (user's exact ask): a terminal-window mark -- a horizontal BLACK
-    # rectangle (the window) with a WHITE "> _" prompt inside (a chevron stroked path + an
-    # underscore cursor rect). Black and white ONLY, no color, no cat. Assert the structural
-    # bits are present and nothing colored/mascot slipped in.
+    # The whole point (user's exact ask): a terminal-window mark -- a BLACK window shape with
+    # a WHITE "> _" prompt inside (a chevron ">" and an underscore "_" cursor). The icon is
+    # drawn as filled <path>s (converted to FontForge geometry): a black window path plus the
+    # white prompt paths. Black and white ONLY, no color, no cat. Assert the structural bits
+    # are present and nothing colored/mascot slipped in.
     svg = _asset_svg_text().lower()
     assert "<svg" in svg and "</svg>" in svg
     assert 'viewbox="0 0 256 256"' in svg
-    assert svg.count("<rect") >= 2  # the black window rectangle + the "_" underscore cursor
-    assert "<path" in svg           # the chevron ">"
+    # The glyph is path-based: the black window + the white chevron ">" + the white
+    # underscore "_" cursor are three filled paths.
+    assert svg.count("<path") >= 3
     assert "cat" not in svg and "whisker" not in svg
     # Black and white only: a black window fill and a white prompt, and NO stray colors (the
     # old rejected icon used red/yellow/green titlebar dots + a green prompt).
-    assert "#000000" in svg         # black background rectangle
+    assert "#000000" in svg         # black window path
     assert "#ffffff" in svg         # white prompt "> _"
     for banned in ("#e06c75", "#e5c07b", "#98c379", "#3fd07f", "#1b1f24", "#2b3038"):
         assert banned not in svg
 
 
-def test_icon_asset_window_is_a_horizontal_rectangle():
-    # The window must read as a terminal: a LANDSCAPE (wider-than-tall) rectangle, not a
-    # square tile. Parse the background rect and assert width > height.
+def _path_bbox(d: str) -> tuple[float, float, float, float]:
+    """Rough bounding box (min_x, min_y, max_x, max_y) of an SVG path's on-curve points.
+
+    Walks the M/L/C/H/V commands (absolute and relative) tracking the current point and
+    recording each segment endpoint. Control points are ignored, which is fine for an
+    aspect-ratio (wider-vs-taller) check on these closed glyph outlines."""
+    import re as _re
+    toks = _re.findall(r"[A-Za-z]|-?\d*\.?\d+", d)
+    xs: list[float] = []
+    ys: list[float] = []
+    i = 0
+    cx = cy = 0.0
+    cmd = None
+
+    def take(n: int) -> list[float]:
+        nonlocal i
+        vals = [float(toks[i + k]) for k in range(n)]
+        i += n
+        return vals
+
+    while i < len(toks):
+        t = toks[i]
+        if _re.match(r"[A-Za-z]$", t):
+            cmd = t
+            i += 1
+            continue
+        if cmd in ("M", "L"):
+            cx, cy = take(2)
+        elif cmd in ("m", "l"):
+            dx, dy = take(2); cx += dx; cy += dy
+        elif cmd == "C":
+            _x1, _y1, _x2, _y2, cx, cy = take(6)
+        elif cmd == "c":
+            _dx1, _dy1, _dx2, _dy2, dx, dy = take(6); cx += dx; cy += dy
+        elif cmd == "H":
+            cx, = take(1)
+        elif cmd == "h":
+            dx, = take(1); cx += dx
+        elif cmd == "V":
+            cy, = take(1)
+        elif cmd == "v":
+            dy, = take(1); cy += dy
+        elif cmd in ("Z", "z"):
+            continue
+        else:
+            take(1)  # unknown command's operand -- consume one to avoid an infinite loop
+            continue
+        xs.append(cx); ys.append(cy)
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def test_icon_asset_window_is_a_horizontal_shape():
+    # The window must read as a terminal: a LANDSCAPE (wider-than-tall) shape, not a square
+    # tile. The window is the FIRST <path> (the black #000000 fill); assert its bounding box
+    # is wider than tall. (It used to be a <rect>; the icon is now path-based.)
     root = ET.fromstring(_asset_svg_text())
     ns = "{http://www.w3.org/2000/svg}"
-    rects = root.findall(f"{ns}rect")
-    assert rects, "expected at least the background window rect"
-    bg = rects[0]  # first rect is the window background
-    assert float(bg.get("width")) > float(bg.get("height"))
+    paths = root.findall(f".//{ns}path")
+    assert paths, "expected at least the window path"
+    window = paths[0]  # first path is the black window background
+    assert window.get("fill") == "#000000"
+    min_x, min_y, max_x, max_y = _path_bbox(window.get("d"))
+    assert (max_x - min_x) > (max_y - min_y)

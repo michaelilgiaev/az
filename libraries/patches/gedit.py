@@ -51,18 +51,22 @@
        (gschema_override()). A glib schema OVERRIDE (changes the DEFAULT of a key without
        editing the packaged schema, so a gedit upgrade cannot revert it). It sets:
          org.gnome.gedit.preferences.ui  show-tabs-mode = 'never'   (never draw a tab strip)
-         org.gnome.gedit.plugins         active-plugins = [gedit defaults + 'azarch-notepad']
+         org.gnome.gedit.plugins         active-plugins = [gedit defaults + 'gedit-modifications']
              so OUR notepad-mode plugin is enabled out of the box (added to gedit's own
-             default plugin set, not replacing it). glib override files MUST be compiled
-             (`glib-compile-schemas`); compiler.py and the live-apply path both run that
-             (RUN_COMPILE_SCHEMAS is the single source of truth for the command).
+             default plugin set, not replacing it).
+         org.gnome.gedit.preferences.editor  use-default-font = false, editor-font =
+             'Monospace 18'  (a fixed 18pt editor font; use-default-font must be false or
+             gedit ignores editor-font and falls back to the system fixed-width font).
+       glib override files MUST be compiled (`glib-compile-schemas`); compiler.py and the
+       live-apply path both run that (RUN_COMPILE_SCHEMAS is the single source of truth for
+       the command).
 
-    C. The plugin metadata -- /usr/lib/gedit/plugins/azarch-notepad.plugin
+    C. The plugin metadata -- /usr/lib/gedit/plugins/gedit-modifications.plugin
        (plugin_metadata(), GENERATED from Python -- no static .plugin file). The libpeas
        .plugin INI that registers the module name so gedit lists/loads it.
 
-    D. The compiled plugin -- /usr/lib/gedit/plugins/libazarch-notepad.so. NOT a content
-       string: build_plugin() compiles gedit/azarch-notepad.c against the gedit +
+    D. The compiled plugin -- /usr/lib/gedit/plugins/libgedit-modifications.so. NOT a content
+       string: build_plugin() compiles gedit/gedit_modifications.c against the gedit +
        GTK3 + libpeas dev stack (pkg-config `gedit`) and installs the .so. compiler.py
        calls it during _emit_apps (like application_menu.build_daemon). Its activate():
          1. disables win.new-tab (the "+" button goes dead, Ctrl+T no-ops);
@@ -102,16 +106,26 @@ GSCHEMA_OVERRIDE_PATH = "/usr/share/glib-2.0/schemas/90_azarch-gedit.gschema.ove
 GLIB_SCHEMAS_DIR = "/usr/share/glib-2.0/schemas"
 RUN_COMPILE_SCHEMAS = ["glib-compile-schemas", GLIB_SCHEMAS_DIR]
 
-# The GSettings keys we override: hide the notebook tab bar entirely, and enable OUR
-# notepad-mode plugin (added to gedit's own default plugin set).
+# The GSettings keys we override: hide the notebook tab bar entirely, enable OUR
+# notepad-mode plugin (added to gedit's own default plugin set), and pin the editor font.
 GEDIT_UI_SCHEMA = "org.gnome.gedit.preferences.ui"
 SHOW_TABS_MODE = "never"   # 'never' | 'auto' | 'always' (case-sensitive)
+# The editor-area font. gedit uses the system default fixed-width font UNLESS
+# use-default-font is false, in which case editor-font (a Pango font description string,
+# "<family> <size>") is used. Az'arch wants a fixed 18pt editor font, so we turn the
+# default OFF and set editor-font to Monospace 18 (gedit's stock editor-font is
+# 'Monospace 12'; we keep the family, bump the size). Both keys live under the editor
+# preferences schema and are set in the SAME override file as show-tabs-mode/active-plugins.
+GEDIT_EDITOR_SCHEMA = "org.gnome.gedit.preferences.editor"
+GEDIT_USE_DEFAULT_FONT = False   # false so editor-font (below) actually takes effect
+GEDIT_FONT_SIZE = 18
+GEDIT_EDITOR_FONT = f"Monospace {GEDIT_FONT_SIZE}"   # Pango font description: family + size
 GEDIT_PLUGINS_SCHEMA = "org.gnome.gedit.plugins"
 # gedit 50's shipped default active-plugins (from its gschema); we KEEP these and ADD ours,
 # so notepad mode does not disable the editor's stock plugins.
 GEDIT_DEFAULT_PLUGINS = ["filebrowser", "sort", "spell", "textsize"]
-NOTEPAD_PLUGIN_MODULE = "azarch-notepad"      # the .plugin Module= / active-plugins id
-ACTIVE_PLUGINS = GEDIT_DEFAULT_PLUGINS + [NOTEPAD_PLUGIN_MODULE]
+MODIFICATIONS_PLUGIN_MODULE = "gedit-modifications"   # the .plugin Module= / active-plugins id
+ACTIVE_PLUGINS = GEDIT_DEFAULT_PLUGINS + [MODIFICATIONS_PLUGIN_MODULE]
 
 # --- The compiled libpeas plugin (notepad mode) -----------------------------
 # The plugin source tree (C + Makefile), built by build_plugin() into the .so. It lives
@@ -119,17 +133,17 @@ ACTIVE_PLUGINS = GEDIT_DEFAULT_PLUGINS + [NOTEPAD_PLUGIN_MODULE]
 # module" layout the application-menu package uses). The .plugin INI is NOT a source file:
 # plugin_metadata() below generates it from Python (edit the Python, not a static file).
 GEDIT_PLUGIN_SRC_DIR = paths.PATCHESDIR / "gedit"
-GEDIT_PLUGIN_SO_NAME = "libazarch-notepad.so"           # the built shared object
+GEDIT_PLUGIN_SO_NAME = "libgedit-modifications.so"      # the built shared object
 GEDIT_PLUGIN_SO_DEST = f"/usr/lib/gedit/plugins/{GEDIT_PLUGIN_SO_NAME}"
-GEDIT_PLUGIN_METADATA_NAME = "azarch-notepad.plugin"    # the libpeas .plugin INI (generated)
+GEDIT_PLUGIN_METADATA_NAME = "gedit-modifications.plugin"  # the libpeas .plugin INI (generated)
 GEDIT_PLUGIN_METADATA_DEST = f"/usr/lib/gedit/plugins/{GEDIT_PLUGIN_METADATA_NAME}"
 
 # The libpeas .plugin manifest fields. libpeas REQUIRES a .plugin INI on disk beside the .so
 # or gedit will not list/load the plugin; plugin_metadata() emits it (there is no static
 # .plugin in the source tree -- this Python is the single source of truth). Module MUST equal
-# NOTEPAD_PLUGIN_MODULE (the active-plugins id) or the override enables a plugin gedit can't
-# find.
-GEDIT_PLUGIN_NAME = "Az'arch Notepad Mode"
+# MODIFICATIONS_PLUGIN_MODULE (the active-plugins id) or the override enables a plugin gedit
+# can't find.
+GEDIT_PLUGIN_NAME = "Az'arch gedit modifications"
 GEDIT_PLUGIN_DESCRIPTION = (
     "One window per file, no tabs, a minimal headerbar (hamburger + window controls only), "
     "and Ctrl+W exits."
@@ -187,39 +201,49 @@ Exec=gedit --standalone --new-document
 
 
 def gschema_override() -> str:
-    """/usr/share/glib-2.0/schemas/90_azarch-gedit.gschema.override -- hide the tab bar
-    AND enable the notepad-mode plugin.
+    """/usr/share/glib-2.0/schemas/90_azarch-gedit.gschema.override -- hide the tab bar,
+    enable the notepad-mode plugin, AND set the editor font to 18pt.
 
-    A glib schema override: sets the DEFAULTS of two keys without editing the packaged
+    A glib schema override: sets the DEFAULTS of these keys without editing the packaged
     schema (so a gedit upgrade cannot revert them):
       * org.gnome.gedit.preferences.ui show-tabs-mode = 'never' (never draw a tab strip)
-      * org.gnome.gedit.plugins active-plugins = gedit's defaults + 'azarch-notepad'
+      * org.gnome.gedit.plugins active-plugins = gedit's defaults + 'gedit-modifications'
         (enable OUR plugin out of the box without dropping gedit's stock plugins).
+      * org.gnome.gedit.preferences.editor use-default-font = false + editor-font =
+        'Monospace 18' (a fixed 18pt editor font; use-default-font MUST be false or gedit
+        ignores editor-font and uses the system fixed-width font).
     MUST be compiled afterwards with `glib-compile-schemas` (see RUN_COMPILE_SCHEMAS) or it
     has no effect. The 90_ prefix sorts it AFTER the stock schema so our values win."""
     plugins_literal = "[" + ", ".join(f"'{p}'" for p in ACTIVE_PLUGINS) + "]"
+    use_default_font_literal = "true" if GEDIT_USE_DEFAULT_FONT else "false"
     return f"""\
 # Az'arch gedit override -- notepad mode. Generated by patches/gedit.py (edit the Python,
 # not this file). Requires `glib-compile-schemas {GLIB_SCHEMAS_DIR}` to take effect.
 # show-tabs-mode: never draw the notebook tab strip.
-# active-plugins: gedit's default plugins PLUS azarch-notepad (removes New Tab, strips the
+# active-plugins: gedit's default plugins PLUS gedit-modifications (removes New Tab, strips the
 #   headerbar to hamburger + window controls, makes Ctrl+W exit).
+# use-default-font/editor-font: use a fixed {GEDIT_FONT_SIZE}pt editor font (default off so
+#   editor-font wins over the system fixed-width font).
 [{GEDIT_UI_SCHEMA}]
 show-tabs-mode='{SHOW_TABS_MODE}'
 
 [{GEDIT_PLUGINS_SCHEMA}]
 active-plugins={plugins_literal}
+
+[{GEDIT_EDITOR_SCHEMA}]
+use-default-font={use_default_font_literal}
+editor-font='{GEDIT_EDITOR_FONT}'
 """
 
 
 def plugin_metadata() -> str:
-    """/usr/lib/gedit/plugins/azarch-notepad.plugin -- the libpeas .plugin INI, GENERATED
-    here (this Python is the single source of truth; there is no static .plugin file).
-    Registers the module name so gedit lists/loads the compiled plugin. Module= equals
-    NOTEPAD_PLUGIN_MODULE, which the active-plugins override (above) enables."""
+    """/usr/lib/gedit/plugins/gedit-modifications.plugin -- the libpeas .plugin INI,
+    GENERATED here (this Python is the single source of truth; there is no static .plugin
+    file). Registers the module name so gedit lists/loads the compiled plugin. Module= equals
+    MODIFICATIONS_PLUGIN_MODULE, which the active-plugins override (above) enables."""
     return f"""\
 [Plugin]
-Module={NOTEPAD_PLUGIN_MODULE}
+Module={MODIFICATIONS_PLUGIN_MODULE}
 IAge={GEDIT_PLUGIN_IAGE}
 Name={GEDIT_PLUGIN_NAME}
 Description={GEDIT_PLUGIN_DESCRIPTION}

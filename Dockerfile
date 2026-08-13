@@ -45,7 +45,7 @@ FROM archlinux:latest
 # directory" and aborts the build. This is unlike the makepkg makedepends: those are
 # installed at build time by makepkg, but the menu compile happens BEFORE that step, so
 # its deps have to be baked in here. The gedit notepad-mode libpeas plugin
-# (libazarch-notepad.so) is COMPILED the same way during _emit_apps, so ITS dev headers
+# (libgedit-modifications.so) is COMPILED the same way during _emit_apps, so ITS dev headers
 # must be present here too. Keep in sync with application_menu.MENU_BUILD_DEPS +
 # gedit.GEDIT_PLUGIN_BUILD_DEPS (compiler._check_host_deps installs the same set on a
 # non-Docker Arch host); missing any of these aborts step 2/16 "Sync host toolchain"

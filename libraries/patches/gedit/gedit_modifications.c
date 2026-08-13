@@ -27,7 +27,7 @@
  *      process. So we rebind: app.quit gets <Primary>W (and keeps <Primary>Q), and
  *      win.close's accel is cleared. Now Ctrl+W quits the app outright -- close = close.
  *
- * Built as /usr/lib/gedit/plugins/libazarch-notepad.so (+ azarch-notepad.plugin) and
+ * Built as /usr/lib/gedit/plugins/libgedit-modifications.so (+ gedit-modifications.plugin) and
  * enabled via the org.gnome.gedit.plugins active-plugins gschema override. Pure GTK3 +
  * Gio + the public gedit plugin API (gedit-window-activatable.h, gedit-window.h). No
  * private gedit symbols, so a gedit point-release will not break the link.
@@ -40,42 +40,42 @@
 #include <gio/gio.h>
 #include <gmodule.h>
 
-#define AZARCH_TYPE_NOTEPAD_PLUGIN (azarch_notepad_plugin_get_type ())
+#define GEDIT_TYPE_MODIFICATIONS_PLUGIN (gedit_modifications_plugin_get_type ())
 
 /*
  * The plugin object. It holds the GeditWindow it was activated for (delivered via the
  * construct-only "window" property that GeditWindowActivatable defines) and implements
  * the interface's activate/deactivate/update_state vfuncs.
  */
-struct _AzarchNotepadPlugin
+struct _GeditModificationsPlugin
 {
 	GObject parent_instance;
 	GeditWindow *window;   /* construct property "window" (not owned; weak use only) */
 };
 
-typedef struct _AzarchNotepadPlugin AzarchNotepadPlugin;
+typedef struct _GeditModificationsPlugin GeditModificationsPlugin;
 
-typedef struct _AzarchNotepadPluginClass
+typedef struct _GeditModificationsPluginClass
 {
 	GObjectClass parent_class;
-} AzarchNotepadPluginClass;
+} GeditModificationsPluginClass;
 
-static void azarch_notepad_plugin_window_activatable_iface_init (GeditWindowActivatableInterface *iface);
+static void gedit_modifications_plugin_window_activatable_iface_init (GeditWindowActivatableInterface *iface);
 
 /*
  * A libpeas plugin type must be registered DYNAMICALLY against the GTypeModule libpeas
  * hands us (so the type can be loaded/unloaded with the module), not statically. So we use
- * G_DEFINE_DYNAMIC_TYPE_EXTENDED, which generates azarch_notepad_plugin_register_type()
+ * G_DEFINE_DYNAMIC_TYPE_EXTENDED, which generates gedit_modifications_plugin_register_type()
  * (called from peas_register_types below) instead of a get_type() that self-registers on
  * first use. This is the exact pattern gedit's own C plugins use.
  */
 G_DEFINE_DYNAMIC_TYPE_EXTENDED (
-	AzarchNotepadPlugin,
-	azarch_notepad_plugin,
+	GeditModificationsPlugin,
+	gedit_modifications_plugin,
 	G_TYPE_OBJECT,
 	0,
 	G_IMPLEMENT_INTERFACE_DYNAMIC (GEDIT_TYPE_WINDOW_ACTIVATABLE,
-	                               azarch_notepad_plugin_window_activatable_iface_init))
+	                               gedit_modifications_plugin_window_activatable_iface_init))
 
 /* The construct property id for "window" (overridden from the interface). */
 enum
@@ -256,9 +256,9 @@ azarch_rebind_close_to_quit (GtkApplicationWindow *win)
 
 /* GeditWindowActivatable::activate -- runs once per window when the plugin is enabled. */
 static void
-azarch_notepad_plugin_activate (GeditWindowActivatable *activatable)
+gedit_modifications_plugin_activate (GeditWindowActivatable *activatable)
 {
-	AzarchNotepadPlugin *plugin = (AzarchNotepadPlugin *) activatable;
+	GeditModificationsPlugin *plugin = (GeditModificationsPlugin *) activatable;
 	GtkWidget *titlebar;
 
 	g_return_if_fail (plugin->window != NULL);
@@ -278,7 +278,7 @@ azarch_notepad_plugin_activate (GeditWindowActivatable *activatable)
 }
 
 static void
-azarch_notepad_plugin_deactivate (GeditWindowActivatable *activatable)
+gedit_modifications_plugin_deactivate (GeditWindowActivatable *activatable)
 {
 	/* Nothing to undo: the process is a per-file --standalone instance that exits when
 	 * its window closes, and the header buttons/actions are re-created per window. Leaving
@@ -287,26 +287,26 @@ azarch_notepad_plugin_deactivate (GeditWindowActivatable *activatable)
 }
 
 static void
-azarch_notepad_plugin_update_state (GeditWindowActivatable *activatable)
+gedit_modifications_plugin_update_state (GeditWindowActivatable *activatable)
 {
 	(void) activatable;
 }
 
 static void
-azarch_notepad_plugin_window_activatable_iface_init (GeditWindowActivatableInterface *iface)
+gedit_modifications_plugin_window_activatable_iface_init (GeditWindowActivatableInterface *iface)
 {
-	iface->activate = azarch_notepad_plugin_activate;
-	iface->deactivate = azarch_notepad_plugin_deactivate;
-	iface->update_state = azarch_notepad_plugin_update_state;
+	iface->activate = gedit_modifications_plugin_activate;
+	iface->deactivate = gedit_modifications_plugin_deactivate;
+	iface->update_state = gedit_modifications_plugin_update_state;
 }
 
 static void
-azarch_notepad_plugin_set_property (GObject      *object,
+gedit_modifications_plugin_set_property (GObject      *object,
                                     guint         prop_id,
                                     const GValue *value,
                                     GParamSpec   *pspec)
 {
-	AzarchNotepadPlugin *plugin = (AzarchNotepadPlugin *) object;
+	GeditModificationsPlugin *plugin = (GeditModificationsPlugin *) object;
 
 	switch (prop_id)
 	{
@@ -320,12 +320,12 @@ azarch_notepad_plugin_set_property (GObject      *object,
 }
 
 static void
-azarch_notepad_plugin_get_property (GObject    *object,
+gedit_modifications_plugin_get_property (GObject    *object,
                                     guint       prop_id,
                                     GValue     *value,
                                     GParamSpec *pspec)
 {
-	AzarchNotepadPlugin *plugin = (AzarchNotepadPlugin *) object;
+	GeditModificationsPlugin *plugin = (GeditModificationsPlugin *) object;
 
 	switch (prop_id)
 	{
@@ -339,18 +339,18 @@ azarch_notepad_plugin_get_property (GObject    *object,
 }
 
 static void
-azarch_notepad_plugin_init (AzarchNotepadPlugin *plugin)
+gedit_modifications_plugin_init (GeditModificationsPlugin *plugin)
 {
 	plugin->window = NULL;
 }
 
 static void
-azarch_notepad_plugin_class_init (AzarchNotepadPluginClass *klass)
+gedit_modifications_plugin_class_init (GeditModificationsPluginClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
-	object_class->set_property = azarch_notepad_plugin_set_property;
-	object_class->get_property = azarch_notepad_plugin_get_property;
+	object_class->set_property = gedit_modifications_plugin_set_property;
+	object_class->get_property = gedit_modifications_plugin_get_property;
 
 	/* GeditWindowActivatable defines a "window" construct property; override it so we
 	 * receive the GeditWindow. */
@@ -360,7 +360,7 @@ azarch_notepad_plugin_class_init (AzarchNotepadPluginClass *klass)
 /* Required by G_DEFINE_DYNAMIC_TYPE_EXTENDED (dynamic types get a class_finalize). Nothing
  * to tear down at the class level. */
 static void
-azarch_notepad_plugin_class_finalize (AzarchNotepadPluginClass *klass)
+gedit_modifications_plugin_class_finalize (GeditModificationsPluginClass *klass)
 {
 	(void) klass;
 }
@@ -373,10 +373,10 @@ azarch_notepad_plugin_class_finalize (AzarchNotepadPluginClass *klass)
 G_MODULE_EXPORT void
 peas_register_types (PeasObjectModule *module)
 {
-	azarch_notepad_plugin_register_type (G_TYPE_MODULE (module));
+	gedit_modifications_plugin_register_type (G_TYPE_MODULE (module));
 
 	peas_object_module_register_extension_type (
 		module,
 		GEDIT_TYPE_WINDOW_ACTIVATABLE,
-		AZARCH_TYPE_NOTEPAD_PLUGIN);
+		GEDIT_TYPE_MODIFICATIONS_PLUGIN);
 }
