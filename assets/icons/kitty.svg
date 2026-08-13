@@ -1,18 +1,14 @@
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!-- Az'arch kitty icon: a clean terminal-window mark. A classic filled terminal
-     RECTANGLE (black, heavily rounded corners) with a WHITE shell prompt inside it: a
-     chevron then an underscore cursor, "> _". Black and white ONLY, no color, no mascot.
-     Single source of truth for the kitty icon (patches/kitty.py copies this asset to the
-     system icon paths and rasterizes it for the in-window titlebar icon). 256x256 canvas
-     so it stays crisp at every rasterized size. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <!-- The terminal window: a black rounded rectangle filling the canvas with a small even
-       margin and generously rounded corners. -->
-  <rect x="14" y="30" width="228" height="196" rx="52" ry="52" fill="#000000"/>
-  <!-- The chevron ">" : two thick strokes meeting at a point, upper-left, white. -->
-  <path d="M60 82 L104 112 L60 142"
-        fill="none" stroke="#ffffff" stroke-width="22"
-        stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- The underscore cursor "_" : a chunky white bar just below and right of the chevron. -->
-  <rect x="98" y="140" width="64" height="22" rx="11" ry="11" fill="#ffffff"/>
+  <g transform="translate(0,256) scale(0.1,-0.1)">
+    <path fill="#000000" d="M463 2225 c-154 -42 -261 -155 -293 -311 -7 -33 -10 -261 -8 -665 l3
+-614 23 -58 c45 -111 133 -195 246 -234 47 -17 107 -18 846 -18 739 0 799 1
+846 18 113 39 201 123 246 234 l23 58 0 640 c0 590 -1 644 -18 691 -39 113
+-123 201 -234 246 l-58 23 -785 2 c-654 2 -794 0 -837 -12z"/>
+    <path fill="#ffffff" d="M665 1565 c-16 -15 -25 -35 -25 -56 0 -28 18 -51 137 -171 l137 -138
+-137 -138 c-119 -120 -137 -143 -137 -171 0 -42 38 -81 80 -81 27 0 54 22 197
+163 91 89 172 175 180 191 9 17 12 39 8 55 -7 29 -303 334 -347 357 -39 20
+-66 17 -93 -11z"/>
+    <path fill="#ffffff" d="M1161 946 c-47 -26 -53 -81 -15 -120 l27 -26 258 0 c170 0 266 4 283
+11 54 25 57 108 5 134 -39 21 -521 21 -558 1z"/>
+  </g>
 </svg>
