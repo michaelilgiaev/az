@@ -203,9 +203,9 @@ echo "[*] Branding os-release as Az'arch Linux..."
 # system is "Az'arch Linux" and fastfetch's OS line matches the live ISO.
 cp /root/azarch/os-release /mnt/usr/lib/os-release
 
-echo "[*] Planting per-app overrides (kitty icon, gedit/gimp launchers)..."
+echo "[*] Planting per-app overrides (kitty icon, gedit launcher)..."
 # The installed-system pacstrap NoExtracts these package-owned paths too (see pacman.py),
-# so the kitty/gedit/gimp packages never lay down their stock icon/.desktop -- plant our
+# so the kitty/gedit packages never lay down their stock icon/.desktop -- plant our
 # versions from /root/azarch/apps/ (staged into the ISO alongside os-release) and remove
 # the suppressed cat PNGs, exactly as the live customize hook does.
 %APP_OVERRIDES%

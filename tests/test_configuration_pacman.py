@@ -59,7 +59,7 @@ def test_build_profile_conf_noextracts_os_release():
 
 
 def test_noextract_covers_every_app_override():
-    # Every kitty/gedit/gimp system file Az'arch overrides is owned by its package, so it
+    # Every kitty/gedit system file Az'arch overrides is owned by its package, so it
     # MUST be NoExtract'd -- otherwise pacstrap's file-conflict check aborts the build with
     # "exists in filesystem" (the exact failure this fix addresses). Guard that BOTH the
     # live-ISO profile conf and the on-disk installer's pacstrap conf list all of them.
@@ -76,8 +76,6 @@ def test_app_override_cp_sh_plants_replacements_and_removes_suppressed():
     live = pacman.app_override_cp_sh()
     assert "install -Dm644 /root/azarch/apps/kitty.svg "\
            "/usr/share/icons/hicolor/scalable/apps/kitty.svg" in live
-    assert "install -Dm644 /root/azarch/apps/gimp.desktop "\
-           "/usr/share/applications/gimp.desktop" in live
     assert "install -Dm644 /root/azarch/apps/org.gnome.gedit.desktop "\
            "/usr/share/applications/org.gnome.gedit.desktop" in live
     # Suppress-only cat PNGs: removed, never installed.
@@ -86,7 +84,7 @@ def test_app_override_cp_sh_plants_replacements_and_removes_suppressed():
     assert "install -Dm644 /root/azarch/apps/None" not in live  # no body staged for removals
     # Installer variant targets the mounted new root.
     mnt = pacman.app_override_cp_sh("/mnt")
-    assert "/mnt/usr/share/applications/gimp.desktop" in mnt
+    assert "/mnt/usr/share/applications/org.gnome.gedit.desktop" in mnt
     assert "rm -f /mnt/usr/share/pixmaps/kitty.png" in mnt
 
 

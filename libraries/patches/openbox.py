@@ -121,11 +121,6 @@ HOME_OWNER = (1000, 998)
 # hidden) so opening it is instant; the Super key and the OpenBox root menu both run
 # the launcher (/usr/local/bin/azarch-application-menu) which signals that daemon.
 from packages.application_menu import application_menu as _app_menu  # noqa: E402  (the menu is OUR package)
-# GIMP is PRELOADED at login (patches/gimp.py) so it opens instantly; the rc.xml
-# <applications> block below starts that warmed window minimized/unfocused so the
-# preload stays out of the way. GIMP_WM_CLASS_MATCH is gimp.py's single source of truth
-# for the window match (GIMP's WM_CLASS "gimp"); import it so the two cannot disagree.
-from patches import gimp as _gimp  # noqa: E402  (shared WM_CLASS match constant)
 
 MENU_LAUNCHER = _app_menu.MENU_LAUNCHER_SYSTEM_PATH
 MENU_DAEMON_BIN = _app_menu.MENU_DAEMON_BIN_SYSTEM_PATH
@@ -626,18 +621,6 @@ def openbox_rc_xml() -> str:
          manages its own placement (centered) and needs no OpenBox decorations. -->
     <application name="*azarch*menu*">
       <decor>no</decor>
-    </application>
-    <!-- GIMP is PRELOADED at login (patches/gimp.py) so it opens instantly. The warm-up
-         window is kept MAPPED but moved OFF-SCREEN by the preload (so it paints fully and
-         opens cleanly; an iconic/unmapped window painted half-drawn with a transparent
-         middle, the bug we removed). Here we only make sure it never steals focus and never
-         shows in the taskbar/pager while it is parked off-screen. When the user opens GIMP
-         the azarch-gimp wrapper moves it back on-screen and the single instance present()s
-         it. Matches GIMP's WM_CLASS ("gimp"); the match string is gimp.py's shared constant. -->
-    <application name="{_gimp.GIMP_WM_CLASS_MATCH}">
-      <focus>no</focus>
-      <skip_taskbar>yes</skip_taskbar>
-      <skip_pager>yes</skip_pager>
     </application>
   </applications>
 </openbox_config>

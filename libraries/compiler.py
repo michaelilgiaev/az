@@ -49,11 +49,9 @@ from patches import librewolf
 # Per-application tweaks (each a self-contained patch module with an emit_plan()):
 #   kitty  -- swap the cat-in-a-terminal icon for a plain terminal icon
 #   vlc    -- suppress the first-run "metadata network access" dialog
-#   gimp   -- preload GIMP at login so it opens instantly (single-instance warm-up)
 #   gedit  -- notepad mode: one window per file, no multi-tab feature (+ schema override)
 from patches import kitty
 from patches import vlc
-from patches import gimp
 from patches import gedit
 import installer
 import pacman
@@ -191,8 +189,8 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # pacstrap). The branded file is staged read-only under root/azarch/os-release and
     # the hook copies it into place inside the pacstrapped rootfs.
     emit.write_text(ea / "os-release", system.OS_RELEASE)
-    # The per-app system files kitty/gedit/gimp override (kitty icon SVG, the two stale
-    # cat PNGs, the gedit/gimp .desktop) are owned by their own packages, so they hit the
+    # The per-app system files kitty/gedit override (kitty icon SVG, the two stale
+    # cat PNGs, the gedit .desktop) are owned by their own packages, so they hit the
     # SAME conflict wall -- planting them in the overlay aborts pacstrap. They get the
     # identical after-pacstrap cure: NoExtract'd (libraries/pacman.py) and copied in by the
     # customize hook. The replacement bodies are staged under root/azarch/apps/ in
@@ -427,7 +425,7 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
 
 
 def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
-    """Overlay the per-application tweaks (kitty/vlc/gimp/gedit), each a self-contained
+    """Overlay the per-application tweaks (kitty/vlc/gedit), each a self-contained
     patch module exposing emit_plan() in the same builder/dest/mode/owner shape as
     openbox/librewolf. Several extras beyond the plain write loop, all driven by keys on
     the plan entries so this stays declarative:
@@ -471,10 +469,9 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
         return None
 
     # kitty (icon: SVG asset copy + PNG removals + titlebar PNG render) | vlc (home vlcrc) |
-    # gimp (home autostart + helper) | gedit (system .desktop + gschema override). One loop
-    # over all four plans.
+    # gedit (system .desktop + gschema override). One loop over all three plans.
     for entry in (kitty.emit_plan() + vlc.emit_plan()
-                  + gimp.emit_plan() + gedit.emit_plan()):
+                  + gedit.emit_plan()):
         dest_abs = entry["dest"]                       # absolute path on the target
         # Package-owned override path? Redirect its body to the post-pacstrap staging dir
         # (or drop it if suppress-only) instead of writing into the conflicting overlay.
