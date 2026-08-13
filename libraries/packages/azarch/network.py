@@ -106,7 +106,10 @@ def _split_terse(line: str) -> list[str]:
 
 
 def _nm_radio(kind: str) -> str:
-    """Current nmcli radio state for 'wifi' | 'wwan' | 'all' -> 'enabled'/'disabled'/''"."""
+    """Current nmcli radio state for a SINGLE radio ('wifi' | 'wwan') -> 'enabled'/'disabled'
+    (or '' if unavailable). Only call this for a single radio: `nmcli radio all` prints a
+    two-line table (header + values), so its .strip() is not a single word -- use
+    _airplane_is_on() for the all-radios verdict instead."""
     rc, out = _run("nmcli", "radio", kind)
     return out.strip() if rc == 0 else ""
 
@@ -123,8 +126,20 @@ def _conn_for_iface(iface: str) -> str:
 # ---------------------------------------------------------------------------
 # status (the bare `azarch network`)
 # ---------------------------------------------------------------------------
+def _internet_state() -> str:
+    """The plain headline the TUI shows too: 'Online - Connected to Internet' when
+    NetworkManager reports FULL connectivity, else 'Offline - No Internet'. This is the one
+    thing a developer actually cares about, so it leads the overview."""
+    if _have("nmcli"):
+        rc, out = _run("nmcli", "networking", "connectivity")
+        if rc == 0 and out.strip() == "full":
+            return "Online - Connected to Internet"
+    return "Offline - No Internet"
+
+
 def network_status() -> int:
     """One-screen overview across every backend (the bare `azarch network`)."""
+    print(_internet_state())
     if _have("nmcli"):
         rc, out = _run("nmcli", "-t", "-f", "STATE", "general")
         print(f"NetworkManager: {out.strip() or 'unknown'}" if rc == 0
@@ -375,11 +390,20 @@ def cmd_bluetooth(args: list[str]) -> int:
 # airplane (kill/restore every radio at once: nmcli radio all + rfkill)
 # ---------------------------------------------------------------------------
 def _airplane_is_on() -> bool:
-    """True when airplane mode is ON = all radios down. Read from nmcli (radio all ==
-    disabled) with an rfkill fallback (everything soft/hard blocked)."""
-    state = _nm_radio("all")
-    if state:
-        return state == "disabled"
+    """True when airplane mode is ON = the controllable radios are all down. Default OFF.
+
+    `nmcli -t radio all` prints ONE terse line 'WIFI-HW:WIFI:WWAN-HW:WWAN' (e.g.
+    'enabled:disabled:missing:enabled'); the SOFTWARE radios are WIFI and WWAN -- fields at
+    indices 1 and 3 (the '-HW' fields 0 and 2 are hardware kill switches). Airplane is ON iff
+    neither software radio is 'enabled'. (The old code used `nmcli radio all` and
+    compared the whole two-line table to 'disabled', which was never equal.) Falls back to
+    rfkill (ON == every listed radio soft/hard blocked)."""
+    rc, out = _run("nmcli", "-t", "radio", "all")
+    if rc == 0 and out.strip():
+        fields = out.strip().splitlines()[0].split(":")
+        software = [fields[i] for i in (1, 3) if i < len(fields)]
+        if software:
+            return not any(s == "enabled" for s in software)
     if _have("rfkill"):
         _rc, out = _run("rfkill", "list")
         blocks = [ln for ln in out.splitlines() if "blocked" in ln.lower()]

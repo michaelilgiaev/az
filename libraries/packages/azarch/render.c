@@ -144,11 +144,11 @@ static void draw_nav(Buf *b, const AzUI *ui, int row)
         buf_str(&t, "   ");
         verb(&t, "ENTER", "open");
         buf_str(&t, "   ");
-        verb(&t, "Q", "quit");
+        /* ESC is GO BACK everywhere (the newest spec: "ESC is 'go back' not 'quit'"); Q is the
+         * one, always-instant QUIT. So the labels are fixed -- no depth-dependent relabelling. */
+        verb(&t, "ESC", "back");
         buf_str(&t, "   ");
-        /* ESC goes BACK a screen; at the top it quits (so the label reads "back" everywhere
-         * but the deepest verb the user has is quit -- both keys quit from the root). */
-        verb(&t, "ESC", ui->depth == 1 ? "quit" : "back");
+        verb(&t, "Q", "quit");
         buf_str(&t, "   ");
         verb(&t, "/", "search");
     }
@@ -171,10 +171,10 @@ static void draw_nav(Buf *b, const AzUI *ui, int row)
 const char *az_nav_plain(char *buf, size_t n)
 {
     /* Uncoloured content for tests: the packed movement clusters + the verbs, matching what
-     * draw_nav renders ("WASD HJKL ←↑→↓ move   ENTER open   Q quit   ESC back   / search"). */
+     * draw_nav renders ("WASD HJKL ←↑→↓ move   ENTER open   ESC back   Q quit   / search"). */
     snprintf(buf, n,
              "WASD HJKL \xe2\x86\x90\xe2\x86\x91\xe2\x86\x92\xe2\x86\x93 "
-             "move   ENTER open   Q quit   ESC back   / search");
+             "move   ENTER open   ESC back   Q quit   / search");
     return buf;
 }
 
@@ -199,7 +199,6 @@ void az_render(const AzUI *ui, AzRect *preview_out)
     if (sel >= nvis) sel = nvis > 0 ? nvis - 1 : 0;
 
     int rows = ui->rows, cols = ui->cols;
-    (void)cols;
 
     /* Row layout (all centred). Top margin scales a little with height. */
     int y = rows >= 24 ? 2 : 1;
@@ -269,7 +268,7 @@ void az_render(const AzUI *ui, AzRect *preview_out)
      * rows below stay label-only with no "white"/"years" echo trailing each option. */
     if (scr && scr->current) {
         char sb[128];
-        const char *cur = scr->current(sb, sizeof sb);
+        const char *cur = az_status_cached(scr->current, sb, sizeof sb);
         char line[160];
         snprintf(line, sizeof line, "Current: %s", cur ? cur : "");
         put_center(&b, ui, y, AZ_SGR_ACCENT ";" AZ_SGR_BOLD, line);
@@ -289,7 +288,7 @@ void az_render(const AzUI *ui, AzRect *preview_out)
             int lw = vwidth(vis[i]->label);
             if (lw > label_w) label_w = lw;
             if (vis[i]->status) {
-                const char *st = vis[i]->status(sbuf, sizeof sbuf);
+                const char *st = az_status_cached(vis[i]->status, sbuf, sizeof sbuf);
                 int sw = vwidth(st ? st : "");
                 if (sw > status_w) status_w = sw;
             }
@@ -313,7 +312,7 @@ void az_render(const AzUI *ui, AzRect *preview_out)
             reset(&b);
             /* status */
             if (vis[i]->status) {
-                const char *st = vis[i]->status(sbuf, sizeof sbuf);
+                const char *st = az_status_cached(vis[i]->status, sbuf, sizeof sbuf);
                 for (int k = 0; k < gap; k++) buf_str(&b, " ");
                 sgr(&b, selected ? AZ_SGR_ACCENT : AZ_SGR_DIM);
                 buf_str(&b, st ? st : "");
@@ -352,10 +351,12 @@ void az_render(const AzUI *ui, AzRect *preview_out)
     }
     draw_nav(&b, ui, rows - 1);
 
-    /* Park the cursor at HOME and hide it again at the very end of the buffer. Home (not the
-     * bottom row) means that even on a terminal that ignores the hide, there is no stray
-     * cursor blinking under the nav line -- the exact artifact the spec called out. */
-    at(&b, 1, 1);
+    /* Park the cursor in the BOTTOM-RIGHT corner and hide it again at the very end of the
+     * buffer. main.c re-asserts this after the kitty preview (which re-shows the cursor at
+     * home -- the "cursor at the top-left" artifact); doing it here too means a frame with no
+     * preview is already clean. Bottom-right (not home) keeps any cursor a terminal insists on
+     * showing out of the way of the centred UI. */
+    at(&b, rows > 0 ? rows : 1, cols > 0 ? cols : 1);
     buf_str(&b, "\033[?25l");
 
     if (b.p) { ssize_t w = write(STDOUT_FILENO, b.p, b.len); (void)w; }

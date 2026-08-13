@@ -252,6 +252,59 @@ def test_nav_advertises_wasd_hjkl_and_arrows_uppercased():
     assert "case 'q':" in main
 
 
+def test_esc_is_back_and_q_ctrlc_quit_instantly():
+    """PROMPT (newest): ESC is 'go back', NOT quit; q is the one instant quit; Ctrl-C must ALSO
+    quit cleanly (raw mode disables ISIG, so Ctrl-C arrives as the byte 0x03 and must be handled
+    explicitly). The nav label for ESC therefore reads 'back' everywhere (no depth relabelling)."""
+    main = _src("main.c")
+    render = _src("render.c")
+    # ESC handler goes back (never a quit branch of its own anymore).
+    esc_block = main[main.index("case K_ESC:"):main.index("case 'q':")]
+    assert "go_back(&ui)" in esc_block
+    assert "return 0" not in esc_block, "ESC must NOT quit -- it only goes back"
+    # q, Ctrl-C (0x03) and EOF all quit instantly.
+    assert "case 'q':" in main
+    assert "case 3:" in main            # Ctrl-C as a raw byte
+    assert "case K_EOF:" in main        # stdin closed -> quit, never spin
+    # the nav label for ESC is a fixed 'back' (not depth-dependent 'quit').
+    assert 'verb(&t, "ESC", "back")' in render
+
+
+def test_status_probes_are_cached_for_instant_navigation():
+    """PROMPT: it must feel SNAP INSTANT. Every status probe forks a tool; called straight from
+    the draw loop that is several forks per keystroke. All probe calls go through a short-TTL
+    memo (az_status_cached) so navigation re-forks nothing, and an apply busts the cache so a
+    toggle shows immediately."""
+    model = _src("model.c")
+    render = _src("render.c")
+    main = _src("main.c")
+    # the cache + its invalidation exist in the model
+    assert "az_status_cached" in model
+    assert "az_status_invalidate" in model
+    # the renderer reads EVERY probe through the cache, never calling the fn pointer directly
+    assert "az_status_cached(scr->current" in render
+    assert "az_status_cached(vis[i]->status" in render
+    assert "vis[i]->status(sbuf" not in render      # no direct (uncached) probe call
+    assert "scr->current(sb" not in render
+    # an apply invalidates the cache so the new state shows on the next frame
+    assert "az_status_invalidate()" in main
+
+
+def test_network_status_is_plain_online_offline():
+    """PROMPT: replace "wifi enabled, firewall active" with a plain Online/Offline headline, and
+    make Bluetooth/Airplane read as a simple on/off (never "present"; default off)."""
+    model = _src("model.c")
+    assert "Online - Connected to Internet" in model
+    assert "Offline - No Internet" in model
+    # the top-level Network row reads connectivity, not a radio+firewall soup
+    assert "networking" in model and "connectivity" in model
+    # bluetooth never RETURNS the old confusing "present" value (the word may still appear in a
+    # comment explaining why it was dropped -- match the code that produced it, not prose).
+    assert 'snprintf(buf, n, "present")' not in model
+    # airplane parses the TERSE radio line (the header-line bug is gone)
+    assert '"-t", "radio", "all"' in model
+
+
 def test_entry_title_and_first_option():
     """PROMPT: rename the entry screen to "Az'arch Settings" and make Network the FIRST option.
     (The earlier "no branding" rule was about ASCII-art / a logo banner -- a plain window title

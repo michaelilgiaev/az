@@ -76,9 +76,23 @@ def test_bare_network_prints_overview(monkeypatch, capsys):
     rc = cli.main(["network"])
     out = capsys.readouterr().out
     assert rc == 0
+    # The overview LEADS with the plain internet headline (the same one the TUI shows); with
+    # no nmcli that is the Offline verdict.
+    assert "Offline - No Internet" in out
     assert "Airplane mode:" in out
     assert "Bluetooth:" in out
     assert "Firewall:" in out
+
+
+def test_network_overview_reports_online_when_connectivity_full(monkeypatch, capsys):
+    """With nmcli reporting full connectivity, the overview headline is the Online verdict."""
+    cli = _cli()
+    monkeypatch.setattr(cli, "_have", lambda prog: True)
+    monkeypatch.setattr(cli, "_run",
+                        lambda *a: (0, "full\n")
+                        if a == ("nmcli", "networking", "connectivity") else (0, ""))
+    assert cli.main(["network"]) == 0
+    assert "Online - Connected to Internet" in capsys.readouterr().out
 
 
 def test_unknown_noun_is_rc_two(capsys):
@@ -182,14 +196,30 @@ def test_airplane_off_restores_all_radios(monkeypatch):
 
 
 def test_airplane_status_reads_nmcli(monkeypatch, capsys):
+    """`nmcli -t radio all` prints ONE terse line 'WIFI-HW:WIFI:WWAN-HW:WWAN'. Airplane is ON
+    only when the SOFTWARE radios (WIFI, WWAN -- fields 1 and 3) are BOTH not 'enabled'. This
+    pins the terse-format parse (the old code read the non-terse HEADER line and never saw the
+    values, so it mis-reported)."""
     cli = _cli()
     monkeypatch.setattr(cli, "_have", lambda prog: True)
-    # nmcli radio all -> disabled  => airplane ON
+    # every software radio down => airplane ON
     monkeypatch.setattr(cli, "_run",
-                        lambda *a: (0, "disabled\n") if a[:3] == ("nmcli", "radio", "all")
-                        else (0, ""))
+                        lambda *a: (0, "enabled:disabled:missing:disabled\n")
+                        if a[:4] == ("nmcli", "-t", "radio", "all") else (0, ""))
     assert cli.main(["network", "airplane", "status"]) == 0
     assert "Airplane mode: on" in capsys.readouterr().out
+
+
+def test_airplane_status_off_when_a_radio_is_enabled(monkeypatch, capsys):
+    """One software radio still 'enabled' => airplane OFF (the default). Guards against the
+    old bug where the whole two-line table was compared to 'disabled' and never matched."""
+    cli = _cli()
+    monkeypatch.setattr(cli, "_have", lambda prog: True)
+    monkeypatch.setattr(cli, "_run",
+                        lambda *a: (0, "enabled:enabled:missing:disabled\n")
+                        if a[:4] == ("nmcli", "-t", "radio", "all") else (0, ""))
+    assert cli.main(["network", "airplane", "status"]) == 0
+    assert "Airplane mode: off" in capsys.readouterr().out
 
 
 # --- firewall + ports -------------------------------------------------------

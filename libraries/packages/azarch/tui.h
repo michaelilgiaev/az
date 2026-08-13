@@ -123,6 +123,15 @@ const char *az_status_network(char *buf, size_t n);
  * stdout into buf (size n). Returns 0 on a clean exit, non-zero otherwise. Never blocks
  * on stdin. Used by the status probes. */
 int az_capture(const char *const argv[], char *buf, size_t n);
+
+/* --- probe cache (model.c) --------------------------------------------------
+ * Run a status probe THROUGH a short-TTL memo keyed by the function pointer, so a redraw that
+ * is not a real state change never re-forks the probe's tool. This is what keeps navigation
+ * instant. The renderer calls every `.status`/`.current` probe via this, not directly.
+ * az_status_invalidate() drops all cached values -- call it right after an apply so a toggle's
+ * new state shows on the very next frame instead of after the TTL. */
+const char *az_status_cached(const char *(*fn)(char *, size_t), char *buf, size_t n);
+void az_status_invalidate(void);
 /* Absolute path to the inner PNG for a wallpaper id (what the preview shows / what feh
  * paints). Mirrors wallpaper.py _wallpaper_image. Writes into buf, returns buf. */
 const char *az_wallpaper_image(const char *id, char *buf, size_t n);

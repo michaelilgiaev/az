@@ -83,6 +83,97 @@ int az_capture(const char *const argv[], char *buf, size_t n)
     return WEXITSTATUS(status);
 }
 
+/* Like az_capture but keeps the WHOLE output (up to n-1 bytes), newlines and all, so a
+ * multi-line report can be scanned with strstr. Same fork/exec/no-shell contract. Needed by
+ * the rfkill/bluetooth probes, whose telltale "... blocked: yes" lines are NOT on line 1. */
+static int az_capture_all(const char *const argv[], char *buf, size_t n)
+{
+    if (n == 0) return -1;
+    buf[0] = '\0';
+    int pipefd[2];
+    if (pipe(pipefd) != 0) return -1;
+    pid_t pid = fork();
+    if (pid < 0) { close(pipefd[0]); close(pipefd[1]); return -1; }
+    if (pid == 0) {
+        int devnull = open("/dev/null", O_RDWR);
+        if (devnull >= 0) { dup2(devnull, 0); dup2(devnull, 2); }
+        dup2(pipefd[1], 1);
+        close(pipefd[0]); close(pipefd[1]);
+        if (devnull > 2) close(devnull);
+        execvp(argv[0], (char *const *)argv);
+        _exit(127);
+    }
+    close(pipefd[1]);
+    size_t off = 0;
+    ssize_t r;
+    while (off < n - 1 && (r = read(pipefd[0], buf + off, n - 1 - off)) > 0)
+        off += (size_t)r;
+    buf[off] = '\0';
+    char drain[256];
+    while (read(pipefd[0], drain, sizeof drain) > 0) { }   /* keep child unblocked */
+    close(pipefd[0]);
+    int status = 0;
+    waitpid(pid, &status, 0);
+    if (!WIFEXITED(status)) return -1;
+    return WEXITSTATUS(status);
+}
+
+/* --- probe cache (this is what makes navigation feel INSTANT) ---------------
+ * Every status probe forks a tool (nmcli/ufw/systemctl/rfkill/gsettings). Called straight
+ * from the draw loop, that means several forks PER KEYSTROKE -- the source of the lag. So all
+ * probe calls go through az_status_cached(): it memoises each probe's last result by function
+ * pointer for a short TTL, so holding a key, typing in the search box, or any redraw that is
+ * not a genuine state change re-forks NOTHING. The first draw after the TTL refreshes it.
+ *
+ * The clock is CLOCK_MONOTONIC (immune to wall-clock jumps). The TTL is deliberately short so
+ * the shown status still tracks reality within ~1.5s; an apply also busts the cache outright
+ * (az_status_invalidate) so a toggle's effect shows immediately, not after the TTL. */
+#include <time.h>
+
+#define AZ_CACHE_TTL_MS 1500
+#define AZ_CACHE_SLOTS  16
+
+typedef const char *(*AzProbe)(char *, size_t);
+typedef struct { AzProbe fn; long stamp_ms; char val[128]; } AzCacheSlot;
+static AzCacheSlot g_cache[AZ_CACHE_SLOTS];
+
+static long az_now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+const char *az_status_cached(const char *(*fn)(char *, size_t), char *buf, size_t n)
+{
+    if (!fn) { if (n) buf[0] = '\0'; return buf; }
+    long now = az_now_ms();
+    AzCacheSlot *slot = NULL, *free_slot = NULL;
+    for (int i = 0; i < AZ_CACHE_SLOTS; i++) {
+        if (g_cache[i].fn == fn) { slot = &g_cache[i]; break; }
+        if (!free_slot && g_cache[i].fn == NULL) free_slot = &g_cache[i];
+    }
+    if (slot && (now - slot->stamp_ms) < AZ_CACHE_TTL_MS) {
+        snprintf(buf, n, "%s", slot->val);       /* fresh enough -> no fork */
+        return buf;
+    }
+    /* Miss (or stale): run the probe for real, then remember it. */
+    char tmp[128];
+    const char *r = fn(tmp, sizeof tmp);
+    if (!r) r = "";
+    if (!slot) slot = free_slot ? free_slot : &g_cache[0];  /* evict slot 0 if the table is full */
+    slot->fn = fn;
+    slot->stamp_ms = now;
+    snprintf(slot->val, sizeof slot->val, "%s", r);
+    snprintf(buf, n, "%s", slot->val);
+    return buf;
+}
+
+void az_status_invalidate(void)
+{
+    for (int i = 0; i < AZ_CACHE_SLOTS; i++) { g_cache[i].fn = NULL; g_cache[i].stamp_ms = 0; }
+}
+
 /* True if `prog` is somewhere on PATH (mirrors _have()). */
 static int have(const char *prog)
 {
@@ -147,66 +238,97 @@ const char *az_status_wallpaper(char *buf, size_t n)
     return buf;
 }
 
-/* nmcli radio wifi -> "enabled"/"disabled" */
+/* The wifi radio, as a plain "on"/"off" (the vocabulary the whole UI now uses). Shown ONCE
+ * as the Wifi screen's "Current:" line -- never repeated on each row. */
 const char *az_status_wifi(char *buf, size_t n)
 {
-    if (!have("nmcli")) { snprintf(buf, n, "nmcli not found"); return buf; }
+    if (!have("nmcli")) { snprintf(buf, n, "unavailable"); return buf; }
     const char *argv[] = {"nmcli", "radio", "wifi", NULL};
     char raw[64] = {0};
     if (az_capture(argv, raw, sizeof raw) == 0 && raw[0])
-        snprintf(buf, n, "radio %s", raw);
+        snprintf(buf, n, "%s", strcmp(raw, "enabled") == 0 ? "on" : "off");
     else
-        snprintf(buf, n, "radio unknown");
+        snprintf(buf, n, "off");
     return buf;
 }
 
+/* Wired (ethernet): "connected" / "disconnected" / "no device", as the Wired screen's one
+ * "Current:" line. Scans all devices (az_capture_all -- the ethernet line is rarely line 1)
+ * and reports whether any ethernet device is connected. */
 const char *az_status_wired(char *buf, size_t n)
 {
-    if (!have("nmcli")) { snprintf(buf, n, "nmcli not found"); return buf; }
-    /* nmcli -t -f DEVICE,TYPE,STATE device -> find the ethernet line */
-    const char *argv[] = {"nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device", NULL};
-    char raw[512] = {0};
-    if (az_capture(argv, raw, sizeof raw) != 0) { snprintf(buf, n, "unknown"); return buf; }
-    /* az_capture only kept the FIRST line; for a full scan we need our own read. Fall back
-     * to a simple summary: whether any ethernet is connected via a second query. */
-    const char *argv2[] = {"nmcli", "-t", "-f", "TYPE,STATE", "device", NULL};
-    (void)argv2;
-    /* Keep it simple + robust: report the first device line we captured. */
-    snprintf(buf, n, "%s", raw[0] ? raw : "no ethernet device");
-    /* Replace ':' field separators with ' ' for readability. */
-    for (char *p = buf; *p; p++) if (*p == ':') *p = ' ';
+    if (!have("nmcli")) { snprintf(buf, n, "unavailable"); return buf; }
+    const char *argv[] = {"nmcli", "-t", "-f", "TYPE,STATE", "device", NULL};
+    char raw[1024] = {0};
+    if (az_capture_all(argv, raw, sizeof raw) != 0 || !raw[0]) {
+        snprintf(buf, n, "no device");
+        return buf;
+    }
+    int have_eth = 0, connected = 0;
+    for (char *line = strtok(raw, "\n"); line; line = strtok(NULL, "\n")) {
+        if (strncmp(line, "ethernet:", 9) == 0) {
+            have_eth = 1;
+            if (strstr(line, ":connected")) connected = 1;
+        }
+    }
+    snprintf(buf, n, have_eth ? (connected ? "connected" : "disconnected") : "no device");
     return buf;
 }
 
 const char *az_status_bluetooth(char *buf, size_t n)
 {
-    /* nmcli radio bluetooth if present, else bluetoothctl show. */
-    if (have("nmcli")) {
-        const char *argv[] = {"nmcli", "radio", "bluetooth", NULL};
-        char raw[64] = {0};
-        if (az_capture(argv, raw, sizeof raw) == 0 && raw[0]) {
-            snprintf(buf, n, "%s", raw);
-            return buf;
-        }
+    /* A plain ON or OFF -- never "present" (present is not a state a user can act on). The
+     * default is OFF (the ISO ships bluetooth disabled). Mirrors network.py _bt_state: it is
+     * ON only when the service is active AND rfkill has not blocked the radio; anything else
+     * (blocked, inactive, or unreadable) reads as OFF. */
+    int active = 0;
+    if (have("systemctl")) {
+        const char *argv[] = {"systemctl", "is-active", "bluetooth", NULL};
+        char raw[32] = {0};
+        az_capture(argv, raw, sizeof raw);        /* "active" only when running */
+        active = strcmp(raw, "active") == 0;
     }
     if (have("rfkill")) {
         const char *argv[] = {"rfkill", "list", "bluetooth", NULL};
-        char raw[128] = {0};
-        if (az_capture(argv, raw, sizeof raw) == 0) { snprintf(buf, n, "present"); return buf; }
+        char raw[512] = {0};
+        if (az_capture_all(argv, raw, sizeof raw) == 0 &&
+            (strstr(raw, "Soft blocked: yes") || strstr(raw, "Hard blocked: yes"))) {
+            snprintf(buf, n, "off");              /* radio blocked -> off regardless */
+            return buf;
+        }
     }
-    snprintf(buf, n, "unknown");
+    snprintf(buf, n, active ? "on" : "off");
     return buf;
 }
 
 const char *az_status_airplane(char *buf, size_t n)
 {
-    /* rfkill: all blocked -> "on". Cheap heuristic: nmcli networking + radio all off. */
+    /* A plain ON or OFF. Airplane is ON only when the controllable radios are all down; the
+     * default is OFF. `nmcli -t radio all` prints ONE terse line "WIFI-HW:WIFI:WWAN-HW:WWAN",
+     * e.g. "enabled:disabled:missing:enabled". The SOFTWARE radios are WIFI and WWAN -- fields
+     * at indices 1 and 3 (the "-HW" fields 0 and 2 are the hardware kill switches); airplane
+     * is ON iff neither software radio is "enabled". (The old check used the non-terse form and
+     * matched the HEADER line -- "WIFI-HW WIFI ..." -- so it never saw the values.) */
     if (have("nmcli")) {
-        const char *argv[] = {"nmcli", "radio", "all", NULL};
+        const char *argv[] = {"nmcli", "-t", "radio", "all", NULL};
         char raw[128] = {0};
-        if (az_capture(argv, raw, sizeof raw) == 0) {
-            /* raw like "enabled  enabled  enabled  enabled"; if it contains no "enabled" -> off */
-            snprintf(buf, n, strstr(raw, "enabled") ? "off" : "on");
+        if (az_capture(argv, raw, sizeof raw) == 0 && raw[0]) {
+            /* Walk the colon-separated fields; the software radios are indices 1 and 3. */
+            int idx = 0, any_on = 0;
+            char *save = raw, *tok;
+            for (tok = strtok_r(raw, ":", &save); tok; tok = strtok_r(NULL, ":", &save), idx++) {
+                if ((idx == 1 || idx == 3) && strcmp(tok, "enabled") == 0) any_on = 1;
+            }
+            snprintf(buf, n, any_on ? "off" : "on");
+            return buf;
+        }
+    }
+    if (have("rfkill")) {
+        const char *argv[] = {"rfkill", "list", NULL};
+        char raw[2048] = {0};
+        if (az_capture_all(argv, raw, sizeof raw) == 0 && strstr(raw, "blocked")) {
+            /* on only if at least one radio is listed and none is left unblocked ("no"). */
+            snprintf(buf, n, strstr(raw, "blocked: no") ? "off" : "on");
             return buf;
         }
     }
@@ -236,19 +358,19 @@ const char *az_status_firewall(char *buf, size_t n)
 
 const char *az_status_network(char *buf, size_t n)
 {
-    /* Compact one-liner for the top-level Network row: wifi + firewall at a glance. */
-    char wifi[64] = {0}, fw[64] = {0};
+    /* The top-level Network row says, in plain words, whether the machine can reach the
+     * internet -- NOT a pile of radio/firewall jargon. "Online - Connected to Internet" when
+     * NetworkManager reports full connectivity, "Offline - No Internet" otherwise. This is the
+     * one thing a developer actually cares about at a glance. */
     if (have("nmcli")) {
-        const char *argv[] = {"nmcli", "radio", "wifi", NULL};
-        char raw[64] = {0};
-        if (az_capture(argv, raw, sizeof raw) == 0 && raw[0])
-            snprintf(wifi, sizeof wifi, "wifi %s", raw);
+        const char *argv[] = {"nmcli", "networking", "connectivity", NULL};
+        char raw[32] = {0};
+        if (az_capture(argv, raw, sizeof raw) == 0 && strcmp(raw, "full") == 0) {
+            snprintf(buf, n, "Online - Connected to Internet");
+            return buf;
+        }
     }
-    az_status_firewall(fw, sizeof fw);
-    if (wifi[0])
-        snprintf(buf, n, "%s, firewall %s", wifi, fw);
-    else
-        snprintf(buf, n, "firewall %s", fw);
+    snprintf(buf, n, "Offline - No Internet");
     return buf;
 }
 
@@ -273,7 +395,7 @@ int az_row_matches(const AzRow *r, const char *q)
     if (ci_contains(r->label, q)) return 1;
     if (r->status) {
         char sb[256];
-        const char *s = r->status(sb, sizeof sb);
+        const char *s = az_status_cached(r->status, sb, sizeof sb);
         if (s && ci_contains(s, q)) return 1;
     }
     return 0;
@@ -325,36 +447,39 @@ static const AzRow ROWS_NETWORK[] = {
     {.label="Firewall",      .kind=AZ_ACT_SCREEN, .target="network.firewall",  .status=az_status_firewall},
 };
 
+/* The sub-screen action rows carry NO per-row .status -- the live state is shown ONCE as the
+ * screen's "Current:" line (its .current probe), exactly like Theme/Wallpaper. This is the fix
+ * for the repeated "radio enabled" spam: every row on a screen was echoing the same probe. */
 static const AzRow ROWS_WIFI[] = {
-    {.label="Turn wifi on",         .kind=AZ_ACT_APPLY, .target="azarch network wifi on",         .status=az_status_wifi},
-    {.label="Turn wifi off",        .kind=AZ_ACT_APPLY, .target="azarch network wifi off",        .status=az_status_wifi},
-    {.label="Scan / list networks", .kind=AZ_ACT_APPLY, .target="azarch network wifi list",       .status=az_status_wifi},
-    {.label="Disconnect",           .kind=AZ_ACT_APPLY, .target="azarch network wifi disconnect", .status=az_status_wifi,
+    {.label="Turn wifi on",         .kind=AZ_ACT_APPLY, .target="azarch network wifi on"},
+    {.label="Turn wifi off",        .kind=AZ_ACT_APPLY, .target="azarch network wifi off"},
+    {.label="Scan / list networks", .kind=AZ_ACT_APPLY, .target="azarch network wifi list"},
+    {.label="Disconnect",           .kind=AZ_ACT_APPLY, .target="azarch network wifi disconnect",
      .hint="To connect: azarch network wifi connect <name> <password>"},
 };
 
 static const AzRow ROWS_WIRED[] = {
-    {.label="Turn wired on",  .kind=AZ_ACT_APPLY, .target="azarch network wired on",  .status=az_status_wired},
-    {.label="Turn wired off", .kind=AZ_ACT_APPLY, .target="azarch network wired off", .status=az_status_wired},
+    {.label="Turn wired on",  .kind=AZ_ACT_APPLY, .target="azarch network wired on"},
+    {.label="Turn wired off", .kind=AZ_ACT_APPLY, .target="azarch network wired off"},
 };
 
 static const AzRow ROWS_BLUETOOTH[] = {
-    {.label="Turn bluetooth on",   .kind=AZ_ACT_APPLY, .target="azarch network bluetooth on",   .status=az_status_bluetooth},
-    {.label="Turn bluetooth off",  .kind=AZ_ACT_APPLY, .target="azarch network bluetooth off",  .status=az_status_bluetooth},
-    {.label="Scan / list devices", .kind=AZ_ACT_APPLY, .target="azarch network bluetooth scan", .status=az_status_bluetooth,
+    {.label="Turn bluetooth on",   .kind=AZ_ACT_APPLY, .target="azarch network bluetooth on"},
+    {.label="Turn bluetooth off",  .kind=AZ_ACT_APPLY, .target="azarch network bluetooth off"},
+    {.label="Scan / list devices", .kind=AZ_ACT_APPLY, .target="azarch network bluetooth scan",
      .hint="Pair a device with: azarch network bluetooth pair <mac>"},
 };
 
 static const AzRow ROWS_AIRPLANE[] = {
-    {.label="Turn airplane mode on",  .kind=AZ_ACT_APPLY, .target="azarch network airplane on",  .status=az_status_airplane,
+    {.label="Turn airplane mode on",  .kind=AZ_ACT_APPLY, .target="azarch network airplane on",
      .hint="Kills every radio at once."},
-    {.label="Turn airplane mode off", .kind=AZ_ACT_APPLY, .target="azarch network airplane off", .status=az_status_airplane},
+    {.label="Turn airplane mode off", .kind=AZ_ACT_APPLY, .target="azarch network airplane off"},
 };
 
 static const AzRow ROWS_FIREWALL[] = {
-    {.label="Enable firewall",          .kind=AZ_ACT_APPLY, .target="azarch network firewall enable",    .status=az_status_firewall},
-    {.label="Disable firewall",         .kind=AZ_ACT_APPLY, .target="azarch network firewall disable",   .status=az_status_firewall},
-    {.label="List ports (with titles)", .kind=AZ_ACT_APPLY, .target="azarch network firewall port list", .status=az_status_firewall,
+    {.label="Enable firewall",          .kind=AZ_ACT_APPLY, .target="azarch network firewall enable"},
+    {.label="Disable firewall",         .kind=AZ_ACT_APPLY, .target="azarch network firewall disable"},
+    {.label="List ports (with titles)", .kind=AZ_ACT_APPLY, .target="azarch network firewall port list",
      .hint="Open/close/delete a port: azarch network firewall port ..."},
 };
 
@@ -374,16 +499,18 @@ static const AzScreen SCREENS[] = {
      .current=az_status_wallpaper, .rows=ROWS_WALLPAPER, .nrows=AZN(ROWS_WALLPAPER)},
     {.id="network",   .title="Network", .subtitle="Everything network related.",
      .rows=ROWS_NETWORK, .nrows=AZN(ROWS_NETWORK)},
+    /* Each network sub-screen shows its live state ONCE via .current (the "Current:" line at
+     * the top), so the rows below stay label-only -- no repeated status echo. */
     {.id="network.wifi",      .title="Wifi",      .subtitle="Wireless.",
-     .rows=ROWS_WIFI,      .nrows=AZN(ROWS_WIFI)},
+     .current=az_status_wifi,      .rows=ROWS_WIFI,      .nrows=AZN(ROWS_WIFI)},
     {.id="network.wired",     .title="Wired",     .subtitle="Ethernet.",
-     .rows=ROWS_WIRED,     .nrows=AZN(ROWS_WIRED)},
+     .current=az_status_wired,     .rows=ROWS_WIRED,     .nrows=AZN(ROWS_WIRED)},
     {.id="network.bluetooth", .title="Bluetooth", .subtitle="Off by default.",
-     .rows=ROWS_BLUETOOTH, .nrows=AZN(ROWS_BLUETOOTH)},
+     .current=az_status_bluetooth, .rows=ROWS_BLUETOOTH, .nrows=AZN(ROWS_BLUETOOTH)},
     {.id="network.airplane",  .title="Airplane mode", .subtitle="One switch for all radios.",
-     .rows=ROWS_AIRPLANE,  .nrows=AZN(ROWS_AIRPLANE)},
+     .current=az_status_airplane,  .rows=ROWS_AIRPLANE,  .nrows=AZN(ROWS_AIRPLANE)},
     {.id="network.firewall",  .title="Firewall",  .subtitle="ufw front-end.",
-     .rows=ROWS_FIREWALL,  .nrows=AZN(ROWS_FIREWALL)},
+     .current=az_status_firewall,  .rows=ROWS_FIREWALL,  .nrows=AZN(ROWS_FIREWALL)},
     { 0 },
 };
 

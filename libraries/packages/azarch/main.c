@@ -86,7 +86,7 @@ static void term_size(int *rows, int *cols)
 /* --- input: read one logical key ------------------------------------------- */
 enum {
     K_NONE = 0, K_UP = 256, K_DOWN, K_LEFT, K_RIGHT,
-    K_ENTER, K_ESC, K_BACKSPACE, K_RESIZE
+    K_ENTER, K_ESC, K_BACKSPACE, K_RESIZE, K_EOF
 };
 
 /* Read a key, decoding arrow escape sequences. Returns a K_* code or a byte (>=0). On
@@ -97,7 +97,7 @@ static int read_key(void)
     ssize_t r = read(STDIN_FILENO, &c, 1);
     if (r <= 0) {
         if (errno == EINTR && g_resized) { g_resized = 0; return K_RESIZE; }
-        if (r == 0) return K_ESC;    /* EOF -> treat as quit */
+        if (r == 0) return K_EOF;    /* stdin closed -> quit (distinct from a bare ESC) */
         return K_NONE;
     }
     if (c == '\r' || c == '\n') return K_ENTER;
@@ -159,6 +159,7 @@ static void run_apply_visible(AzUI *ui, const char *cmdline)
     /* consume the acknowledgement key */
     (void)read_key();
 
+    az_status_invalidate();   /* the apply may have changed state -> refresh status now */
     snprintf(ui->message, sizeof ui->message, "%s",
              rc == 0 ? "Done." : "That reported an error (see above).");
 }
@@ -182,6 +183,7 @@ static void run_apply_quiet(AzUI *ui, const char *cmdline)
         int st = 0; waitpid(pid, &st, 0);
         rc = WIFEXITED(st) ? WEXITSTATUS(st) : -1;
     }
+    az_status_invalidate();   /* refresh status so the new theme/wallpaper shows immediately */
     snprintf(ui->message, sizeof ui->message, "%s",
              rc == 0 ? "Done." : "That reported an error.");
 }
@@ -270,6 +272,17 @@ int main(void)
         if (g_had_image && !(pv.valid)) { az_preview_clear(); g_had_image = 0; }
         int drew_img = az_preview_draw(&ui, &pv);
         if (drew_img) g_had_image = 1;
+        /* Re-hide + PARK the cursor as the very last thing each frame. `kitten icat` (placing
+         * OR clearing a preview) re-enables the cursor and leaves it at home -- that is the
+         * "cursor appears at the top-left when I move" artifact. We run icat above, so we must
+         * re-assert the hide AFTER it, and park the cursor in the bottom-right corner so that
+         * even a terminal ignoring the hide shows nothing blinking over the UI. */
+        {
+            char park[32];
+            int pr = ui.rows > 0 ? ui.rows : 1, pc = ui.cols > 0 ? ui.cols : 1;
+            int m = snprintf(park, sizeof park, "\033[%d;%dH\033[?25l", pr, pc);
+            if (m > 0) { ssize_t w = write(STDOUT_FILENO, park, (size_t)m); (void)w; }
+        }
 
         int k = read_key();
         if (k == K_RESIZE) continue;
@@ -297,13 +310,20 @@ int main(void)
             case '/':
                 ui.searching = 1; break;
             case K_ESC:
-                if (ui.depth == 1 && !ui.query[0]) { leave_raw(); return 0; }
+                /* ESC is GO BACK -- always, never quit (the newest spec: "ESC is 'go back'
+                 * not 'quit'"). At the root there is nothing to go back to, so it is a no-op;
+                 * `q` is the one, always-instant quit key. */
                 go_back(&ui);
                 break;
             case 'q':
-                if (ui.depth == 1) { leave_raw(); return 0; }
-                go_back(&ui);
-                break;
+            case 3:      /* Ctrl-C: raw mode has ISIG OFF, so it arrives as the byte 0x03, NOT
+                          * as SIGINT -- which is why it used to do nothing. Quit like q. */
+            case K_EOF:  /* stdin closed (e.g. Ctrl-D at the top) -> quit, never spin on EOF. */
+                /* q / Ctrl-C / EOF quit INSTANTLY from anywhere -- no "go back first" at depth.
+                 * leave_raw() restores the terminal cleanly (shows the cursor, drops the alt
+                 * screen) and we return straight away, so there is no lag before the prompt. */
+                leave_raw();
+                return 0;
             default: break;
         }
     }

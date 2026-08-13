@@ -95,6 +95,29 @@ static void test_current_is_screen_level_not_per_row(void)
     CHECK(m->rows[0].status != NULL);
 }
 
+/* THE ANTI-SPAM CONTRACT. Every network sub-screen (Wifi/Wired/Bluetooth/Airplane/Firewall)
+ * shows its live state EXACTLY ONCE via a screen-level `.current` probe -- and its action rows
+ * carry NO per-row .status. This is the fix for "radio enabled" being echoed on all four Wifi
+ * rows: the state now appears only in the "Current:" line, never after each option. */
+static void test_network_subscreens_have_current_and_no_row_spam(void)
+{
+    const char *subs[] = {
+        "network.wifi", "network.wired", "network.bluetooth",
+        "network.airplane", "network.firewall",
+    };
+    for (size_t i = 0; i < sizeof subs / sizeof subs[0]; i++) {
+        const AzScreen *s = az_screen_find(subs[i]);
+        CHECK(s != NULL);
+        CHECK(s->current != NULL);                       /* state shown ONCE, up top */
+        for (int r = 0; r < s->nrows; r++)
+            CHECK(s->rows[r].status == NULL);            /* no per-row echo (no spam) */
+    }
+    /* The Network PARENT screen keeps one distinct status per row (a genuine at-a-glance
+     * summary of each sub-screen -- not a repeated label), so those DO have a status. */
+    const AzScreen *net = az_screen_find("network");
+    for (int r = 0; r < net->nrows; r++) CHECK(net->rows[r].status != NULL);
+}
+
 /* Wallpaper rows request the image preview and carry the right ids. */
 static void test_wallpaper_rows_preview(void)
 {
@@ -142,6 +165,7 @@ int main(void)
     test_network_rows_descend();
     test_theme_rows_are_applies();
     test_current_is_screen_level_not_per_row();
+    test_network_subscreens_have_current_and_no_row_spam();
     test_wallpaper_rows_preview();
     test_row_matches();
     test_wallpaper_image_path();
