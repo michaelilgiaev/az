@@ -8,7 +8,7 @@ Mirrors the directory scheme the old compile.sh used, so the Docker bind mounts
     libraries/packages/    Az'arch's OWN packages (things WE build/ship): the pacman
                            manifest (packages.x86_64), application_menu/, pkgbuild.py,
                            azarch.py -- all pure stdlib (no requirements.txt)
-    libraries/patches/     ONLY upstream software we modify/configure (calamares,
+    libraries/modifications/  ONLY upstream software we modify/configure (calamares,
                            ckbcomp, fastfetch, librewolf, openbox)
     cache/                 persistent download cache (git-ignored, survives builds)
       build/               WORKDIR on a NATIVE run: disposable mkarchiso scratch
@@ -47,17 +47,17 @@ PACKAGESDIR = LIBDIR / "packages"
 # to fit Az'arch (calamares, ckbcomp, fastfetch, librewolf, openbox). Anything WE author outright
 # is NOT here: it is either a compiler module (flat in libraries/) or one of our own
 # packages (libraries/packages/).
-PATCHESDIR = LIBDIR / "patches"
+MODIFICATIONSDIR = LIBDIR / "modifications"
 ASSETSDIR = REPODIR / "assets"
 
 # Vendored ckbcomp: a Python 3 port of the upstream Perl ckbcomp (byte-identical
 # output, no Perl in the tree). Arch does not package it (Debian/Manjaro-only), yet
 # Calamares' keyboard-preview page shells out to `ckbcomp`, so we ship it in the repo
 # and copy it to /usr/bin at build time. It is an upstream tool modified to fit the
-# distribution, so it lives under libraries/patches/ as a flat patch module
-# (libraries/patches/ckbcomp.py). It is emitted to /usr/bin/ckbcomp (no .py suffix
+# distribution, so it lives under libraries/modifications/ as a flat modification module
+# (libraries/modifications/ckbcomp.py). It is emitted to /usr/bin/ckbcomp (no .py suffix
 # there -- it is an executable script the keyboard page runs by name).
-CKBCOMP_SRC = PATCHESDIR / "ckbcomp.py"
+CKBCOMP_SRC = MODIFICATIONSDIR / "ckbcomp.py"
 
 CACHEDIR = REPODIR / "cache"
 BUILDDIR = REPODIR / "output"
@@ -115,15 +115,15 @@ APPLICATION_MENU_DIR = PACKAGESDIR / "application_menu"
 # (app.py + page.py) live directly here alongside timedate.py, the build wiring that
 # copies them into the airootfs, installs the launcher, and ships the systemd service.
 # It is OUR package (a website we author), so it lives under libraries/packages/, not
-# patches/. Served at localhost:49154; LibreWolf's default home/new-tab page.
+# modifications/. Served at localhost:49154; LibreWolf's default home/new-tab page.
 TIMEDATE_DIR = PACKAGESDIR / "timedate"
 # The `azarch` guest CLI is a Python PACKAGE now (libraries/packages/azarch/): it grew a
 # `theme` subcommand (and more to come), so the single module was split into small modules
 # (common, country_table, resolver, theme, sshd, cli). The single /usr/local/bin/azarch
 # script that ships to the guest is reassembled from those modules by the package's
 # bundle.bundle_source(); the compiler then injects the country->locale table from
-# patches/calamares/locale.py between the AZARCH_CC markers (which now live in
-# country_table.py). See patches/openbox openbox.azarch_cli().
+# modifications/calamares/locale.py between the AZARCH_CC markers (which now live in
+# country_table.py). See modifications/openbox openbox.azarch_cli().
 AZARCH_CLI_DIR = PACKAGESDIR / "azarch"
 # The module whose source carries the AZARCH_CC_TABLE_START/END markers (the compiler
 # regenerates the COUNTRY_TABLE literal between them from the single source of truth).

@@ -618,14 +618,14 @@ def test_desktop_exec_path_matches_install():
 
 def test_overrides_first_line_is_comment():
     # AutoConfig files: the engine ignores line 1, so it MUST be a comment.
-    from patches import librewolf as lw_patch
+    from modifications import librewolf as lw_patch
 
     first = lw_patch.overrides_cfg().splitlines()[0]
     assert first.startswith("//")
 
 
 def test_overrides_disables_sanitize_on_shutdown():
-    from patches import librewolf as lw_patch
+    from modifications import librewolf as lw_patch
 
     cfg = lw_patch.overrides_cfg()
     assert (
@@ -641,7 +641,7 @@ def test_overrides_land_on_timedate_home_and_keep_logins():
     # Logins must still persist though, so browser.sessionstore.privacy_level stays 0
     # (LibreWolf defaults it to 2 = "save no session data", which would log sites out);
     # that + sanitizeOnShutdown=false is the cookie-persistence half.
-    from patches import librewolf as lw_patch
+    from modifications import librewolf as lw_patch
     from packages.timedate import timedate as td
 
     cfg = lw_patch.overrides_cfg()
@@ -660,7 +660,7 @@ def test_overrides_hide_bookmarks_toolbar_by_default():
     # "For quick access" (the bookmarks toolbar, Ctrl+Shift+B) must be HIDDEN by
     # default. LibreWolf ships browser.toolbars.bookmarks.visibility="always"; our
     # override sets it to "never" (hides it on every window AND the new-tab page).
-    from patches import librewolf as lw_patch
+    from modifications import librewolf as lw_patch
 
     cfg = lw_patch.overrides_cfg()
     assert (
@@ -674,7 +674,7 @@ def test_overrides_delivered_to_profile_path_not_opt():
     # (~/.config/librewolf/librewolf/librewolf.overrides.cfg -- doubled "librewolf"),
     # NEVER from /opt. So the override must be delivered as a HOME file by the patch's
     # emit_plan(), and the PKGBUILD must NOT ship it into /opt (a dead file there).
-    from patches import librewolf as lw_patch
+    from modifications import librewolf as lw_patch
 
     plan = lw_patch.emit_plan()
     assert len(plan) == 1
@@ -688,7 +688,7 @@ def test_overrides_delivered_to_profile_path_not_opt():
     for pb in (pkgbuild.pkgbuild_librewolf(), pkgbuild.pkgbuild_librewolf_src()):
         assert "/opt/librewolf/librewolf.overrides.cfg" not in pb, (
             "the override must NOT be installed under /opt -- LibreWolf never reads it "
-            "there; it ships as a home file via patches/librewolf.emit_plan()"
+            "there; it ships as a home file via modifications/librewolf.emit_plan()"
         )
     # And it is no longer a recipe companion file in either tier.
     for full in (False, True):

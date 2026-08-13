@@ -158,7 +158,7 @@ _CUSTOM_EXAMPLE = """\
 #                      out, no post-pacstrap step needed).
 #   remove          -- True for the suppress-only PNGs (no replacement planted).
 # The kitty scalable SVG + the gedit .desktop are the ones the pacstrap log named
-# as conflicts; the two PNGs are added so the kitty patch's icon-removal intent actually
+# as conflicts; the two PNGs are added so the kitty modification's icon-removal intent actually
 # holds on the ISO (otherwise pacstrap re-installs the cat PNGs the overlay had removed).
 ISO_APP_OVERRIDES = [
     ("kitty.svg", "/usr/share/icons/hicolor/scalable/apps/kitty.svg", False),

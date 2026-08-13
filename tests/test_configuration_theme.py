@@ -7,7 +7,7 @@ standard so downloaded apps that honour it are configured for free. These tests 
     is BUNDLED into the shipped /usr/local/bin/azarch script;
   * that the theme uses the standard signals (org.gnome.desktop.interface color-scheme +
     the GTK theme files with Adwaita-dark / Adwaita);
-  * that the ISO's shipped DEFAULT files (patches.openbox GTK settings.ini + dconf keyfile)
+  * that the ISO's shipped DEFAULT files (modifications.openbox GTK settings.ini + dconf keyfile)
     are DARK and stay byte-for-byte in lock-step with the CLI's theme.py dark output, so the
     shipped default and a later `azarch theme --dark` produce identical files;
   * that the kitty terminal is DELIBERATELY exempt (the theme never touches kitty).
@@ -23,7 +23,7 @@ import types
 import pytest
 
 from packages.azarch.bundle import bundle_source
-from patches import openbox as desktop
+from modifications import openbox as desktop
 
 
 def _cli():

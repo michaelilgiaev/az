@@ -11,14 +11,14 @@ emit.write_text with the (dest, mode) each entry declares, and _link_services cr
 service enable-symlink. So the declarative PLAN table + the unit text ARE the contract:
 a wrong mode makes the launcher non-executable (systemd's Exec= then fails), a wrong
 WantedBy means the home page never starts at boot, and a port that drifts from
-patches/librewolf's URL means the browser lands on a dead tab. None of that raises in
+modifications/librewolf's URL means the browser lands on a dead tab. None of that raises in
 Python; it only shows up as a blank home page on the built ISO. These tests pin:
 
   * the emit_plan() dest/mode table + that it does not mutate module state,
   * the systemd unit (Type/ExecStart/Restart/WantedBy=multi-user.target + hardening),
   * the launcher (execs `python app.py` from the install dir),
-  * the PORT lock-step between the app, this package, and patches/librewolf.TIMEDATE_URL,
-  * that patches/librewolf now makes the timedate URL the home + startup page,
+  * the PORT lock-step between the app, this package, and modifications/librewolf.TIMEDATE_URL,
+  * that modifications/librewolf now makes the timedate URL the home + startup page,
   * page.render()'s self-contained HTML (seeds the time, embeds the system zone, ships
     the client-side Intl ticking script + /api/now re-sync -- pure stdlib, no Flask),
     including its four end-user features: the 12-hour AM/PM digital readout, the round
@@ -39,7 +39,7 @@ import pytest
 
 from packages.timedate import timedate as td
 from packages.timedate import page as td_page
-from patches import librewolf
+from modifications import librewolf
 
 
 # --- The fixed port contract ------------------------------------------------
@@ -152,7 +152,7 @@ def test_launcher_execs_python_app_from_install_dir():
 
 # --- LibreWolf lands on the timedate page -----------------------------------
 def test_librewolf_home_and_startup_point_at_timedate():
-    """patches/librewolf makes the timedate site the home page AND opens it on startup
+    """modifications/librewolf makes the timedate site the home page AND opens it on startup
     (browser.startup.page = 1 = home), so LibreWolf 'defaults to land on it'."""
     cfg = librewolf.overrides_cfg()
     assert f'defaultPref("browser.startup.homepage", "{td.URL}");' in cfg

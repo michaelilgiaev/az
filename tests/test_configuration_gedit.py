@@ -1,4 +1,4 @@
-"""patches.gedit -- notepad mode: one window per file, NO tabs, minimal headerbar, Ctrl+W exits.
+"""modifications.gedit -- notepad mode: one window per file, NO tabs, minimal headerbar, Ctrl+W exits.
 
 Why these tests matter: gedit 50 (the gedit-technology fork) produces tabs and a full
 headerbar in several ways, and notepad mode defeats them with FOUR things -- the launcher
@@ -12,7 +12,7 @@ build_plugin() compiling the .so, so those are pinned too.
 
 from __future__ import annotations
 
-from patches import gedit
+from modifications import gedit
 
 
 def test_emit_plan_has_desktop_schema_and_plugin_metadata():

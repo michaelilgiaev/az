@@ -20,13 +20,13 @@ import paths
 
 def test_ckbcomp_asset_is_vendored_python_script():
     # Calamares' keyboard preview shells out to `ckbcomp` to render key legends;
-    # Arch does not package it, so we vendor it as a flat patch module
-    # (libraries/patches/ckbcomp.py) -- an upstream tool modified to fit Az'arch. It
+    # Arch does not package it, so we vendor it as a flat modification module
+    # (libraries/modifications/ckbcomp.py) -- an upstream tool modified to fit Az'arch. It
     # is a Python 3 port of the upstream Perl ckbcomp (byte-identical output, but no
     # Perl in the tree). It must exist and be that Python script (not an empty
     # placeholder).
     src = paths.CKBCOMP_SRC
-    assert src.is_file(), "libraries/patches/ckbcomp.py is missing"
+    assert src.is_file(), "libraries/modifications/ckbcomp.py is missing"
     head = src.read_text(errors="ignore")[:200]
     assert head.startswith("#!/usr/bin/env python3")
     assert "ckbcomp" in head  # the script's own banner names itself
@@ -34,10 +34,27 @@ def test_ckbcomp_asset_is_vendored_python_script():
 
 def test_run_installs_ckbcomp_into_usr_bin():
     # run() must plant the vendored ckbcomp at /usr/bin/ckbcomp (executable) so the
-    # keyboard preview finds it. Assert the copy_patch_file call is present in run().
+    # keyboard preview finds it. Assert the copy_modification_file call is present in run().
     src = inspect.getsource(compiler.run)
-    assert 'copy_patch_file("ckbcomp.py"' in src
+    assert 'copy_modification_file("ckbcomp.py"' in src
     assert 'usr/bin/ckbcomp' in src
+
+
+def test_emit_calamares_ships_the_window_icon_into_branding():
+    # The installer's WINDOW ICON (the "Az'" tile OpenBox draws on the titlebar) is the
+    # branding productIcon: a real PNG copied INTO branding/azarch/. Assert _emit_calamares
+    # copies the standardized installer icon asset to the branding productIcon file, so the
+    # topbar icon exists and matches the launcher icon.
+    from modifications.calamares import calamares
+    from modifications import openbox
+
+    src = inspect.getsource(compiler._emit_calamares)
+    assert "copy_asset" in src
+    assert "INSTALLER_ICON_ASSET" in src
+    assert "PRODUCT_ICON_FILE" in src
+    # The branding.desc names that same file in productIcon.
+    assert calamares.PRODUCT_ICON_FILE == "productIcon.png"
+    assert openbox.INSTALLER_ICON_ASSET == "icons/azarch_installer_icon.png"
 
 
 # --- power management emission + enablement (Tasks 1 & 2) -------------------

@@ -3,7 +3,7 @@
 `bash tests.sh` already puts libraries/ and scripts/libraries/ on PYTHONPATH, and
 pyproject.toml's [tool.pytest.ini_options] pythonpath does the same for a bare
 `pytest` run. This conftest belt-and-suspenders it so the flat compiler modules
-(build, paths, ...), the patches.* packages, and the flat specification_* modules
+(build, paths, ...), the modifications.* packages, and the flat specification_* modules
 resolve no matter how the tests are launched.
 """
 

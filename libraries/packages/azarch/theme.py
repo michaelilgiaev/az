@@ -44,7 +44,7 @@ GTK_THEME_DARK = "Adwaita-dark"
 GTK_THEME_LIGHT = "Adwaita"
 COLOR_SCHEME_DARK = "prefer-dark"
 COLOR_SCHEME_LIGHT = "prefer-light"
-# The two OpenBox titlebar themes patches.openbox ships to ~/.themes (light = the classic
+# The two OpenBox titlebar themes modifications.openbox ships to ~/.themes (light = the classic
 # Clearlooks-cyan "Azarch"; dark = "Azarch-Dark"). rc.xml's <theme><name> selects one.
 OPENBOX_THEME_DARK = "Azarch-Dark"
 OPENBOX_THEME_LIGHT = "Azarch"
@@ -77,7 +77,7 @@ def gtk3_settings_ini(dark: bool) -> str:
     """~/.config/gtk-3.0/settings.ini -- the GTK3 theme + prefer-dark flag. GTK3 apps
     (gedit and most downloaded GTK apps) read this at startup. Qt/KF6 apps (Dolphin,
     Calamares) follow the SAME theme via QT_QPA_PLATFORMTHEME=gtk3 set in the OpenBox
-    session environment (patches.openbox.openbox_environment), which points Qt at this GTK
+    session environment (modifications.openbox.openbox_environment), which points Qt at this GTK
     theme -- so they honour the toggle too, without a KDE/portal stack."""
     theme = GTK_THEME_DARK if dark else GTK_THEME_LIGHT
     prefer = 1 if dark else 0

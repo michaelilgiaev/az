@@ -4,7 +4,7 @@ This is the LibreWolf default home page: a small local Flask website (app.py + p
 right beside this module) that shows the current time (hour/minute/seconds) and a
 calendar (day/month/year), served at localhost:49154. It runs in the BACKGROUND as a
 systemd service that starts at boot, and LibreWolf lands on it on startup / Home / new
-tab (see patches/librewolf.py). The timezone follows the SYSTEM live -- default
+tab (see modifications/librewolf.py). The timezone follows the SYSTEM live -- default
 Asia/Jerusalem (set by Calamares), updating itself if the user changes it by any means
 (app.py reads /etc/localtime on every request).
 
@@ -38,7 +38,7 @@ import paths
 
 # --- Fixed contract: the port the whole system agrees on --------------------
 # The one port LibreWolf's home/new-tab URL and this service both use. Kept in lock-step
-# with packages/timedate/app.PORT and patches/librewolf.TIMEDATE_URL (a test pins it).
+# with packages/timedate/app.PORT and modifications/librewolf.TIMEDATE_URL (a test pins it).
 PORT = 49154
 URL = f"http://localhost:{PORT}"
 

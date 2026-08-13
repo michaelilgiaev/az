@@ -761,7 +761,7 @@ Exec=/opt/librewolf/librewolf --private-window %u
 # a package companion file. LibreWolf's compiled AutoConfig loader reads it from the
 # user's PROFILE dir (~/.config/librewolf/librewolf/), never from /opt, so shipping it
 # in the package did nothing. It is delivered as a HOME file (mirrored into /etc/skel)
-# by patches/librewolf.emit_plan(), which owns both its content AND its location. This
+# by modifications/librewolf.emit_plan(), which owns both its content AND its location. This
 # recipe therefore neither generates nor installs it.
 
 
@@ -804,7 +804,7 @@ def pkgbuild_librewolf() -> str:
 # default; Az'arch relaxes that (sessions/cookies persist) + hides the bookmarks
 # toolbar via LibreWolf's supported AutoConfig override. That override is delivered
 # as a HOME file at the profile path LibreWolf actually reads (NOT packaged here --
-# see patches/librewolf.py); this recipe is otherwise stock LibreWolf.
+# see modifications/librewolf.py); this recipe is otherwise stock LibreWolf.
 # =============================================================================
 
 pkgname=librewolf
@@ -828,7 +828,7 @@ source=(
 # Tarball: pinned sha256 (+ GPG). .sig: GPG-checked (SKIP sha). Local .desktop:
 # shipped in-repo, reviewed in packages.pkgbuild (SKIP sha). The AutoConfig override
 # is NOT packaged (LibreWolf reads it from the profile dir, not /opt) -- it ships as a
-# home file via patches/librewolf.emit_plan().
+# home file via modifications/librewolf.emit_plan().
 sha256sums=('{LIBREWOLF_SHA256}' 'SKIP' 'SKIP')
 validpgpkeys=('{LIBREWOLF_PGP_KEY}')
 
@@ -850,7 +850,7 @@ package() {{
   # NOTE: the Az'arch persistence/bookmarks override is NOT installed here. LibreWolf's
   # AutoConfig loader reads librewolf.overrides.cfg from the user's PROFILE dir
   # (~/.config/librewolf/librewolf/), never from /opt, so it is delivered as a home file
-  # by patches/librewolf.emit_plan() (compiler.py) instead.
+  # by modifications/librewolf.emit_plan() (compiler.py) instead.
 }}
 """
 
@@ -906,7 +906,7 @@ source=(
   'librewolf.desktop'
 )
 # The AutoConfig override is NOT packaged (LibreWolf reads it from the profile dir, not
-# /opt) -- it ships as a home file via patches/librewolf.emit_plan().
+# /opt) -- it ships as a home file via modifications/librewolf.emit_plan().
 sha256sums=('SKIP' 'SKIP')
 
 build() {{
@@ -956,8 +956,8 @@ package() {{
     "$pkgdir/usr/share/icons/hicolor/128x128/apps/librewolf.png"
 
   # NOTE: the Az'arch override is NOT installed here -- LibreWolf reads it from the
-  # profile dir, not /opt, so patches/librewolf.emit_plan() (compiler.py) delivers it as
-  # a home file. See patches/librewolf.py.
+  # profile dir, not /opt, so modifications/librewolf.emit_plan() (compiler.py) delivers it as
+  # a home file. See modifications/librewolf.py.
 }}
 """
 
@@ -982,8 +982,8 @@ def recipe_dirs(full_compile: bool) -> list[tuple[str, dict[str, str]]]:
     # The .desktop is the ONLY companion file the package ships now. The AutoConfig
     # override (librewolf.overrides.cfg) is NOT packaged: LibreWolf reads it from the
     # user's PROFILE dir, not /opt, so it is delivered as a home file by
-    # patches/librewolf.emit_plan() (compiler.py) instead -- shipping it under /opt did
-    # nothing. See patches/librewolf.py.
+    # modifications/librewolf.emit_plan() (compiler.py) instead -- shipping it under /opt did
+    # nothing. See modifications/librewolf.py.
     lw_common = {
         "librewolf.desktop": librewolf_desktop(),
     }

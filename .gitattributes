@@ -1,2 +1,2 @@
 documentations/** linguist-generated=true
-libraries/patches/ckbcomp/ckbcomp linguist-vendored=true
+libraries/modifications/ckbcomp.py linguist-vendored=true

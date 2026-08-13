@@ -16,7 +16,7 @@ back on later, not here.
 from __future__ import annotations
 
 import pacman
-from patches.calamares.locale import _detect_and_apply_locale_block
+from modifications.calamares.locale import _detect_and_apply_locale_block
 
 
 # --- The disk installer (runs in the live session) --------------------------

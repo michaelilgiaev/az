@@ -43,11 +43,11 @@ import makepkg
 import downloader
 import paths
 
-from patches.calamares import calamares
-from patches import openbox as desktop
-from patches import librewolf
+from modifications.calamares import calamares
+from modifications import openbox as desktop
+from modifications import librewolf
 import installer
-from patches.calamares import locale
+from modifications.calamares import locale
 import pacman
 from packages import pkgbuild
 from packages.timedate import timedate

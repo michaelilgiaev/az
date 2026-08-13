@@ -1,4 +1,4 @@
-"""patches.fastfetch -- the fastfetch configuration + Az' logo.
+"""modifications.fastfetch -- the fastfetch configuration + Az' logo.
 
 The configuration's `source` MUST be an absolute path: fastfetch resolves a relative
 source against the CWD, so a bare filename silently falls back to the stock Arch
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from patches import fastfetch
+from modifications import fastfetch
 
 
 def test_config_jsonc_is_valid_json():

@@ -4,7 +4,7 @@ This is OUR application menu, and it is the WHOLE shell: KDE Plasma was removed 
 the desktop is OpenBox with no panel, so this menu -- a borderless, Breeze-styled
 launcher CENTERED on the screen (search, launch-frequency ordering, power actions) --
 is the only launcher surface. It is opened by the Super key (via xcape + the OpenBox
-rc.xml keybind); see patches/openbox.py.
+rc.xml keybind); see modifications/openbox.py.
 
 The menu is a C / GTK3 program (the earlier Tkinter/Python port was replaced): the
 sources live DIRECTLY in this dir (menu.c + siblings, a Makefile), and the build here
@@ -29,7 +29,7 @@ Layers:
   * BUILD wiring -- THIS module (application_menu.py, alongside the source) COMPILES the
     C sources into the daemon binary and copies it to MENU_LIB_DIR, installs launcher.py
     to /usr/local/bin, and writes a generated .desktop entry. The OpenBox session
-    (patches/openbox.py) starts the daemon from its autostart and binds the Super key to
+    (modifications/openbox.py) starts the daemon from its autostart and binds the Super key to
     the launcher; there is no panel applet to bake.
 
 Build host requirements: gcc + the GTK3 dev stack (pkg-config gtk+-3.0 ...). These are
@@ -64,12 +64,12 @@ MENU_DESKTOP_SYSTEM_PATH = (
 # --- Super/Meta key -> menu (handled by OpenBox, not KDE) --------------------
 # Pressing the Super key alone OPENS THIS MENU. Under OpenBox that is wired WITHOUT any
 # KDE machinery: xcape turns a lone Super_L tap into the chord Super_L+Menu and the
-# OpenBox rc.xml binds W-Menu to MENU_LAUNCHER_SYSTEM_PATH (see patches/openbox.py
+# OpenBox rc.xml binds W-Menu to MENU_LAUNCHER_SYSTEM_PATH (see modifications/openbox.py
 # openbox_rc_xml + openbox_autostart). There is therefore NO X-KDE-Shortcuts .desktop
 # and NO kglobalaccel anymore -- the old KDE global-shortcut file was removed.
 #
 # The daemon that keeps the menu resident (instant open) is likewise started from the
-# OpenBox autostart (patches/openbox.openbox_autostart), not from a KDE autostart
+# OpenBox autostart (modifications/openbox.openbox_autostart), not from a KDE autostart
 # .desktop.
 
 # Per-user seed for the launch-frequency store (usage.c's usage store file). The menu
@@ -79,7 +79,7 @@ MENU_DESKTOP_SYSTEM_PATH = (
 # Dolphin (descending) -- while leaving it fully dynamic: as the user opens apps the
 # window watcher bumps these counts and the order re-sorts, so the seed only decides the
 # initial arrangement. Keyed by .desktop id (usage.c's key); counts are spaced so the
-# intended order is unambiguous. Emitted by patches/openbox.py as a home-owned
+# intended order is unambiguous. Emitted by modifications/openbox.py as a home-owned
 # file (mirrored into /etc/skel).
 MENU_USAGE_SEED_SYSTEM_PATH = (
     "/home/main/.local/share/azarch-application-menu/usage.json"
@@ -146,7 +146,7 @@ def menu_desktop() -> str:
     /usr/local/share/applications so the menu can be launched by name and appears in app
     scans. GENERATED here (the package ships no .desktop files) -- Exec points at the
     launcher and Icon at MENU_ICON_NAME. (The Super key is bound by OpenBox's rc.xml, not
-    by this file -- see patches/openbox.py.)"""
+    by this file -- see modifications/openbox.py.)"""
     return f"""\
 [Desktop Entry]
 Type=Application
@@ -222,7 +222,7 @@ def build_daemon(dest: Path, *, make: str = "make") -> Path:
 
 # --- Emit plan --------------------------------------------------------------
 # Declarative map (builder -> dest -> mode) so compiler.py can iterate, mirroring
-# patches/openbox.PLAN. All are absolute SYSTEM paths (root-owned): the
+# modifications/openbox.PLAN. All are absolute SYSTEM paths (root-owned): the
 # OFFLINE Calamares install rsyncs the live rootfs, so these carry onto the
 # installed system with no separate installer step.
 #
@@ -243,6 +243,6 @@ PLAN = [
 
 def emit_plan() -> list[dict]:
     """Return the PLAN list (builder/dest/mode) for compiler.py to emit into the
-    airootfs. Kept as a function to mirror patches/openbox.emit_plan(). The compiled
+    airootfs. Kept as a function to mirror modifications/openbox.emit_plan(). The compiled
     daemon binary is installed separately by build_daemon()."""
     return PLAN

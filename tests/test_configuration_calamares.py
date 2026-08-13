@@ -1,4 +1,4 @@
-"""patches.calamares -- the Calamares 3.4.2 installer configuration tree.
+"""modifications.calamares -- the Calamares 3.4.2 installer configuration tree.
 
 Every builder here returns the verbatim YAML text of one file Calamares reads at
 runtime. Python never parses these strings, so a wrong filename, a clobbered exec
@@ -17,7 +17,7 @@ import re
 
 import yaml
 
-from patches.calamares import calamares
+from modifications.calamares import calamares
 
 
 # The files Calamares reads, relative to /etc/calamares. Any drift here means
@@ -347,9 +347,9 @@ def test_shellprocess_deletes_the_live_user_non_fatally():
 # --- shellprocess.conf: remove the installer artifacts from the installed system ---
 
 def _installer_cleanup_command(script: list) -> str:
-    """The single script command that removes the Desktop launcher + autostart entry
-    from the installed target. Identified by the Desktop launcher path."""
-    from patches.calamares import calamares_shellprocess as csp
+    """The single script command that removes the installer launchers (Desktop + menu) and
+    overwrites the autostart on the installed target. Identified by the Desktop launcher."""
+    from modifications.calamares import calamares_shellprocess as csp
     matches = [c for c in script if csp.INSTALLER_DESKTOP_LAUNCHER in c]
     assert len(matches) == 1, matches
     return matches[0]
@@ -363,22 +363,34 @@ def test_shellprocess_removes_installer_from_installed_desktop():
     # be on the Desktop after install" fix. The command must delete the Desktop launcher
     # from BOTH the reused /home/main and /etc/skel; the auto-launch is removed by
     # overwriting the OpenBox autostart (see the autostart test below).
-    from patches.calamares import calamares_shellprocess as csp
+    from modifications.calamares import calamares_shellprocess as csp
     d = yaml.safe_load(calamares.shellprocess_conf())
     cmd = _installer_cleanup_command(d["script"])
     assert f"rm -f {csp.INSTALLER_DESKTOP_LAUNCHER}" in cmd
     assert f"rm -f {csp.INSTALLER_SKEL_LAUNCHER}" in cmd
     # It targets the live user's home Desktop launcher specifically.
     assert csp.INSTALLER_DESKTOP_LAUNCHER == "/home/main/Desktop/azarch-install.desktop"
-    # The system-wide MENU launcher is intentionally LEFT in place (re-running the
-    # installer from the menu is harmless; only the Desktop icon + auto-launch go).
-    assert "/usr/share/applications/azarch-install.desktop" not in cmd
+
+
+def test_shellprocess_removes_installer_menu_entry_post_install():
+    # The installer must NOT appear ANYWHERE post-installation, so the system-wide
+    # application-menu launcher (/usr/share/applications/azarch-install.desktop) is removed
+    # too (previously it was left in place). calamares itself is also try_removed by the
+    # packages module, so keeping the entry would just leave a dead launcher in the menu.
+    from modifications.calamares import calamares_shellprocess as csp
+    from modifications import openbox as desktop
+    d = yaml.safe_load(calamares.shellprocess_conf())
+    cmd = _installer_cleanup_command(d["script"])
+    assert f"rm -f {csp.INSTALLER_MENU_DESKTOP}" in cmd
+    # Single source of truth: the path this removes is exactly the one openbox.py ships.
+    assert csp.INSTALLER_MENU_DESKTOP == desktop.INSTALL_MENU_DESKTOP_PATH
+    assert csp.INSTALLER_MENU_DESKTOP == "/usr/share/applications/azarch-install.desktop"
 
 
 def test_installer_cleanup_command_uses_no_shell_variables():
     # Same no-`$` rule as the other shellprocess commands (Calamares macro-expansion).
     # rm -f / cp -f so an absent path is a no-op and a shipped-file copy never prompts.
-    from patches.calamares import calamares_shellprocess as csp
+    from modifications.calamares import calamares_shellprocess as csp
     cmd = csp._installer_cleanup_command()
     assert "$" not in cmd
     assert cmd.startswith("set -e")
@@ -399,8 +411,8 @@ def test_shellprocess_overwrites_openbox_autostart_so_region_keyboard_and_no_ins
     # (wrong on an installed system). The cleanup step must OVERWRITE the target's
     # autostart (home + skel) with the "installed" variant staged on the ISO, which drops
     # exactly those two lines while keeping wallpaper/xcape/menu-daemon.
-    from patches.calamares import calamares_shellprocess as csp
-    from patches import openbox as desktop
+    from modifications.calamares import calamares_shellprocess as csp
+    from modifications import openbox as desktop
     d = yaml.safe_load(calamares.shellprocess_conf())
     cmd = _installer_cleanup_command(d["script"])
     src = desktop.INSTALLED_AUTOSTART_STAGING_PATH
@@ -421,10 +433,10 @@ def test_shellprocess_overwrites_openbox_autostart_so_region_keyboard_and_no_ins
 
 def test_shellprocess_autostart_source_is_the_staged_shipped_file():
     # Guard against drift: the file the cleanup COPIES FROM must be the exact staging
-    # path patches/openbox.py emits the installed autostart to. If openbox.py's
+    # path modifications/openbox.py emits the installed autostart to. If openbox.py's
     # staging dest ever moves, this catches it so the copy keeps sourcing a real file.
-    from patches.calamares import calamares_shellprocess as csp
-    from patches import openbox as desktop
+    from modifications.calamares import calamares_shellprocess as csp
+    from modifications import openbox as desktop
     assert csp.INSTALLED_AUTOSTART_SRC == desktop.INSTALLED_AUTOSTART_STAGING_PATH
     dests = {e["dest"] for e in desktop.emit_plan()}
     assert desktop.INSTALLED_AUTOSTART_STAGING_PATH in dests
@@ -1173,14 +1185,20 @@ def test_branding_style_keys_capitalized():
         assert key[0].isupper(), key
 
 
-def test_branding_images_all_empty():
+def test_branding_images():
     d = yaml.safe_load(calamares.branding_desc())
     images = d["images"]
-    # No PNGs shipped; empty strings make Calamares fall back to its default
-    # pixmap instead of logging "does not exist".
     assert set(images) == {"productLogo", "productIcon", "productWelcome"}
-    for val in images.values():
-        assert val == ""
+    # productIcon is the WINDOW ICON: a real PNG shipped INTO the branding dir (so
+    # QIcon(imagePath) loads it and OpenBox draws it on the titlebar). It must be the
+    # branding-relative filename (no '/'), not a bare theme name -- see calamares.py.
+    assert images["productIcon"] == calamares.PRODUCT_ICON_FILE
+    assert images["productIcon"] == "productIcon.png"
+    assert "/" not in images["productIcon"]
+    # productLogo / productWelcome ship no PNG, so they stay empty (Calamares falls
+    # back to its default pixmap instead of logging "does not exist").
+    assert images["productLogo"] == ""
+    assert images["productWelcome"] == ""
 
 
 def test_branding_component_and_product_strings():

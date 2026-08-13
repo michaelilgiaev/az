@@ -1,4 +1,4 @@
-"""patches.profile -- profiledef.sh (the archiso profile mkarchiso sources).
+"""modifications.profile -- profiledef.sh (the archiso profile mkarchiso sources).
 
 The file_permissions map is load-bearing: archiso NORMALIZES overlay file modes
 when it packs the squashfs, so any path that must stay executable in the live ISO

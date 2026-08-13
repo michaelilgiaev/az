@@ -20,8 +20,8 @@ Both are derived deterministically from real signals:
     computed by specification_resolve from the edges, not guessed from names.
   * AZARCH_CONFIGURED  -- the subset of Az'arch Components the build demonstrably
     customises. Grounded in the build's own configuration-as-Python modules (the flat
-    compiler modules in libraries/, the upstream-tailoring patches in
-    libraries/patches/*/, and our own packages in libraries/packages/): each entry
+    compiler modules in libraries/, the upstream-tailoring modifications in
+    libraries/modifications/*/, and our own packages in libraries/packages/): each entry
     says which package is touched and how. It no longer defines a separate edition;
     it is surfaced as a per-package sub-note on the Az'arch-Component packages that
     carry Az'arch-specific changes.
@@ -41,7 +41,7 @@ import re
 # top of the `az'arch` (Az'arch-Component) edition.
 #
 # Source of truth: the build's own configuration-as-Python modules (flat compiler
-# modules in libraries/, upstream-tailoring patches in libraries/patches/*/, and our
+# modules in libraries/, upstream-tailoring modifications in libraries/modifications/*/, and our
 # own packages in libraries/packages/). Each package here is one those modules
 # demonstrably brand, configure, theme, replace or remove. `note` is the concrete,
 # user-facing reason. `archiso` is the build tool itself and is intentionally absent

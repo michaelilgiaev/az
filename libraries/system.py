@@ -77,7 +77,7 @@ LOGO=archlinux-logo
 #
 # Wallpaper: the desktop is OpenBox now (KDE Plasma was removed), and OpenBox paints no
 # wallpaper of its own -- feh sets the X root pixmap from the OpenBox autostart /
-# ~/.xinitrc (see patches/openbox.py). So there is NO Plasma org.kde.image default
+# ~/.xinitrc (see modifications/openbox.py). So there is NO Plasma org.kde.image default
 # to rewrite here anymore, and no bundled Plasma "Next" wallpaper / notifications
 # plasmoid / krunner / kmenuedit to delete (those packages are gone from the manifest).
 # The two azarch wallpaper images ship as plain files under /usr/share/wallpapers via
@@ -91,7 +91,7 @@ cp /root/azarch/os-release /usr/lib/os-release
 chmod 0644 /usr/lib/os-release
 
 # System theme DEFAULT (dark): compile the dconf keyfile (color-scheme='prefer-dark',
-# from patches/openbox) into the binary /etc/dconf/db/local so the freedesktop appearance
+# from modifications/openbox) into the binary /etc/dconf/db/local so the freedesktop appearance
 # default is dark for every user out of the box. Runs here (post-pacstrap) because dconf is
 # only installed inside the pacstrapped rootfs, not the airootfs overlay. A per-user
 # `gsettings set` from `azarch theme` overrides this system default and persists.

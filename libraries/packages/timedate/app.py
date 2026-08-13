@@ -42,7 +42,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from flask import Flask, Response, jsonify
 
 # The single, fixed port the whole system agrees on: LibreWolf's home/new-tab URL
-# (patches/librewolf.py) and the systemd service both point here. localhost:49154.
+# (modifications/librewolf.py) and the systemd service both point here. localhost:49154.
 PORT = 49154
 
 # Where the OS stores "the current timezone": /etc/localtime is a symlink into the

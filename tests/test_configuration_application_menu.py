@@ -12,7 +12,7 @@ launcher (installed as the bin entry point) signals that daemon.
 
 These pin the contract that (a) the build compiles + installs the daemon binary and
 emits the launcher + .desktop to the fixed system paths the launcher/session expect,
-(b) the constants shared with patches/openbox.py agree, (c) the launcher execs the
+(b) the constants shared with modifications/openbox.py agree, (c) the launcher execs the
 BINARY (not a python module), and (d) the C menu keeps its pinned behaviour -- most
 importantly, TAB lands on "Shut Down".
 
@@ -35,7 +35,7 @@ from pathlib import Path
 import pytest
 
 from packages.application_menu import application_menu as am
-from patches import openbox as desktop
+from modifications import openbox as desktop
 
 CSRC_DIR = Path(am.paths.APPLICATION_MENU_DIR)
 

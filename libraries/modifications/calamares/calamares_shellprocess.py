@@ -1,7 +1,7 @@
 """Calamares `shellprocess` module configuration -- the post-unpackfs target fixups the
 OFFLINE (copy-the-live-rootfs) install needs.
 
-Split out of patches/calamares/calamares.py because it is the most intricate part of the
+Split out of modifications/calamares/calamares.py because it is the most intricate part of the
 install: it undoes two archiso-only artifacts the live SquashFS carries so the
 target boots. calamares.py imports shellprocess_conf() (and re-exports the
 constants tests pin) so the public surface stays `calamares.shellprocess_conf`,
@@ -24,16 +24,18 @@ from __future__ import annotations
 # the account being removed.
 LIVE_USER = "main"
 
-# The live session ships an "Az'arch Linux Installer" launcher ON the Desktop, and its
+# The live session ships an "Az'arch Linux Installer" launcher ON the Desktop, a matching
+# entry in the application menu (/usr/share/applications/azarch-install.desktop), and its
 # OpenBox autostart (~/.config/openbox/autostart) opens Calamares once at login AND sets
-# a fixed us,il keyboard. The OFFLINE install copies the live /home/main VERBATIM via
-# unpackfs (and reuseHome:true keeps it), so WITHOUT the cleanup below the INSTALLED
-# system would still carry the installer icon on its Desktop, re-launch the installer on
+# a fixed us,il keyboard. The OFFLINE install copies the live /home/main and the live
+# system tree VERBATIM via unpackfs (and reuseHome:true keeps the home), so WITHOUT the
+# cleanup below the INSTALLED system would still carry the installer icon on its Desktop,
+# STILL show "Az'arch Linux Installer" in the application menu, re-launch the installer on
 # every login, AND force US+Hebrew regardless of the region the user chose. This
-# shellprocess step (target chroot, post-unpackfs) fixes all three. The system-wide
-# application-menu launcher (/usr/share/applications/azarch-install.desktop) is LEFT in
-# place: re-running the installer from the menu on an installed system is harmless and
-# the user only asked for the DESKTOP icon (and the auto-launch) to be gone.
+# shellprocess step (target chroot, post-unpackfs) fixes all of them: the installer must
+# NOT appear anywhere post-installation, so the menu entry (INSTALLER_MENU_DESKTOP, below)
+# is removed too -- calamares itself is additionally try_removed by the packages module,
+# which would otherwise leave that menu entry a dead launcher.
 INSTALLER_DESKTOP_LAUNCHER = f"/home/{LIVE_USER}/Desktop/azarch-install.desktop"
 INSTALLER_SKEL_LAUNCHER = "/etc/skel/Desktop/azarch-install.desktop"
 
@@ -45,7 +47,7 @@ INSTALLER_SKEL_LAUNCHER = "/etc/skel/Desktop/azarch-install.desktop"
 #     region the user picked (so every install would come up US+Hebrew regardless).
 #   * the first-run Calamares launch -- wrong on an already-installed system.
 # The fix: OVERWRITE the target's autostart (home + skel) with the "installed" variant
-# staged on the ISO (patches/openbox.openbox_autostart_installed, at
+# staged on the ISO (modifications/openbox.openbox_autostart_installed, at
 # openbox.INSTALLED_AUTOSTART_STAGING_PATH), which keeps only the shared wallpaper/xcape/
 # menu-daemon block. `cp` (not an edit) so the result is deterministic and needs no `$`.
 INSTALLED_OPENBOX_AUTOSTART = f"/home/{LIVE_USER}/.config/openbox/autostart"
@@ -53,28 +55,38 @@ INSTALLED_SKEL_OPENBOX_AUTOSTART = "/etc/skel/.config/openbox/autostart"
 
 # The staged "installed" autostart on the target (unpackfs copied the whole live rootfs,
 # so this root-owned system file is present in the target chroot). Kept as a module
-# constant, imported from the flat patches/openbox.py, so the staging path and the copy agree.
-from patches import openbox as _openbox  # noqa: E402  (single source of truth for the path)
+# constant, imported from the flat modifications/openbox.py, so the staging path and the copy agree.
+from modifications import openbox as _openbox  # noqa: E402  (single source of truth for the path)
 
 INSTALLED_AUTOSTART_SRC = _openbox.INSTALLED_AUTOSTART_STAGING_PATH
+# The system-wide application-menu launcher for the installer, removed on the installed
+# system so "Az'arch Linux Installer" no longer appears in the menu post-installation.
+# Sourced from openbox.py so the path the live medium SHIPS and the path this step DELETES
+# are the same string.
+INSTALLER_MENU_DESKTOP = _openbox.INSTALL_MENU_DESKTOP_PATH
 
 
 def _installer_cleanup_command() -> str:
     """A single shellprocess command (target chroot) that makes the INSTALLED system's
-    OpenBox session correct: no "Az'arch Linux Installer" Desktop icon, no first-run
-    installer at login, and the region keyboard (not the live us,il) in effect.
+    OpenBox session correct: no "Az'arch Linux Installer" ANYWHERE (no Desktop icon and no
+    application-menu entry), no first-run installer at login, and the region keyboard (not
+    the live us,il) in effect.
 
-    Deletes the Desktop launcher from the reused /home/main AND /etc/skel, then OVERWRITES
-    the inherited OpenBox autostart (home + skel) with the "installed" variant staged on
-    the ISO -- which drops the two live-only lines (the fixed us,il setxkbmap and the
-    first-run Calamares launch) while keeping wallpaper/xcape/menu-daemon. `set -e` with
-    plain `rm -f`/`cp -f` (a `cp` of a shipped file that always exists), and NO `$`
-    (Calamares macro-expands $WORD and aborts on an unknown one -- see
-    _mkinitcpio_reset_command), so only fixed paths are used."""
+    Deletes the Desktop launcher from the reused /home/main AND /etc/skel AND the system-wide
+    application-menu launcher, then OVERWRITES the inherited OpenBox autostart (home + skel)
+    with the "installed" variant staged on the ISO -- which drops the two live-only lines
+    (the fixed us,il setxkbmap and the first-run Calamares launch) while keeping
+    wallpaper/xcape/menu-daemon. `set -e` with plain `rm -f`/`cp -f` (a `cp` of a shipped
+    file that always exists), and NO `$` (Calamares macro-expands $WORD and aborts on an
+    unknown one -- see _mkinitcpio_reset_command), so only fixed paths are used."""
     return (
         "set -e\n"
         f"rm -f {INSTALLER_DESKTOP_LAUNCHER}\n"
         f"rm -f {INSTALLER_SKEL_LAUNCHER}\n"
+        # Remove the application-menu entry too, so the installer does not appear in the
+        # menu on the installed system (calamares itself is also try_removed, so keeping it
+        # would just leave a dead launcher). `rm -f` is a no-op if it is already absent.
+        f"rm -f {INSTALLER_MENU_DESKTOP}\n"
         # Replace the inherited live autostart (home + skel) with the installed variant
         # (no fixed keyboard, no first-run installer). The source is a root-owned file
         # unpackfs copied onto the target, so it is always present.
@@ -226,7 +238,7 @@ def _boot_desparsify_command() -> str:
 
     ROOT CAUSE (the REAL one -- an earlier revision MISdiagnosed this as a trailing
     sparse hole and its `cp --sparse=never` "fix" did NOT work): the target btrfs
-    root is mounted `compress=zstd:1` (patches/calamares.mount_conf ->
+    root is mounted `compress=zstd:1` (modifications/calamares.mount_conf ->
     mountOptions), so `unpackfs` writes /boot/vmlinuz-linux as ZSTD-COMPRESSED btrfs
     extents (a bzImage is highly compressible, so btrfs really does compress it --
     verified: every extent is flagged `encoded` in `filefrag -v`). GRUB 2.14's btrfs

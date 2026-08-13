@@ -1,4 +1,4 @@
-"""patches.kitty -- the kitty terminal-icon patch (clean "> _" glyph).
+"""modifications.kitty -- the kitty terminal-icon patch (clean "> _" glyph).
 
 Why these tests matter: compiler._emit_apps never inspects builder CONTENT for kitty; it
 iterates emit_plan() and copies/renders/removes each dest by its keys (asset/render/remove)
@@ -18,7 +18,7 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 
 import paths
-from patches import kitty
+from modifications import kitty
 
 
 def _asset_svg_text() -> str:
@@ -100,7 +100,7 @@ def test_kitty_conf_sets_font_size_18_in_home():
 
 def test_kitty_conf_font_size_matches_gedit():
     # The whole point of pinning both: the terminal and the editor render at the same size.
-    from patches import gedit
+    from modifications import gedit
     assert kitty.KITTY_FONT_SIZE == gedit.GEDIT_FONT_SIZE
 
 

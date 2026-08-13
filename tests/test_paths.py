@@ -18,17 +18,17 @@ def test_repodir_is_repo_root():
 
 
 def test_static_dirs_are_under_repodir():
-    for d in (paths.LIBDIR, paths.PACKAGESDIR, paths.PATCHESDIR, paths.ASSETSDIR,
+    for d in (paths.LIBDIR, paths.PACKAGESDIR, paths.MODIFICATIONSDIR, paths.ASSETSDIR,
               paths.PKGDIR, paths.CACHEDIR, paths.BUILDDIR, paths.LOGDIR,
               paths.CKBCOMP_SRC):
         assert str(d).startswith(str(paths.REPODIR))
 
 
-def test_ckbcomp_src_is_a_patch_package():
-    # ckbcomp was flattened from patches/ckbcomp/ckbcomp to the flat module
-    # patches/ckbcomp.py (it is still emitted to /usr/bin/ckbcomp without the suffix).
-    assert paths.PATCHESDIR == paths.REPODIR / "libraries" / "patches"
-    assert paths.CKBCOMP_SRC == paths.PATCHESDIR / "ckbcomp.py"
+def test_ckbcomp_src_is_a_modification_package():
+    # ckbcomp was flattened from modifications/ckbcomp/ckbcomp to the flat module
+    # modifications/ckbcomp.py (it is still emitted to /usr/bin/ckbcomp without the suffix).
+    assert paths.MODIFICATIONSDIR == paths.REPODIR / "libraries" / "modifications"
+    assert paths.CKBCOMP_SRC == paths.MODIFICATIONSDIR / "ckbcomp.py"
 
 
 def test_packagesdir_is_libraries_packages():

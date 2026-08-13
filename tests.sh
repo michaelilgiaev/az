@@ -57,7 +57,7 @@ fi
 
 # --- 3. Run pytest. ----------------------------------------------------------
 # PYTHONPATH exposes both Python roots so tests can import the flat compiler
-# modules (compiler, paths, ...), the packages.* / patches.* packages (the ISO
+# modules (compiler, paths, ...), the packages.* / modifications.* packages (the ISO
 # build driver, rooted at libraries/) and the flat specification_* modules (the
 # specifications pipeline, rooted at scripts/libraries/). pytest options and
 # the test path live in pyproject.toml.

@@ -32,7 +32,7 @@ FROM archlinux:latest
 #                    hands off to `python3 -m compiler` (see libraries/)
 # --noconfirm keeps the build non-interactive.
 # Extra tools beyond the original set, for the makepkg stage that builds Az'arch's
-# OWN packages (calamares, librewolf) from our recipes in patches/pkgbuild:
+# OWN packages (calamares, librewolf) from our recipes in packages/pkgbuild:
 #   fakeroot   -> makepkg's fakeroot packaging (part of base-devel, listed for clarity)
 #   gnupg      -> import + verify LibreWolf's release signing key for the .sig check
 # The heavy makedepends (cmake, qt6-*, kpmcore, rust, clang, ...) are installed at

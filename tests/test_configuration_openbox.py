@@ -1,4 +1,4 @@
-"""patches.openbox -- the OpenBox live-session configuration-as-Python payloads.
+"""modifications.openbox -- the OpenBox live-session configuration-as-Python payloads.
 
 Why these tests matter: compiler.py never inspects the CONTENT of these builders;
 it blindly iterates PLAN/emit_plan() and calls emit.write_text/write_exec with
@@ -29,7 +29,7 @@ import importlib.util
 
 import pytest
 
-from patches import openbox as desktop
+from modifications import openbox as desktop
 
 
 def _load_azarch_cli():
@@ -200,7 +200,7 @@ def test_installer_icon_paths_are_standard_system_locations():
     assert desktop.INSTALLER_ICON_HICOLOR == (
         "/usr/share/icons/hicolor/256x256/apps/azarch-installer.png"
     )
-    assert desktop.INSTALLER_ICON_ASSET == "logo/azarch_installer_icon.png"
+    assert desktop.INSTALLER_ICON_ASSET == "icons/azarch_installer_icon.png"
 
 
 def test_home_owned_dests_live_under_home():
@@ -338,6 +338,44 @@ def test_rc_xml_menu_window_is_undecorated():
     out = desktop.openbox_rc_xml()
     assert '<application name="*azarch*menu*">' in out
     assert "<decor>no</decor>" in out
+
+
+def test_rc_xml_forces_calamares_centered():
+    # The Calamares installer must open CENTERED every time, including on a REOPEN.
+    # Calamares remembers its last window geometry, so branding.desc windowPlacement:center
+    # (first-map only) and OpenBox's global Smart/center (only for windows that request no
+    # position) are not enough. A per-application <position force="yes"> centered on both
+    # axes, matched on the installer's WM_CLASS, overrides the remembered geometry per map.
+    import xml.etree.ElementTree as ET
+
+    root = ET.fromstring(desktop.openbox_rc_xml())
+    ns = {"ob": "http://openbox.org/3.4/rc"}
+    app = None
+    for a in root.findall(".//ob:applications/ob:application", ns):
+        # Match on the CLASS field (res_class "Calamares", capital C) -- the load-bearing
+        # attribute. name= is also present (res_name "calamares", lowercase).
+        if a.get("class") == desktop.CALAMARES_WM_CLASS:
+            app = a
+            break
+    assert app is not None, "no <application class='Calamares'> rule in rc.xml"
+    # Both WM_CLASS fields matched, each with its exact case (OpenBox matching is
+    # case-sensitive; a lowercase class= would not match res_class 'Calamares').
+    assert app.get("name") == desktop.CALAMARES_WM_NAME
+    assert app.get("class") == desktop.CALAMARES_WM_CLASS
+    pos = app.find("ob:position", ns)
+    assert pos is not None and pos.get("force") == "yes", "position must be force='yes'"
+    assert pos.find("ob:x", ns).text == "center"
+    assert pos.find("ob:y", ns).text == "center"
+
+
+def test_calamares_wm_class_constants_match_qt_derivation():
+    # Qt derives the installer window's WM_CLASS as two DIFFERENTLY-cased fields:
+    #   res_name  = argv[0] basename = "calamares" (our wrapper runs `sudo -E calamares`)
+    #   res_class = applicationName() = "Calamares" (Calamares hardcodes setApplicationName)
+    # OpenBox matching is case-sensitive, so these constants must carry the exact case or
+    # the centering rule silently no-ops. Pinned so a drift is caught here, not on the guest.
+    assert desktop.CALAMARES_WM_NAME == "calamares"
+    assert desktop.CALAMARES_WM_CLASS == "Calamares"
 
 
 def test_rc_xml_is_wellformed_xml():
@@ -701,7 +739,7 @@ def test_install_wrapper_is_sh_script():
 # --- azarch --sshd-hypervisor guest CLI (now pure Python) -------------------
 # The `azarch` guest CLI is a single Python module (libraries/packages/azarch.py);
 # desktop.azarch_cli() ships it to /usr/local/bin/azarch with the country table
-# re-injected from patches/calamares/locale. These tests assert on that emitted Python.
+# re-injected from modifications/calamares/locale. These tests assert on that emitted Python.
 
 def test_azarch_cli_is_a_python_program():
     # It is Python now (no shell), so it must carry the python shebang and NOT be a
@@ -926,10 +964,10 @@ def test_azarch_resolve_date_time_sets_timezone_only():
 
 
 def test_azarch_resolve_embeds_country_table_from_locale():
-    # The country->layout table is the single source of truth in patches/calamares/locale;
+    # The country->layout table is the single source of truth in modifications/calamares/locale;
     # the emitted CLI's COUNTRY_TABLE must equal exactly that data. Build the emitted
     # module and compare its table to locale.RESOLVER_COUNTRY_TABLE.
-    from patches.calamares import locale
+    from modifications.calamares import locale
     azcli = _load_azarch_cli()
 
     expected = {cc: (loc, lay, km, 1 if en else 0)
@@ -950,7 +988,7 @@ def test_azarch_cli_is_valid_python_and_in_sync():
     # Python, and importing/executing it must reproduce the in-sync COUNTRY_TABLE.
     import ast
 
-    from patches.calamares import locale
+    from modifications.calamares import locale
 
     out = desktop.azarch_cli()
     # No f-string/template artefacts leaked from the injection.

@@ -41,20 +41,22 @@ from ownership import Ownership
 from progress import ProgressBar
 from packages.application_menu import application_menu
 from packages.timedate import timedate
-from patches.calamares import calamares
-from patches.calamares import locale
-from patches import openbox
-from patches import fastfetch
-from patches import librewolf
-# Per-application tweaks (each a self-contained patch module with an emit_plan()):
+from modifications.calamares import calamares
+from modifications.calamares import locale
+from modifications import openbox
+from modifications import fastfetch
+from modifications import librewolf
+# Per-application tweaks (each a self-contained modification module with an emit_plan()):
 #   kitty       -- swap the cat-in-a-terminal icon for a plain terminal icon
 #   vlc         -- suppress the first-run "metadata network access" dialog + follow theme
 #   gedit       -- notepad mode: one window per file, no multi-tab feature (+ schema override)
 #   libreoffice -- skip the first-run / introduction popups (Tip of the Day, first-start ...)
-from patches import kitty
-from patches import vlc
-from patches import gedit
-from patches import libreoffice
+#   gimp        -- skip the first-run intro dialogs (Tip of the Day + fresh-profile Welcome)
+from modifications import kitty
+from modifications import vlc
+from modifications import gedit
+from modifications import libreoffice
+from modifications import gimp
 import installer
 import pacman
 import profile
@@ -217,12 +219,12 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # out to `ckbcomp`; without it the preview draws BLANK keys ("ckbcomp not found,
     # keyboard preview disabled"). `ckbcomp` is a self-contained Python 3 port of the
     # upstream (Debian/Manjaro) Perl ckbcomp -- byte-identical output, no Perl in the
-    # tree -- which Arch does NOT package, so we vendor it (as the flat patch module
-    # libraries/patches/ckbcomp.py) into /usr/bin. It needs only python (in base) and the
+    # tree -- which Arch does NOT package, so we vendor it (as the flat modification module
+    # libraries/modifications/ckbcomp.py) into /usr/bin. It needs only python (in base) and the
     # XKB data in /usr/share/X11/xkb (shipped by xkeyboard-config), both present. It
     # lands in the live ISO (as /usr/bin/ckbcomp, no .py suffix) and is copied to the
     # target by unpackfs.
-    emit.copy_patch_file("ckbcomp.py", airootfs / "usr/bin/ckbcomp", mode=0o755)
+    emit.copy_modification_file("ckbcomp.py", airootfs / "usr/bin/ckbcomp", mode=0o755)
 
     # 9 -- Stage installed-system pacman and pkgs service.
     # The package-management unit of the installed system: its /etc/pacman.conf, the
@@ -360,7 +362,7 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
     # rule, so they iterate through one loop. The LibreWolf entry drops
     # librewolf.overrides.cfg at the PROFILE path LibreWolf's AutoConfig loader actually
     # reads (~/.config/librewolf/librewolf/...); shipping it under /opt did nothing (the
-    # loader never looks there). See patches/librewolf.emit_plan().
+    # loader never looks there). See modifications/librewolf.emit_plan().
     for entry in openbox.emit_plan() + librewolf.emit_plan():
         content = entry["builder"]()
         dest_abs = entry["dest"]          # e.g. "/home/main/.xinitrc" or "/usr/local/bin/..."
@@ -428,7 +430,7 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
 
 def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
     """Overlay the per-application tweaks (kitty/vlc/gedit), each a self-contained
-    patch module exposing emit_plan() in the same builder/dest/mode/owner shape as
+    modification module exposing emit_plan() in the same builder/dest/mode/owner shape as
     openbox/librewolf. Several extras beyond the plain write loop, all driven by keys on
     the plan entries so this stays declarative:
 
@@ -472,9 +474,10 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
 
     # kitty (icon: SVG asset copy + PNG removals + titlebar PNG render) | vlc (home vlcrc) |
     # gedit (system .desktop + gschema override) | libreoffice (home registrymodifications.xcu,
-    # skips the first-run popups). One loop over all four plans.
+    # skips the first-run popups) | gimp (home gimprc, skips the Tip-of-the-Day + fresh-profile
+    # Welcome intro dialogs; GIMP itself loads normally -- no preload). One loop over all five.
     for entry in (kitty.emit_plan() + vlc.emit_plan()
-                  + gedit.emit_plan() + libreoffice.emit_plan()):
+                  + gedit.emit_plan() + libreoffice.emit_plan() + gimp.emit_plan()):
         dest_abs = entry["dest"]                       # absolute path on the target
         # Package-owned override path? Redirect its body to the post-pacstrap staging dir
         # (or drop it if suppress-only) instead of writing into the conflicting overlay.
@@ -529,7 +532,7 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
     # (gedit's base schema is not installed yet, so glib-compile-schemas prints "No schema
     # files found: doing nothing"); we keep it as belt-and-braces (and because the
     # live-apply path, which drops the override onto an already-installed system, DOES need
-    # it). Use the command the gedit patch defines (single source of truth).
+    # it). Use the command the gedit modification defines (single source of truth).
     if need_compile_schemas:
         schemas_dir = airootfs / gedit.GLIB_SCHEMAS_DIR.lstrip("/")
         subprocess.run(_sudo() + ["glib-compile-schemas", str(schemas_dir)], check=False)
@@ -542,6 +545,17 @@ def _emit_calamares(airootfs: Path) -> None:
     base = airootfs / "etc/calamares"
     for rel, content in calamares.emit_map().items():
         emit.write_text(base / rel, content)
+    # The Calamares WINDOW ICON: ship the standardized "Az'" app tile as a REAL PNG inside
+    # the branding component dir (branding/azarch/productIcon.png). branding.desc names it
+    # by that branding-relative filename in `productIcon`, so Calamares resolves it to an
+    # absolute path and QIcon() loads it as the window icon -- which OpenBox draws on the
+    # titlebar (rc.xml titleLayout's `N`). Same source asset as the .desktop launcher icon
+    # (modifications/openbox.INSTALLER_ICON_ASSET), so the topbar icon matches the launcher.
+    emit.copy_asset(
+        openbox.INSTALLER_ICON_ASSET,
+        base / "branding" / calamares.BRANDING / calamares.PRODUCT_ICON_FILE,
+        mode=0o644,
+    )
 
 
 def _emit_power(airootfs: Path) -> None:

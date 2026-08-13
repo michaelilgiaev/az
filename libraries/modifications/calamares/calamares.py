@@ -82,6 +82,21 @@ from .calamares_shellprocess import (  # noqa: F401  (re-exported for the public
 BRANDING = "azarch"
 PRODUCT = "Az'arch Linux"
 
+# The Calamares WINDOW ICON (the "Az'" app tile). Shipped as a REAL PNG inside the
+# branding component dir (branding/azarch/) and named by its branding-relative filename
+# in branding.desc's `productIcon`. This is what makes the icon show on OpenBox's titlebar
+# (the `N` in rc.xml's titleLayout): Calamares' CalamaresApplication sets the window icon
+# with QIcon( Branding::imagePath(ProductIcon) ), i.e. it constructs a QIcon from the
+# STORED string DIRECTLY -- so productIcon MUST resolve to a real FILE PATH, not a bare
+# freedesktop icon name. Branding.cpp turns a branding-relative filename that EXISTS in the
+# component dir into an absolute path (componentDir.absoluteFilePath), so QIcon(path) loads
+# it; a bare theme name would only pass load-time validation (via QIcon::fromTheme) yet come
+# back out of imagePath() as the bare name, and QIcon("azarch-installer") then reads it as a
+# missing file -> no titlebar icon. Hence a shipped file. compiler.py copies the standardized
+# assets/icons/azarch_installer_icon.png (see modifications/openbox.INSTALLER_ICON_ASSET) to
+# branding/azarch/PRODUCT_ICON_FILE, so the window icon matches the .desktop launcher icon.
+PRODUCT_ICON_FILE = "productIcon.png"
+
 # The live archiso SquashFS image. On a booted archiso medium the boot device is
 # mounted at /run/archiso/bootmnt and the root image lives at
 # <install_dir>/<arch>/airootfs.sfs under it. Az'arch's install_dir is "arch"
@@ -326,7 +341,7 @@ unpack:
 
 # --- 3b. modules/shellprocess.conf -----------------------------------------
 # The shellprocess configuration (LIVE_USER, STOCK_LINUX_PRESET, _mkinitcpio_reset_command,
-# shellprocess_conf) is defined in patches/calamares_shellprocess/calamares_shellprocess.py and imported at
+# shellprocess_conf) is defined in modifications/calamares_shellprocess/calamares_shellprocess.py and imported at
 # the top of this module. It is emitted below via emit_map()'s shellprocess_conf().
 
 
@@ -819,15 +834,18 @@ strings:
     releaseNotesUrl:     https://github.com/michaelilgiaev/azarch
     donateUrl:           ""
 
-# Optional images (product logo / window icon). We ship NO logo.png in the
-# branding dir, so these are left EMPTY: Calamares' loadStrings skips empty image
-# keys (exactly as it does for productWelcome) and falls back to its built-in
-# default pixmap. Pointing them at a non-existent "logo.png" instead makes
-# Calamares log "Image file logo.png does not exist" -- set a real path here only
-# if a PNG is actually added to this branding directory.
+# Optional images (product logo / window icon).
+#   productIcon -> the WINDOW ICON. Set to the "Az'" app tile shipped INTO this branding
+#     dir as productIcon.png (see PRODUCT_ICON_FILE / compiler.py). Calamares sets the
+#     window icon from QIcon(imagePath(ProductIcon)); a real file in the component dir
+#     resolves to an absolute path so the icon actually loads and OpenBox draws it on the
+#     titlebar (fixes the "installer has no topbar icon" report). It matches the Desktop /
+#     application-menu launcher icon (both are the same source asset).
+#   productLogo / productWelcome -> still EMPTY (no such PNGs shipped): Calamares skips
+#     empty image keys and uses its built-in default, avoiding a "does not exist" log.
 images:
     productLogo:   ""
-    productIcon:   ""
+    productIcon:   \"""" + PRODUCT_ICON_FILE + """\"
     productWelcome: ""
 
 # Slideshow: a single QML slide placeholder shown during the exec phase.

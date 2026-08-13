@@ -1,4 +1,4 @@
-"""patches.pacman -- the pacman.conf variants.
+"""modifications.pacman -- the pacman.conf variants.
 
 These are pure string generators/transforms. The offline/online repo switching
 (switch_to_local_repo, append_local_repo) is exactly the brittle string surgery

@@ -116,7 +116,7 @@ fi
 
 # --- Under the PTY now: hand off to the Python build driver. ----------------
 # PYTHONPATH points at libraries/ so the flat compiler modules (compiler, paths,
-# ...) and the patches.* packages resolve. -u = unbuffered, so the bar and build
+# ...) and the modifications.* packages resolve. -u = unbuffered, so the bar and build
 # output interleave correctly on the PTY and in full.log.
 export PYTHONPATH="$REPODIR/libraries${PYTHONPATH:+:$PYTHONPATH}"
 export _COMPILE_ONPTY

@@ -1,6 +1,6 @@
 """Emit contract: write configuration-as-Python content out as real files in the ISO tree.
 
-The configuration modules (``patches.*``) hold each artifact's content as a
+The configuration modules (``modifications.*``) hold each artifact's content as a
 Python string. These helpers place that content on disk with the right mode,
 and copy the few verbatim data files. This is the seam between "configuration as data"
 (the strings) and "build logic" (where they go).
@@ -62,14 +62,14 @@ def copy_asset(rel: str, dest: Path, mode: int | None = None) -> Path:
     return dest
 
 
-def copy_patch_file(rel: str, dest: Path, mode: int | None = None) -> Path:
-    """Copy a verbatim file from a patch-package under libraries/patches/<rel>.
+def copy_modification_file(rel: str, dest: Path, mode: int | None = None) -> Path:
+    """Copy a verbatim file from a modification-package under libraries/modifications/<rel>.
 
-    Patches are existing UPSTREAM tools modified to fit Az'arch -- currently the
+    Modifications are existing UPSTREAM tools modified to fit Az'arch -- currently the
     vendored ckbcomp (a Python 3 port of the upstream Perl ckbcomp), shipped as the
-    flat module libraries/patches/ckbcomp.py and copied to /usr/bin/ckbcomp.
+    flat module libraries/modifications/ckbcomp.py and copied to /usr/bin/ckbcomp.
     """
-    src = paths.PATCHESDIR / rel
+    src = paths.MODIFICATIONSDIR / rel
     dest = Path(dest)
     _ensure_parent(dest)
     shutil.copy2(src, dest)

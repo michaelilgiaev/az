@@ -123,7 +123,7 @@ What the medium can do, grouped by the role each component plays. Counts and siz
 
 ## 9. Network endpoints -- what the distro contacts
 
-Every external host and service the distribution talks to: where it downloads packages from, how it resolves the timezone and locale, and what it pings. Read live from the build configuration (`libraries/pacman.py`, `libraries/installer.py`, and `libraries/patches/calamares/locale.py`), so this list cannot drift from what the ISO actually does. The system is designed to work fully offline; these are the endpoints used **when a network is available**.
+Every external host and service the distribution talks to: where it downloads packages from, how it resolves the timezone and locale, and what it pings. Read live from the build configuration (`libraries/pacman.py`, `libraries/installer.py`, and `libraries/modifications/calamares/locale.py`), so this list cannot drift from what the ISO actually does. The system is designed to work fully offline; these are the endpoints used **when a network is available**.
 
 | Endpoint | Purpose | Where / notes |
 |---|---|---|
@@ -137,7 +137,7 @@ Every external host and service the distribution talks to: where it downloads pa
 Notes for a developer:
 
 - **Package mirrors** are hard-coded for the *build* (host-independent so the ISO builds identically on Arch, Manjaro or Docker); the *installed* system uses the standard Arch `mirrorlist`. The offline `file://` repo is the baked-in package cache used when no mirror is reachable.
-- **Timezone / locale / keyboard** are auto-detected on first boot from a geo-IP lookup; if that host is unreachable the defaults (`en_US.UTF-8`, `us`) apply. Change the provider in `libraries/patches/calamares/locale.py`.
+- **Timezone / locale / keyboard** are auto-detected on first boot from a geo-IP lookup; if that host is unreachable the defaults (`en_US.UTF-8`, `us`) apply. Change the provider in `libraries/modifications/calamares/locale.py`.
 - **Time sync** uses systemd-timesyncd's default NTP servers, enabled only after the connectivity probe succeeds.
 
 ---

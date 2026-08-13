@@ -89,17 +89,17 @@ def test_copy_asset_reads_from_assetsdir_and_applies_mode(tmp_path, monkeypatch)
     assert _mode(dest) == 0o755
 
 
-def test_copy_patch_file_reads_from_patchesdir_and_applies_mode(tmp_path, monkeypatch):
-    # copy_patch_file resolves its source against paths.PATCHESDIR (upstream tools
+def test_copy_modification_file_reads_from_modificationsdir_and_applies_mode(tmp_path, monkeypatch):
+    # copy_modification_file resolves its source against paths.MODIFICATIONSDIR (upstream tools
     # modified to fit Az'arch, like the vendored ckbcomp) and applies the exec bit.
-    # ckbcomp is now a flat patch module (patches/ckbcomp.py) copied to /usr/bin/ckbcomp.
-    src_root = tmp_path / "patches"
+    # ckbcomp is now a flat modification module (modifications/ckbcomp.py) copied to /usr/bin/ckbcomp.
+    src_root = tmp_path / "modifications"
     src_root.mkdir(parents=True)
     (src_root / "ckbcomp.py").write_text("#!/usr/bin/env python3\n")
-    monkeypatch.setattr(emit.paths, "PATCHESDIR", src_root)
+    monkeypatch.setattr(emit.paths, "MODIFICATIONSDIR", src_root)
 
     dest = tmp_path / "out" / "usr/bin/ckbcomp"
-    emit.copy_patch_file("ckbcomp.py", dest, mode=0o755)
+    emit.copy_modification_file("ckbcomp.py", dest, mode=0o755)
     assert dest.read_text() == "#!/usr/bin/env python3\n"
     assert _mode(dest) == 0o755
 

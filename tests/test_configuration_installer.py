@@ -1,4 +1,4 @@
-"""patches.installer -- the on-disk install pipeline scripts.
+"""modifications.installer -- the on-disk install pipeline scripts.
 
 These generators emit the real .sh/.conf/.service files the ISO ships. They are
 pure string producers, but the strings are load-bearing in three brittle ways:
