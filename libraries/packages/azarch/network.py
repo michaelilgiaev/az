@@ -15,7 +15,8 @@ SHAPE. `azarch network <noun> <verb...>`. The nouns:
                              pair/connect/disconnect <mac>
   airplane                   on/off/toggle/status -- kill/restore ALL radios at once
   firewall                   status, enable/disable, default <in> <out>,
-                             port list|open <n[/proto]>|close <n[/proto]>
+                             port list (with a Title column) |open <n[/proto]>
+                             |close <n[/proto]>|delete <n[/proto]>
   ip                         show, static <iface> <cidr> <gw> [dns...], dynamic <iface>
 
 BACKENDS + DEGRADATION. Each backend is probed with _have(); a missing tool prints a
@@ -426,129 +427,10 @@ def cmd_airplane(args: list[str]) -> int:
 # ---------------------------------------------------------------------------
 # firewall (ufw) + ports
 # ---------------------------------------------------------------------------
-def _firewall_print_status(indent: str = "") -> None:
-    if not _have("ufw"):
-        print(f"{indent}Firewall: ufw not found")
-        return
-    rc, out = _run("ufw", "status", "verbose")
-    if rc != 0:
-        # ufw status needs root; fall back to the plain active/inactive check via sudo.
-        rc2, out2 = _run("sudo", "-n", "ufw", "status")
-        out = out2
-        rc = rc2
-    first = (out.strip().splitlines() or ["unknown"])[0]
-    print(f"{indent}Firewall: {first or 'unknown'}")
-
-
-def _firewall_status() -> int:
-    if not _need("ufw", "ufw"):
-        return 1
-    rc = _sudo("ufw", "status", "verbose", check=False)
-    return 0 if rc == 0 else 1
-
-
-def _firewall_enable(on: bool) -> int:
-    if not _need("ufw", "ufw"):
-        return 1
-    rc = _sudo("ufw", "--force", "enable", check=False) if on \
-        else _sudo("ufw", "disable", check=False)
-    if rc != 0:
-        _err("azarch network firewall: could not change the firewall state.")
-        return 1
-    print(f"Firewall {'enabled' if on else 'disabled'}.")
-    return 0
-
-
-def _firewall_default(args: list[str]) -> int:
-    """`firewall default <incoming> <outgoing>` -- each is allow|deny|reject."""
-    if len(args) < 2:
-        _err("azarch network firewall default: need <incoming> <outgoing> "
-             "(allow|deny|reject).")
-        return 2
-    if not _need("ufw", "ufw"):
-        return 1
-    incoming, outgoing = args[0], args[1]
-    valid = ("allow", "deny", "reject")
-    if incoming not in valid or outgoing not in valid:
-        _err("azarch network firewall default: policies must be allow|deny|reject.")
-        return 2
-    rc = _sudo("ufw", "default", incoming, "incoming", check=False)
-    rc |= _sudo("ufw", "default", outgoing, "outgoing", check=False)
-    if rc != 0:
-        _err("azarch network firewall: could not set default policy.")
-        return 1
-    print(f"Firewall default: incoming {incoming}, outgoing {outgoing}.")
-    return 0
-
-
-def _port_spec(token: str) -> str | None:
-    """Validate a 'PORT' or 'PORT/proto' token; return the normalised spec or None.
-
-    PORT is 1..65535; proto (optional) is tcp|udp. Guards the ufw argv so a bad token
-    can't be passed straight to ufw."""
-    port, _, proto = token.partition("/")
-    if not port.isdigit() or not (1 <= int(port) <= 65535):
-        return None
-    if proto and proto not in ("tcp", "udp"):
-        return None
-    return token
-
-
-def _firewall_port(args: list[str]) -> int:
-    """`firewall port list|open <n[/proto]>|close <n[/proto]>`."""
-    verb = args[0] if args else "list"
-    rest = args[1:]
-    if not _need("ufw", "ufw"):
-        return 1
-    if verb == "list":
-        rc = _sudo("ufw", "status", "numbered", check=False)
-        return 0 if rc == 0 else 1
-    if verb in ("open", "close"):
-        if not rest:
-            _err(f"azarch network firewall port {verb}: need a port (e.g. 8080 or 8080/tcp).")
-            return 2
-        spec = _port_spec(rest[0])
-        if spec is None:
-            _err(f"azarch network firewall port {verb}: invalid port '{rest[0]}' "
-                 "(use 1-65535 optionally /tcp or /udp).")
-            return 2
-        if verb == "open":
-            rc = _sudo("ufw", "allow", spec, check=False)
-        else:
-            # `ufw deny` closes the port by dropping it (matches the Deny-incoming default).
-            rc = _sudo("ufw", "deny", spec, check=False)
-        if rc != 0:
-            _err(f"azarch network firewall: could not {verb} port {spec}.")
-            return 1
-        print(f"Port {spec} {'opened' if verb == 'open' else 'closed'}.")
-        return 0
-    if verb in ("--help", "-h", "help"):
-        print("Usage: azarch network firewall port [list|open <n[/proto]>|close <n[/proto]>]")
-        return 0
-    _err(f"azarch network firewall port: unknown verb: {verb}")
-    return 2
-
-
-def cmd_firewall(args: list[str]) -> int:
-    """`azarch network firewall ...`"""
-    verb = args[0] if args else "status"
-    rest = args[1:]
-    if verb == "status":
-        return _firewall_status()
-    if verb == "enable":
-        return _firewall_enable(True)
-    if verb == "disable":
-        return _firewall_enable(False)
-    if verb == "default":
-        return _firewall_default(rest)
-    if verb == "port":
-        return _firewall_port(rest)
-    if verb in ("--help", "-h", "help"):
-        print("Usage: azarch network firewall "
-              "[status|enable|disable|default <in> <out>|port ...]")
-        return 0
-    _err(f"azarch network firewall: unknown verb: {verb}")
-    return 2
+# The firewall noun (ufw enable/disable/default, the port open/close/delete verbs, the
+# Title-column listing, and PORT_TITLES) lives in its OWN module, firewall.py -- network.py
+# was outgrowing the per-file size budget. It is bundled ahead of this module, so
+# cmd_firewall / _firewall_print_status resolve by bare name here (see bundle.MODULE_ORDER).
 
 
 # ---------------------------------------------------------------------------
@@ -659,7 +541,7 @@ def network_usage() -> None:
         "pair/connect/disconnect <mac>.\n"
         "  airplane [on|off|toggle|status] Kill or restore ALL radios at once.\n"
         "  firewall ...                    status, enable/disable, default <in> <out>, "
-        "port list|open|close.\n"
+        "port list|open|close|delete.\n"
         "  ip ...                          show, static <iface> <addr/prefix> <gw> "
         "[dns...], dynamic <iface>.\n"
         "  --help                          Show this help.\n"

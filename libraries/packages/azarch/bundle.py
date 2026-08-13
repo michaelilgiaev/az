@@ -40,8 +40,15 @@ MODULE_ORDER = [
     "resolver.py",
     "theme.py",
     "wallpaper.py",
+    # firewall.py before network.py: network's status/dispatch call the firewall functions
+    # by bare name, and this keeps every module under the per-file size budget.
+    "firewall.py",
     "network.py",
     "sshd.py",
+    # tui.py is the bare-`azarch` full-screen UI. It calls the theme/wallpaper/network
+    # helpers by bare name, so it MUST be bundled after all of them; and before cli.py,
+    # whose main() dispatches the no-argument case to run_tui().
+    "tui.py",
     "cli.py",
 ]
 

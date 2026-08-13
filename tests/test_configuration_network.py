@@ -65,6 +65,8 @@ def test_network_help_prints_usage_and_exits_zero(capsys):
     assert "Usage: azarch network" in out
     for noun in ("wifi", "wired", "bluetooth", "airplane", "firewall", "ip"):
         assert noun in out
+    # The firewall line advertises the full port verb set, including delete.
+    assert "port list|open|close|delete" in out
 
 
 def test_bare_network_prints_overview(monkeypatch, capsys):
@@ -242,6 +244,91 @@ def test_firewall_port_rejects_bad_token(monkeypatch, capsys):
     assert cli.main(["network", "firewall", "port", "open", "80/sctp"]) == 2
     assert cli.main(["network", "firewall", "port", "open", "abc"]) == 2
     assert "invalid port" in capsys.readouterr().err
+
+
+# --- firewall port: Title column + delete (the PROMPT.md additions) ---------
+
+def test_firewall_port_49154_has_timedate_title():
+    """The port-title map ships 49154 -> 'timedate' (the Az'arch timedate home page)."""
+    cli = _cli()
+    assert cli.PORT_TITLES.get(49154) == "timedate"
+    # The title is matched by base port, regardless of protocol suffix.
+    assert cli._title_for_to("49154") == "timedate"
+    assert cli._title_for_to("49154/tcp") == "timedate"
+    # An untitled / non-numeric 'To' value yields an empty Title cell (never raises).
+    assert cli._title_for_to("22/tcp") == ""
+    assert cli._title_for_to("Anywhere") == ""
+
+
+def test_firewall_port_list_renders_title_column():
+    """`firewall port list` re-renders ufw's numbered rules with a leading Title column,
+    and port 49154 shows the 'timedate' title in that column."""
+    cli = _cli()
+    sample = (
+        "Status: active\n"
+        "\n"
+        "     To                         Action      From\n"
+        "     --                         ------      ----\n"
+        "[ 1] 49154                      DENY IN     Anywhere\n"
+        "[ 2] 22/tcp                     ALLOW IN    Anywhere\n"
+    )
+    table = cli._render_port_table(sample)
+    header = table.splitlines()
+    # The Title column header is present...
+    assert any(line.strip().startswith("#") and "Title" in line and "To" in line
+               for line in header)
+    # ...and 49154's row carries 'timedate' while the 22/tcp row's Title stays empty.
+    row_49154 = next(l for l in header if "49154" in l)
+    assert "timedate" in row_49154
+    row_22 = next(l for l in header if "22/tcp" in l)
+    assert "timedate" not in row_22
+
+
+def test_firewall_port_list_dispatches_to_ufw_status_numbered(monkeypatch, capsys):
+    """The list verb reads ufw status numbered (via a sudo -n probe) and prints the table."""
+    cli = _cli()
+    monkeypatch.setattr(cli, "_have", lambda prog: True)
+    monkeypatch.setattr(cli, "_run",
+                        lambda *a: (0, "Status: active\n[ 1] 49154   DENY IN   Anywhere\n"))
+    _capture_sudo(cli, monkeypatch)
+    assert cli.main(["network", "firewall", "port", "list"]) == 0
+    out = capsys.readouterr().out
+    assert "Title" in out
+    assert "timedate" in out
+
+
+def test_firewall_port_delete_removes_rule(monkeypatch, capsys):
+    """`firewall port delete <n>` issues `ufw delete` for BOTH the allow and deny forms so
+    the rule is removed whether it was opened or closed, and reports it deleted."""
+    cli = _cli()
+    _stub_reads(cli, monkeypatch, have=True)
+    calls = _capture_sudo(cli, monkeypatch)
+    assert cli.main(["network", "firewall", "port", "delete", "8080/tcp"]) == 0
+    assert ("ufw", "delete", "allow", "8080/tcp") in calls
+    assert ("ufw", "delete", "deny", "8080/tcp") in calls
+    assert "Port 8080/tcp deleted." in capsys.readouterr().out
+
+
+def test_firewall_port_delete_rejects_bad_token(monkeypatch, capsys):
+    cli = _cli()
+    _stub_reads(cli, monkeypatch, have=True)
+    _capture_sudo(cli, monkeypatch)
+    assert cli.main(["network", "firewall", "port", "delete", "99999"]) == 2
+    assert "invalid port" in capsys.readouterr().err
+
+
+def test_firewall_port_help_lists_delete(capsys):
+    cli = _cli()
+    assert cli.main(["network", "firewall", "port", "--help"]) == 0
+    assert "delete" in capsys.readouterr().out
+
+
+def test_firewall_help_documents_title_and_delete(capsys):
+    cli = _cli()
+    assert cli.main(["network", "firewall", "--help"]) == 0
+    out = capsys.readouterr().out
+    assert "Title column" in out
+    assert "port delete" in out
 
 
 # --- ip (static / dynamic IPv4) --------------------------------------------

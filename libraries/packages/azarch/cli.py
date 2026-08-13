@@ -14,7 +14,11 @@ from __future__ import annotations
 
 def usage() -> None:
     print(
-        "Usage: azarch <command>\n"
+        "Usage: azarch [command]\n"
+        "\n"
+        "With no command, azarch opens a simple full-screen UI to configure the\n"
+        "Theme, Wallpaper, and Network (arrow keys to move, Enter to select, / to\n"
+        "search, Esc to go back).\n"
         "\n"
         "Commands:\n"
         "  theme [--dark|--white]  Set the system colour theme (dark is the default);\n"
@@ -88,8 +92,10 @@ def main(argv: list[str] | None = None) -> int:
         usage()
         return 0
     if cmd == "":
-        usage()
-        return 1
+        # Bare `azarch` (no arguments) opens the full-screen TUI (Theme / Wallpaper /
+        # Network). run_tui degrades to a pointer message when there is no terminal, so this
+        # is safe even when stdin/stdout are not a tty.
+        return run_tui(argv)
     _err(f"azarch: unknown command: {cmd}")
     usage_err()
     return 2
