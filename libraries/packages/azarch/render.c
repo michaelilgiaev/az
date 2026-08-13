@@ -15,6 +15,10 @@
 /* --- a tiny growable output buffer ----------------------------------------- */
 typedef struct { char *p; size_t len, cap; } Buf;
 
+/* The normal menu frame; az_render() dispatches here for BROWSE/SEARCH (and draws the
+ * overlays itself for OUTPUT/PORT/PASSWORD). Forward-declared so az_render can call it. */
+static void az_render_menu(const AzUI *ui, AzRect *preview_out);
+
 static void buf_reserve(Buf *b, size_t extra)
 {
     if (b->len + extra + 1 <= b->cap) return;
@@ -178,8 +182,168 @@ const char *az_nav_plain(char *buf, size_t n)
     return buf;
 }
 
+/* --- the OUTPUT overlay + the PORT/PASSWORD prompts ------------------------- */
+/* These draw INSIDE the alt screen instead of the menu, so an apply's result or a prompt
+ * never drops to the real terminal. All centred, accent-framed, matching the menu's look. */
+
+/* Count the lines in a text block (a trailing newline does NOT add an empty line). */
+static int count_lines(const char *s)
+{
+    if (!s || !*s) return 0;
+    int n = 1;
+    for (const char *p = s; *p; p++) if (*p == '\n' && *(p + 1)) n++;
+    return n;
+}
+
+int az_output_line_count(const AzUI *ui) { return count_lines(ui->output); }
+
+int az_output_page_rows(const AzUI *ui)
+{
+    /* Body area between the title (top) and the footer/nav (bottom). */
+    int h = ui->rows - 8;
+    return h < 1 ? 1 : h;
+}
+
+/* Draw the captured-output overlay: a title (the command), the output text (scrolled), and a
+ * footer telling the user how to leave / page. */
+static void draw_output(Buf *b, const AzUI *ui)
+{
+    int rows = ui->rows;
+    int top = rows >= 24 ? 2 : 1;
+    put_center(b, ui, top, AZ_SGR_ACCENT ";" AZ_SGR_BOLD, "Result");
+    /* the command that produced it, dim */
+    if (ui->output_title[0]) {
+        char line[200];
+        snprintf(line, sizeof line, "$ %s", ui->output_title);
+        put_center(b, ui, top + 1, AZ_SGR_DIM, line);
+    }
+    int body_top = top + 3;
+    int page = az_output_page_rows(ui);
+    int total = count_lines(ui->output);
+    int scroll = ui->output_scroll;
+    if (scroll < 0) scroll = 0;
+    if (scroll > total - page) scroll = total - page > 0 ? total - page : 0;
+
+    /* The output is left-aligned as a block, but the block is centred on the widest line so it
+     * sits in the middle of the screen like everything else. Walk the lines. */
+    int widest = 0;
+    {
+        int w = 0;
+        for (const char *p = ui->output ? ui->output : ""; ; p++) {
+            if (*p == '\n' || *p == '\0') { if (w > widest) widest = w; w = 0; if (!*p) break; }
+            else if ((*(const unsigned char *)p & 0xC0) != 0x80) w++;
+        }
+    }
+    if (widest > ui->cols - 2) widest = ui->cols - 2;
+    int col = center_col(ui->cols, widest);
+
+    int drawn = 0, idx = 0;
+    const char *p = ui->output ? ui->output : "";
+    while (*p && drawn < page) {
+        const char *nl = strchr(p, '\n');
+        int len = nl ? (int)(nl - p) : (int)strlen(p);
+        if (idx >= scroll) {
+            char line[512];
+            int cpy = len < (int)sizeof line - 1 ? len : (int)sizeof line - 1;
+            memcpy(line, p, cpy); line[cpy] = '\0';
+            at(b, body_top + drawn, col);
+            sgr(b, AZ_SGR_TEXT); buf_str(b, line); reset(b);
+            drawn++;
+        }
+        idx++;
+        if (!nl) break;
+        p = nl + 1;
+    }
+    if (!ui->output || !ui->output[0])
+        put_center(b, ui, body_top, AZ_SGR_DIM, "(no output)");
+
+    /* footer: paging hint if it overflows, plus how to close */
+    char foot[128];
+    if (total > page)
+        snprintf(foot, sizeof foot, "J/K scroll   %d-%d/%d   ENTER/ESC/Q close",
+                 scroll + 1, scroll + drawn, total);
+    else
+        snprintf(foot, sizeof foot, "ENTER / ESC / Q  close");
+    put_center(b, ui, rows - 1, AZ_SGR_DIM, foot);
+}
+
+/* Draw a single centred input prompt (PORT or PASSWORD). Password input is shown masked. */
+static void draw_prompt(Buf *b, const AzUI *ui, int masked)
+{
+    int rows = ui->rows;
+    int cy = rows / 2 - 1;
+    if (cy < 2) cy = 2;
+    /* breadcrumb so the user still knows where they are */
+    {
+        char crumb[256] = {0};
+        for (int i = 0; i < ui->depth; i++) {
+            const AzScreen *s = az_screen_find(ui->stack[i]);
+            if (i) strncat(crumb, "  \xe2\x80\xba  ", sizeof crumb - strlen(crumb) - 1);
+            if (s) strncat(crumb, s->title, sizeof crumb - strlen(crumb) - 1);
+        }
+        put_center(b, ui, rows >= 24 ? 2 : 1, AZ_SGR_ACCENT ";" AZ_SGR_BOLD, crumb);
+    }
+    /* the prompt label */
+    put_center(b, ui, cy, AZ_SGR_ACCENT ";" AZ_SGR_BOLD, ui->prompt ? ui->prompt : "");
+    /* the input box */
+    int inner = 24;
+    int boxw = inner + 4;
+    int bcol = center_col(ui->cols, boxw);
+    const char *hbar = "\xe2\x94\x80";
+    at(b, cy + 1, bcol);
+    sgr(b, AZ_SGR_ACCENT);
+    buf_str(b, "\xe2\x95\xad");
+    for (int i = 0; i < boxw - 2; i++) buf_str(b, hbar);
+    buf_str(b, "\xe2\x95\xae"); reset(b);
+    at(b, cy + 2, bcol);
+    sgr(b, AZ_SGR_ACCENT); buf_str(b, "\xe2\x94\x82 "); reset(b);
+    /* shown text: masked -> dots */
+    char shown[sizeof ui->input];
+    int qw;
+    if (masked) {
+        size_t l = strlen(ui->input);
+        if (l > (size_t)inner) l = inner;
+        for (size_t i = 0; i < l; i++) shown[i] = '*';
+        shown[l] = '\0'; qw = (int)l;
+    } else {
+        snprintf(shown, sizeof shown, "%s", ui->input);
+        qw = vwidth(shown);
+        if (qw > inner) { shown[inner] = '\0'; qw = inner; }
+    }
+    sgr(b, AZ_SGR_TEXT); buf_str(b, shown); reset(b);
+    sgr(b, AZ_SGR_ACCENT); buf_str(b, "\xe2\x96\x8f"); reset(b); qw += 1;   /* caret */
+    for (int i = qw; i < inner; i++) buf_str(b, " ");
+    sgr(b, AZ_SGR_ACCENT); buf_str(b, " \xe2\x94\x82"); reset(b);
+    at(b, cy + 3, bcol);
+    sgr(b, AZ_SGR_ACCENT);
+    buf_str(b, "\xe2\x95\xb0");
+    for (int i = 0; i < boxw - 2; i++) buf_str(b, hbar);
+    buf_str(b, "\xe2\x95\xaf"); reset(b);
+    /* footer */
+    put_center(b, ui, rows - 1, AZ_SGR_DIM, "ENTER  confirm    ESC  cancel");
+}
+
 /* --- the frame -------------------------------------------------------------- */
 void az_render(const AzUI *ui, AzRect *preview_out)
+{
+    /* Overlays/prompts REPLACE the menu and never reserve a preview rect. */
+    if (ui->mode == AZ_MODE_OUTPUT || ui->mode == AZ_MODE_PORT || ui->mode == AZ_MODE_PASSWORD) {
+        if (preview_out) preview_out->valid = 0;
+        Buf ob = {0};
+        buf_str(&ob, "\033[?25l\033[2J\033[H");
+        if (ui->mode == AZ_MODE_OUTPUT) draw_output(&ob, ui);
+        else draw_prompt(&ob, ui, ui->mode == AZ_MODE_PASSWORD);
+        at(&ob, ui->rows > 0 ? ui->rows : 1, ui->cols > 0 ? ui->cols : 1);
+        buf_str(&ob, "\033[?25l");
+        if (ob.p) { ssize_t w = write(STDOUT_FILENO, ob.p, ob.len); (void)w; }
+        free(ob.p);
+        return;
+    }
+    az_render_menu(ui, preview_out);
+}
+
+/* The normal menu frame (BROWSE / SEARCH). */
+static void az_render_menu(const AzUI *ui, AzRect *preview_out)
 {
     if (preview_out) preview_out->valid = 0;
     Buf b = {0};
@@ -323,12 +487,14 @@ void az_render(const AzUI *ui, AzRect *preview_out)
     }
 
     /* 6. reserve a PREVIEW rectangle for the hovered row (below the list, centred). The
-     * renderer only reserves the space + draws a faint frame label; preview.c places the
-     * kitty image inside it. */
+     * renderer only reserves the space; preview.c places the kitty image inside it. We leave
+     * FOUR lines at the bottom (hint/command + message + nav) so the command line the spec
+     * wants never collides with the image. */
+    int have_preview = 0;
     if (nvis > 0 && sel < nvis && vis[sel]->preview != AZ_PV_NONE) {
         int pv_top = y + 1;
-        int pv_h = rows - pv_top - 3;         /* down to just above the nav line */
-        if (pv_h > 12) pv_h = 12;
+        int pv_h = rows - pv_top - 4;         /* leave hint/command + message + nav */
+        if (pv_h > 11) pv_h = 11;
         int pv_w = ui->cols > 72 ? 64 : ui->cols - 6;
         if (pv_h >= 4 && pv_w >= 20 && preview_out) {
             preview_out->row = pv_top;
@@ -336,13 +502,25 @@ void az_render(const AzUI *ui, AzRect *preview_out)
             preview_out->w = pv_w;
             preview_out->h = pv_h;
             preview_out->valid = 1;
+            have_preview = 1;
         }
         y = pv_top + (pv_h >= 4 ? pv_h : 0);
     }
 
-    /* 7. hovered row hint (dim, centred), just above the message/nav. */
-    if (nvis > 0 && sel < nvis && vis[sel]->hint && vis[sel]->hint[0]) {
-        put_center(&b, ui, rows - 3, AZ_SGR_DIM, vis[sel]->hint);
+    /* 7. hovered row hint (dim) + the bash COMMAND that runs it, so the user learns how to do
+     * this WITHOUT the UI (the spec: "settings should be accompanied by the bash command that
+     * invokes them"). The command reads "$ azarch ..." in the accent so it stands out as
+     * something to type. When a preview is on screen we show ONLY the command (skip the
+     * free-text hint) so nothing overlaps the image; otherwise both are shown. */
+    if (nvis > 0 && sel < nvis) {
+        const char *cmd = az_row_command(vis[sel]);
+        if (!have_preview && vis[sel]->hint && vis[sel]->hint[0])
+            put_center(&b, ui, rows - 4, AZ_SGR_DIM, vis[sel]->hint);
+        if (cmd && cmd[0]) {
+            char line[220];
+            snprintf(line, sizeof line, "$ %s", cmd);
+            put_center(&b, ui, rows - 3, AZ_SGR_ACCENT, line);
+        }
     }
 
     /* 8. message line (last action result, accent) OR blank; then the nav line. */

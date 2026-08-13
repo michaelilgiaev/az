@@ -27,17 +27,26 @@ TEST_LIBS   = $(shell pkg-config --libs $(TEST_PKGS))
 TUI_TEST_BIN    = test_tui_model
 TUI_TEST_CFLAGS = -O2 -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L -I$(TUI_DIR)
 
+# The ACTION-layer test: exercises the SHIPPING action.c (capture + sudo credential). It forks
+# real subprocesses (sh/timeout) but never authenticates sudo (it forces the failing path), so
+# it stays deterministic and needs no privileges.
+ACT_TEST_BIN    = test_tui_action
+
 $(TEST_BIN): test_applications.c $(APP_DIR)/applications.c $(APP_DIR)/applications.h
 	$(CC) $(TEST_CFLAGS) test_applications.c $(APP_DIR)/applications.c -o $@ $(TEST_LIBS)
 
 $(TUI_TEST_BIN): test_tui_model.c $(TUI_DIR)/model.c $(TUI_DIR)/tui.h
 	$(CC) $(TUI_TEST_CFLAGS) test_tui_model.c $(TUI_DIR)/model.c -o $@
 
-test: $(TEST_BIN) $(TUI_TEST_BIN)
+$(ACT_TEST_BIN): test_tui_action.c $(TUI_DIR)/action.c $(TUI_DIR)/action.h
+	$(CC) $(TUI_TEST_CFLAGS) test_tui_action.c $(TUI_DIR)/action.c -o $@
+
+test: $(TEST_BIN) $(TUI_TEST_BIN) $(ACT_TEST_BIN)
 	./$(TEST_BIN)
 	./$(TUI_TEST_BIN)
+	./$(ACT_TEST_BIN)
 
 clean:
-	rm -f $(TEST_BIN) $(TUI_TEST_BIN)
+	rm -f $(TEST_BIN) $(TUI_TEST_BIN) $(ACT_TEST_BIN)
 
 .PHONY: test clean

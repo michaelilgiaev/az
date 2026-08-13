@@ -72,9 +72,54 @@ static void test_theme_rows_are_applies(void)
     /* both request the theme preview */
     CHECK(t->rows[0].preview == AZ_PV_THEME);
     CHECK(t->rows[1].preview == AZ_PV_THEME);
-    /* both apply QUIETLY (no sudo/tty needed -> no CLI text flashes over the UI) */
-    CHECK(t->rows[0].quiet == 1);
-    CHECK(t->rows[1].quiet == 1);
+    /* theme needs no sudo (it configures the user session) -> needs_root stays 0 */
+    CHECK(t->rows[0].needs_root == 0);
+    CHECK(t->rows[1].needs_root == 0);
+}
+
+/* Every apply teaches its bash command (az_row_command); a plain sub-screen row teaches
+ * nothing. This backs the "show the bash command that invokes the setting" requirement. */
+static void test_row_command(void)
+{
+    const AzScreen *t = az_screen_find("theme");
+    CHECK(strcmp(az_row_command(&t->rows[0]), "azarch theme --dark") == 0);
+    /* a SCREEN row (Network parent) has no command to type */
+    const AzScreen *m = az_screen_find("main");
+    CHECK(az_row_command(&m->rows[0]) == NULL);
+    /* a PORT row's command carries the "<port>" placeholder the user would type */
+    const AzScreen *fw = az_screen_find("network.firewall");
+    int found_port = 0;
+    for (int i = 0; i < fw->nrows; i++) {
+        if (fw->rows[i].kind == AZ_ACT_PORT) {
+            found_port = 1;
+            CHECK(strstr(az_row_command(&fw->rows[i]), "<port>") != NULL);
+        }
+    }
+    CHECK(found_port == 1);
+}
+
+/* The Firewall screen can LIST ports (show_output) and OPEN/CLOSE/DELETE a port by typing its
+ * number (AZ_ACT_PORT) -- the in-UI firewall config the spec asks for. Every firewall apply
+ * needs root, so needs_root is set (the UI secures a credential first, no black screen). */
+static void test_firewall_lists_and_configures_ports(void)
+{
+    const AzScreen *fw = az_screen_find("network.firewall");
+    CHECK(fw != NULL);
+    int has_list = 0, n_port = 0;
+    for (int i = 0; i < fw->nrows; i++) {
+        CHECK(fw->rows[i].needs_root == 1);        /* all firewall applies secure sudo first */
+        if (fw->rows[i].kind == AZ_ACT_APPLY &&
+            strcmp(fw->rows[i].target, "azarch network firewall port list") == 0) {
+            has_list = 1;
+            CHECK(fw->rows[i].show_output == 1);    /* the listing renders in the overlay */
+        }
+        if (fw->rows[i].kind == AZ_ACT_PORT) {
+            n_port++;
+            CHECK(fw->rows[i].show_output == 1);
+        }
+    }
+    CHECK(has_list == 1);
+    CHECK(n_port == 3);                             /* open / close / delete */
 }
 
 /* The "Current:" line comes from the SCREEN, not a per-row status: Theme and Wallpaper set
@@ -164,6 +209,8 @@ int main(void)
     test_screen_set_is_exactly_expected();
     test_network_rows_descend();
     test_theme_rows_are_applies();
+    test_row_command();
+    test_firewall_lists_and_configures_ports();
     test_current_is_screen_level_not_per_row();
     test_network_subscreens_have_current_and_no_row_spam();
     test_wallpaper_rows_preview();

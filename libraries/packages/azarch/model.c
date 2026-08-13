@@ -8,8 +8,9 @@
  *
  * ACTIONS are shell command lines run against the installed `azarch` CLI (e.g.
  * "azarch theme --dark"): the UI drives the tested subcommands rather than re-implementing
- * system behaviour. `azarch` is on PATH on the guest; the command runs with the terminal
- * restored so any sudo prompt / output is visible (see actions in main.c).
+ * system behaviour. `azarch` is on PATH on the guest; the command runs INSIDE the UI with its
+ * output captured (see main.c / action.c), never dropping to the real terminal. `.needs_root`
+ * marks the applies that first take a sudo credential; `.show_output` shows their output.
  */
 /* POSIX APIs (fork/execvp/pipe/waitpid) under -std=c11. */
 #define _POSIX_C_SOURCE 200809L
@@ -200,15 +201,17 @@ static int have(const char *prog)
 
 const char *az_status_theme(char *buf, size_t n)
 {
-    /* gsettings get org.gnome.desktop.interface color-scheme -> 'prefer-dark' | ... */
+    /* gsettings get org.gnome.desktop.interface color-scheme -> 'prefer-dark' | ...
+     * Reported with a Capitalised first letter ("Dark"/"White") -- the spec wants the
+     * "Current:" line and the row status to read "Dark", not "dark". */
     const char *argv[] = {"gsettings", "get", "org.gnome.desktop.interface",
                           "color-scheme", NULL};
     char raw[128] = {0};
     if (have("gsettings") && az_capture(argv, raw, sizeof raw) == 0) {
-        if (strstr(raw, "prefer-dark")) { snprintf(buf, n, "dark"); return buf; }
-        if (strstr(raw, "prefer-light")) { snprintf(buf, n, "white"); return buf; }
+        if (strstr(raw, "prefer-dark")) { snprintf(buf, n, "Dark"); return buf; }
+        if (strstr(raw, "prefer-light")) { snprintf(buf, n, "White"); return buf; }
     }
-    snprintf(buf, n, "dark");   /* Az'arch default */
+    snprintf(buf, n, "Dark");   /* Az'arch default */
     return buf;
 }
 
@@ -228,21 +231,53 @@ const char *az_status_wallpaper(char *buf, size_t n)
             fclose(f);
         }
     }
+    /* Report WITH the ".png" file type ("years.png"), per the spec -- not a bare "years". */
     const char *ids[] = {"years", "decades"};
     char img[512];
     for (size_t i = 0; i < sizeof ids / sizeof ids[0]; i++) {
         az_wallpaper_image(ids[i], img, sizeof img);
-        if (cur[0] && strcmp(cur, img) == 0) { snprintf(buf, n, "%s", ids[i]); return buf; }
+        if (cur[0] && strcmp(cur, img) == 0) { snprintf(buf, n, "%s.png", ids[i]); return buf; }
     }
-    snprintf(buf, n, "%s", cur[0] ? "custom" : "years");
+    snprintf(buf, n, "%s", cur[0] ? "custom" : "years.png");
     return buf;
 }
 
-/* The wifi radio, as a plain "on"/"off" (the vocabulary the whole UI now uses). Shown ONCE
- * as the Wifi screen's "Current:" line -- never repeated on each row. */
+/* Wifi and Wired are ONE-OR-THE-OTHER, never both "on"/"connected" at once (the spec:
+ * "if wired is connected then wifi is off, if wifi is connected then wired is disconnected").
+ * Both probes read the SAME device table once and decide from a single source of truth: the
+ * connected ethernet device wins. So we scan devices for (a) is any ethernet connected and
+ * (b) is any wifi connected, then each probe reports its own line in light of the other. */
+struct AzNet { int eth_present, eth_conn, wifi_present, wifi_conn; };
+
+static struct AzNet az_net_scan(void)
+{
+    struct AzNet s = {0};
+    const char *argv[] = {"nmcli", "-t", "-f", "TYPE,STATE", "device", NULL};
+    char raw[1024] = {0};
+    if (az_capture_all(argv, raw, sizeof raw) != 0 || !raw[0]) return s;
+    for (char *line = strtok(raw, "\n"); line; line = strtok(NULL, "\n")) {
+        if (strncmp(line, "ethernet:", 9) == 0) {
+            s.eth_present = 1;
+            if (strstr(line, ":connected")) s.eth_conn = 1;
+        } else if (strncmp(line, "wifi:", 5) == 0) {
+            s.wifi_present = 1;
+            if (strstr(line, ":connected")) s.wifi_conn = 1;
+        }
+    }
+    return s;
+}
+
+/* Wifi, as the Wifi screen's one "Current:" line. "connected" only when wifi is the ACTIVE
+ * link; "off" whenever wired is connected (one-or-the-other) or there is no wifi hardware;
+ * otherwise the radio state ("on"/"off"). */
 const char *az_status_wifi(char *buf, size_t n)
 {
     if (!have("nmcli")) { snprintf(buf, n, "unavailable"); return buf; }
+    struct AzNet s = az_net_scan();
+    if (s.eth_conn) { snprintf(buf, n, "off"); return buf; }   /* wired wins -> wifi off */
+    if (s.wifi_conn) { snprintf(buf, n, "connected"); return buf; }
+    if (!s.wifi_present) { snprintf(buf, n, "off"); return buf; }
+    /* wifi present but not the active link: report the radio switch. */
     const char *argv[] = {"nmcli", "radio", "wifi", NULL};
     char raw[64] = {0};
     if (az_capture(argv, raw, sizeof raw) == 0 && raw[0])
@@ -252,26 +287,15 @@ const char *az_status_wifi(char *buf, size_t n)
     return buf;
 }
 
-/* Wired (ethernet): "connected" / "disconnected" / "no device", as the Wired screen's one
- * "Current:" line. Scans all devices (az_capture_all -- the ethernet line is rarely line 1)
- * and reports whether any ethernet device is connected. */
+/* Wired (ethernet), as the Wired screen's one "Current:" line. "connected" when ethernet is
+ * the active link; "disconnected" when wifi is the active link (one-or-the-other) or the
+ * device is simply down; "no device" when there is no ethernet at all. */
 const char *az_status_wired(char *buf, size_t n)
 {
     if (!have("nmcli")) { snprintf(buf, n, "unavailable"); return buf; }
-    const char *argv[] = {"nmcli", "-t", "-f", "TYPE,STATE", "device", NULL};
-    char raw[1024] = {0};
-    if (az_capture_all(argv, raw, sizeof raw) != 0 || !raw[0]) {
-        snprintf(buf, n, "no device");
-        return buf;
-    }
-    int have_eth = 0, connected = 0;
-    for (char *line = strtok(raw, "\n"); line; line = strtok(NULL, "\n")) {
-        if (strncmp(line, "ethernet:", 9) == 0) {
-            have_eth = 1;
-            if (strstr(line, ":connected")) connected = 1;
-        }
-    }
-    snprintf(buf, n, have_eth ? (connected ? "connected" : "disconnected") : "no device");
+    struct AzNet s = az_net_scan();
+    if (!s.eth_present) { snprintf(buf, n, "no device"); return buf; }
+    snprintf(buf, n, s.eth_conn ? "connected" : "disconnected");
     return buf;
 }
 
@@ -303,23 +327,15 @@ const char *az_status_bluetooth(char *buf, size_t n)
 
 const char *az_status_airplane(char *buf, size_t n)
 {
-    /* A plain ON or OFF. Airplane is ON only when the controllable radios are all down; the
-     * default is OFF. `nmcli -t radio all` prints ONE terse line "WIFI-HW:WIFI:WWAN-HW:WWAN",
-     * e.g. "enabled:disabled:missing:enabled". The SOFTWARE radios are WIFI and WWAN -- fields
-     * at indices 1 and 3 (the "-HW" fields 0 and 2 are the hardware kill switches); airplane
-     * is ON iff neither software radio is "enabled". (The old check used the non-terse form and
-     * matched the HEADER line -- "WIFI-HW WIFI ..." -- so it never saw the values.) */
+    /* A plain ON or OFF. Airplane REALLY means "no networking" -- the internet actually drops
+     * -- so it is driven by NetworkManager's master switch, not just the radios (a wired VM
+     * has no radio to kill). `nmcli networking` prints "enabled"/"disabled"; airplane is ON
+     * when it is "disabled". Mirrors network.py _airplane_is_on. rfkill is the fallback. */
     if (have("nmcli")) {
-        const char *argv[] = {"nmcli", "-t", "radio", "all", NULL};
-        char raw[128] = {0};
+        const char *argv[] = {"nmcli", "networking", NULL};
+        char raw[64] = {0};
         if (az_capture(argv, raw, sizeof raw) == 0 && raw[0]) {
-            /* Walk the colon-separated fields; the software radios are indices 1 and 3. */
-            int idx = 0, any_on = 0;
-            char *save = raw, *tok;
-            for (tok = strtok_r(raw, ":", &save); tok; tok = strtok_r(NULL, ":", &save), idx++) {
-                if ((idx == 1 || idx == 3) && strcmp(tok, "enabled") == 0) any_on = 1;
-            }
-            snprintf(buf, n, any_on ? "off" : "on");
+            snprintf(buf, n, strcmp(raw, "disabled") == 0 ? "on" : "off");
             return buf;
         }
     }
@@ -401,13 +417,29 @@ int az_row_matches(const AzRow *r, const char *q)
     return 0;
 }
 
+/* The bash command a row teaches. APPLY -> the command verbatim; PORT -> the command with a
+ * "<port>" placeholder (that is exactly what the user would type); SCREEN -> NULL. Returned
+ * from a small static buffer for the PORT case (there is one hovered row at a time). */
+const char *az_row_command(const AzRow *r)
+{
+    if (!r) return NULL;
+    if (r->kind == AZ_ACT_APPLY) return r->target;
+    if (r->kind == AZ_ACT_PORT) {
+        static char buf[160];
+        snprintf(buf, sizeof buf, "%s <port>", r->target ? r->target : "");
+        return buf;
+    }
+    return NULL;
+}
+
 /* --- the screen tree -------------------------------------------------------- */
 /* Actions are shell command lines run through the installed `azarch` CLI. main.c runs
- * them with the terminal restored so prompts/output are visible, then shows a result. */
+ * them INSIDE the UI (output captured, shown in the results overlay), then shows a result. */
 
 /* All rows use DESIGNATED initializers: any field not named is zero (NULL / AZ_PV_NONE /
- * quiet==0), so adding a field never forces touching every row and the intent of each row is
- * self-documenting. `.quiet = 1` marks an apply that runs silently inside the UI. */
+ * needs_root==0 / show_output==0), so adding a field never forces touching every row and the
+ * intent of each row is self-documenting. `.needs_root = 1` marks an apply that first secures a
+ * sudo credential; `.show_output = 1` shows its captured output in the overlay. */
 
 /* Network is FIRST (it is what a fresh machine needs first). The main rows keep their live
  * status -- it is a genuine at-a-glance summary of the sub-screen (e.g. "firewall active"),
@@ -421,22 +453,22 @@ static const AzRow ROWS_MAIN[] = {
 /* Theme / Wallpaper rows carry NO per-row status: the live state is shown ONCE as the
  * "Current:" line at the top of the screen (the screen's `current` probe), so echoing
  * "white"/"years" after each option would just be noise -- exactly what the spec calls out.
- * They are `.quiet = 1`: applying a theme/wallpaper needs no sudo/tty, so it runs silently and
- * NO CLI text flashes over the UI. */
+ * Applying a theme/wallpaper needs no sudo (it configures the user session), so needs_root
+ * stays 0; the apply still runs inside the UI (captured), so no CLI text flashes over it. */
 static const AzRow ROWS_THEME[] = {
     {.label="Dark",  .kind=AZ_ACT_APPLY, .target="azarch theme --dark",
      .preview=AZ_PV_THEME, .preview_arg="dark",
-     .hint="The default. Everything follows it (kitty is exempt).", .quiet=1},
+     .hint="The default. Everything follows it (kitty is exempt)."},
     {.label="White", .kind=AZ_ACT_APPLY, .target="azarch theme --white",
      .preview=AZ_PV_THEME, .preview_arg="white",
-     .hint="Kitty keeps its own look regardless of the system theme.", .quiet=1},
+     .hint="Kitty keeps its own look regardless of the system theme."},
 };
 
 static const AzRow ROWS_WALLPAPER[] = {
     {.label="Years",   .kind=AZ_ACT_APPLY, .target="azarch wallpaper --years.png",
-     .preview=AZ_PV_WALLPAPER, .preview_arg="years",   .quiet=1},
+     .preview=AZ_PV_WALLPAPER, .preview_arg="years"},
     {.label="Decades", .kind=AZ_ACT_APPLY, .target="azarch wallpaper --decades.png",
-     .preview=AZ_PV_WALLPAPER, .preview_arg="decades", .quiet=1},
+     .preview=AZ_PV_WALLPAPER, .preview_arg="decades"},
 };
 
 static const AzRow ROWS_NETWORK[] = {
@@ -450,37 +482,50 @@ static const AzRow ROWS_NETWORK[] = {
 /* The sub-screen action rows carry NO per-row .status -- the live state is shown ONCE as the
  * screen's "Current:" line (its .current probe), exactly like Theme/Wallpaper. This is the fix
  * for the repeated "radio enabled" spam: every row on a screen was echoing the same probe. */
+/* Every network apply runs privileged tools (nmcli/rfkill/systemctl/ufw), so needs_root=1:
+ * the UI secures a sudo credential (masked, in-UI, cached) before running it, and runs it
+ * captured -- no black screen, no scrollback. The list/scan verbs set show_output=1 so their
+ * table lands in the results overlay; the toggles just show a one-line result. */
 static const AzRow ROWS_WIFI[] = {
-    {.label="Turn wifi on",         .kind=AZ_ACT_APPLY, .target="azarch network wifi on"},
-    {.label="Turn wifi off",        .kind=AZ_ACT_APPLY, .target="azarch network wifi off"},
-    {.label="Scan / list networks", .kind=AZ_ACT_APPLY, .target="azarch network wifi list"},
-    {.label="Disconnect",           .kind=AZ_ACT_APPLY, .target="azarch network wifi disconnect",
+    {.label="Turn wifi on",         .kind=AZ_ACT_APPLY, .target="azarch network wifi on",   .needs_root=1},
+    {.label="Turn wifi off",        .kind=AZ_ACT_APPLY, .target="azarch network wifi off",  .needs_root=1},
+    {.label="Scan / list networks", .kind=AZ_ACT_APPLY, .target="azarch network wifi list", .needs_root=1, .show_output=1},
+    {.label="Disconnect",           .kind=AZ_ACT_APPLY, .target="azarch network wifi disconnect", .needs_root=1,
      .hint="To connect: azarch network wifi connect <name> <password>"},
 };
 
 static const AzRow ROWS_WIRED[] = {
-    {.label="Turn wired on",  .kind=AZ_ACT_APPLY, .target="azarch network wired on"},
-    {.label="Turn wired off", .kind=AZ_ACT_APPLY, .target="azarch network wired off"},
+    {.label="Turn wired on",  .kind=AZ_ACT_APPLY, .target="azarch network wired on",  .needs_root=1},
+    {.label="Turn wired off", .kind=AZ_ACT_APPLY, .target="azarch network wired off", .needs_root=1},
 };
 
 static const AzRow ROWS_BLUETOOTH[] = {
-    {.label="Turn bluetooth on",   .kind=AZ_ACT_APPLY, .target="azarch network bluetooth on"},
-    {.label="Turn bluetooth off",  .kind=AZ_ACT_APPLY, .target="azarch network bluetooth off"},
-    {.label="Scan / list devices", .kind=AZ_ACT_APPLY, .target="azarch network bluetooth scan",
+    {.label="Turn bluetooth on",   .kind=AZ_ACT_APPLY, .target="azarch network bluetooth on",  .needs_root=1},
+    {.label="Turn bluetooth off",  .kind=AZ_ACT_APPLY, .target="azarch network bluetooth off", .needs_root=1},
+    {.label="Scan / list devices", .kind=AZ_ACT_APPLY, .target="azarch network bluetooth scan", .needs_root=1, .show_output=1,
      .hint="Pair a device with: azarch network bluetooth pair <mac>"},
 };
 
 static const AzRow ROWS_AIRPLANE[] = {
-    {.label="Turn airplane mode on",  .kind=AZ_ACT_APPLY, .target="azarch network airplane on",
-     .hint="Kills every radio at once."},
-    {.label="Turn airplane mode off", .kind=AZ_ACT_APPLY, .target="azarch network airplane off"},
+    {.label="Turn airplane mode on",  .kind=AZ_ACT_APPLY, .target="azarch network airplane on", .needs_root=1,
+     .hint="Turns networking off -- the internet actually drops."},
+    {.label="Turn airplane mode off", .kind=AZ_ACT_APPLY, .target="azarch network airplane off", .needs_root=1},
 };
 
+/* Firewall: enable/disable, LIST the port rules right here in the overlay (show_output=1),
+ * and open/close/delete a port by TYPING its number (AZ_ACT_PORT prompts, then appends the
+ * port to the command). This is the in-UI firewall config the spec asks for -- no dropping
+ * to a shell, no guessing the CLI. */
 static const AzRow ROWS_FIREWALL[] = {
-    {.label="Enable firewall",          .kind=AZ_ACT_APPLY, .target="azarch network firewall enable"},
-    {.label="Disable firewall",         .kind=AZ_ACT_APPLY, .target="azarch network firewall disable"},
-    {.label="List ports (with titles)", .kind=AZ_ACT_APPLY, .target="azarch network firewall port list",
-     .hint="Open/close/delete a port: azarch network firewall port ..."},
+    {.label="Enable firewall",   .kind=AZ_ACT_APPLY, .target="azarch network firewall enable",  .needs_root=1},
+    {.label="Disable firewall",  .kind=AZ_ACT_APPLY, .target="azarch network firewall disable", .needs_root=1},
+    {.label="List ports",        .kind=AZ_ACT_APPLY, .target="azarch network firewall port list", .needs_root=1, .show_output=1},
+    {.label="Open a port",       .kind=AZ_ACT_PORT,  .target="azarch network firewall port open",   .needs_root=1, .show_output=1,
+     .hint="Allow a port through (you will type the number)."},
+    {.label="Close a port",      .kind=AZ_ACT_PORT,  .target="azarch network firewall port close",  .needs_root=1, .show_output=1,
+     .hint="Deny a port -- the rule stays in the list."},
+    {.label="Delete a port rule", .kind=AZ_ACT_PORT, .target="azarch network firewall port delete", .needs_root=1, .show_output=1,
+     .hint="Remove the rule entirely, back to the default policy."},
 };
 
 #define AZN(a) (int)(sizeof(a) / sizeof((a)[0]))

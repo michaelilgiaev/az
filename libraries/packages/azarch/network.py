@@ -123,6 +123,25 @@ def _conn_for_iface(iface: str) -> str:
     return ""
 
 
+def _link_state() -> tuple[bool, bool, bool, bool]:
+    """(eth_present, eth_connected, wifi_present, wifi_connected) from ONE device scan.
+
+    Wifi and Wired are one-or-the-other: the connected ethernet link wins, so the status
+    helpers below decide each line in light of the other from this single source of truth
+    (same rule the C TUI's az_net_scan uses, so the CLI and the UI can never disagree)."""
+    eth_present = eth_conn = wifi_present = wifi_conn = False
+    for _dev, typ, state, *_ in _nm_field("DEVICE,TYPE,STATE,CONNECTION", "device"):
+        if typ == "ethernet":
+            eth_present = True
+            if state == "connected":
+                eth_conn = True
+        elif typ == "wifi":
+            wifi_present = True
+            if state == "connected":
+                wifi_conn = True
+    return eth_present, eth_conn, wifi_present, wifi_conn
+
+
 # ---------------------------------------------------------------------------
 # status (the bare `azarch network`)
 # ---------------------------------------------------------------------------
@@ -150,7 +169,9 @@ def network_status() -> int:
                 print(f"  active: {name} ({typ}) on {dev}")
         else:
             print("  active: none")
-        print(f"  wifi radio: {_nm_radio('wifi') or 'unknown'}")
+        # Wifi and Wired are one-or-the-other (see _wifi_state/_wired_state).
+        print(f"  wifi:  {_wifi_state()}")
+        print(f"  wired: {_wired_state()}")
     else:
         print("NetworkManager: nmcli not found")
     print(f"Airplane mode: {'on' if _airplane_is_on() else 'off'}")
@@ -218,8 +239,22 @@ def _wifi_disconnect() -> int:
     return 0 if rc == 0 else 1
 
 
+def _wifi_state() -> str:
+    """Wifi as one word for the status line, one-or-the-other with wired: 'connected' only
+    when wifi is the ACTIVE link; 'off' when wired is connected or there is no wifi hardware;
+    else the radio switch ('on'/'off'). Mirrors the C az_status_wifi exactly."""
+    _eth_p, eth_conn, wifi_p, wifi_conn = _link_state()
+    if eth_conn:
+        return "off"          # wired wins -> wifi off
+    if wifi_conn:
+        return "connected"
+    if not wifi_p:
+        return "off"
+    return "on" if _nm_radio("wifi") == "enabled" else "off"
+
+
 def _wifi_status() -> int:
-    print(f"Wifi radio: {_nm_radio('wifi') or 'unknown'}")
+    print(f"Wifi: {_wifi_state()}")
     for name, typ, dev in _nm_field("NAME,TYPE,DEVICE", "connection", "show", "--active"):
         if "wireless" in typ:
             print(f"  connected: {name} on {dev}")
@@ -273,14 +308,21 @@ def _wired_toggle(on: bool) -> int:
     return 0
 
 
+def _wired_state() -> str:
+    """Wired as one word, one-or-the-other with wifi: 'connected' when ethernet is the active
+    link, 'disconnected' when it is down (incl. when wifi is the active link), 'no device'
+    when there is no ethernet. Mirrors the C az_status_wired exactly."""
+    eth_p, eth_conn, _wp, _wc = _link_state()
+    if not eth_p:
+        return "no device"
+    return "connected" if eth_conn else "disconnected"
+
+
 def _wired_status() -> int:
-    devs = _wired_devices()
-    if not devs:
-        print("Wired: no ethernet device.")
-        return 0
+    print(f"Wired: {_wired_state()}")
     for d, t, state, conn in _nm_field("DEVICE,TYPE,STATE,CONNECTION", "device"):
         if t == "ethernet":
-            print(f"Wired {d}: {state}" + (f" ({conn})" if conn else ""))
+            print(f"  {d}: {state}" + (f" ({conn})" if conn else ""))
     return 0
 
 
@@ -390,20 +432,17 @@ def cmd_bluetooth(args: list[str]) -> int:
 # airplane (kill/restore every radio at once: nmcli radio all + rfkill)
 # ---------------------------------------------------------------------------
 def _airplane_is_on() -> bool:
-    """True when airplane mode is ON = the controllable radios are all down. Default OFF.
+    """True when airplane mode is ON. Default OFF.
 
-    `nmcli -t radio all` prints ONE terse line 'WIFI-HW:WIFI:WWAN-HW:WWAN' (e.g.
-    'enabled:disabled:missing:enabled'); the SOFTWARE radios are WIFI and WWAN -- fields at
-    indices 1 and 3 (the '-HW' fields 0 and 2 are hardware kill switches). Airplane is ON iff
-    neither software radio is 'enabled'. (The old code used `nmcli radio all` and
-    compared the whole two-line table to 'disabled', which was never equal.) Falls back to
-    rfkill (ON == every listed radio soft/hard blocked)."""
-    rc, out = _run("nmcli", "-t", "radio", "all")
+    Airplane REALLY means "no networking": the machine's internet actually drops. Since many
+    Az'arch machines (and every VM) reach the internet over WIRED ethernet -- which is not a
+    radio -- toggling radios alone left the internet up (the "fake airplane mode" the spec
+    calls out). So airplane is driven by, and read from, NetworkManager's master switch:
+    `nmcli networking` == 'disabled' means airplane is ON. (rfkill is still a fallback signal
+    on hosts without nmcli.)"""
+    rc, out = _run("nmcli", "networking")
     if rc == 0 and out.strip():
-        fields = out.strip().splitlines()[0].split(":")
-        software = [fields[i] for i in (1, 3) if i < len(fields)]
-        if software:
-            return not any(s == "enabled" for s in software)
+        return out.strip() == "disabled"
     if _have("rfkill"):
         _rc, out = _run("rfkill", "list")
         blocks = [ln for ln in out.splitlines() if "blocked" in ln.lower()]
@@ -413,10 +452,16 @@ def _airplane_is_on() -> bool:
 
 
 def _airplane_set(on: bool) -> int:
-    """on=True -> all radios OFF (airplane engaged). Uses nmcli radio all when present and
-    rfkill as the hard kill so non-NM radios go down too."""
+    """on=True -> airplane engaged: the internet ACTUALLY drops. We turn NetworkManager's
+    master switch off (`nmcli networking off`), which disconnects EVERY managed device --
+    wired included -- so connectivity really goes away (not just the radios). We also block
+    the radios via rfkill so wifi/bluetooth hardware goes down too. on=False restores both
+    (`nmcli networking on` reconnects the auto-connect profiles, wired comes back)."""
     did = False
     if _have("nmcli"):
+        # The master switch is what makes airplane real: it kills wired connectivity too.
+        _sudo("nmcli", "networking", "off" if on else "on", check=False)
+        # Also flip the radio switch so the wifi/wwan indicators reflect airplane.
         _sudo("nmcli", "radio", "all", "off" if on else "on", check=False)
         did = True
     if _have("rfkill"):
@@ -425,7 +470,7 @@ def _airplane_set(on: bool) -> int:
     if not did:
         _err("azarch network airplane: neither nmcli nor rfkill available.")
         return 1
-    print(f"Airplane mode {'ON -- all radios off' if on else 'OFF -- radios restored'}.")
+    print(f"Airplane mode {'ON -- networking off, internet down' if on else 'OFF -- networking restored'}.")
     return 0
 
 

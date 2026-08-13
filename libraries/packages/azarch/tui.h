@@ -53,15 +53,17 @@
  * C so it needs no terminal to reason about (and the tests read it directly). */
 
 typedef enum {
-    AZ_ACT_SCREEN = 0,   /* action.target names a child screen id to descend into  */
-    AZ_ACT_APPLY,        /* action.target is a shell command line to run (an apply) */
+    AZ_ACT_SCREEN = 0,   /* action.target names a child screen id to descend into      */
+    AZ_ACT_APPLY,        /* action.target is a shell command line to run (an apply)     */
+    AZ_ACT_PORT,         /* like APPLY, but PROMPT for a port first and append it to    */
+                         /* action.target, e.g. "azarch network firewall port open"    */
 } AzActionKind;
 
 /* How a row should render its PREVIEW while hovered (right/lower pane). */
 typedef enum {
     AZ_PV_NONE = 0,
-    AZ_PV_WALLPAPER,     /* kitty-icat the wallpaper image for row->preview_arg (an id) */
-    AZ_PV_THEME,         /* ANSI mock-ups of LibreWolf + Dolphin for row->preview_arg    */
+    AZ_PV_WALLPAPER,     /* kitty-icat the wallpaper image for row->preview_arg (an id)  */
+    AZ_PV_THEME,         /* kitty-icat the LibreWolf + Dolphin screenshots (dark/white)  */
 } AzPreviewKind;
 
 typedef struct {
@@ -75,12 +77,19 @@ typedef struct {
     AzPreviewKind preview;
     const char *preview_arg;    /* wallpaper id / theme name for the preview           */
     const char *hint;           /* optional one-line help shown under the list         */
-    /* quiet: run this apply SILENTLY -- capture its output and stay on the alt screen,
-     * showing only a one-line result -- instead of dropping to the real terminal. Set for
-     * applies that never need a tty (theme, wallpaper: they configure the user session with
-     * no sudo), so switching them does NOT flash raw CLI text over the UI. Applies that may
-     * prompt for a sudo password (network/firewall) leave quiet==0 so the prompt is visible. */
-    int quiet;
+    /* EVERY apply now runs INSIDE the UI: its output is captured and shown in a centred
+     * results overlay on the alt screen, so raw CLI text never flashes over the UI and the
+     * terminal is never "blacked out" or polluted (the fix for "selecting a setting turns the
+     * screen black" and "Q leaves the terminal full of previous commands"). These two flags
+     * describe an apply's needs; there is no more "drop to the real terminal" path.
+     *
+     *  needs_root -- the command runs privileged tools (ufw/nmcli/rfkill/systemctl). Before
+     *      running it the UI ensures a sudo credential (an in-UI masked password prompt,
+     *      cached for the session), so the apply never blocks on an invisible sudo prompt.
+     *  show_output -- show the command's captured output in the results overlay (firewall
+     *      "list ports" wants its table shown; a plain toggle just needs a one-line result). */
+    int needs_root;
+    int show_output;
 } AzRow;
 
 typedef struct {
@@ -105,6 +114,11 @@ const AzScreen *az_screen_find(const char *id);
 /* filter_items: does row `r` match the search query `q` (case-insensitive substring of
  * the label or its live status)? Empty/NULL q matches everything. Pure -- unit-tested. */
 int az_row_matches(const AzRow *r, const char *q);
+
+/* The one-line bash command a row teaches the user (shown under the list so they can run it
+ * WITHOUT the UI). For an APPLY it is the command itself; for a PORT prompt it is the command
+ * with a "<port>" placeholder; for a SCREEN it is NULL (nothing to teach). Pure. */
+const char *az_row_command(const AzRow *r);
 
 /* --- Status probes (model.c) ------------------------------------------------
  * Each writes a short human string into buf and returns it. They shell out to the same

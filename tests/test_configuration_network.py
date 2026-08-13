@@ -145,6 +145,41 @@ def test_wifi_without_nmcli_degrades(monkeypatch, capsys):
     assert "nmcli not found" in capsys.readouterr().err
 
 
+def _stub_devices(cli, monkeypatch, table: str):
+    """Stub `nmcli -t -f ... device` (the DEVICE,TYPE,STATE,CONNECTION read that
+    _link_state uses) to return `table`; everything else reads empty."""
+    monkeypatch.setattr(cli, "_have", lambda prog: True)
+
+    def fake_run(*a):
+        if a[:3] == ("nmcli", "-t", "-f") and a[-1] == "device":
+            return (0, table)
+        return (0, "")
+    monkeypatch.setattr(cli, "_run", fake_run)
+
+
+def test_wifi_and_wired_are_mutually_exclusive_wired_wins(monkeypatch):
+    """When ethernet is connected, wired is 'connected' and wifi is 'off' -- never both on
+    (the spec: "if wired is connected then wifi is off"). Both read one device table."""
+    cli = _cli()
+    # ethernet connected, a wifi device present but merely 'disconnected'.
+    _stub_devices(cli, monkeypatch,
+                  "enp0s6:ethernet:connected:Wired connection 1\n"
+                  "wlan0:wifi:disconnected:\n")
+    assert cli._wired_state() == "connected"
+    assert cli._wifi_state() == "off"
+
+
+def test_wifi_and_wired_are_mutually_exclusive_wifi_wins(monkeypatch):
+    """When wifi is the active link, wifi is 'connected' and wired is 'disconnected' -- the
+    other half of one-or-the-other."""
+    cli = _cli()
+    _stub_devices(cli, monkeypatch,
+                  "enp0s6:ethernet:disconnected:\n"
+                  "wlan0:wifi:connected:HomeNet\n")
+    assert cli._wifi_state() == "connected"
+    assert cli._wired_state() == "disconnected"
+
+
 # --- bluetooth (off by default) --------------------------------------------
 
 def test_bluetooth_on_unblocks_and_enables(monkeypatch, capsys):
@@ -175,49 +210,52 @@ def test_bluetooth_connect_needs_mac(capsys):
 
 # --- airplane ---------------------------------------------------------------
 
-def test_airplane_on_kills_all_radios(monkeypatch, capsys):
+def test_airplane_on_really_drops_networking(monkeypatch, capsys):
+    """Airplane ON must ACTUALLY drop the internet, not just the radios -- a wired VM has no
+    radio to kill. So it turns NetworkManager's master switch off (`nmcli networking off`,
+    which disconnects wired too), flips the radios, and rfkill-blocks. This pins the fix for
+    the "fake airplane mode -- doesn't disable internet" report."""
     cli = _cli()
     _stub_reads(cli, monkeypatch, have=True)
     calls = _capture_sudo(cli, monkeypatch)
     rc = cli.main(["network", "airplane", "on"])
     assert rc == 0
+    assert ("nmcli", "networking", "off") in calls      # the master switch: wired drops too
     assert ("nmcli", "radio", "all", "off") in calls
     assert ("rfkill", "block", "all") in calls
     assert "Airplane mode ON" in capsys.readouterr().out
 
 
-def test_airplane_off_restores_all_radios(monkeypatch):
+def test_airplane_off_restores_networking(monkeypatch):
     cli = _cli()
     _stub_reads(cli, monkeypatch, have=True)
     calls = _capture_sudo(cli, monkeypatch)
     assert cli.main(["network", "airplane", "off"]) == 0
+    assert ("nmcli", "networking", "on") in calls        # reconnects wired + auto profiles
     assert ("nmcli", "radio", "all", "on") in calls
     assert ("rfkill", "unblock", "all") in calls
 
 
-def test_airplane_status_reads_nmcli(monkeypatch, capsys):
-    """`nmcli -t radio all` prints ONE terse line 'WIFI-HW:WIFI:WWAN-HW:WWAN'. Airplane is ON
-    only when the SOFTWARE radios (WIFI, WWAN -- fields 1 and 3) are BOTH not 'enabled'. This
-    pins the terse-format parse (the old code read the non-terse HEADER line and never saw the
-    values, so it mis-reported)."""
+def test_airplane_status_on_when_networking_disabled(monkeypatch, capsys):
+    """Airplane is read from NetworkManager's master switch now: `nmcli networking` ==
+    'disabled' means airplane is ON (the internet is really down). This replaces the old
+    radios-only read that left a wired machine reporting airplane OFF while offline."""
     cli = _cli()
     monkeypatch.setattr(cli, "_have", lambda prog: True)
-    # every software radio down => airplane ON
     monkeypatch.setattr(cli, "_run",
-                        lambda *a: (0, "enabled:disabled:missing:disabled\n")
-                        if a[:4] == ("nmcli", "-t", "radio", "all") else (0, ""))
+                        lambda *a: (0, "disabled\n")
+                        if a == ("nmcli", "networking") else (0, ""))
     assert cli.main(["network", "airplane", "status"]) == 0
     assert "Airplane mode: on" in capsys.readouterr().out
 
 
-def test_airplane_status_off_when_a_radio_is_enabled(monkeypatch, capsys):
-    """One software radio still 'enabled' => airplane OFF (the default). Guards against the
-    old bug where the whole two-line table was compared to 'disabled' and never matched."""
+def test_airplane_status_off_when_networking_enabled(monkeypatch, capsys):
+    """`nmcli networking` == 'enabled' => airplane OFF (the default)."""
     cli = _cli()
     monkeypatch.setattr(cli, "_have", lambda prog: True)
     monkeypatch.setattr(cli, "_run",
-                        lambda *a: (0, "enabled:enabled:missing:disabled\n")
-                        if a[:4] == ("nmcli", "-t", "radio", "all") else (0, ""))
+                        lambda *a: (0, "enabled\n")
+                        if a == ("nmcli", "networking") else (0, ""))
     assert cli.main(["network", "airplane", "status"]) == 0
     assert "Airplane mode: off" in capsys.readouterr().out
 

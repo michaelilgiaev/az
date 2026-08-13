@@ -6,7 +6,7 @@ CC      ?= gcc
 CFLAGS  += -O2 -Wall -Wextra -std=c11
 LDFLAGS +=
 
-OBJS = main.o render.o model.o preview.o
+OBJS = main.o render.o model.o preview.o action.o
 BIN  = azarch-tui
 
 # Repo-root tests dir (single home for tests). `make test` delegates there, matching the

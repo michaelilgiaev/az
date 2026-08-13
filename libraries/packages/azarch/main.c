@@ -6,13 +6,17 @@
  * never an interpreter round-trip.
  *
  * NAVIGATION (per the spec): arrow keys, WASD, and HJKL all move; Enter opens/applies; Esc
- * (or the movement "back") goes up a screen; `/` focuses the search box. The nav keys are
- * uppercased + coloured by the renderer.
+ * (or the movement "back") goes up a screen; `/` focuses the search box; `q`/Ctrl-C quit. The
+ * nav keys are uppercased + coloured by the renderer, and ESC is INSTANT (no wait on a bare
+ * ESC -- the arrow-sequence peek is fully non-blocking).
  *
- * ACTIONS shell out to the installed `azarch` subcommands (theme/wallpaper/network). Since
- * some prompt for a sudo password or print output, we RESTORE the terminal (cooked mode,
- * normal screen) around the command so its I/O is visible, then re-enter raw mode and show
- * a one-line result. So the UI adds navigation + previews, not new system behaviour.
+ * ACTIONS shell out to the installed `azarch` subcommands (theme/wallpaper/network), but ALWAYS
+ * INSIDE the UI: the command's output is CAPTURED (action.c) and shown in a centred results
+ * overlay on the alt screen -- we never drop to the real terminal. A privileged apply first
+ * takes a sudo credential via a masked in-UI password prompt (cached for the session), so it
+ * never blocks on a hidden prompt over a blanked terminal. That is why selecting a setting no
+ * longer blacks out the screen and why quitting lands cleanly back at the shell with no leftover
+ * CLI text. So the UI adds navigation, previews and prompts, not new system behaviour.
  *
  * If stdin/stdout is not a terminal, main() prints a short pointer to the subcommands and
  * exits 0 (so `azarch </dev/null` or a pipe never breaks) -- mirroring the old Python UI.
@@ -23,7 +27,9 @@
 
 #include "render.h"
 #include "preview.h"
+#include "action.h"
 
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -103,11 +109,16 @@ static int read_key(void)
     if (c == '\r' || c == '\n') return K_ENTER;
     if (c == 127 || c == 8) return K_BACKSPACE;
     if (c == 27) {
-        /* Could be a bare ESC or a CSI sequence. Peek with a short non-blocking read. */
+        /* Bare ESC vs a CSI/SS3 arrow sequence. A real arrow arrives as one atomic burst
+         * ("\033[A"), so its bytes are ALREADY in the input buffer the instant we see the
+         * ESC. So we peek NON-BLOCKING (VMIN=0, VTIME=0): if a byte is there it's a sequence,
+         * if not it's a genuine ESC and we return immediately. This is what makes "ESC = go
+         * back" INSTANT -- the old code armed a 100ms VTIME timer on every ESC, so a bare ESC
+         * always paid ~100ms of latency before it registered. */
         unsigned char seq[2];
         struct termios t; tcgetattr(STDIN_FILENO, &t);
         cc_t vmin = t.c_cc[VMIN], vtime = t.c_cc[VTIME];
-        t.c_cc[VMIN] = 0; t.c_cc[VTIME] = 1;   /* 100ms */
+        t.c_cc[VMIN] = 0; t.c_cc[VTIME] = 0;   /* fully non-blocking peek */
         tcsetattr(STDIN_FILENO, TCSANOW, &t);
         ssize_t n0 = read(STDIN_FILENO, &seq[0], 1);
         int key = K_ESC;
@@ -130,67 +141,97 @@ static int read_key(void)
     return c;
 }
 
-/* --- run an apply command, VISIBLY (terminal restored) --------------------- */
-/* For applies that may prompt (sudo password) or print output worth seeing -- network /
- * firewall. We drop out of the alt screen so the command's I/O is on the real terminal, run
- * it, wait for a key, then come back and report. */
-static void run_apply_visible(AzUI *ui, const char *cmdline)
+/* --- run an apply command, entirely INSIDE the UI -------------------------- */
+/* NOTHING drops to the real terminal. The command runs with its output CAPTURED (action.c),
+ * and we either show a one-line result or, for a listing / on error, the full output in the
+ * centred overlay (AZ_MODE_OUTPUT). This is the fix for "selecting a setting turns the screen
+ * black", "Firewall goes black / can't configure", and "Q leaves the terminal full of
+ * previous commands": no alt-screen exit, no child ever writes to the terminal.
+ *
+ * A command that `needs_root` requires a sudo credential first. If one isn't already active
+ * we stash the command and switch to the masked PASSWORD prompt; run_pending_apply() finishes
+ * it once the password validates. So the sudo prompt is a visible in-UI field, never a hidden
+ * prompt on a blanked terminal. */
+static char g_pending_cmd[768];      /* command awaiting a password before it can run */
+static int  g_pending_show;          /* its show_output flag                          */
+
+static void set_output(AzUI *ui, const char *title, char *captured)
 {
-    az_preview_clear();
-    wr("\033[?25h\033[?1049l");
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &g_orig_termios);
-    g_raw = 0;
-
-    printf("\n\033[%sm$ %s\033[0m\n", AZ_SGR_DIM, cmdline);
-    fflush(stdout);
-    int rc = -1;
-    pid_t pid = fork();
-    if (pid == 0) {
-        execl("/bin/sh", "sh", "-c", cmdline, (char *)NULL);
-        _exit(127);
-    } else if (pid > 0) {
-        int st = 0; waitpid(pid, &st, 0);
-        rc = WIFEXITED(st) ? WEXITSTATUS(st) : -1;
-    }
-    printf("\n\033[%sm[ Press any key to return ]\033[0m", AZ_SGR_DIM);
-    fflush(stdout);
-
-    enter_raw();
-    /* consume the acknowledgement key */
-    (void)read_key();
-
-    az_status_invalidate();   /* the apply may have changed state -> refresh status now */
-    snprintf(ui->message, sizeof ui->message, "%s",
-             rc == 0 ? "Done." : "That reported an error (see above).");
+    free(ui->output);
+    ui->output = captured;            /* takes ownership (may be NULL) */
+    ui->output_scroll = 0;
+    snprintf(ui->output_title, sizeof ui->output_title, "%s", title ? title : "");
 }
 
-/* --- run an apply command, SILENTLY (stay on the UI) ----------------------- */
-/* For applies that never need a tty -- theme, wallpaper (they configure the user session, no
- * sudo). We run the command with stdin/stdout/stderr on /dev/null WITHOUT leaving the alt
- * screen, so NO raw CLI text ever flashes over the UI; the next frame just redraws with the
- * new "Current:" state and a one-line result. This is the fix for the "changing themes is
- * buggy, CLI text appears" report -- the toggle now stays entirely inside the UI. */
-static void run_apply_quiet(AzUI *ui, const char *cmdline)
+/* Actually run `cmdline` (credential already ensured) and land the result in the UI. */
+static void do_apply(AzUI *ui, const char *cmdline, int show_output)
 {
-    int rc = -1;
-    pid_t pid = fork();
-    if (pid == 0) {
-        int dn = open("/dev/null", O_RDWR);
-        if (dn >= 0) { dup2(dn, 0); dup2(dn, 1); dup2(dn, 2); if (dn > 2) close(dn); }
-        execl("/bin/sh", "sh", "-c", cmdline, (char *)NULL);
-        _exit(127);
-    } else if (pid > 0) {
-        int st = 0; waitpid(pid, &st, 0);
-        rc = WIFEXITED(st) ? WEXITSTATUS(st) : -1;
-    }
-    az_status_invalidate();   /* refresh status so the new theme/wallpaper shows immediately */
+    char *out = NULL;
+    int rc = az_action_run_capture(cmdline, &out);
+    az_status_invalidate();           /* the apply may have changed state -> refresh now */
+
+    /* Show the full output when the row asked for it (a listing) OR when it failed (so the
+     * error is visible, not swallowed). Otherwise a terse one-line result keeps the flow calm. */
+    int has_text = out && out[0];
     snprintf(ui->message, sizeof ui->message, "%s",
              rc == 0 ? "Done." : "That reported an error.");
+    if (show_output || rc != 0) {
+        /* set_output takes ownership of whatever pointer we pass. If the command printed
+         * nothing, substitute a short placeholder (and drop the empty capture) so the overlay
+         * is never blank. */
+        if (has_text) {
+            set_output(ui, cmdline, out);
+        } else {
+            free(out);
+            set_output(ui, cmdline,
+                       strdup(rc == 0 ? "(done)" : "(the command reported an error)"));
+        }
+        ui->mode = AZ_MODE_OUTPUT;
+    } else {
+        free(out);
+        ui->mode = AZ_MODE_BROWSE;
+    }
+}
+
+/* Begin an apply: ensure sudo when needed (else prompt), then run it. */
+static void start_apply(AzUI *ui, const char *cmdline, int needs_root, int show_output)
+{
+    if (needs_root && !az_action_sudo_ok()) {
+        /* Need a password first: stash the command and raise the masked prompt. */
+        snprintf(g_pending_cmd, sizeof g_pending_cmd, "%s", cmdline);
+        g_pending_show = show_output;
+        ui->mode = AZ_MODE_PASSWORD;
+        ui->prompt = "Enter your password (sudo):";
+        ui->input[0] = '\0';
+        return;
+    }
+    do_apply(ui, cmdline, show_output);
+}
+
+/* After a password validates, run whatever apply was waiting on it. */
+static void run_pending_apply(AzUI *ui)
+{
+    if (g_pending_cmd[0]) {
+        char cmd[768];
+        snprintf(cmd, sizeof cmd, "%s", g_pending_cmd);
+        g_pending_cmd[0] = '\0';
+        do_apply(ui, cmd, g_pending_show);
+    }
 }
 
 /* --- navigation ------------------------------------------------------------- */
+/* Go back one step. From an overlay/prompt (OUTPUT/PORT/PASSWORD) "back" just closes it and
+ * returns to the menu (instantly -- there is no command running to wait on). From the menu it
+ * clears a live search, else pops one screen off the stack. */
 static void go_back(AzUI *ui)
 {
+    if (ui->mode == AZ_MODE_OUTPUT || ui->mode == AZ_MODE_PORT || ui->mode == AZ_MODE_PASSWORD) {
+        ui->mode = AZ_MODE_BROWSE;
+        ui->input[0] = '\0';
+        g_pending_cmd[0] = '\0';
+        set_output(ui, "", NULL);
+        return;
+    }
     if (ui->query[0]) { ui->query[0] = '\0'; ui->sel = 0; return; }
     if (ui->depth > 1) { ui->depth--; ui->sel = 0; ui->message[0] = '\0'; }
 }
@@ -206,16 +247,23 @@ static void activate(AzUI *ui)
             ui->stack[ui->depth++] = row->target;
             ui->sel = 0; ui->query[0] = '\0'; ui->message[0] = '\0';
         }
-    } else {
-        if (row->quiet) run_apply_quiet(ui, row->target);
-        else            run_apply_visible(ui, row->target);
+    } else if (row->kind == AZ_ACT_PORT) {
+        /* Prompt for a port number, then run "<target> <port>" (open/close/delete). We keep
+         * the base command in g_pending_cmd so the port handler can append the typed number. */
+        snprintf(g_pending_cmd, sizeof g_pending_cmd, "%s", row->target);
+        g_pending_show = row->show_output;
+        ui->mode = AZ_MODE_PORT;
+        ui->prompt = "Port number:";
+        ui->input[0] = '\0';
+    } else { /* AZ_ACT_APPLY */
+        start_apply(ui, row->target, row->needs_root, row->show_output);
     }
 }
 
-/* search-box editing; returns 0 to quit (never happens here) */
+/* search-box editing */
 static void search_key(AzUI *ui, int k)
 {
-    if (k == K_ENTER || k == K_ESC) { ui->searching = 0; return; }
+    if (k == K_ENTER || k == K_ESC) { ui->mode = AZ_MODE_BROWSE; ui->searching = 0; return; }
     if (k == K_BACKSPACE) {
         size_t l = strlen(ui->query);
         if (l) ui->query[l - 1] = '\0';
@@ -226,6 +274,72 @@ static void search_key(AzUI *ui, int k)
         size_t l = strlen(ui->query);
         if (l < sizeof ui->query - 1) { ui->query[l] = (char)k; ui->query[l + 1] = '\0'; }
         ui->sel = 0;
+    }
+}
+
+/* generic single-line text-input editing into ui->input (shared by PORT + PASSWORD) */
+static void input_edit(AzUI *ui, int k, int digits_only)
+{
+    if (k == K_BACKSPACE) {
+        size_t l = strlen(ui->input);
+        if (l) ui->input[l - 1] = '\0';
+        return;
+    }
+    if (k >= 32 && k < 127) {
+        if (digits_only && !isdigit(k)) return;    /* port field: digits only */
+        size_t l = strlen(ui->input);
+        if (l < sizeof ui->input - 1) { ui->input[l] = (char)k; ui->input[l + 1] = '\0'; }
+    }
+}
+
+/* PORT prompt: Enter runs "<base cmd> <port>"; ESC cancels back to the menu. */
+static void port_key(AzUI *ui, int k)
+{
+    if (k == K_ESC) { go_back(ui); return; }
+    if (k == K_ENTER) {
+        if (!ui->input[0]) { go_back(ui); return; }   /* empty -> cancel */
+        char cmd[768];
+        snprintf(cmd, sizeof cmd, "%s %s", g_pending_cmd, ui->input);
+        g_pending_cmd[0] = '\0';
+        int show = g_pending_show;
+        ui->input[0] = '\0';
+        /* Port applies need root; ensure the credential, then run (may re-prompt password). */
+        start_apply(ui, cmd, 1, show);
+        return;
+    }
+    input_edit(ui, k, /*digits_only=*/1);
+}
+
+/* PASSWORD prompt: Enter validates the typed password with sudo; on success run the pending
+ * apply, on failure show a message and let them retry; ESC cancels. Masked on screen. */
+static void password_key(AzUI *ui, int k)
+{
+    if (k == K_ESC) { go_back(ui); return; }
+    if (k == K_ENTER) {
+        if (az_action_authenticate(ui->input)) {
+            ui->input[0] = '\0';
+            ui->mode = AZ_MODE_BROWSE;
+            run_pending_apply(ui);
+        } else {
+            ui->input[0] = '\0';
+            snprintf(ui->message, sizeof ui->message, "Wrong password -- try again.");
+        }
+        return;
+    }
+    input_edit(ui, k, /*digits_only=*/0);
+}
+
+/* OUTPUT overlay: paging keys (up/down/j/k) scroll; anything else (Enter/ESC/q handled in the
+ * main loop) closes. Returns after adjusting scroll. */
+static void output_key(AzUI *ui, int k)
+{
+    int lines = az_output_line_count(ui);
+    int page = az_output_page_rows(ui);
+    int maxscroll = lines - page; if (maxscroll < 0) maxscroll = 0;
+    switch (k) {
+        case K_DOWN: case 'j': if (ui->output_scroll < maxscroll) ui->output_scroll++; break;
+        case K_UP:   case 'k': if (ui->output_scroll > 0) ui->output_scroll--; break;
+        default: break;
     }
 }
 
@@ -252,6 +366,13 @@ int main(void)
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
     signal(SIGHUP, on_signal);
+    /* IGNORE SIGPIPE. An apply forks a child (e.g. `sudo -S -v` for the password) and we write
+     * to its stdin pipe; if that child has already exited (sudo missing, a rejected password,
+     * or a fork/exec race) the write hits a closed pipe and would raise SIGPIPE, whose DEFAULT
+     * action terminates the process -- and a signal death does NOT run atexit(on_exit_restore),
+     * so the terminal would be left in raw + alt-screen mode (a corrupted shell). Ignoring it
+     * turns that write into a plain EPIPE the caller handles as "auth failed", never a crash. */
+    signal(SIGPIPE, SIG_IGN);
     struct sigaction sa; memset(&sa, 0, sizeof sa);
     sa.sa_handler = on_winch;
     sigaction(SIGWINCH, &sa, NULL);
@@ -287,8 +408,27 @@ int main(void)
         int k = read_key();
         if (k == K_RESIZE) continue;
 
-        if (ui.searching) { search_key(&ui, k); continue; }
+        /* EOF (stdin closed) always quits, from any mode -- never spin on it. Ctrl-C likewise
+         * quits from the browsing modes; inside a text prompt it is swallowed (not a literal). */
+        if (k == K_EOF) { leave_raw(); free(ui.output); return 0; }
 
+        /* Route by MODE. The text prompts (SEARCH/PORT/PASSWORD) consume the key as input;
+         * the OUTPUT overlay pages or closes; BROWSE is the menu. Keeping the modes on ui.mode
+         * (not a pile of flags) means each key has exactly one meaning per screen. */
+        if (ui.mode == AZ_MODE_SEARCH) { ui.searching = 1; search_key(&ui, k); continue; }
+        if (ui.mode == AZ_MODE_PORT)     { port_key(&ui, k);     continue; }
+        if (ui.mode == AZ_MODE_PASSWORD) { password_key(&ui, k); continue; }
+        if (ui.mode == AZ_MODE_OUTPUT) {
+            /* Enter / ESC / q / left-back all CLOSE the overlay and return to the menu
+             * (instant -- no command is running). Other keys page the text. */
+            if (k == K_ENTER || k == K_ESC || k == 'q' || k == K_LEFT || k == 'h' || k == 'a')
+                go_back(&ui);
+            else
+                output_key(&ui, k);
+            continue;
+        }
+
+        /* BROWSE. */
         switch (k) {
             case K_UP: case 'k': case 'w':
                 if (ui.sel > 0) ui.sel--;
@@ -308,21 +448,22 @@ int main(void)
             case K_LEFT: case 'h': case 'a':
                 go_back(&ui); break;
             case '/':
-                ui.searching = 1; break;
+                ui.mode = AZ_MODE_SEARCH; ui.searching = 1; break;
             case K_ESC:
-                /* ESC is GO BACK -- always, never quit (the newest spec: "ESC is 'go back'
-                 * not 'quit'"). At the root there is nothing to go back to, so it is a no-op;
+                /* ESC is GO BACK -- always, never quit (the spec: "ESC is 'go back' not
+                 * 'quit'"). At the root there is nothing to go back to, so it is a no-op;
                  * `q` is the one, always-instant quit key. */
                 go_back(&ui);
                 break;
             case 'q':
             case 3:      /* Ctrl-C: raw mode has ISIG OFF, so it arrives as the byte 0x03, NOT
                           * as SIGINT -- which is why it used to do nothing. Quit like q. */
-            case K_EOF:  /* stdin closed (e.g. Ctrl-D at the top) -> quit, never spin on EOF. */
-                /* q / Ctrl-C / EOF quit INSTANTLY from anywhere -- no "go back first" at depth.
-                 * leave_raw() restores the terminal cleanly (shows the cursor, drops the alt
-                 * screen) and we return straight away, so there is no lag before the prompt. */
+                /* q / Ctrl-C quit INSTANTLY from the menu. leave_raw() restores the terminal
+                 * cleanly (shows the cursor, drops the alt screen, WIPES scrollback) and we
+                 * return straight away -- no lag, and no leftover CLI text (every apply ran
+                 * inside the UI, so there is nothing in the scrollback to leak). */
                 leave_raw();
+                free(ui.output);
                 return 0;
             default: break;
         }

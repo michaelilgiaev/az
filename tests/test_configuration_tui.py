@@ -137,8 +137,10 @@ def test_build_tui_inputs_are_the_c_sources():
     assert "render.c" in names
     assert "model.c" in names
     assert "preview.c" in names
+    assert "action.c" in names       # apply execution + in-UI sudo credential
     assert "Makefile" in names
     assert "tui.h" in names
+    assert "action.h" in names
     assert not any(n.endswith(".py") for n in names)     # only C inputs
     assert tui_build.TUI_BIN_NAME == os.path.basename(tui_build.TUI_BIN_SYSTEM_PATH)
 
@@ -262,10 +264,11 @@ def test_esc_is_back_and_q_ctrlc_quit_instantly():
     esc_block = main[main.index("case K_ESC:"):main.index("case 'q':")]
     assert "go_back(&ui)" in esc_block
     assert "return 0" not in esc_block, "ESC must NOT quit -- it only goes back"
-    # q, Ctrl-C (0x03) and EOF all quit instantly.
+    # q and Ctrl-C (0x03) quit instantly from the menu; EOF (stdin closed) quits from ANY mode,
+    # handled up front so it can never spin (it is a top-level `if`, not a switch case now).
     assert "case 'q':" in main
     assert "case 3:" in main            # Ctrl-C as a raw byte
-    assert "case K_EOF:" in main        # stdin closed -> quit, never spin
+    assert "k == K_EOF" in main         # stdin closed -> quit, never spin (checked before dispatch)
     # the nav label for ESC is a fixed 'back' (not depth-dependent 'quit').
     assert 'verb(&t, "ESC", "back")' in render
 
@@ -301,8 +304,66 @@ def test_network_status_is_plain_online_offline():
     # bluetooth never RETURNS the old confusing "present" value (the word may still appear in a
     # comment explaining why it was dropped -- match the code that produced it, not prose).
     assert 'snprintf(buf, n, "present")' not in model
-    # airplane parses the TERSE radio line (the header-line bug is gone)
-    assert '"-t", "radio", "all"' in model
+    # airplane now reads NetworkManager's master switch (`nmcli networking`) so a wired machine
+    # reports airplane correctly (the internet really being down), not just the radios.
+    assert '"nmcli", "networking"' in model
+
+
+def test_wifi_and_wired_status_are_mutually_exclusive_in_c():
+    """PROMPT (newest): wifi and wired must not both read on/connected -- one-or-the-other. The
+    C probes share a single device scan and the connected ethernet link wins (wifi -> off)."""
+    model = _src("model.c")
+    assert "az_net_scan" in model                 # single source of truth for both probes
+    # wired wins: when ethernet is connected the wifi probe reports off
+    assert "s.eth_conn" in model
+
+
+def test_every_apply_runs_inside_the_ui_no_terminal_drop():
+    """PROMPT (newest): selecting a setting must NOT black out the terminal, and Q must exit
+    cleanly (no leftover CLI text). So every apply runs captured INSIDE the alt screen -- there
+    is no '?1049l' (leave alt screen) around an apply anymore, and applies go through action.c's
+    capture, shown in the OUTPUT overlay."""
+    main = _src("main.c")
+    action = _src("action.c")
+    # the old "drop to the real terminal for the apply" path is gone.
+    assert "run_apply_visible" not in main
+    # applies are captured (no child writes to the terminal) ...
+    assert "az_action_run_capture" in main
+    assert "az_action_run_capture" in action
+    # ... and a privileged apply secures a sudo credential via an in-UI prompt, never a hidden
+    # prompt on a blanked screen.
+    assert "AZ_MODE_PASSWORD" in main
+    assert "az_action_sudo_ok" in main
+
+
+def test_firewall_ports_are_configurable_in_the_ui():
+    """PROMPT (newest): the Firewall screen must LIST ports in the UI and let you configure them
+    (open/close/delete) without dropping to a shell. model.c has the list row (show_output) and
+    the AZ_ACT_PORT rows; main.c prompts for the port."""
+    model = _src("model.c")
+    main = _src("main.c")
+    assert "firewall port list" in model
+    assert "AZ_ACT_PORT" in model                 # open/close/delete by typing a port
+    assert "AZ_MODE_PORT" in main                 # the in-UI port prompt
+
+
+def test_settings_show_their_bash_command():
+    """PROMPT (newest): each setting is accompanied by the bash command that invokes it, so the
+    user learns to do it without the UI. The renderer draws the row's command; model.c exposes
+    it via az_row_command."""
+    model = _src("model.c")
+    render = _src("render.c")
+    assert "az_row_command" in model
+    assert "az_row_command" in render
+
+
+def test_esc_go_back_is_instant():
+    """PROMPT (newest): ESC (go back) must be INSTANT. The ESC decode no longer arms a 100ms
+    VTIME timer -- it peeks fully non-blocking (VMIN=0, VTIME=0), so a bare ESC returns at once."""
+    main = _src("main.c")
+    esc_decode = main[main.index("if (c == 27)"):main.index("return key;")]
+    assert "VTIME] = 0" in esc_decode
+    assert "VTIME] = 1" not in esc_decode          # no 100ms wait on a bare ESC anymore
 
 
 def test_entry_title_and_first_option():
