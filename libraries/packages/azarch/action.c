@@ -1,4 +1,4 @@
-/* Az'arch bare-`azarch` TUI (C) -- apply execution + sudo credential. See action.h. */
+/* Az'arch bare-`azarch` terminal user interface (C) -- apply execution + sudo credential. See action.h. */
 /* POSIX APIs (fork/execvp/pipe/waitpid) under -std=c11. */
 #define _POSIX_C_SOURCE 200809L
 #define _DEFAULT_SOURCE 1

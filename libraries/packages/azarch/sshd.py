@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""azarch guest CLI -- `--sshd-hypervisor` (wire the guest sshd up for the hypervisor).
+"""azarch guest command line interface -- `--sshd-hypervisor` (wire the guest sshd up for the hypervisor).
 
 Installs the host's public key from ~/shared/authorized_keys (staged there by the
 hypervisor) into the target user's ~/.ssh/authorized_keys, then enables and starts sshd.
@@ -48,7 +48,7 @@ def sshd_hypervisor() -> int:
         return 1
     # Install the key into the TARGET user's ~/.ssh and hand ownership to them
     # (root-owned authorized_keys trips sshd StrictModes). Each privileged step is
-    # FAIL-FAST, mirroring the old shell CLI's `set -e`: if a step fails, bail with its
+    # FAIL-FAST, mirroring the old shell command line interface's `set -e`: if a step fails, bail with its
     # exit code and do NOT print the success line (so a failed sshd never reports
     # "enabled and started"). _sudo returns the child's exit code.
     ssh_dir = os.path.join(target_home, ".ssh")

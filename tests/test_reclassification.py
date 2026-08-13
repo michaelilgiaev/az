@@ -16,7 +16,7 @@ that, and the "modifications holds only upstream" invariant, at unit-test time.
 
 `packages/` carries no `__init__.py` -- it (like `modifications/`) is an implicit
 namespace package, resolved off PYTHONPATH (= libraries/). The flat module
-`packages/pkgbuild.py` imports as `packages.pkgbuild`; the `azarch` guest CLI grew a
+`packages/pkgbuild.py` imports as `packages.pkgbuild`; the `azarch` guest command line interface grew a
 `theme` subcommand and became a REGULAR sub-package (`packages/azarch/` with its own
 __init__.py), importing as `packages.azarch` -- both resolve under the namespace
 `packages` (which itself still has no top-level __init__.py).

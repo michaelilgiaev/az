@@ -1,6 +1,6 @@
 /* Az'arch bare-`azarch` TERMINAL UI (C port) -- shared palette, geometry, model.
  *
- * WHY C. The Python/curses TUI felt laggy; every keystroke redrew through the
+ * WHY C. The Python/curses terminal user interface felt laggy; every keystroke redrew through the
  * interpreter and every action paid a fresh Python cold-start. This is a from-scratch
  * C rewrite driving the terminal with RAW ANSI + termios (no ncurses), so a keystroke
  * is a syscall and a diff, not an interpreter round-trip -- it feels instant.
@@ -14,7 +14,7 @@
  * the selection, the navigation keys, and the "Current" line -- everything the eye
  * should land on -- while the rest stays muted, so the screen is easy to read.
  *
- * ACTIONS shell back to the SAME `azarch` subcommands the CLI exposes (azarch theme
+ * ACTIONS shell back to the SAME `azarch` subcommands the command line interface exposes (azarch theme
  * --dark, azarch wallpaper --years.png, azarch network firewall enable, ...): the C UI
  * adds navigation + previews, not new system behaviour. Status is likewise read by
  * asking the underlying tools (nmcli/ufw/gsettings) or the pointer files.
@@ -24,8 +24,8 @@
  * and Dolphin rendered light/dark. kitty is deliberately exempt from the system theme,
  * which the Theme screen discloses.
  */
-#ifndef AZ_TUI_H
-#define AZ_TUI_H
+#ifndef AZ_TERMINAL_USER_INTERFACE_H
+#define AZ_TERMINAL_USER_INTERFACE_H
 
 #include <stddef.h>
 
@@ -78,7 +78,7 @@ typedef struct {
     const char *preview_arg;    /* wallpaper id / theme name for the preview           */
     const char *hint;           /* optional one-line help shown under the list         */
     /* EVERY apply now runs INSIDE the UI: its output is captured and shown in a centred
-     * results overlay on the alt screen, so raw CLI text never flashes over the UI and the
+     * results overlay on the alt screen, so raw command line interface text never flashes over the UI and the
      * terminal is never "blacked out" or polluted (the fix for "selecting a setting turns the
      * screen black" and "Q leaves the terminal full of previous commands"). These two flags
      * describe an apply's needs; there is no more "drop to the real terminal" path.
@@ -122,7 +122,7 @@ const char *az_row_command(const AzRow *r);
 
 /* --- Status probes (model.c) ------------------------------------------------
  * Each writes a short human string into buf and returns it. They shell out to the same
- * tools the CLI uses (or read the pointer files), and NEVER leave buf empty on error --
+ * tools the command line interface uses (or read the pointer files), and NEVER leave buf empty on error --
  * they degrade to a readable word so a probe can't blank a cell. */
 const char *az_status_theme(char *buf, size_t n);
 const char *az_status_wallpaper(char *buf, size_t n);
@@ -150,4 +150,4 @@ void az_status_invalidate(void);
  * paints). Mirrors wallpaper.py _wallpaper_image. Writes into buf, returns buf. */
 const char *az_wallpaper_image(const char *id, char *buf, size_t n);
 
-#endif /* AZ_TUI_H */
+#endif /* AZ_TERMINAL_USER_INTERFACE_H */

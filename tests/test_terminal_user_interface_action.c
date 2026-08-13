@@ -1,4 +1,4 @@
-/* Az'arch -- headless C unit tests for the bare-`azarch` TUI ACTION layer (action.c).
+/* Az'arch -- headless C unit tests for the bare-`azarch` terminal user interface ACTION layer (action.c).
  *
  * action.c runs an apply INSIDE the UI: it captures a command's output and takes a sudo
  * credential via `sudo -S -v`. Two things here are safety-critical and easy to regress, so
@@ -103,9 +103,9 @@ int main(void)
     test_sudo_ok_without_sudo_is_zero();
 
     if (failures == 0) {
-        printf("test_tui_action: all checks passed\n");
+        printf("test_terminal_user_interface_action: all checks passed\n");
         return 0;
     }
-    printf("test_tui_action: %d check(s) FAILED\n", failures);
+    printf("test_terminal_user_interface_action: %d check(s) FAILED\n", failures);
     return 1;
 }

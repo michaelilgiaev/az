@@ -86,7 +86,7 @@ def test_sshd_service_runs_the_cli_subcommand():
 
 
 def test_sshd_service_targets_main_via_sudo_user():
-    # Run as root with SUDO_USER=main: the azarch CLI keys off ${SUDO_USER:-...} and
+    # Run as root with SUDO_USER=main: the azarch command line interface keys off ${SUDO_USER:-...} and
     # refuses a bare-root target, so this is what makes the pubkey land in
     # /home/main/.ssh (the account sshd accepts) without needing a PAM session.
     svc = system.SSHD_HYPERVISOR_SETUP_SERVICE
@@ -105,7 +105,7 @@ def test_sshd_service_ordering_is_sane():
 
 
 def test_sshd_service_guarded_on_cli_presence():
-    # ConditionPathExists keeps it from failing loudly if the azarch CLI is absent.
+    # ConditionPathExists keeps it from failing loudly if the azarch command line interface is absent.
     assert "ConditionPathExists=/usr/local/bin/azarch" in system.SSHD_HYPERVISOR_SETUP_SERVICE
 
 

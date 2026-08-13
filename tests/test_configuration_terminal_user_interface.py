@@ -5,16 +5,16 @@ can tune the three things a fresh machine needs -- Theme, Wallpaper, Network -- 
 keys (or WASD / HJKL), a search box at the top and nav hints at the bottom, everything
 centred and coloured in the Az'arch logo cyan. It used to be Python/curses but felt laggy, so
 it was rewritten in C. The C sources now live INSIDE the azarch package
-(libraries/packages/azarch/, built by tui_build.py) -- there is only ONE program, `azarch`,
-and the UI is C for speed; the Python `azarch` CLI just EXECs that binary for the no-argument
+(libraries/packages/azarch/, built by terminal_user_interface_build.py) -- there is only ONE program, `azarch`,
+and the UI is C for speed; the Python `azarch` command line interface just EXECs that binary for the no-argument
 case.
 
 These tests pin, against BOTH the bundled Python launcher (the /usr/local/bin/azarch
 artifact) AND the C source tree + its build wiring:
 
-  * bare `azarch` dispatches to run_tui, which EXECs the compiled UI binary (not curses);
+  * bare `azarch` dispatches to run_terminal_user_interface, which EXECs the compiled UI binary (not curses);
   * the launcher's binary path is the SAME one the build installs (no drift);
-  * graceful degradation: with no terminal, run_tui prints a pointer and returns 0 instead
+  * graceful degradation: with no terminal, run_terminal_user_interface prints a pointer and returns 0 instead
     of exec-ing anything (so `azarch </dev/null` / a pipe never throws);
   * the build wiring compiles exactly the C sources into the installed binary, without
     polluting the repo tree, and the binary is pinned executable in the ISO file_permissions;
@@ -26,7 +26,7 @@ artifact) AND the C source tree + its build wiring:
     exempt -- with the "Current:" state shown once at the top and no per-row status echo.
 
 The interactive DRAWING itself is exercised by an interactive smoke run (and the C model is
-unit-tested headless by tests/Makefile's test_tui_model). Here we keep to the launcher wiring
+unit-tested headless by tests/Makefile's test_terminal_user_interface_model). Here we keep to the launcher wiring
 + the source contract so the suite stays deterministic and tty-free.
 """
 
@@ -40,78 +40,78 @@ import types
 import pytest
 
 from packages.azarch.bundle import bundle_source, MODULE_ORDER
-from packages.azarch import tui_build
+from packages.azarch import terminal_user_interface_build
 from modifications import openbox as desktop
 import paths
 import profile as profiledef
 
 
 # The C UI sources now live INSIDE the azarch package (one program, C for speed) -- there is
-# no separate azarch_tui package anymore.
-TUI_SRC_DIR = paths.AZARCH_CLI_DIR
+# no separate azarch_terminal_user_interface package anymore.
+TERMINAL_USER_INTERFACE_SRC_DIR = paths.AZARCH_COMMAND_LINE_INTERFACE_DIR
 
 
-def _cli():
-    """Exec the bundled azarch CLI in a fresh module namespace (as shipped)."""
+def _command_line_interface():
+    """Exec the bundled azarch command line interface in a fresh module namespace (as shipped)."""
     mod = types.ModuleType("azarch_cli_tui_test")
-    exec(compile(bundle_source(), "azarch_cli", "exec"), mod.__dict__)
+    exec(compile(bundle_source(), "azarch_command_line_interface", "exec"), mod.__dict__)
     return mod
 
 
 def _src(name: str) -> str:
-    return (TUI_SRC_DIR / name).read_text(encoding="utf-8")
+    return (TERMINAL_USER_INTERFACE_SRC_DIR / name).read_text(encoding="utf-8")
 
 
-# --- dispatch wiring: bare azarch -> run_tui -> exec the C binary ------------
+# --- dispatch wiring: bare azarch -> run_terminal_user_interface -> exec the C binary ------------
 
 def test_bare_azarch_dispatches_to_the_tui():
-    """No-argument azarch must route to run_tui, and the top-level usage must mention the UI."""
-    src = desktop.azarch_cli()
+    """No-argument azarch must route to run_terminal_user_interface, and the top-level usage must mention the UI."""
+    src = desktop.azarch_command_line_interface()
     assert 'cmd == ""' in src
-    assert "return run_tui(argv)" in src
+    assert "return run_terminal_user_interface(argv)" in src
     assert "full-screen UI" in src  # advertised in usage()
 
 
 def test_run_tui_execs_the_compiled_binary():
-    """run_tui must EXEC the compiled C UI (the fast, instant path) -- not start curses."""
+    """run_terminal_user_interface must EXEC the compiled C UI (the fast, instant path) -- not start curses."""
     src = bundle_source()
-    assert "os.execv(TUI_BIN" in src
+    assert "os.execv(TERMINAL_USER_INTERFACE_BIN" in src
     assert "import curses" not in src        # the Python curses UI is gone
 
 
 def test_launcher_binary_path_matches_the_build():
-    """The path run_tui execs must be the SAME path the build installs the binary to, so the
+    """The path run_terminal_user_interface execs must be the SAME path the build installs the binary to, so the
     two can never drift."""
-    cli = _cli()
-    assert cli.TUI_BIN == tui_build.TUI_BIN_SYSTEM_PATH
-    assert cli.TUI_BIN == "/usr/local/lib/azarch-tui/azarch-tui"
+    command_line_interface = _command_line_interface()
+    assert command_line_interface.TERMINAL_USER_INTERFACE_BIN == terminal_user_interface_build.TERMINAL_USER_INTERFACE_BIN_SYSTEM_PATH
+    assert command_line_interface.TERMINAL_USER_INTERFACE_BIN == "/usr/local/lib/azarch/azarch"
 
 
 def test_bare_main_uses_run_tui(monkeypatch):
-    """cli.main([]) must call run_tui (bare azarch == the UI)."""
-    cli = _cli()
+    """command_line_interface.main([]) must call run_terminal_user_interface (bare azarch == the UI)."""
+    command_line_interface = _command_line_interface()
     called = {}
-    monkeypatch.setattr(cli, "run_tui", lambda argv=None: (called.setdefault("hit", True), 0)[1])
-    assert cli.main([]) == 0
+    monkeypatch.setattr(command_line_interface, "run_terminal_user_interface", lambda argv=None: (called.setdefault("hit", True), 0)[1])
+    assert command_line_interface.main([]) == 0
     assert called.get("hit") is True
 
 
 def test_tui_is_bundled_before_cli():
-    """tui.py (the launcher) must be bundled before cli.py, whose main() dispatches to it."""
-    assert "tui.py" in MODULE_ORDER
-    assert MODULE_ORDER.index("tui.py") < MODULE_ORDER.index("cli.py")
+    """terminal_user_interface.py (the launcher) must be bundled before command_line_interface.py, whose main() dispatches to it."""
+    assert "terminal_user_interface.py" in MODULE_ORDER
+    assert MODULE_ORDER.index("terminal_user_interface.py") < MODULE_ORDER.index("command_line_interface.py")
 
 
 # --- graceful degradation with no terminal ----------------------------------
 
 def test_run_tui_without_tty_prints_pointer(monkeypatch, capsys):
-    """No usable terminal -> run_tui must NOT exec anything; it prints a pointer and rc 0."""
-    cli = _cli()
-    monkeypatch.setattr(cli, "_tty_ok", lambda: False)
+    """No usable terminal -> run_terminal_user_interface must NOT exec anything; it prints a pointer and rc 0."""
+    command_line_interface = _command_line_interface()
+    monkeypatch.setattr(command_line_interface, "_tty_ok", lambda: False)
     # If it tried to exec, this would raise; assert it returns cleanly instead.
-    monkeypatch.setattr(cli.os, "execv",
+    monkeypatch.setattr(command_line_interface.os, "execv",
                         lambda *a, **k: pytest.fail("must not exec without a tty"))
-    assert cli.run_tui([]) == 0
+    assert command_line_interface.run_terminal_user_interface([]) == 0
     out = capsys.readouterr().out
     assert "no interactive terminal" in out
     for sub in ("azarch theme", "azarch wallpaper", "azarch network"):
@@ -120,29 +120,29 @@ def test_run_tui_without_tty_prints_pointer(monkeypatch, capsys):
 
 def test_run_tui_missing_binary_falls_back(monkeypatch, capsys):
     """A tty but a MISSING binary must fall back to the pointer, never crash."""
-    cli = _cli()
-    monkeypatch.setattr(cli, "_tty_ok", lambda: True)
-    monkeypatch.setattr(cli.os.path, "exists", lambda p: False)
-    assert cli.run_tui([]) == 0
+    command_line_interface = _command_line_interface()
+    monkeypatch.setattr(command_line_interface, "_tty_ok", lambda: True)
+    monkeypatch.setattr(command_line_interface.os.path, "exists", lambda p: False)
+    assert command_line_interface.run_terminal_user_interface([]) == 0
     assert "no interactive terminal" in capsys.readouterr().out
 
 
 # --- the build wiring: compile the C sources, no pollution, pinned exec ------
 
 def test_build_tui_inputs_are_the_c_sources():
-    """build_tui copies exactly the C sources/headers + the Makefile (no Python) into a
+    """build_terminal_user_interface copies exactly the C sources/headers + the Makefile (no Python) into a
     scratch dir; the produced binary name matches the installed path's basename."""
-    names = {p.name for p in tui_build._csrc_files()}
+    names = {p.name for p in terminal_user_interface_build._csrc_files()}
     assert "main.c" in names
     assert "render.c" in names
     assert "model.c" in names
     assert "preview.c" in names
     assert "action.c" in names       # apply execution + in-UI sudo credential
     assert "Makefile" in names
-    assert "tui.h" in names
+    assert "terminal_user_interface.h" in names
     assert "action.h" in names
     assert not any(n.endswith(".py") for n in names)     # only C inputs
-    assert tui_build.TUI_BIN_NAME == os.path.basename(tui_build.TUI_BIN_SYSTEM_PATH)
+    assert terminal_user_interface_build.TERMINAL_USER_INTERFACE_BIN_NAME == os.path.basename(terminal_user_interface_build.TERMINAL_USER_INTERFACE_BIN_SYSTEM_PATH)
 
 
 def test_theme_preview_assets_exist_and_ship_unmodified(tmp_path):
@@ -150,16 +150,16 @@ def test_theme_preview_assets_exist_and_ship_unmodified(tmp_path):
     All four contract images must exist as assets, and install_previews must copy them BYTE-FOR-
     BYTE into the runtime preview dir (no resizing at build time -- the C scales at draw time)."""
     # every contract asset exists in the repo
-    for rel in tui_build.PREVIEW_ASSETS:
+    for rel in terminal_user_interface_build.PREVIEW_ASSETS:
         assert (paths.ASSETSDIR / rel).is_file(), f"missing preview asset {rel}"
     # the four expected names (timedate/files x dark/white) are exactly the contract
-    assert {os.path.basename(r) for r in tui_build.PREVIEW_ASSETS} == {
+    assert {os.path.basename(r) for r in terminal_user_interface_build.PREVIEW_ASSETS} == {
         "timedate_dark.png", "timedate_white.png", "files_dark.png", "files_white.png",
     }
     # install_previews copies them verbatim (identical bytes) into the dest dir
-    written = tui_build.install_previews(tmp_path)
-    assert len(written) == len(tui_build.PREVIEW_ASSETS)
-    for rel in tui_build.PREVIEW_ASSETS:
+    written = terminal_user_interface_build.install_previews(tmp_path)
+    assert len(written) == len(terminal_user_interface_build.PREVIEW_ASSETS)
+    for rel in terminal_user_interface_build.PREVIEW_ASSETS:
         src = paths.ASSETSDIR / rel
         dst = tmp_path / os.path.basename(rel)
         assert dst.is_file()
@@ -168,11 +168,11 @@ def test_theme_preview_assets_exist_and_ship_unmodified(tmp_path):
 
 def test_preview_dir_contract_matches_between_build_and_c():
     """The C reads the screenshots from a hard-coded AZ_PREVIEW_DIR; it MUST equal the dir the
-    build ships them to (tui_build.TUI_PREVIEW_SYSTEM_DIR), or the previews are 'not installed'
+    build ships them to (terminal_user_interface_build.TERMINAL_USER_INTERFACE_PREVIEW_SYSTEM_DIR), or the previews are 'not installed'
     at runtime. Also pin the dir under the binary's lib dir so both travel together."""
     preview = _src("preview.c")
-    assert f'"{tui_build.TUI_PREVIEW_SYSTEM_DIR}"' in preview
-    assert tui_build.TUI_PREVIEW_SYSTEM_DIR.startswith(tui_build.TUI_LIB_DIR)
+    assert f'"{terminal_user_interface_build.TERMINAL_USER_INTERFACE_PREVIEW_SYSTEM_DIR}"' in preview
+    assert terminal_user_interface_build.TERMINAL_USER_INTERFACE_PREVIEW_SYSTEM_DIR.startswith(terminal_user_interface_build.TERMINAL_USER_INTERFACE_LIB_DIR)
 
 
 def _have_c_toolchain() -> bool:
@@ -181,22 +181,22 @@ def _have_c_toolchain() -> bool:
 
 
 def test_build_tui_compiles_and_does_not_pollute_the_repo_tree():
-    """build_tui() must build in a TEMP dir, not the source tree -- no .o/binary left behind
+    """build_terminal_user_interface() must build in a TEMP dir, not the source tree -- no .o/binary left behind
     next to the sources (they would otherwise get tracked / shipped)."""
     def _artifacts():
-        return sorted(p.name for p in TUI_SRC_DIR.iterdir()
-                      if p.suffix == ".o" or p.name == tui_build.TUI_BIN_NAME)
+        return sorted(p.name for p in TERMINAL_USER_INTERFACE_SRC_DIR.iterdir()
+                      if p.suffix == ".o" or p.name == terminal_user_interface_build.TERMINAL_USER_INTERFACE_BIN_NAME)
 
     assert _artifacts() == [], f"stale build artifacts in the source tree: {_artifacts()}"
     if not _have_c_toolchain():
         pytest.skip("no C toolchain on this host")
-    out = TUI_SRC_DIR / "_test_build_out" / tui_build.TUI_BIN_NAME
+    out = TERMINAL_USER_INTERFACE_SRC_DIR / "_test_build_out" / terminal_user_interface_build.TERMINAL_USER_INTERFACE_BIN_NAME
     try:
-        tui_build.build_tui(out)
+        terminal_user_interface_build.build_terminal_user_interface(out)
         assert out.is_file() and os.access(out, os.X_OK)   # produced an executable
         assert _artifacts() == [], f"build polluted the source tree: {_artifacts()}"
     finally:
-        shutil.rmtree(TUI_SRC_DIR / "_test_build_out", ignore_errors=True)
+        shutil.rmtree(TERMINAL_USER_INTERFACE_SRC_DIR / "_test_build_out", ignore_errors=True)
 
 
 def test_tui_binary_is_pinned_executable_in_the_iso():
@@ -204,15 +204,15 @@ def test_tui_binary_is_pinned_executable_in_the_iso():
     profile file_permissions or bare `azarch` would find it non-executable and fall back to
     the pointer instead of opening the UI."""
     perms = profiledef.FILE_PERMISSIONS
-    assert tui_build.TUI_BIN_SYSTEM_PATH in perms
-    assert perms[tui_build.TUI_BIN_SYSTEM_PATH].endswith(":755")
+    assert terminal_user_interface_build.TERMINAL_USER_INTERFACE_BIN_SYSTEM_PATH in perms
+    assert perms[terminal_user_interface_build.TERMINAL_USER_INTERFACE_BIN_SYSTEM_PATH].endswith(":755")
 
 
 def test_tui_build_dep_is_only_gcc_no_ncurses_no_gtk():
     """The UI is pure libc + raw ANSI (previews shell out to kitty at runtime), so the ONLY
     build dep is a C compiler -- no ncurses, no GTK LINKAGE (checked on the recipe, not the
     comments, which do mention 'no ncurses')."""
-    assert tui_build.TUI_BUILD_DEPS == ["gcc"]
+    assert terminal_user_interface_build.TERMINAL_USER_INTERFACE_BUILD_DEPS == ["gcc"]
     # Look only at the non-comment recipe lines: no library linkage, no pkg-config.
     recipe = "\n".join(ln for ln in _src("Makefile").splitlines()
                        if not ln.lstrip().startswith("#"))
@@ -227,7 +227,7 @@ def test_tui_build_dep_is_only_gcc_no_ncurses_no_gtk():
 def test_accent_is_the_azarch_logo_cyan():
     """PROMPT: use the Az'arch logo colour (cyan-ish, #06B8FD) to differentiate elements and
     ease navigation. The accent RGB (6,184,253) must be the accent SGR in the palette."""
-    header = _src("tui.h")
+    header = _src("terminal_user_interface.h")
     assert "#06B8FD" in header
     assert "38;2;6;184;253" in header    # the accent as a truecolor foreground
     # the nav keys are coloured with the accent, too
@@ -320,7 +320,7 @@ def test_wifi_and_wired_status_are_mutually_exclusive_in_c():
 
 def test_every_apply_runs_inside_the_ui_no_terminal_drop():
     """PROMPT (newest): selecting a setting must NOT black out the terminal, and Q must exit
-    cleanly (no leftover CLI text). So every apply runs captured INSIDE the alt screen -- there
+    cleanly (no leftover command line interface text). So every apply runs captured INSIDE the alt screen -- there
     is no '?1049l' (leave alt screen) around an apply anymore, and applies go through action.c's
     capture, shown in the OUTPUT overlay."""
     main = _src("main.c")

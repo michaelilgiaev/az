@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""azarch guest CLI -- `azarch network firewall` (ufw front-end + port table).
+"""azarch guest command line interface -- `azarch network firewall` (ufw front-end + port table).
 
 Split out of network.py (which was growing past the project's per-file size budget). This
 module owns EVERYTHING firewall: the ufw enable/disable/default-policy commands, the port

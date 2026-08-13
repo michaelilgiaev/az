@@ -38,7 +38,7 @@ LIBDIR = REPODIR / "libraries"
 PKGDIR = LIBDIR
 # Az'arch's OWN packages (the things WE build/ship, baked into the ISO): the package
 # manifest (packages.x86_64), the application-menu source tree + its build wiring
-# (application_menu/), our own package recipes (pkgbuild.py), and the `azarch` guest CLI
+# (application_menu/), our own package recipes (pkgbuild.py), and the `azarch` guest command line interface
 # (the azarch/ package). Our packages are pure Python standard library, so there is NO shared
 # requirements.txt here (the only one in the repo is the repo-root requirements.txt the
 # compiler itself uses for its test/dev deps). Formerly libraries/data/; consolidated here.
@@ -117,24 +117,24 @@ APPLICATION_MENU_DIR = PACKAGESDIR / "application_menu"
 # It is OUR package (a website we author), so it lives under libraries/packages/, not
 # modifications/. Served at localhost:49154; LibreWolf's default home/new-tab page.
 TIMEDATE_DIR = PACKAGESDIR / "timedate"
-# The `azarch` guest CLI is a Python PACKAGE now (libraries/packages/azarch/): it grew a
+# The `azarch` guest command line interface is a Python PACKAGE now (libraries/packages/azarch/): it grew a
 # `theme` subcommand (and more to come), so the single module was split into small modules
-# (common, country_table, resolver, theme, sshd, cli). The single /usr/local/bin/azarch
+# (common, country_table, resolver, theme, sshd, command_line_interface). The single /usr/local/bin/azarch
 # script that ships to the guest is reassembled from those modules by the package's
 # bundle.bundle_source(); the compiler then injects the country->locale table from
 # modifications/calamares/locale.py between the AZARCH_CC markers (which now live in
-# country_table.py). See modifications/openbox openbox.azarch_cli().
+# country_table.py). See modifications/openbox openbox.azarch_command_line_interface().
 #
 # This dir ALSO holds the bare-`azarch` TERMINAL UI's C sources (main.c/render.c/model.c/
-# preview.c, tui.h + siblings, Makefile) -- there is only ONE program, `azarch`, and the UI
-# is C for speed, so it lives next to the Python CLI it drives rather than in a separate
-# package. packages/azarch/tui_build.py is the build wiring that compiles them into the
-# azarch-tui binary; bare `azarch` execs it (see packages/azarch/tui.py). tui_build's
+# preview.c, terminal_user_interface.h + siblings, Makefile) -- there is only ONE program, `azarch`, and the UI
+# is C for speed, so it lives next to the Python command line interface it drives rather than in a separate
+# package. packages/azarch/terminal_user_interface_build.py is the build wiring that compiles them into the
+# azarch binary; bare `azarch` execs it (see packages/azarch/terminal_user_interface.py). terminal_user_interface_build's
 # _csrc_files() picks up only the C inputs, never the .py modules, so the two coexist here.
-AZARCH_CLI_DIR = PACKAGESDIR / "azarch"
+AZARCH_COMMAND_LINE_INTERFACE_DIR = PACKAGESDIR / "azarch"
 # The module whose source carries the AZARCH_CC_TABLE_START/END markers (the compiler
 # regenerates the COUNTRY_TABLE literal between them from the single source of truth).
-AZARCH_CLI_TABLE_MODULE = AZARCH_CLI_DIR / "country_table.py"
+AZARCH_COMMAND_LINE_INTERFACE_TABLE_MODULE = AZARCH_COMMAND_LINE_INTERFACE_DIR / "country_table.py"
 
 # Inside the archiso profile tree, the airootfs root and the azarch payload dir
 # baked into the live/installed system.

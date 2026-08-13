@@ -74,7 +74,7 @@ def _language_map_heredoc() -> str:
 # (packages/pkgbuild.calamares_region_keyboard_patch): the layout codes are
 # real /usr/share/X11/xkb/rules/base.lst identifiers (Hebrew is "il" NOT "he",
 # generic Arabic is "ara", Latin-American Spanish is "latam"). The resolver embeds
-# this as a Python literal (resolver_country_table_py) into the `azarch` CLI's
+# this as a Python literal (resolver_country_table_py) into the `azarch` command line interface's
 # COUNTRY_TABLE, so adding a country here is a one-line edit that both the installer
 # patch table and the guest resolver should mirror.
 #
@@ -194,7 +194,7 @@ def resolver_country_table_sh() -> str:
     `english` is the literal 1/0. This is the data the guest resolver
     (`azarch --resolve-language`/`--resolve-region`) maps an IP-geolocated country
     code onto. Kept as the canonical pipe-delimited rendering the tests pin the
-    table's contents against; the CLI itself embeds the Python form below."""
+    table's contents against; the command line interface itself embeds the Python form below."""
     out = []
     for cc, (loc, layout, keymap, english) in RESOLVER_COUNTRY_TABLE.items():
         out.append(f"{cc}|{loc}|{layout}|{keymap}|{1 if english else 0}")
@@ -202,10 +202,10 @@ def resolver_country_table_sh() -> str:
 
 
 def resolver_country_table_py() -> str:
-    """Render RESOLVER_COUNTRY_TABLE as the body of the `azarch` CLI's COUNTRY_TABLE
+    """Render RESOLVER_COUNTRY_TABLE as the body of the `azarch` command line interface's COUNTRY_TABLE
     dict literal: one ``    'CC': ('locale', 'layout', 'keymap', english),`` line per
     country (english as the literal int 1/0). The compiler substitutes this between the
-    AZARCH_CC markers in the azarch CLI (country_table.py, bundled into the shipped
+    AZARCH_CC markers in the azarch command line interface (country_table.py, bundled into the shipped
     script) so the guest resolver's table stays in lock-step with this single source of
     truth."""
     out = []

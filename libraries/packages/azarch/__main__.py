@@ -1,8 +1,8 @@
-"""Allow `python -m packages.azarch ...` to run the CLI in-place (dev/testing).
+"""Allow `python -m packages.azarch ...` to run the command line interface in-place (dev/testing).
 
 The SHIPPED artifact is always the single bundled script (bundle.bundle_source(), installed
-to /usr/local/bin/azarch). This entry point just wires the split package's cli.main() so the
-CLI is runnable from the source tree without bundling first.
+to /usr/local/bin/azarch). This entry point just wires the split package's command_line_interface.main() so the
+command line interface is runnable from the source tree without bundling first.
 """
 
 from __future__ import annotations

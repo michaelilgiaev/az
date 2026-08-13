@@ -1,4 +1,4 @@
-/* Az'arch bare-`azarch` TUI (C) -- the renderer (centred, coloured ANSI drawing).
+/* Az'arch bare-`azarch` terminal user interface (C) -- the renderer (centred, coloured ANSI drawing).
  *
  * Pure terminal drawing over RAW ANSI (no ncurses): everything is CENTRED, the accent is
  * the logo cyan, the navigation keys are UPPERCASED and coloured. The renderer owns a
@@ -12,7 +12,7 @@
 #ifndef AZ_RENDER_H
 #define AZ_RENDER_H
 
-#include "tui.h"
+#include "terminal_user_interface.h"
 
 /* What has keyboard focus / what the UI is doing right now. Browsing is the normal menu;
  * SEARCH is the top box; PORT/PASSWORD are the two in-UI text prompts an apply can raise;

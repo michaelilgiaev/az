@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""azarch guest CLI -- `azarch network` (one friendly front-end for ALL networking).
+"""azarch guest command line interface -- `azarch network` (one friendly front-end for ALL networking).
 
 WHY THIS EXISTS. The raw tools -- nmcli (NetworkManager), rfkill, bluetoothctl, ufw --
 are powerful but hard to remember. `azarch network` wraps them in the same plain
@@ -26,7 +26,7 @@ wifi/wired/ip and the radio side of airplane; rfkill is the hard radio kill (air
 
 PRIVILEGE. Queries run as the user; changes go through _sudo() (nmcli connection edits,
 ufw, systemctl, rfkill). Output is result-only on stdout, errors on stderr, exit codes
-0 (ok) / 1 (error) / 2 (usage) -- identical to the rest of the CLI.
+0 (ok) / 1 (error) / 2 (usage) -- identical to the rest of the command line interface.
 
 DEFAULTS ARE SET AT BUILD TIME, NOT HERE. The ISO ships firewall ENABLED (deny incoming,
 allow outgoing, :49154 timedate closed) and bluetooth DISABLED; the sshd variant also
@@ -128,7 +128,7 @@ def _link_state() -> tuple[bool, bool, bool, bool]:
 
     Wifi and Wired are one-or-the-other: the connected ethernet link wins, so the status
     helpers below decide each line in light of the other from this single source of truth
-    (same rule the C TUI's az_net_scan uses, so the CLI and the UI can never disagree)."""
+    (same rule the C terminal user interface's az_net_scan uses, so the command line interface and the UI can never disagree)."""
     eth_present = eth_conn = wifi_present = wifi_conn = False
     for _dev, typ, state, *_ in _nm_field("DEVICE,TYPE,STATE,CONNECTION", "device"):
         if typ == "ethernet":
@@ -146,7 +146,7 @@ def _link_state() -> tuple[bool, bool, bool, bool]:
 # status (the bare `azarch network`)
 # ---------------------------------------------------------------------------
 def _internet_state() -> str:
-    """The plain headline the TUI shows too: 'Online - Connected to Internet' when
+    """The plain headline the terminal user interface shows too: 'Online - Connected to Internet' when
     NetworkManager reports FULL connectivity, else 'Offline - No Internet'. This is the one
     thing a developer actually cares about, so it leads the overview."""
     if _have("nmcli"):
@@ -381,7 +381,7 @@ def _bt_scan() -> int:
     if not _need("bluetoothctl", "bluez-utils"):
         return 1
     # A short, bounded discovery: turn scanning on, wait, list, off. Timeout keeps it from
-    # hanging the CLI (per the project's "always bound a program" rule).
+    # hanging the command line interface (per the project's "always bound a program" rule).
     _sudo("bluetoothctl", "--timeout", "6", "scan", "on", check=False)
     rc, out = _run("bluetoothctl", "devices")
     if rc != 0:

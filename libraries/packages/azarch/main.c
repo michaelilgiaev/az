@@ -1,4 +1,4 @@
-/* Az'arch bare-`azarch` TUI (C) -- the driver (raw termios, input loop, actions).
+/* Az'arch bare-`azarch` terminal user interface (C) -- the driver (raw termios, input loop, actions).
  *
  * This is what `azarch` (no arguments) runs: a full-screen, CENTRED, coloured settings UI
  * for the three things a fresh machine needs -- Theme, Wallpaper, Network. It is C over
@@ -16,7 +16,7 @@
  * takes a sudo credential via a masked in-UI password prompt (cached for the session), so it
  * never blocks on a hidden prompt over a blanked terminal. That is why selecting a setting no
  * longer blacks out the screen and why quitting lands cleanly back at the shell with no leftover
- * CLI text. So the UI adds navigation, previews and prompts, not new system behaviour.
+ * command line interface text. So the UI adds navigation, previews and prompts, not new system behaviour.
  *
  * If stdin/stdout is not a terminal, main() prints a short pointer to the subcommands and
  * exits 0 (so `azarch </dev/null` or a pipe never breaks) -- mirroring the old Python UI.
@@ -62,7 +62,7 @@ static void enter_raw(void)
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &t);
     /* Alt screen ON, then WIPE it (2J) and the scrollback (3J) and home the cursor, then
      * hide the cursor. The 2J+3J is what makes launching `azarch` leave NO trace of whatever
-     * was on the terminal before -- the previous CLI output is gone, not just scrolled. */
+     * was on the terminal before -- the previous command line interface output is gone, not just scrolled. */
     wr("\033[?1049h\033[2J\033[3J\033[H\033[?25l");
     g_raw = 1;
 }
@@ -460,7 +460,7 @@ int main(void)
                           * as SIGINT -- which is why it used to do nothing. Quit like q. */
                 /* q / Ctrl-C quit INSTANTLY from the menu. leave_raw() restores the terminal
                  * cleanly (shows the cursor, drops the alt screen, WIPES scrollback) and we
-                 * return straight away -- no lag, and no leftover CLI text (every apply ran
+                 * return straight away -- no lag, and no leftover command line interface text (every apply ran
                  * inside the UI, so there is nothing in the scrollback to leak). */
                 leave_raw();
                 free(ui.output);

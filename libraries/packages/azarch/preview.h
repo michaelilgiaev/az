@@ -1,4 +1,4 @@
-/* Az'arch bare-`azarch` TUI (C) -- the hovered-row PREVIEW pane.
+/* Az'arch bare-`azarch` terminal user interface (C) -- the hovered-row PREVIEW pane.
  *
  * Two kinds of preview, both REAL images placed with kitty's `kitten icat --place` graphics
  * into the rectangle the renderer reserves (this is kitty; it can do it):

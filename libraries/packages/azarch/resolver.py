@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""azarch guest CLI -- IP-geolocation resolver (region / date-time / language).
+"""azarch guest command line interface -- IP-geolocation resolver (region / date-time / language).
 
 The ONLY part of Az'arch that pings an external server to geolocate the machine and
 update its region settings (everything else is static/user-chosen). Presents 5 SHUFFLED
@@ -59,7 +59,7 @@ def resolve_via_server() -> tuple[str, str] | None:
     _err(f"Querying {label} ...")
     try:
         import urllib.request     # lazy: only the (rare) geolocate path needs it, so bare
-        # `azarch` (the TUI) never pays the ~25ms urllib import at startup.
+        # `azarch` (the terminal user interface) never pays the ~25ms urllib import at startup.
         with urllib.request.urlopen(url, timeout=15) as resp:
             payload = json.loads(resp.read().decode("utf-8", "replace"))
     except Exception:

@@ -1,12 +1,12 @@
-/* Az'arch bare-`azarch` TUI (C) -- the menu MODEL + live status probes.
+/* Az'arch bare-`azarch` terminal user interface (C) -- the menu MODEL + live status probes.
  *
  * This is the C counterpart of the old Python build_menu(): the whole navigable tree as
  * static data (screens -> rows), plus the status probes each row draws. The probes shell
- * out to the SAME tools the CLI uses (gsettings / nmcli / ufw) or read the pointer files,
+ * out to the SAME tools the command line interface uses (gsettings / nmcli / ufw) or read the pointer files,
  * exactly like the Python status helpers did -- so the UI reflects reality and the two
  * can't drift. Nothing here touches the terminal, so the tests exercise it headless.
  *
- * ACTIONS are shell command lines run against the installed `azarch` CLI (e.g.
+ * ACTIONS are shell command lines run against the installed `azarch` command line interface (e.g.
  * "azarch theme --dark"): the UI drives the tested subcommands rather than re-implementing
  * system behaviour. `azarch` is on PATH on the guest; the command runs INSIDE the UI with its
  * output captured (see main.c / action.c), never dropping to the real terminal. `.needs_root`
@@ -16,7 +16,7 @@
 #define _POSIX_C_SOURCE 200809L
 #define _DEFAULT_SOURCE 1
 
-#include "tui.h"
+#include "terminal_user_interface.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -433,7 +433,7 @@ const char *az_row_command(const AzRow *r)
 }
 
 /* --- the screen tree -------------------------------------------------------- */
-/* Actions are shell command lines run through the installed `azarch` CLI. main.c runs
+/* Actions are shell command lines run through the installed `azarch` command line interface. main.c runs
  * them INSIDE the UI (output captured, shown in the results overlay), then shows a result. */
 
 /* All rows use DESIGNATED initializers: any field not named is zero (NULL / AZ_PV_NONE /
@@ -454,7 +454,7 @@ static const AzRow ROWS_MAIN[] = {
  * "Current:" line at the top of the screen (the screen's `current` probe), so echoing
  * "white"/"years" after each option would just be noise -- exactly what the spec calls out.
  * Applying a theme/wallpaper needs no sudo (it configures the user session), so needs_root
- * stays 0; the apply still runs inside the UI (captured), so no CLI text flashes over it. */
+ * stays 0; the apply still runs inside the UI (captured), so no command line interface text flashes over it. */
 static const AzRow ROWS_THEME[] = {
     {.label="Dark",  .kind=AZ_ACT_APPLY, .target="azarch theme --dark",
      .preview=AZ_PV_THEME, .preview_arg="dark",
@@ -515,7 +515,7 @@ static const AzRow ROWS_AIRPLANE[] = {
 /* Firewall: enable/disable, LIST the port rules right here in the overlay (show_output=1),
  * and open/close/delete a port by TYPING its number (AZ_ACT_PORT prompts, then appends the
  * port to the command). This is the in-UI firewall config the spec asks for -- no dropping
- * to a shell, no guessing the CLI. */
+ * to a shell, no guessing the command line interface. */
 static const AzRow ROWS_FIREWALL[] = {
     {.label="Enable firewall",   .kind=AZ_ACT_APPLY, .target="azarch network firewall enable",  .needs_root=1},
     {.label="Disable firewall",  .kind=AZ_ACT_APPLY, .target="azarch network firewall disable", .needs_root=1},

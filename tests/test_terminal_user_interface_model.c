@@ -1,4 +1,4 @@
-/* Az'arch -- headless C unit tests for the bare-`azarch` TUI MODEL.
+/* Az'arch -- headless C unit tests for the bare-`azarch` terminal user interface MODEL.
  *
  * The UI's menu tree + the search filter + the wallpaper path are pure data/logic in
  * model.c (no terminal), so we exercise them directly here -- the C counterpart of the old
@@ -9,7 +9,7 @@
  * fork nmcli/ufw and stay deterministic on any host. tests/Makefile compiles this against
  * the shipping model.c.
  */
-#include "tui.h"
+#include "terminal_user_interface.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -218,9 +218,9 @@ int main(void)
     test_wallpaper_image_path();
 
     if (failures == 0) {
-        printf("test_tui_model: all checks passed\n");
+        printf("test_terminal_user_interface_model: all checks passed\n");
         return 0;
     }
-    printf("test_tui_model: %d check(s) FAILED\n", failures);
+    printf("test_terminal_user_interface_model: %d check(s) FAILED\n", failures);
     return 1;
 }

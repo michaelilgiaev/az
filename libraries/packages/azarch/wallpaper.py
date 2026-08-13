@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""azarch guest CLI -- `azarch wallpaper` (pick the desktop wallpaper: years / decades).
+"""azarch guest command line interface -- `azarch wallpaper` (pick the desktop wallpaper: years / decades).
 
 Az'arch ships TWO wallpapers on the medium, both under the standard system wallpaper dir
 /usr/share/wallpapers (each as .../<id>/contents/images/<W>x<H>.png -- the layout
@@ -29,7 +29,7 @@ applies live:
 Runs WITHOUT sudo: it only writes the user's own config pointer and repaints the user's
 own X root (exactly like `azarch theme`). Standard library only (this module is bundled
 into the single /usr/local/bin/azarch script; see common.py). The wallpaper paths here are
-kept in lock-step with modifications/openbox (a test pins them) so the CLI and the shipped
+kept in lock-step with modifications/openbox (a test pins them) so the command line interface and the shipped
 images can never disagree.
 """
 
@@ -39,7 +39,7 @@ from __future__ import annotations
 
 # The two wallpapers shipped under the standard system wallpaper dir. Kept in lock-step
 # with modifications/openbox (WALLPAPERS_SYSTEM_DIR / WALLPAPER_IMAGE_RES / WALLPAPER_PACKAGES);
-# a test (test_configuration_wallpaper) pins these against those constants so the CLI and the
+# a test (test_configuration_wallpaper) pins these against those constants so the command line interface and the
 # emitted images cannot drift. feh needs a real FILE (not a dir), so each id resolves to the
 # inner .../<id>/contents/images/<W>x<H>.png the compiler writes.
 WALLPAPERS_SYSTEM_DIR = "/usr/share/wallpapers"

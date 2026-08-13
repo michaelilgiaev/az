@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""azarch guest CLI -- the country -> (locale, layout, keymap, english) table.
+"""azarch guest command line interface -- the country -> (locale, layout, keymap, english) table.
 
 Kept in its OWN module so the AZARCH_CC markers bracket nothing but the generated
-literal: modifications.openbox.azarch_cli() REGENERATES everything between the two markers from
+literal: modifications.openbox.azarch_command_line_interface() REGENERATES everything between the two markers from
 modifications/calamares/locale.RESOLVER_COUNTRY_TABLE (the single source of truth) at build time,
 so this literal stays in lock-step. The on-disk copy below is a working snapshot so the
 package is runnable/importable on its own.

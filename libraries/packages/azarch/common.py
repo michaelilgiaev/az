@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""azarch guest CLI -- shared imports + tiny privileged/host helpers.
+"""azarch guest command line interface -- shared imports + tiny privileged/host helpers.
 
 This is the FIRST module of the `azarch` guest-CLI package (libraries/packages/azarch/).
 The package is split across several small modules for maintainability (common, resolver,
-theme, sshd, cli), but the thing that actually ships to the guest is a SINGLE
-self-contained script at /usr/local/bin/azarch: modifications.openbox.azarch_cli() BUNDLES these
+theme, sshd, command_line_interface), but the thing that actually ships to the guest is a SINGLE
+self-contained script at /usr/local/bin/azarch: modifications.openbox.azarch_command_line_interface() BUNDLES these
 modules -- in the order packages.azarch.bundle.MODULE_ORDER -- into one file (this module's
 imports/header first, then each later module's body after its `# BUNDLE_START` sentinel).
 So everything below lands in ONE module namespace at runtime; that is why the later modules
@@ -13,7 +13,7 @@ call these helpers by bare name with no intra-package import.
 Only the standard library is used (urllib + json for the geolocation query; subprocess for
 the privileged steps). No curl/jq, no pip packages. NOTE: urllib.request and random are
 imported LAZILY where they are used (resolver.py), NOT here in the shared header -- so the
-bare `azarch` fast path (which execs the C TUI) never pays their import cost at startup.
+bare `azarch` fast path (which execs the C terminal user interface) never pays their import cost at startup.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ import sys
 
 
 def _err(msg: str) -> None:
-    """Print to stderr (stdout stays result-only, matching the old CLI)."""
+    """Print to stderr (stdout stays result-only, matching the old command line interface)."""
     print(msg, file=sys.stderr)
 
 

@@ -1,4 +1,4 @@
-/* Az'arch bare-`azarch` TUI (C) -- the renderer. See render.h.
+/* Az'arch bare-`azarch` terminal user interface (C) -- the renderer. See render.h.
  *
  * Everything is CENTRED and drawn with raw ANSI into one back buffer that is flushed in a
  * single write(), so a keystroke repaints without flicker. The accent (logo cyan) marks

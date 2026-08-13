@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""azarch guest CLI -- top-level dispatch (usage + main).
+"""azarch guest command line interface -- top-level dispatch (usage + main).
 
 This is the LAST module bundled into /usr/local/bin/azarch. It ties the pieces together:
 the `theme` positional subcommand (theme.cmd_theme), the `--resolve-*` geolocators
@@ -92,10 +92,10 @@ def main(argv: list[str] | None = None) -> int:
         usage()
         return 0
     if cmd == "":
-        # Bare `azarch` (no arguments) opens the full-screen TUI (Theme / Wallpaper /
-        # Network). run_tui degrades to a pointer message when there is no terminal, so this
+        # Bare `azarch` (no arguments) opens the full-screen terminal user interface (Theme / Wallpaper /
+        # Network). run_terminal_user_interface degrades to a pointer message when there is no terminal, so this
         # is safe even when stdin/stdout are not a tty.
-        return run_tui(argv)
+        return run_terminal_user_interface(argv)
     _err(f"azarch: unknown command: {cmd}")
     usage_err()
     return 2

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""azarch guest CLI -- `azarch theme` (system-wide dark / white theme toggle).
+"""azarch guest command line interface -- `azarch theme` (system-wide dark / white theme toggle).
 
 WHAT "SYSTEM THEME" MEANS HERE. Az'arch adopts the EXISTING freedesktop / GTK standard for
 light-vs-dark so any downloaded application that already honours it is configured for free:

@@ -1,4 +1,4 @@
-/* Az'arch bare-`azarch` TUI (C) -- running the APPLY actions INSIDE the UI.
+/* Az'arch bare-`azarch` terminal user interface (C) -- running the APPLY actions INSIDE the UI.
  *
  * Every menu apply (theme/wallpaper/network/firewall) runs through here. The whole point is
  * that NOTHING drops to the real terminal anymore: the command runs with its stdout+stderr

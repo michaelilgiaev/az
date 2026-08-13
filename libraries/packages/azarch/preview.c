@@ -1,4 +1,4 @@
-/* Az'arch bare-`azarch` TUI (C) -- preview pane. See preview.h.
+/* Az'arch bare-`azarch` terminal user interface (C) -- preview pane. See preview.h.
  *
  * BOTH previews are now REAL images placed with kitty's `kitten icat --place` (this is
  * kitty; it can do it):
@@ -7,7 +7,7 @@
  *   THEME     -- two shipped SCREENSHOTS side by side: LibreWolf on the timedate home page
  *                and the Dolphin file manager, in the dark or the white variant to match the
  *                hovered choice. The images live in AZ_PREVIEW_DIR (installed from
- *                assets/previews/ by tui_build.install_previews) and are used UNMODIFIED --
+ *                assets/previews/ by terminal_user_interface_build.install_previews) and are used UNMODIFIED --
  *                kitty scales each into the reserved half-rectangle at draw time, so swapping
  *                the files (same names) needs no code change. There is NO caption under the
  *                previews and NO per-app ANSI mock-up anymore.
@@ -44,9 +44,9 @@
 #include <fcntl.h>
 
 /* Where the theme-preview screenshots live on the installed system. MUST match
- * tui_build.TUI_PREVIEW_SYSTEM_DIR (a test pins the two together). The filenames are the
+ * terminal_user_interface_build.TERMINAL_USER_INTERFACE_PREVIEW_SYSTEM_DIR (a test pins the two together). The filenames are the
  * contract: <what>_<variant>.png with what in {timedate, files} and variant in {dark, white}. */
-#define AZ_PREVIEW_DIR "/usr/local/lib/azarch-tui/previews"
+#define AZ_PREVIEW_DIR "/usr/local/lib/azarch/previews"
 
 /* --- emit ANSI straight to stdout (the renderer already flushed its buffer) --- */
 static void outf(const char *fmt, ...)

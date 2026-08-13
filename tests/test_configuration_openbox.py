@@ -32,10 +32,10 @@ import pytest
 from modifications import openbox as desktop
 
 
-def _load_azarch_cli():
-    """Load the `azarch` guest CLI as a single module namespace.
+def _load_azarch_command_line_interface():
+    """Load the `azarch` guest command line interface as a single module namespace.
 
-    The CLI is now a PACKAGE (libraries/packages/azarch/) that is BUNDLED into one
+    The command line interface is now a PACKAGE (libraries/packages/azarch/) that is BUNDLED into one
     self-contained script for shipping (packages.azarch.bundle.bundle_source). We exec that
     bundle text in a fresh namespace -- exactly the artifact the compiler ships, before the
     country-table re-injection -- so tests exercise the real functions (main/
@@ -47,8 +47,8 @@ def _load_azarch_cli():
     import types
     from packages.azarch.bundle import bundle_source
 
-    mod = types.ModuleType("azarch_guest_cli")
-    exec(compile(bundle_source(), "azarch_guest_cli", "exec"), mod.__dict__)
+    mod = types.ModuleType("azarch_guest_command_line_interface")
+    exec(compile(bundle_source(), "azarch_guest_command_line_interface", "exec"), mod.__dict__)
     return mod
 
 
@@ -73,7 +73,7 @@ def test_plan_has_exactly_seventeen_entries():
     #  14. /usr/share/applications/azarch-install.desktop (menu re-open entry, system)
     #  15. ~/Desktop/azarch-install.desktop          (double-clickable installer launcher)
     #  16. /usr/local/bin/azarch-install             (privileged Calamares wrapper)
-    #  17. /usr/local/bin/azarch                      (guest-side CLI)
+    #  17. /usr/local/bin/azarch                      (guest-side command line interface)
     # (entries 3-9 are the system theme: dark is the default; `azarch theme` toggles it.)
     # The .bash_profile snippet is appended by emit_plan(), NOT part of PLAN.
     assert len(desktop.PLAN) == 17
@@ -143,7 +143,7 @@ def test_openbox_rc_xml_entry_is_home_owned_conf():
 
 
 def test_root_owned_dests_are_wrapper_cli_menu_entry_installed_autostart_and_dconf():
-    # Exactly six PLAN entries are root-owned: the azarch CLI, the installer wrapper
+    # Exactly six PLAN entries are root-owned: the azarch command line interface, the installer wrapper
     # (both /usr/local/bin), the system-wide installer menu .desktop
     # (/usr/share/applications), the STAGED "installed" OpenBox autostart the Calamares
     # install copies onto the target, and the TWO dconf system-theme files (the
@@ -772,23 +772,23 @@ def test_install_wrapper_is_sh_script():
     assert desktop.install_wrapper_sh().startswith("#!/bin/sh\n")
 
 
-# --- azarch --sshd-hypervisor guest CLI (now pure Python) -------------------
-# The `azarch` guest CLI is a single Python module (libraries/packages/azarch.py);
-# desktop.azarch_cli() ships it to /usr/local/bin/azarch with the country table
+# --- azarch --sshd-hypervisor guest command line interface (now pure Python) -------------------
+# The `azarch` guest command line interface is a single Python module (libraries/packages/azarch.py);
+# desktop.azarch_command_line_interface() ships it to /usr/local/bin/azarch with the country table
 # re-injected from modifications/calamares/locale. These tests assert on that emitted Python.
 
 def test_azarch_cli_is_a_python_program():
     # It is Python now (no shell), so it must carry the python shebang and NOT be a
     # /bin/sh script. This is the whole point of the de-shelling.
-    out = desktop.azarch_cli()
+    out = desktop.azarch_command_line_interface()
     assert out.startswith("#!/usr/bin/env python3")
     assert "#!/bin/sh" not in out
 
 
 def test_azarch_subcommand_is_sshd_hypervisor():
-    # The guest CLI subcommand is --sshd-hypervisor (the binary stays `azarch`).
+    # The guest command line interface subcommand is --sshd-hypervisor (the binary stays `azarch`).
     # Assert the branch + usage line exist and no bare `--sshd` token survives.
-    out = desktop.azarch_cli()
+    out = desktop.azarch_command_line_interface()
     assert 'cmd == "--sshd-hypervisor"' in out
     assert "--sshd-hypervisor    Install host pubkey" in out
     import re
@@ -799,7 +799,7 @@ def test_azarch_subcommand_is_sshd_hypervisor():
 def test_azarch_sshd_installs_pubkey_and_starts_sshd():
     # The --sshd-hypervisor path must stage the host pubkey into the target user's
     # ~/.ssh/authorized_keys, (re)generate host keys, and enable+start sshd.
-    out = desktop.azarch_cli()
+    out = desktop.azarch_command_line_interface()
     assert '"authorized_keys"' in out                  # installed into ssh_dir
     assert '"ssh-keygen", "-A"' in out
     assert '"systemctl", "enable", "--now", "sshd"' in out
@@ -807,9 +807,9 @@ def test_azarch_sshd_installs_pubkey_and_starts_sshd():
 
 def test_azarch_sshd_targets_sudo_invoking_user_not_root_home():
     # The documented invocation is `sudo azarch --sshd-hypervisor`, under which $HOME=/root
-    # and $USER=root. The CLI must resolve the REAL user via SUDO_USER (fallback to the
+    # and $USER=root. The command line interface must resolve the REAL user via SUDO_USER (fallback to the
     # current user) and look the home up in the passwd db, never off $HOME/os.environ.
-    out = desktop.azarch_cli()
+    out = desktop.azarch_command_line_interface()
     assert 'os.environ.get("SUDO_USER")' in out
     assert "pwd.getpwnam(target_user).pw_dir" in out
     # It must NOT read HOME from the environment to place the login key.
@@ -821,15 +821,15 @@ def test_azarch_sshd_chowns_key_to_target_user():
     # Under sudo the ~/.ssh tree is created as root; a root-owned authorized_keys
     # trips sshd StrictModes and is ignored. The install must hand ownership to the
     # target user (install -o/-g target_user for BOTH the dir and the key file).
-    out = desktop.azarch_cli()
+    out = desktop.azarch_command_line_interface()
     assert '"install", "-d", "-m", "700", "-o", target_user, "-g", target_user' in out
     assert '"install", "-m", "600", "-o", target_user, "-g", target_user' in out
 
 
 def test_azarch_sshd_refuses_bare_root_target():
     # If the resolved target is root (no SUDO_USER, invoked as root), there is no home
-    # pubkey login for root here, so the CLI must bail rather than stage a useless key.
-    out = desktop.azarch_cli()
+    # pubkey login for root here, so the command line interface must bail rather than stage a useless key.
+    out = desktop.azarch_command_line_interface()
     assert 'if target_user == "root":' in out
 
 
@@ -837,7 +837,7 @@ def test_azarch_sshd_opens_firewall_before_starting_sshd():
     # setup-pkgs.sh sets 'ufw default deny incoming', so without an explicit allow
     # the forwarded host->guest :22 is dropped even though sshd listens. The allow must
     # come BEFORE sshd starts so the port is reachable the instant it listens.
-    out = desktop.azarch_cli()
+    out = desktop.azarch_command_line_interface()
     allow_idx = out.index('"ufw", "allow", "ssh"')
     start_idx = out.index('"systemctl", "enable", "--now", "sshd"')
     assert allow_idx < start_idx
@@ -845,13 +845,13 @@ def test_azarch_sshd_opens_firewall_before_starting_sshd():
 
 def test_azarch_sshd_is_fail_fast_no_false_success(monkeypatch):
     # Behavioral regression guard (the old shell ran `set -e`): if a privileged step
-    # FAILS, the CLI must bail with that step's exit code and NEVER print the
+    # FAILS, the command line interface must bail with that step's exit code and NEVER print the
     # "sshd enabled and started" success line. A `check=False` port that always
     # returns 0 would silently report success on a dead sshd -- exactly the bug this
     # pins. Drive the real sshd_hypervisor() with systemctl stubbed to fail (rc 5).
     import types
 
-    azcli = _load_azarch_cli()
+    azcli = _load_azarch_command_line_interface()
     printed: list[str] = []
     monkeypatch.setattr(azcli, "print",
                         lambda *a, **k: printed.append(" ".join(map(str, a)))
@@ -874,11 +874,11 @@ def test_azarch_sshd_is_fail_fast_no_false_success(monkeypatch):
     assert not any("sshd enabled and started" in p for p in printed), printed
 
 
-# --- azarch --resolve-* guest CLI (IP geolocation, user-chosen server) ------
+# --- azarch --resolve-* guest command line interface (IP geolocation, user-chosen server) ------
 
 def test_azarch_resolve_subcommands_present_in_case_and_usage():
     # All three resolvers must be real dispatch branches AND advertised in usage.
-    out = desktop.azarch_cli()
+    out = desktop.azarch_command_line_interface()
     for sub in ("--resolve-region", "--resolve-date-time", "--resolve-language"):
         assert f'cmd == "{sub}"' in out              # dispatch branch
         assert (sub + " ") in out                    # usage line mentions it
@@ -887,10 +887,10 @@ def test_azarch_resolve_subcommands_present_in_case_and_usage():
 def test_azarch_resolve_offers_five_shuffled_servers():
     # The user must be presented FIVE servers, shuffled, including the two called out
     # in issue #46 (ipapi.co, ipquery.io). The prompt says 1-5. Assert against the
-    # actual RESOLVER_SERVERS list the emitted CLI defines.
-    azcli = _load_azarch_cli()
+    # actual RESOLVER_SERVERS list the emitted command line interface defines.
+    azcli = _load_azarch_command_line_interface()
 
-    out = desktop.azarch_cli()
+    out = desktop.azarch_command_line_interface()
     labels = [s[0] for s in azcli.RESOLVER_SERVERS]
     assert "ipapi.co" in labels
     assert "ipquery.io" in labels
@@ -900,10 +900,10 @@ def test_azarch_resolve_offers_five_shuffled_servers():
 
 
 def test_azarch_resolve_uses_stdlib_not_curl_or_jq():
-    # The Python CLI parses JSON with the standard library (urllib + json), so it does
-    # NOT shell out to curl or jq (the old shell CLI's dependencies). This is a
+    # The Python command line interface parses JSON with the standard library (urllib + json), so it does
+    # NOT shell out to curl or jq (the old shell command line interface's dependencies). This is a
     # regression guard that the de-shelling did not smuggle those back in.
-    out = desktop.azarch_cli()
+    out = desktop.azarch_command_line_interface()
     assert "urllib.request" in out
     assert "json.loads" in out
     assert "command -v curl" not in out
@@ -913,7 +913,7 @@ def test_azarch_resolve_uses_stdlib_not_curl_or_jq():
 def test_azarch_resolve_language_english_first_with_alt_shift():
     # The applied keyboard must put English ("us") FIRST/active and the region layout
     # SECOND, switched with Alt+Shift -- never the region layout alone.
-    out = desktop.azarch_cli()
+    out = desktop.azarch_command_line_interface()
     assert 'xkb_layout = f"us,{layout}"' in out
     assert "grp:alt_shift_toggle" in out
     # English-speaking regions get a lone "us" layout (English only).
@@ -924,7 +924,7 @@ def test_azarch_resolve_language_keeps_lang_english():
     # Matching the installer: the display language stays English (LANG=en_US) and only
     # the region FORMAT locale (LC_*) follows the country. The LC_* keys are written in
     # a loop over the format categories.
-    out = desktop.azarch_cli()
+    out = desktop.azarch_command_line_interface()
     assert "LANG=en_US.UTF-8" in out
     assert '"LC_NUMERIC", "LC_TIME", "LC_MONETARY", "LC_PAPER", "LC_MEASUREMENT"' in out
 
@@ -932,7 +932,7 @@ def test_azarch_resolve_language_keeps_lang_english():
 def test_azarch_resolve_region_does_both_timezone_and_language():
     # --resolve-region must apply BOTH the timezone and the language from a single
     # server query. Exercise the real dispatch with a stubbed resolver.
-    azcli = _load_azarch_cli()
+    azcli = _load_azarch_command_line_interface()
 
     calls = []
     orig_resolve = azcli.resolve_via_server
@@ -958,7 +958,7 @@ def test_azarch_resolve_region_short_circuits_on_timezone_failure():
     # bail with that code and NOT touch the keyboard/locale -- so a bad server result
     # never half-applies the region. A port that runs both unconditionally would leave
     # the keyboard changed after a timezone error; this pins the short-circuit.
-    azcli = _load_azarch_cli()
+    azcli = _load_azarch_command_line_interface()
 
     calls = []
     orig_resolve = azcli.resolve_via_server
@@ -979,7 +979,7 @@ def test_azarch_resolve_region_short_circuits_on_timezone_failure():
 
 
 def test_azarch_resolve_date_time_sets_timezone_only():
-    azcli = _load_azarch_cli()
+    azcli = _load_azarch_command_line_interface()
 
     calls = []
     orig_resolve = azcli.resolve_via_server
@@ -1001,18 +1001,18 @@ def test_azarch_resolve_date_time_sets_timezone_only():
 
 def test_azarch_resolve_embeds_country_table_from_locale():
     # The country->layout table is the single source of truth in modifications/calamares/locale;
-    # the emitted CLI's COUNTRY_TABLE must equal exactly that data. Build the emitted
+    # the emitted command line interface's COUNTRY_TABLE must equal exactly that data. Build the emitted
     # module and compare its table to locale.RESOLVER_COUNTRY_TABLE.
     from modifications.calamares import locale
-    azcli = _load_azarch_cli()
+    azcli = _load_azarch_command_line_interface()
 
     expected = {cc: (loc, lay, km, 1 if en else 0)
                 for cc, (loc, lay, km, en) in locale.RESOLVER_COUNTRY_TABLE.items()}
-    # The emitted CLI re-injects the table; the on-disk cli.py already carries it, so
+    # The emitted command line interface re-injects the table; the on-disk command_line_interface.py already carries it, so
     # asserting the imported module's table matches locale is the strongest check.
     assert azcli.COUNTRY_TABLE == expected
     # And the emitted text really contains the regenerated literal (not a stale copy).
-    out = desktop.azarch_cli()
+    out = desktop.azarch_command_line_interface()
     assert "'IL': ('he_IL.UTF-8', 'il', 'il', 0)" in out
     assert "'SV': ('es_SV.UTF-8', 'latam', 'la-latin1', 0)" in out
     assert "'US': ('en_US.UTF-8', 'us', 'us', 1)" in out       # English-speaking flag
@@ -1020,18 +1020,18 @@ def test_azarch_resolve_embeds_country_table_from_locale():
 
 
 def test_azarch_cli_is_valid_python_and_in_sync():
-    # The whole emitted CLI (source file with the re-injected table) must be valid
+    # The whole emitted command line interface (source file with the re-injected table) must be valid
     # Python, and importing/executing it must reproduce the in-sync COUNTRY_TABLE.
     import ast
 
     from modifications.calamares import locale
 
-    out = desktop.azarch_cli()
+    out = desktop.azarch_command_line_interface()
     # No f-string/template artefacts leaked from the injection.
     assert "AZARCH_CC_TABLE_START" in out and "AZARCH_CC_TABLE_END" in out
     ast.parse(out)
     ns: dict = {}
-    exec(compile(out, "azarch_cli", "exec"), ns)
+    exec(compile(out, "azarch_command_line_interface", "exec"), ns)
     expected = {cc: (loc, lay, km, 1 if en else 0)
                 for cc, (loc, lay, km, en) in locale.RESOLVER_COUNTRY_TABLE.items()}
     assert ns["COUNTRY_TABLE"] == expected

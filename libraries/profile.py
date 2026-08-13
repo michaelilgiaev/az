@@ -88,13 +88,13 @@ FILE_PERMISSIONS = {
     # autostart's `[ -x ... ]` guard would then skip it, so the menu is never pre-built
     # and the first Super press does nothing / starts nothing.
     "/usr/local/lib/azarch-application-menu/azarch-application-menu-daemon": "0:0:755",
-    # The COMPILED bare-`azarch` TERMINAL UI binary (built by tui_build.build_tui from the
-    # azarch package's C sources and EXEC'd by the `azarch` CLI for the no-argument case).
+    # The COMPILED bare-`azarch` TERMINAL UI binary (built by terminal_user_interface_build.build_terminal_user_interface from the
+    # azarch package's C sources and EXEC'd by the `azarch` command line interface for the no-argument case).
     # Same archiso mode-normalization
     # as the menu daemon above: it is installed 0755, but the squashfs would ship it 0644
     # unless pinned -- and then the `azarch` launcher's os.access(..., X_OK) guard fails and
     # bare `azarch` silently falls back to the pointer message instead of opening the UI.
-    "/usr/local/lib/azarch-tui/azarch-tui": "0:0:755",
+    "/usr/local/lib/azarch/azarch": "0:0:755",
     # The OpenBox session autostart (~/.config/openbox/autostart). openbox-session runs
     # it via /bin/sh, but it carries a shebang and openbox.PLAN emits it 0755, so pin it
     # executable here too (archiso would otherwise normalize it to 0644). Pin both the

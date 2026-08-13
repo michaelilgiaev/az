@@ -40,7 +40,7 @@ import paths
 from ownership import Ownership
 from progress import ProgressBar
 from packages.application_menu import application_menu
-from packages.azarch import tui_build
+from packages.azarch import terminal_user_interface_build
 from packages.timedate import timedate
 from modifications.calamares import calamares
 from modifications.calamares import locale
@@ -419,18 +419,18 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
         )
     # The bare-`azarch` TERMINAL UI (OUR C settings UI: Theme / Wallpaper / Network, opened
     # by running `azarch` with no arguments). It is part of the `azarch` package now (one
-    # program, C for speed); like the menu it is a COMPILED C program: build_tui() runs
+    # program, C for speed); like the menu it is a COMPILED C program: build_terminal_user_interface() runs
     # `make` against a private copy of the package's C sources and installs the resulting
-    # binary under /usr/local/lib/azarch-tui. The `azarch` CLI (installed by openbox.PLAN
+    # binary under /usr/local/lib/azarch. The `azarch` command line interface (installed by openbox.PLAN
     # below) execs this binary for the no-argument case. Then install_previews() ships the
     # theme-preview screenshots (verbatim) into the sibling previews dir the UI reads at
     # runtime with kitty. Root-owned; the OFFLINE Calamares install rsyncs both onto the
     # installed system with no separate step.
-    tui_build.build_tui(
-        airootfs / tui_build.TUI_BIN_SYSTEM_PATH.lstrip("/")
+    terminal_user_interface_build.build_terminal_user_interface(
+        airootfs / terminal_user_interface_build.TERMINAL_USER_INTERFACE_BIN_SYSTEM_PATH.lstrip("/")
     )
-    tui_build.install_previews(
-        airootfs / tui_build.TUI_PREVIEW_SYSTEM_DIR.lstrip("/")
+    terminal_user_interface_build.install_previews(
+        airootfs / terminal_user_interface_build.TERMINAL_USER_INTERFACE_PREVIEW_SYSTEM_DIR.lstrip("/")
     )
     # Az'arch timedate (OUR Flask Time + Calendar home page -- the site LibreWolf lands
     # on at localhost:49154). A pure-Python app: emit_plan() copies the app sources
@@ -783,12 +783,12 @@ def _check_host_deps(sudo, offline: bool) -> None:
     # gedit/GTK3/libpeas dev headers): _emit_apps COMPILES that libpeas plugin later in
     # this run, so the dev stack must be present here or `make` dies on a missing header.
     # + the bare-`azarch` C terminal UI build dep (just gcc): _emit_desktop COMPILES that
-    # UI (tui_build.build_tui) later in this run. It is pure libc (no ncurses/GTK), so gcc
+    # UI (terminal_user_interface_build.build_terminal_user_interface) later in this run. It is pure libc (no ncurses/GTK), so gcc
     # -- already pulled in by base-devel / the menu deps -- is all it needs; listed for
     # completeness so the dependency intent is explicit.
     host_pkgs = (["archiso", "git", "base-devel", "go"]
                  + application_menu.MENU_BUILD_DEPS + gedit.GEDIT_PLUGIN_BUILD_DEPS
-                 + tui_build.TUI_BUILD_DEPS)
+                 + terminal_user_interface_build.TERMINAL_USER_INTERFACE_BUILD_DEPS)
     if subprocess.run(["pacman", "-Qq", *host_pkgs],
                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
         print("    [+] Build-host dependencies already present, skipping sync (offline).")

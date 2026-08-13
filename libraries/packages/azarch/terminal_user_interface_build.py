@@ -6,25 +6,25 @@ raw ANSI + termios (no ncurses/GTK), so redraws are instant: coloured (the Az'ar
 cyan), everything centred, WASD/HJKL/arrow navigation, live status, and kitty-graphics
 previews (the hovered wallpaper; the theme rendered as real LibreWolf + Dolphin screenshots).
 
-WHY IT LIVES HERE. It used to be a SEPARATE package (packages/azarch_tui/) with its own
-Python wrapper, but the CLI it drives is the `azarch` package -- and there is only ONE
+WHY IT LIVES HERE. It used to be a SEPARATE package (packages/azarch_terminal_user_interface/) with its own
+Python wrapper, but the command line interface it drives is the `azarch` package -- and there is only ONE
 program, `azarch`, in C for speed. So the C sources (main.c/render.c/model.c/preview.c +
-headers + Makefile) now live DIRECTLY in packages/azarch/ next to the Python CLI, and THIS
-module is the build wiring that compiles them into the `azarch-tui` binary and installs it.
-There is no `azarch_tui` package anymore.
+headers + Makefile) now live DIRECTLY in packages/azarch/ next to the Python command line interface, and THIS
+module is the build wiring that compiles them into the `azarch` binary and installs it.
+There is no `azarch_terminal_user_interface` package anymore.
 
 Layers:
-  * SOURCE tree -- libraries/packages/azarch/ (paths.AZARCH_CLI_DIR). The C sources:
+  * SOURCE tree -- libraries/packages/azarch/ (paths.AZARCH_COMMAND_LINE_INTERFACE_DIR). The C sources:
       main.c     raw termios + the input loop + running the apply actions (main())
       render.c   the centred, coloured ANSI renderer
       model.c    the screen/menu tree + the live status probes
       preview.c  the hovered-row previews (kitty icat wallpaper; kitty icat theme shots)
-      tui.h / render.h / preview.h   the headers
-      Makefile   builds azarch-tui (+ `make test`)
-    They sit alongside the Python CLI modules (cli.py, theme.py, ...). _csrc_files() picks up
+      terminal_user_interface.h / render.h / preview.h   the headers
+      Makefile   builds azarch (+ `make test`)
+    They sit alongside the Python command line interface modules (command_line_interface.py, theme.py, ...). _csrc_files() picks up
     ONLY the C inputs (.c/.h/Makefile), never the .py files, so the two coexist cleanly.
   * BUILD wiring -- THIS module compiles those into the binary and installs it to
-    TUI_BIN_SYSTEM_PATH. compiler.py calls build_tui() during the desktop emit.
+    TERMINAL_USER_INTERFACE_BIN_SYSTEM_PATH. compiler.py calls build_terminal_user_interface() during the desktop emit.
 
 The theme previews are REAL screenshots shipped from assets/previews/ (see PREVIEW_ASSETS)
 to a fixed system dir; preview.c places them with kitty's `kitten icat` at RUNTIME. Swapping
@@ -49,21 +49,21 @@ import paths
 # Where the UI lands in the live/installed rootfs. Kept under /usr/local/lib (like the
 # application-menu daemon) rather than directly on PATH: the bin entry point is the Python
 # `azarch` script, which execs this binary for the no-argument case.
-TUI_LIB_DIR = "/usr/local/lib/azarch-tui"
-# The compiled binary the `azarch` CLI execs. MUST match packages/azarch/tui.py TUI_BIN
+TERMINAL_USER_INTERFACE_LIB_DIR = "/usr/local/lib/azarch"
+# The compiled binary the `azarch` command line interface execs. MUST match packages/azarch/terminal_user_interface.py TERMINAL_USER_INTERFACE_BIN
 # (a test pins the two together so the launcher and the build cannot drift).
-TUI_BIN_SYSTEM_PATH = f"{TUI_LIB_DIR}/azarch-tui"
+TERMINAL_USER_INTERFACE_BIN_SYSTEM_PATH = f"{TERMINAL_USER_INTERFACE_LIB_DIR}/azarch"
 
 # The compiled UI reads its theme-preview screenshots from here at RUNTIME (kitty icat).
 # Kept as a sibling data dir of the binary so it travels with it. MUST match preview.c's
 # AZ_PREVIEW_DIR (a test pins the two together).
-TUI_PREVIEW_SYSTEM_DIR = f"{TUI_LIB_DIR}/previews"
+TERMINAL_USER_INTERFACE_PREVIEW_SYSTEM_DIR = f"{TERMINAL_USER_INTERFACE_LIB_DIR}/previews"
 
 # The binary name the Makefile produces.
-TUI_BIN_NAME = "azarch-tui"
+TERMINAL_USER_INTERFACE_BIN_NAME = "azarch"
 
 # The theme-preview screenshots shipped verbatim from assets/previews/ to
-# TUI_PREVIEW_SYSTEM_DIR. The names are the CONTRACT preview.c hard-codes: LibreWolf on the
+# TERMINAL_USER_INTERFACE_PREVIEW_SYSTEM_DIR. The names are the CONTRACT preview.c hard-codes: LibreWolf on the
 # timedate home page + Dolphin, each in a dark and a white variant. They ship UNMODIFIED
 # (kitty scales them into the reserved rectangle at draw time); replacing them with the same
 # filenames needs no code change. Relative to assets/.
@@ -77,16 +77,16 @@ PREVIEW_ASSETS = (
 # Host BUILD dependency: just the C compiler. Listed for compiler._check_host_deps /
 # the Dockerfile (gcc is already pulled in for the application-menu build, so this is
 # effectively already satisfied; kept explicit for clarity + a slimmer host).
-TUI_BUILD_DEPS = ["gcc"]
+TERMINAL_USER_INTERFACE_BUILD_DEPS = ["gcc"]
 
 
 def _csrc_files() -> list[Path]:
     """Every C source/header + the Makefile in the azarch package dir (the build inputs).
 
-    The `azarch` package dir holds BOTH the Python CLI modules and the C UI sources; this
+    The `azarch` package dir holds BOTH the Python command line interface modules and the C UI sources; this
     returns ONLY the C inputs (.c/.h and the Makefile), never the .py files, so the build
     copies exactly the C tree into a scratch dir and `make` sees a clean, Python-free tree."""
-    d = paths.AZARCH_CLI_DIR
+    d = paths.AZARCH_COMMAND_LINE_INTERFACE_DIR
     names = sorted(
         p.name
         for p in d.iterdir()
@@ -95,7 +95,7 @@ def _csrc_files() -> list[Path]:
     return [d / n for n in names]
 
 
-def build_tui(dest: Path, *, make: str = "make") -> Path:
+def build_terminal_user_interface(dest: Path, *, make: str = "make") -> Path:
     """Compile the C terminal UI and install the binary at `dest`.
 
     Builds in a throwaway temp dir populated with a copy of the C sources (NOT in the repo,
@@ -104,12 +104,12 @@ def build_tui(dest: Path, *, make: str = "make") -> Path:
     fail the ISO build loudly rather than ship a missing binary. Returns the destination
     path. Mirrors application_menu.build_daemon()."""
     dest = Path(dest)
-    with tempfile.TemporaryDirectory(prefix="azarch-tui-build-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="azarch-build-") as tmp:
         build_dir = Path(tmp)
         for src in _csrc_files():
             shutil.copy2(src, build_dir / src.name)
-        subprocess.run([make, TUI_BIN_NAME], cwd=build_dir, check=True)
-        built = build_dir / TUI_BIN_NAME
+        subprocess.run([make, TERMINAL_USER_INTERFACE_BIN_NAME], cwd=build_dir, check=True)
+        built = build_dir / TERMINAL_USER_INTERFACE_BIN_NAME
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(built, dest)
         dest.chmod(0o755)

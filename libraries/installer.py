@@ -189,7 +189,7 @@ echo "[*] Preparing home directory..."
 mkdir -p /mnt/home/main
 chown -R 1000:998 /mnt/home/main
 
-echo "[*] Copying azarch CLI..."
+echo "[*] Copying azarch command line interface..."
 install -m 755 /usr/local/bin/azarch /mnt/usr/local/bin/azarch
 
 echo "[*] Copying azarch fastfetch configuration..."

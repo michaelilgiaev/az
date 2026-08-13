@@ -204,7 +204,7 @@ def test_setup_block_still_dollar_brace_clean():
 # --- Resolver country table (the `azarch --resolve-*` commands) --------------
 
 def test_resolver_table_rows_have_five_fields():
-    # Every row is CC|locale|layout|keymap|english; the guest CLI splits on '|' and
+    # Every row is CC|locale|layout|keymap|english; the guest command line interface splits on '|' and
     # relies on exactly five fields.
     for line in locale.resolver_country_table_sh().splitlines():
         parts = line.split("|")

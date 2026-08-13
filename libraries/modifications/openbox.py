@@ -171,7 +171,7 @@ HOME_OWNER = (1000, 998)
 # (_feh_wallpaper_line, used by ~/.xinitrc + the OpenBox autostart) reads it and paints that
 # image if it exists, else falls back to the "years" default -- so a fresh user gets "years"
 # while `azarch wallpaper --decades.png` sticks across a re-login. Under ~/.config
-# (XDG_CONFIG_HOME the session exports). Kept in lock-step with the CLI's _state_file() (a
+# (XDG_CONFIG_HOME the session exports). Kept in lock-step with the command line interface's _state_file() (a
 # test pins the two). The session reads it via the $HOME shell variable (per-user via skel).
 WALLPAPER_POINTER_FILE = f"{HOME}/.config/azarch/wallpaper"
 
@@ -597,8 +597,8 @@ def openbox_theme_rc_light() -> str:
 #     /etc/dconf keyfile + profile and compiled by `dconf update` in the customize hook
 #     (post-pacstrap, where dconf exists). A per-user `gsettings set` from `azarch theme`
 #     OVERRIDES this system default and persists, so a user who picks white keeps white.
-# These builders MUST stay byte-for-byte in lock-step with the azarch CLI's theme.py dark
-# output (a test bundles the CLI and asserts equality) so the shipped default and a later
+# These builders MUST stay byte-for-byte in lock-step with the azarch command line interface's theme.py dark
+# output (a test bundles the command line interface and asserts equality) so the shipped default and a later
 # `azarch theme --dark` produce identical files.
 GTK3_SETTINGS_PATH = f"{HOME}/.config/gtk-3.0/settings.ini"
 GTK4_SETTINGS_PATH = f"{HOME}/.config/gtk-4.0/settings.ini"
@@ -1098,14 +1098,14 @@ Keywords=install;calamares;setup;
 """
 
 
-# --- 8. /usr/local/bin/azarch (guest-side CLI) ------------------------------
-# The `azarch` guest CLI is its OWN Python PACKAGE now, libraries/packages/azarch/ (all
+# --- 8. /usr/local/bin/azarch (guest-side command line interface) ------------------------------
+# The `azarch` guest command line interface is its OWN Python PACKAGE now, libraries/packages/azarch/ (all
 # Python -- no shell). It grew a `theme` subcommand (and more to come), so the single module
-# was split into small modules (common/country_table/resolver/theme/sshd/cli). This module
-# no longer AUTHORS the CLI; it (a) asks the package to BUNDLE those modules into one
+# was split into small modules (common/country_table/resolver/theme/sshd/command_line_interface). This module
+# no longer AUTHORS the command line interface; it (a) asks the package to BUNDLE those modules into one
 # self-contained script (bundle.bundle_source()), then (b) injects the country->locale table
 # from modifications/calamares/locale (the single source of truth) between the AZARCH_CC markers,
-# and ships the result to /usr/local/bin/azarch. See paths.AZARCH_CLI_DIR and packages/azarch/.
+# and ships the result to /usr/local/bin/azarch. See paths.AZARCH_COMMAND_LINE_INTERFACE_DIR and packages/azarch/.
 AZARCH_BIN_PATH = "/usr/local/bin/azarch"
 
 # Marker lines (in the bundled source, originally from country_table.py) bracketing the
@@ -1114,8 +1114,8 @@ _AZARCH_CC_START = "# AZARCH_CC_TABLE_START"
 _AZARCH_CC_END = "# AZARCH_CC_TABLE_END"
 
 
-def azarch_cli() -> str:
-    """The `azarch` guest CLI (Python), BUNDLED from the libraries/packages/azarch/ package
+def azarch_command_line_interface() -> str:
+    """The `azarch` guest command line interface (Python), BUNDLED from the libraries/packages/azarch/ package
     into one self-contained script and shipped to /usr/local/bin/azarch. The COUNTRY_TABLE
     dict literal between the AZARCH_CC markers is REGENERATED from
     modifications/calamares/locale.RESOLVER_COUNTRY_TABLE so the guest resolver's
@@ -1131,7 +1131,7 @@ def azarch_cli() -> str:
       --resolve-region    do both
     """
     from modifications.calamares.locale import resolver_country_table_py  # noqa: E402 (locale lives with the calamares modification)
-    from packages.azarch.bundle import bundle_source  # noqa: E402 (the CLI package's bundler)
+    from packages.azarch.bundle import bundle_source  # noqa: E402 (the command line interface package's bundler)
 
     src = bundle_source()
     start = src.index(_AZARCH_CC_START) + len(_AZARCH_CC_START)
@@ -1341,7 +1341,7 @@ PLAN = [
         "owner": "root",
     },
     {
-        "builder": azarch_cli,
+        "builder": azarch_command_line_interface,
         "dest": AZARCH_BIN_PATH,
         "mode": _EXEC,
         "owner": "root",

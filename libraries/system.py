@@ -460,11 +460,11 @@ SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_TYPE}=="Mains", ACTION=="change", RU
 # the whole point of that variant ("sudo azarch --sshd-hypervisor on by default").
 #
 # It runs as ROOT with Environment=SUDO_USER=main (rather than User=main) on
-# purpose. The azarch CLI resolves its target user from ${SUDO_USER:-$(id -un)} and
+# purpose. The azarch command line interface resolves its target user from ${SUDO_USER:-$(id -un)} and
 # REFUSES a bare-root target, so SUDO_USER=main makes it stage the pubkey into
 # /home/main/.ssh (the account sshd accepts) exactly as an interactive
 # `sudo azarch --sshd-hypervisor` would. Running the UNIT as root avoids the PAM
-# session a `User=main` unit would need for the CLI's internal `sudo` calls (mount
+# session a `User=main` unit would need for the command line interface's internal `sudo` calls (mount
 # the 9p share, ssh-keygen -A, ufw, systemctl enable --now sshd): as root those
 # `sudo` invocations are trivial no-op elevations and the `install -o main` calls
 # still hand the key files to `main`.
@@ -479,7 +479,7 @@ SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_TYPE}=="Mains", ACTION=="change", RU
 #
 # Failure is non-fatal to boot: the guest still boots to the desktop if the shared
 # folder / host pubkey is absent (e.g. booted without the hypervisor's shared dir).
-# The azarch CLI exits non-zero in that case, but Type=oneshot + no other unit
+# The azarch command line interface exits non-zero in that case, but Type=oneshot + no other unit
 # depending on it means the system carries on; the user can re-run it by hand.
 SSHD_HYPERVISOR_SETUP_SERVICE = """\
 [Unit]
