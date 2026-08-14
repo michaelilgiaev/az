@@ -130,3 +130,36 @@ int az_action_run_capture(const char *cmdline, char **out)
     if (!WIFEXITED(st)) return -1;
     return WEXITSTATUS(st);
 }
+
+/* --- clipboard (xclip) ------------------------------------------------------ */
+
+int az_action_copy_clipboard(const char *text)
+{
+    if (!text) return 0;
+    int pipefd[2];
+    if (pipe(pipefd) != 0) return 0;
+    pid_t pid = fork();
+    if (pid < 0) { close(pipefd[0]); close(pipefd[1]); return 0; }
+    if (pid == 0) {
+        /* child: stdin from the pipe; stdout/stderr silenced. xclip reads the selection data
+         * from stdin, then (by default) forks a background server to hold the CLIPBOARD and the
+         * foreground process exits -- so the waitpid below returns promptly. */
+        dup2(pipefd[0], 0);
+        int dn = open("/dev/null", O_WRONLY);
+        if (dn >= 0) { dup2(dn, 1); dup2(dn, 2); if (dn > 2) close(dn); }
+        close(pipefd[0]); close(pipefd[1]);
+        execlp("xclip", "xclip", "-selection", "clipboard", (char *)NULL);
+        _exit(127);   /* xclip missing */
+    }
+    close(pipefd[0]);
+    /* Feed the text (no trailing newline -- it is a single command line). If the child already
+     * exited (xclip missing / exec race) this hits EPIPE; SIGPIPE is ignored process-wide
+     * (main.c), so we get -1 here and fall through to report failure from the child's exit. */
+    size_t len = strlen(text);
+    ssize_t w = len ? write(pipefd[1], text, len) : 0;
+    (void)w;
+    close(pipefd[1]);
+    int st = 0;
+    waitpid(pid, &st, 0);
+    return WIFEXITED(st) && WEXITSTATUS(st) == 0;
+}

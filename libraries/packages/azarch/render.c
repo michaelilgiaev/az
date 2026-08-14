@@ -81,6 +81,24 @@ static void put_center(Buf *b, const AzUI *ui, int row, const char *sgr_body, co
     if (sgr_body) reset(b);
 }
 
+/* Put a centred TWO-TONE line on `row`: `label` in `label_sgr`, then `value` in `value_sgr`,
+ * abutting, centred together on their combined visible width. Used for the command lines under
+ * the list -- "Base Command: $ " / "Azarch Wrapper: $ " in white (AZ_SGR_TEXT) followed by the
+ * command itself in cyan (AZ_SGR_ACCENT). */
+static void put_center_labeled(Buf *b, const AzUI *ui, int row,
+                               const char *label_sgr, const char *label,
+                               const char *value_sgr, const char *value)
+{
+    int w = vwidth(label) + vwidth(value);
+    at(b, row, center_col(ui->cols, w));
+    if (label_sgr) sgr(b, label_sgr);
+    buf_str(b, label);
+    if (label_sgr) reset(b);
+    if (value_sgr) sgr(b, value_sgr);
+    buf_str(b, value);
+    if (value_sgr) reset(b);
+}
+
 /* --- model helpers ---------------------------------------------------------- */
 const AzScreen *az_ui_screen(const AzUI *ui)
 {
@@ -155,6 +173,12 @@ static void draw_nav(Buf *b, const AzUI *ui, int row)
         verb(&t, "Q", "quit");
         buf_str(&t, "   ");
         verb(&t, "/", "search");
+        buf_str(&t, "   ");
+        /* c / x copy the hovered row's commands to the clipboard (xclip): C the Azarch wrapper,
+         * X the base command. */
+        verb(&t, "C", "copy cmd");
+        buf_str(&t, "   ");
+        verb(&t, "X", "copy base");
     }
     /* Measure visible width: strip SGR escapes when counting. */
     int w = 0;
@@ -175,10 +199,11 @@ static void draw_nav(Buf *b, const AzUI *ui, int row)
 const char *az_nav_plain(char *buf, size_t n)
 {
     /* Uncoloured content for tests: the packed movement clusters + the verbs, matching what
-     * draw_nav renders ("WASD HJKL ←↑→↓ move   ENTER open   ESC back   Q quit   / search"). */
+     * draw_nav renders ("WASD HJKL ←↑→↓ move   ENTER open   ESC back   Q quit   / search   C
+     * copy cmd   X copy base"). */
     snprintf(buf, n,
              "WASD HJKL \xe2\x86\x90\xe2\x86\x91\xe2\x86\x92\xe2\x86\x93 "
-             "move   ENTER open   ESC back   Q quit   / search");
+             "move   ENTER open   ESC back   Q quit   / search   C copy cmd   X copy base");
     return buf;
 }
 
@@ -421,10 +446,13 @@ static void az_render_menu(const AzUI *ui, AzRect *preview_out)
     }
     y += 4;
 
-    /* 3. subtitle (dim, centred): the wallpaper dir path, kitty disclaimer, etc. */
+    /* 3. subtitle (centred): the explanatory "what this wraps" line. Normally DIM with a blank
+     * spacer below it; when the screen sets subtitle_accent (the Wallpaper directory path) it is
+     * drawn in the ACCENT (cyan) and TIGHT against the "Current:" line beneath -- the spec wants
+     * that path coloured and sitting right above "Current: years.png". */
     if (scr && scr->subtitle && scr->subtitle[0]) {
-        put_center(&b, ui, y, AZ_SGR_DIM, scr->subtitle);
-        y += 2;
+        put_center(&b, ui, y, scr->subtitle_accent ? AZ_SGR_ACCENT : AZ_SGR_DIM, scr->subtitle);
+        y += scr->subtitle_accent ? 1 : 2;
     }
 
     /* 4. "Current: X" line (accent) -- Theme/Wallpaper want the current state shown ONCE at
@@ -460,7 +488,7 @@ static void az_render_menu(const AzUI *ui, AzRect *preview_out)
         int gap = 3;
         int blockw = 2 + label_w + (status_w ? gap + status_w : 0); /* "› " + label + gap + status */
         int col = center_col(ui->cols, blockw);
-        int maxrows = rows - list_top - 6;      /* leave room for hint + nav */
+        int maxrows = rows - list_top - 6;      /* leave room for the command lines + nav */
         if (maxrows < 1) maxrows = 1;
         for (int i = 0; i < nvis && i < maxrows; i++) {
             int selected = (i == sel);
@@ -488,12 +516,11 @@ static void az_render_menu(const AzUI *ui, AzRect *preview_out)
 
     /* 6. reserve a PREVIEW rectangle for the hovered row (below the list, centred). The
      * renderer only reserves the space; preview.c places the kitty image inside it. We leave
-     * FOUR lines at the bottom (hint/command + message + nav) so the command line the spec
-     * wants never collides with the image. */
-    int have_preview = 0;
+     * FOUR lines at the bottom (Base Command + Azarch Wrapper + message + nav) so the two
+     * command lines the spec wants never collide with the image. */
     if (nvis > 0 && sel < nvis && vis[sel]->preview != AZ_PV_NONE) {
         int pv_top = y + 1;
-        int pv_h = rows - pv_top - 4;         /* leave hint/command + message + nav */
+        int pv_h = rows - pv_top - 4;         /* leave the two command lines + message + nav */
         if (pv_h > 11) pv_h = 11;
         int pv_w = ui->cols > 72 ? 64 : ui->cols - 6;
         if (pv_h >= 4 && pv_w >= 20 && preview_out) {
@@ -502,24 +529,31 @@ static void az_render_menu(const AzUI *ui, AzRect *preview_out)
             preview_out->w = pv_w;
             preview_out->h = pv_h;
             preview_out->valid = 1;
-            have_preview = 1;
         }
         y = pv_top + (pv_h >= 4 ? pv_h : 0);
     }
 
-    /* 7. hovered row hint (dim) + the bash COMMAND that runs it, so the user learns how to do
-     * this WITHOUT the UI (the spec: "settings should be accompanied by the bash command that
-     * invokes them"). The command reads "$ azarch ..." in the accent so it stands out as
-     * something to type. When a preview is on screen we show ONLY the command (skip the
-     * free-text hint) so nothing overlaps the image; otherwise both are shown. */
+    /* 7. the two command lines for the hovered row, so the user learns how to do this WITHOUT
+     * the UI (the spec): the underlying "Base Command: $ <base>" on top, and the wrapper
+     * "Azarch Wrapper: $ azarch ..." below it. The "Base Command: $ " / "Azarch Wrapper: $ "
+     * labels are WHITE (AZ_SGR_TEXT) and the commands themselves CYAN (AZ_SGR_ACCENT). `c`
+     * copies the wrapper, `x` copies the base (see main.c). A SCREEN row teaches nothing, so
+     * the lines are drawn only when there is a command. These sit on the last two body rows
+     * (rows-4, rows-3) whether or not a preview is on screen -- the preview rect above leaves
+     * them clear. */
     if (nvis > 0 && sel < nvis) {
-        const char *cmd = az_row_command(vis[sel]);
-        if (!have_preview && vis[sel]->hint && vis[sel]->hint[0])
-            put_center(&b, ui, rows - 4, AZ_SGR_DIM, vis[sel]->hint);
+        const char *base = az_row_base(vis[sel]);
+        const char *cmd  = az_row_command(vis[sel]);
+        char line[768];
+        if (base && base[0]) {
+            snprintf(line, sizeof line, "$ %s", base);
+            put_center_labeled(&b, ui, rows - 4, AZ_SGR_TEXT, "Base Command: ",
+                               AZ_SGR_ACCENT, line);
+        }
         if (cmd && cmd[0]) {
-            char line[220];
             snprintf(line, sizeof line, "$ %s", cmd);
-            put_center(&b, ui, rows - 3, AZ_SGR_ACCENT, line);
+            put_center_labeled(&b, ui, rows - 3, AZ_SGR_TEXT, "Azarch Wrapper: ",
+                               AZ_SGR_ACCENT, line);
         }
     }
 

@@ -182,6 +182,81 @@ static void test_row_command(void)
     CHECK(found_port == 1);
 }
 
+/* PROMPT: every apply/port row now teaches its UNDERLYING base command too (az_row_base) --
+ * the "Base Command: $ ..." line, which `x` copies -- alongside the azarch wrapper (`c`). A
+ * SCREEN row teaches neither. A PORT row's base carries the same "<port>" placeholder the
+ * wrapper does. These are the exact commands wired in the model, verified end-to-end. */
+static void test_row_base_command(void)
+{
+    /* Theme: the base is the gsettings call, the wrapper is the azarch one. */
+    const AzScreen *t = az_screen_find("theme");
+    CHECK(strcmp(az_row_base(&t->rows[0]),
+                 "gsettings set org.gnome.desktop.interface color-scheme prefer-dark") == 0);
+    CHECK(strcmp(az_row_command(&t->rows[0]), "azarch theme --dark") == 0);
+
+    /* Airplane on: the PROMPT's worked example -- base nmcli, wrapper azarch. */
+    const AzScreen *air = az_screen_find("network.airplane");
+    CHECK(strcmp(air->rows[0].label, "Turn airplane mode on") == 0);
+    CHECK(strcmp(az_row_base(&air->rows[0]), "sudo nmcli networking off") == 0);
+    CHECK(strcmp(az_row_command(&air->rows[0]), "azarch network airplane on") == 0);
+
+    /* Wallpaper base is the feh line ending in the real image path. */
+    const AzScreen *w = az_screen_find("wallpaper");
+    CHECK(strstr(az_row_base(&w->rows[0]), "feh --no-fehbg --bg-fill") != NULL);
+    CHECK(strstr(az_row_base(&w->rows[0]),
+                 "/usr/share/wallpapers/years/contents/images/1672x941.png") != NULL);
+
+    /* A SCREEN row (main > Network) teaches NO command and NO base. */
+    const AzScreen *m = az_screen_find("main");
+    CHECK(az_row_command(&m->rows[0]) == NULL);
+    CHECK(az_row_base(&m->rows[0]) == NULL);
+
+    /* A PORT row's base AND wrapper both carry the "<port>" the user would type. */
+    const AzScreen *fw = az_screen_find("network.firewall");
+    for (int i = 0; i < fw->nrows; i++) {
+        if (fw->rows[i].kind == AZ_ACT_PORT) {
+            CHECK(strstr(az_row_base(&fw->rows[i]), "<port>") != NULL);
+            CHECK(strstr(az_row_base(&fw->rows[i]), "ufw") != NULL);
+            CHECK(strstr(az_row_command(&fw->rows[i]), "<port>") != NULL);
+        }
+    }
+    /* Every APPLY/PORT row that has a wrapper also declares a base (no half-filled rows). */
+    const char *screens[] = {"theme", "wallpaper", "volume", "brightness", "machine",
+                             "network.wifi", "network.wired", "network.bluetooth",
+                             "network.airplane", "network.firewall"};
+    for (size_t s = 0; s < sizeof screens / sizeof screens[0]; s++) {
+        const AzScreen *sc = az_screen_find(screens[s]);
+        CHECK(sc != NULL);
+        for (int i = 0; i < sc->nrows; i++)
+            if (sc->rows[i].kind == AZ_ACT_APPLY || sc->rows[i].kind == AZ_ACT_PORT)
+                CHECK(az_row_base(&sc->rows[i]) != NULL);
+    }
+}
+
+/* PROMPT: the Wallpaper subtitle became the directory PATH ("Wallpapers directory: .../") and is
+ * flagged to render in the accent (cyan) tight above "Current:". Other screens' subtitles stay
+ * default (subtitle_accent == 0) and now EXPLAIN the wrapped tools. */
+static void test_subtitles_explain_and_wallpaper_is_accented(void)
+{
+    const AzScreen *w = az_screen_find("wallpaper");
+    CHECK(strstr(w->subtitle, "Wallpapers directory:") != NULL);
+    CHECK(strstr(w->subtitle, "/usr/share/wallpapers/") != NULL);   /* trailing slash, per spec */
+    CHECK(w->subtitle_accent == 1);                                  /* cyan + tight */
+
+    /* The explanatory subtitles name the tool they wrap; they are NOT accented. */
+    const AzScreen *fw = az_screen_find("network.firewall");
+    CHECK(strstr(fw->subtitle, "ufw") != NULL);
+    CHECK(fw->subtitle_accent == 0);
+    const AzScreen *air = az_screen_find("network.airplane");
+    CHECK(strstr(air->subtitle, "nmcli") != NULL);
+    const AzScreen *vol = az_screen_find("volume");
+    CHECK(strstr(vol->subtitle, "wpctl") != NULL);
+    /* Theme keeps the pinned kitty-exemption phrase AND now names gsettings. */
+    const AzScreen *th = az_screen_find("theme");
+    CHECK(strstr(th->subtitle, "gsettings") != NULL);
+    CHECK(strstr(th->subtitle, "Kitty does not follow the system theme") != NULL);
+}
+
 /* The Firewall screen can LIST ports (show_output) and OPEN/CLOSE/DELETE a port by typing its
  * number (AZ_ACT_PORT) -- the in-UI firewall config the spec asks for. Every firewall apply
  * needs root, so needs_root is set (the UI secures a credential first, no black screen). */
@@ -296,6 +371,8 @@ int main(void)
     test_network_rows_descend();
     test_theme_rows_are_applies();
     test_row_command();
+    test_row_base_command();
+    test_subtitles_explain_and_wallpaper_is_accented();
     test_firewall_lists_and_configures_ports();
     test_current_is_screen_level_not_per_row();
     test_network_subscreens_have_current_and_no_row_spam();

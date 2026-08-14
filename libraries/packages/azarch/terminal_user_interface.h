@@ -76,7 +76,12 @@ typedef struct {
     const char *(*status)(char *buf, size_t n);
     AzPreviewKind preview;
     const char *preview_arg;    /* wallpaper id / theme name for the preview           */
-    const char *hint;           /* optional one-line help shown under the list         */
+    /* base: the UNDERLYING tool command this row's `azarch` wrapper ultimately runs (the
+     * gsettings/feh/wpctl/nmcli/ufw/... line a user would type WITHOUT azarch). The renderer
+     * shows it as the "Base Command: $ ..." line above the "Azarch Wrapper: $ ..." line, and
+     * `x` copies it to the clipboard. NULL for a SCREEN row (nothing to teach). For a PORT row
+     * it carries the same "<port>" placeholder shape the wrapper does. */
+    const char *base;
     /* EVERY apply now runs INSIDE the UI: its output is captured and shown in a centred
      * results overlay on the alt screen, so raw command line interface text never flashes over the UI and the
      * terminal is never "blacked out" or polluted (the fix for "selecting a setting turns the
@@ -101,6 +106,11 @@ typedef struct {
      * This is SEPARATE from the per-row status so the rows themselves can stay label-only
      * (no "white"/"years" echo trailing each option) while "Current:" still shows it. */
     const char *(*current)(char *buf, size_t n);
+    /* subtitle_accent: draw the subtitle in the accent (cyan) and TIGHT against the line below
+     * it (no blank spacer), instead of the default dim + spaced. Set for the Wallpaper screen,
+     * whose subtitle is a directory PATH the spec wants coloured and placed right above the
+     * "Current:" line. 0 keeps the muted, spaced prose look every other screen uses. */
+    int subtitle_accent;
     const AzRow *rows;
     int nrows;
 } AzScreen;
@@ -117,8 +127,15 @@ int az_row_matches(const AzRow *r, const char *q);
 
 /* The one-line bash command a row teaches the user (shown under the list so they can run it
  * WITHOUT the UI). For an APPLY it is the command itself; for a PORT prompt it is the command
- * with a "<port>" placeholder; for a SCREEN it is NULL (nothing to teach). Pure. */
+ * with a "<port>" placeholder; for a SCREEN it is NULL (nothing to teach). Pure. This is the
+ * "Azarch Wrapper: $ ..." line, and `c` copies it. */
 const char *az_row_command(const AzRow *r);
+
+/* The UNDERLYING base command a row's wrapper runs (the gsettings/feh/wpctl/nmcli/ufw/... line
+ * a user would type without azarch), for the "Base Command: $ ..." line that `x` copies. Returns
+ * r->base verbatim for APPLY; for a PORT row it appends the same "<port>" placeholder the wrapper
+ * shows; NULL for a SCREEN row or a row with no base. Pure. */
+const char *az_row_base(const AzRow *r);
 
 /* --- Status probes (model.c) ------------------------------------------------
  * Each writes a short human string into buf and returns it. They shell out to the same

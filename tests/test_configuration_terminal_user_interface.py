@@ -507,3 +507,68 @@ def test_everything_is_centred():
     assert "put_center" in render
     # the search box, rows block, and nav are all placed via the centring helper
     assert render.count("center_col") >= 4
+
+
+def test_hovered_row_shows_base_and_wrapper_command_lines():
+    """PROMPT: under each setting, show TWO lines -- "Base Command: $ <base>" over
+    "Azarch Wrapper: $ azarch ..." -- with the labels WHITE and the commands CYAN. The renderer
+    draws both via az_row_base / az_row_command; model.c exposes az_row_base."""
+    render = _src("render.c")
+    model = _src("model.c")
+    header = _src("terminal_user_interface.h")
+    # the two exact labels the spec wants
+    assert '"Base Command: "' in render
+    assert '"Azarch Wrapper: "' in render
+    # both command accessors feed the lines
+    assert "az_row_base" in render and "az_row_command" in render
+    # the base accessor is a real, exported model function
+    assert "az_row_base" in model and "az_row_base" in header
+    # labels are white (TEXT) and commands cyan (ACCENT): the two-tone helper is used with
+    # AZ_SGR_TEXT for the label and AZ_SGR_ACCENT for the command.
+    assert "put_center_labeled" in render
+    block = render[render.index("Base Command"):render.index("Azarch Wrapper") + 200]
+    assert "AZ_SGR_TEXT" in block and "AZ_SGR_ACCENT" in block
+    # every apply/port row carries a .base in the model (the underlying tool command)
+    assert ".base=" in model
+
+
+def test_c_and_x_copy_commands_via_xclip():
+    """PROMPT: hovering a setting, `c` copies the azarch wrapper and `x` copies the base command,
+    using xclip (the clipboard tool shipped on this X11 build). The keys are advertised on the
+    nav line; main.c binds them; action.c copies through xclip; xclip is in the manifest."""
+    render = _src("render.c")
+    main = _src("main.c")
+    action = _src("action.c")
+    # advertised on the nav line (plain string + the drawn verbs)
+    assert "C copy cmd" in render and "X copy base" in render
+    # the input loop binds c (wrapper) and x (base) in BROWSE mode
+    assert "case 'c':" in main and "case 'x':" in main
+    assert "copy_hovered" in main
+    # c copies the wrapper (want_base=0), x copies the base (want_base=1)
+    assert "az_row_command" in main and "az_row_base" in main
+    # the copy goes through xclip's CLIPBOARD selection
+    assert "az_action_copy_clipboard" in action
+    assert '"xclip"' in action and '"clipboard"' in action
+    # xclip must be a shipped package so the feature works on the ISO
+    pkgs = (TERMINAL_USER_INTERFACE_SRC_DIR.parent / "packages.x86_64").read_text(encoding="utf-8")
+    assert any(ln.strip() == "xclip" for ln in pkgs.splitlines()), "xclip must be in packages.x86_64"
+
+
+def test_subtitles_explain_wrapped_commands_and_wallpaper_dir_is_cyan():
+    """PROMPT: the top labels must explain WHAT commands are wrapped; and the wallpaper subtitle
+    becomes "Wallpapers directory: /usr/share/wallpapers/", coloured cyan and placed tight above
+    "Current:". The renderer honours a per-screen subtitle_accent flag for that cyan/tight case."""
+    model = _src("model.c")
+    render = _src("render.c")
+    header = _src("terminal_user_interface.h")
+    # explanatory subtitles name the tools they wrap
+    assert "Wraps gsettings" in model            # theme
+    assert "nmcli" in model and "rfkill" in model and "ufw" in model  # network family
+    assert "wpctl" in model                        # volume
+    # the wallpaper subtitle is the directory path with a trailing slash, flagged accent
+    assert "Wallpapers directory: " in model
+    assert "/usr/share/wallpapers" in model
+    assert ".subtitle_accent=1" in model
+    assert "subtitle_accent" in header
+    # the renderer draws the accented subtitle in the cyan and tight (no blank spacer)
+    assert "subtitle_accent" in render

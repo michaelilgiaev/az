@@ -495,6 +495,20 @@ const char *az_row_command(const AzRow *r)
     return NULL;
 }
 
+/* The underlying base command (the "Base Command: $ ..." line). r->base verbatim for an APPLY;
+ * for a PORT row we tack on the same "<port>" placeholder the wrapper shows (the base ufw line
+ * also takes the number); NULL for a SCREEN row or any row that declared no base. */
+const char *az_row_base(const AzRow *r)
+{
+    if (!r || !r->base) return NULL;
+    if (r->kind == AZ_ACT_PORT) {
+        static char buf[200];
+        snprintf(buf, sizeof buf, "%s <port>", r->base);
+        return buf;
+    }
+    return r->base;
+}
+
 /* --- the screen tree -------------------------------------------------------- */
 /* Actions are shell command lines run through the installed `azarch` command line interface. main.c runs
  * them INSIDE the UI (output captured, shown in the results overlay), then shows a result. */
@@ -523,17 +537,19 @@ static const AzRow ROWS_MAIN[] = {
  * stays 0; the apply still runs inside the UI (captured), so no command line interface text flashes over it. */
 static const AzRow ROWS_THEME[] = {
     {.label="Dark",  .kind=AZ_ACT_APPLY, .target="azarch theme --dark",
-     .preview=AZ_PV_THEME, .preview_arg="dark",
-     .hint="The default. Everything follows it (kitty is exempt)."},
+     .base="gsettings set org.gnome.desktop.interface color-scheme prefer-dark",
+     .preview=AZ_PV_THEME, .preview_arg="dark"},
     {.label="White", .kind=AZ_ACT_APPLY, .target="azarch theme --white",
-     .preview=AZ_PV_THEME, .preview_arg="white",
-     .hint="Kitty keeps its own look regardless of the system theme."},
+     .base="gsettings set org.gnome.desktop.interface color-scheme prefer-light",
+     .preview=AZ_PV_THEME, .preview_arg="white"},
 };
 
 static const AzRow ROWS_WALLPAPER[] = {
     {.label="Years",   .kind=AZ_ACT_APPLY, .target="azarch wallpaper --years.png",
+     .base="feh --no-fehbg --bg-fill " AZ_WALLPAPERS_DIR "/years/contents/images/" AZ_WALLPAPER_RES ".png",
      .preview=AZ_PV_WALLPAPER, .preview_arg="years"},
     {.label="Decades", .kind=AZ_ACT_APPLY, .target="azarch wallpaper --decades.png",
+     .base="feh --no-fehbg --bg-fill " AZ_WALLPAPERS_DIR "/decades/contents/images/" AZ_WALLPAPER_RES ".png",
      .preview=AZ_PV_WALLPAPER, .preview_arg="decades"},
 };
 
@@ -553,29 +569,37 @@ static const AzRow ROWS_NETWORK[] = {
  * captured -- no black screen, no scrollback. The list/scan verbs set show_output=1 so their
  * table lands in the results overlay; the toggles just show a one-line result. */
 static const AzRow ROWS_WIFI[] = {
-    {.label="Turn wifi on",         .kind=AZ_ACT_APPLY, .target="azarch network wifi on",   .needs_root=1},
-    {.label="Turn wifi off",        .kind=AZ_ACT_APPLY, .target="azarch network wifi off",  .needs_root=1},
-    {.label="Scan / list networks", .kind=AZ_ACT_APPLY, .target="azarch network wifi list", .needs_root=1, .show_output=1},
+    {.label="Turn wifi on",         .kind=AZ_ACT_APPLY, .target="azarch network wifi on",   .needs_root=1,
+     .base="sudo nmcli radio wifi on"},
+    {.label="Turn wifi off",        .kind=AZ_ACT_APPLY, .target="azarch network wifi off",  .needs_root=1,
+     .base="sudo nmcli radio wifi off"},
+    {.label="Scan / list networks", .kind=AZ_ACT_APPLY, .target="azarch network wifi list", .needs_root=1, .show_output=1,
+     .base="nmcli -f IN-USE,SSID,SIGNAL,SECURITY device wifi list"},
     {.label="Disconnect",           .kind=AZ_ACT_APPLY, .target="azarch network wifi disconnect", .needs_root=1,
-     .hint="To connect: azarch network wifi connect <name> <password>"},
+     .base="sudo nmcli device disconnect <iface>"},
 };
 
 static const AzRow ROWS_WIRED[] = {
-    {.label="Turn wired on",  .kind=AZ_ACT_APPLY, .target="azarch network wired on",  .needs_root=1},
-    {.label="Turn wired off", .kind=AZ_ACT_APPLY, .target="azarch network wired off", .needs_root=1},
+    {.label="Turn wired on",  .kind=AZ_ACT_APPLY, .target="azarch network wired on",  .needs_root=1,
+     .base="sudo nmcli device connect <iface>"},
+    {.label="Turn wired off", .kind=AZ_ACT_APPLY, .target="azarch network wired off", .needs_root=1,
+     .base="sudo nmcli device disconnect <iface>"},
 };
 
 static const AzRow ROWS_BLUETOOTH[] = {
-    {.label="Turn bluetooth on",   .kind=AZ_ACT_APPLY, .target="azarch network bluetooth on",  .needs_root=1},
-    {.label="Turn bluetooth off",  .kind=AZ_ACT_APPLY, .target="azarch network bluetooth off", .needs_root=1},
+    {.label="Turn bluetooth on",   .kind=AZ_ACT_APPLY, .target="azarch network bluetooth on",  .needs_root=1,
+     .base="sudo systemctl enable --now bluetooth"},
+    {.label="Turn bluetooth off",  .kind=AZ_ACT_APPLY, .target="azarch network bluetooth off", .needs_root=1,
+     .base="sudo systemctl disable --now bluetooth"},
     {.label="Scan / list devices", .kind=AZ_ACT_APPLY, .target="azarch network bluetooth scan", .needs_root=1, .show_output=1,
-     .hint="Pair a device with: azarch network bluetooth pair <mac>"},
+     .base="bluetoothctl devices"},
 };
 
 static const AzRow ROWS_AIRPLANE[] = {
     {.label="Turn airplane mode on",  .kind=AZ_ACT_APPLY, .target="azarch network airplane on", .needs_root=1,
-     .hint="Turns networking off -- the internet actually drops."},
-    {.label="Turn airplane mode off", .kind=AZ_ACT_APPLY, .target="azarch network airplane off", .needs_root=1},
+     .base="sudo nmcli networking off"},
+    {.label="Turn airplane mode off", .kind=AZ_ACT_APPLY, .target="azarch network airplane off", .needs_root=1,
+     .base="sudo nmcli networking on"},
 };
 
 /* Firewall: enable/disable, LIST the port rules right here in the overlay (show_output=1),
@@ -583,15 +607,18 @@ static const AzRow ROWS_AIRPLANE[] = {
  * port to the command). This is the in-UI firewall config the spec asks for -- no dropping
  * to a shell, no guessing the command line interface. */
 static const AzRow ROWS_FIREWALL[] = {
-    {.label="Enable firewall",   .kind=AZ_ACT_APPLY, .target="azarch network firewall enable",  .needs_root=1},
-    {.label="Disable firewall",  .kind=AZ_ACT_APPLY, .target="azarch network firewall disable", .needs_root=1},
-    {.label="List ports",        .kind=AZ_ACT_APPLY, .target="azarch network firewall port list", .needs_root=1, .show_output=1},
+    {.label="Enable firewall",   .kind=AZ_ACT_APPLY, .target="azarch network firewall enable",  .needs_root=1,
+     .base="sudo ufw --force enable"},
+    {.label="Disable firewall",  .kind=AZ_ACT_APPLY, .target="azarch network firewall disable", .needs_root=1,
+     .base="sudo ufw disable"},
+    {.label="List ports",        .kind=AZ_ACT_APPLY, .target="azarch network firewall port list", .needs_root=1, .show_output=1,
+     .base="sudo ufw status numbered"},
     {.label="Open a port",       .kind=AZ_ACT_PORT,  .target="azarch network firewall port open",   .needs_root=1, .show_output=1,
-     .hint="Allow a port through (you will type the number)."},
+     .base="sudo ufw allow"},
     {.label="Close a port",      .kind=AZ_ACT_PORT,  .target="azarch network firewall port close",  .needs_root=1, .show_output=1,
-     .hint="Deny a port -- the rule stays in the list."},
+     .base="sudo ufw deny"},
     {.label="Delete a port rule", .kind=AZ_ACT_PORT, .target="azarch network firewall port delete", .needs_root=1, .show_output=1,
-     .hint="Remove the rule entirely, back to the default policy."},
+     .base="sudo ufw delete allow"},
 };
 
 /* Machine Type: show what Az'arch recognises (PC or Laptop) via the "Current:" line, and let
@@ -600,12 +627,14 @@ static const AzRow ROWS_FIREWALL[] = {
  * on even on a desktop. These write the user's own config pointer (no sudo), so needs_root
  * stays 0; each runs captured inside the UI and shows its one-line result. */
 static const AzRow ROWS_MACHINE[] = {
+    /* Machine type is a pure config-pointer write (~/.config/azarch/machine-type) -- there is
+     * no system tool behind it, so the "base command" is the equivalent file write / removal. */
     {.label="Force PC",   .kind=AZ_ACT_APPLY, .target="azarch machine --pc",
-     .hint="No brightness control -- the FN keys only change the volume."},
+     .base="printf 'PC\\n' > ~/.config/azarch/machine-type"},
     {.label="Force Laptop", .kind=AZ_ACT_APPLY, .target="azarch machine --laptop",
-     .hint="Enables screen-brightness control (a laptop has a backlight)."},
+     .base="printf 'Laptop\\n' > ~/.config/azarch/machine-type"},
     {.label="Autodetect", .kind=AZ_ACT_APPLY, .target="azarch machine --auto",
-     .hint="Forget the override -- detect from the backlight, then the DMI chassis."},
+     .base="rm -f ~/.config/azarch/machine-type"},
 };
 
 /* Volume: the "Current:" line shows the live level (az_status_volume); the rows set a PRECISE
@@ -613,29 +642,46 @@ static const AzRow ROWS_MACHINE[] = {
  * 7.5% steps and mute. Each pops the bottom-middle cyan OSD bar. No sudo (PipeWire/ALSA run in
  * the user session), so needs_root stays 0; each runs captured in the UI and shows its result. */
 static const AzRow ROWS_VOLUME[] = {
-    {.label="Mute / unmute",   .kind=AZ_ACT_APPLY, .target="azarch volume mute"},
-    {.label="Louder (+7.5%)",  .kind=AZ_ACT_APPLY, .target="azarch volume up"},
-    {.label="Quieter (-7.5%)", .kind=AZ_ACT_APPLY, .target="azarch volume down"},
-    {.label="Set to 0%",       .kind=AZ_ACT_APPLY, .target="azarch volume set 0"},
-    {.label="Set to 25%",      .kind=AZ_ACT_APPLY, .target="azarch volume set 25"},
-    {.label="Set to 50%",      .kind=AZ_ACT_APPLY, .target="azarch volume set 50"},
-    {.label="Set to 75%",      .kind=AZ_ACT_APPLY, .target="azarch volume set 75"},
+    {.label="Mute / unmute",   .kind=AZ_ACT_APPLY, .target="azarch volume mute",
+     .base="wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"},
+    {.label="Louder (+7.5%)",  .kind=AZ_ACT_APPLY, .target="azarch volume up",
+     .base="wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 7.5%+"},
+    {.label="Quieter (-7.5%)", .kind=AZ_ACT_APPLY, .target="azarch volume down",
+     .base="wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 7.5%-"},
+    {.label="Set to 0%",       .kind=AZ_ACT_APPLY, .target="azarch volume set 0",
+     .base="wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 0%"},
+    {.label="Set to 25%",      .kind=AZ_ACT_APPLY, .target="azarch volume set 25",
+     .base="wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 25%"},
+    {.label="Set to 50%",      .kind=AZ_ACT_APPLY, .target="azarch volume set 50",
+     .base="wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 50%"},
+    {.label="Set to 75%",      .kind=AZ_ACT_APPLY, .target="azarch volume set 75",
+     .base="wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 75%"},
     {.label="Set to 100%",     .kind=AZ_ACT_APPLY, .target="azarch volume set 100",
-     .hint="Tip: hover the on-screen bar and drag to set any level. FN keys step 7.5%."},
+     .base="wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 100%"},
 };
 
 /* Brightness: LAPTOP-ONLY (a PC has no backlight). The "Current:" line reads "not on a PC" on a
  * desktop; the set/step rows still run `azarch brightness ...`, which SELF-GATES (it refuses and
  * says so on a PC), so selecting one on a desktop is harmless and explains itself. Force the type
  * on the Machine Type screen to light this up on a desktop. No sudo needed for the UI wrapper. */
+/* Brightness has NO brightnessctl on this build: azarch scales percent -> the raw kernel value
+ * (percent/100 * max_brightness) and writes it to the backlight device's brightness file under
+ * /sys/class/backlight via sudo tee. The base commands mirror that exactly, scaling inline so
+ * they are copy-pasteable on any laptop (the glob picks the single backlight device, e.g.
+ * intel_backlight). */
 static const AzRow ROWS_BRIGHTNESS[] = {
-    {.label="Brighter (+7.5%)", .kind=AZ_ACT_APPLY, .target="azarch brightness up"},
-    {.label="Dimmer (-7.5%)",   .kind=AZ_ACT_APPLY, .target="azarch brightness down"},
-    {.label="Set to 25%",       .kind=AZ_ACT_APPLY, .target="azarch brightness set 25"},
-    {.label="Set to 50%",       .kind=AZ_ACT_APPLY, .target="azarch brightness set 50"},
-    {.label="Set to 75%",       .kind=AZ_ACT_APPLY, .target="azarch brightness set 75"},
+    {.label="Brighter (+7.5%)", .kind=AZ_ACT_APPLY, .target="azarch brightness up",
+     .base="sudo sh -c 'b=/sys/class/backlight/*; echo $(( $(cat $b/brightness) + 8*$(cat $b/max_brightness)/100 )) > $b/brightness'"},
+    {.label="Dimmer (-7.5%)",   .kind=AZ_ACT_APPLY, .target="azarch brightness down",
+     .base="sudo sh -c 'b=/sys/class/backlight/*; echo $(( $(cat $b/brightness) - 8*$(cat $b/max_brightness)/100 )) > $b/brightness'"},
+    {.label="Set to 25%",       .kind=AZ_ACT_APPLY, .target="azarch brightness set 25",
+     .base="sudo sh -c 'b=/sys/class/backlight/*; echo $(( 25*$(cat $b/max_brightness)/100 )) > $b/brightness'"},
+    {.label="Set to 50%",       .kind=AZ_ACT_APPLY, .target="azarch brightness set 50",
+     .base="sudo sh -c 'b=/sys/class/backlight/*; echo $(( 50*$(cat $b/max_brightness)/100 )) > $b/brightness'"},
+    {.label="Set to 75%",       .kind=AZ_ACT_APPLY, .target="azarch brightness set 75",
+     .base="sudo sh -c 'b=/sys/class/backlight/*; echo $(( 75*$(cat $b/max_brightness)/100 )) > $b/brightness'"},
     {.label="Set to 100%",      .kind=AZ_ACT_APPLY, .target="azarch brightness set 100",
-     .hint="Laptops only. On a PC this is not an option (use Machine Type to force Laptop)."},
+     .base="sudo sh -c 'b=/sys/class/backlight/*; cat $b/max_brightness > $b/brightness'"},
 };
 
 #define AZN(a) (int)(sizeof(a) / sizeof((a)[0]))
@@ -647,40 +693,59 @@ static const AzRow ROWS_BRIGHTNESS[] = {
 static const AzScreen SCREENS[] = {
     {.id="main",      .title="Az'arch Settings", .subtitle="",
      .rows=ROWS_MAIN, .nrows=AZN(ROWS_MAIN)},
+    /* Subtitles now say WHAT tool each screen drives and WHAT it does (the spec: the top label
+     * should explain the wrapped commands), not a bare tagline. The Theme one keeps the pinned
+     * "Kitty does not follow the system theme" phrase. */
     {.id="theme",     .title="Theme",
-     .subtitle="Kitty does not follow the system theme (it keeps its own look).",
+     .subtitle="Wraps gsettings color-scheme (prefer-dark/prefer-light) to switch dark/white. "
+               "Kitty does not follow the system theme.",
      .current=az_status_theme,     .rows=ROWS_THEME,     .nrows=AZN(ROWS_THEME)},
-    {.id="wallpaper", .title="Wallpaper", .subtitle="Saved in: " AZ_WALLPAPERS_DIR,
+    /* Wallpaper subtitle is the DIRECTORY PATH -- coloured cyan (subtitle_accent) and placed
+     * tight above the "Current:" line, per the spec. It keeps the /usr/share/wallpapers path. */
+    {.id="wallpaper", .title="Wallpaper",
+     .subtitle="Wallpapers directory: " AZ_WALLPAPERS_DIR "/", .subtitle_accent=1,
      .current=az_status_wallpaper, .rows=ROWS_WALLPAPER, .nrows=AZN(ROWS_WALLPAPER)},
-    {.id="network",   .title="Network", .subtitle="Everything network related.",
+    {.id="network",   .title="Network",
+     .subtitle="A front-end over nmcli, rfkill, bluetoothctl and ufw -- wifi, wired, "
+               "bluetooth, airplane and the firewall.",
      .rows=ROWS_NETWORK, .nrows=AZN(ROWS_NETWORK)},
     /* Each network sub-screen shows its live state ONCE via .current (the "Current:" line at
      * the top), so the rows below stay label-only -- no repeated status echo. */
-    {.id="network.wifi",      .title="Wifi",      .subtitle="Wireless.",
+    {.id="network.wifi",      .title="Wifi",
+     .subtitle="Wraps nmcli radio wifi (on/off) and nmcli device wifi (list/disconnect).",
      .current=az_status_wifi,      .rows=ROWS_WIFI,      .nrows=AZN(ROWS_WIFI)},
-    {.id="network.wired",     .title="Wired",     .subtitle="Ethernet.",
+    {.id="network.wired",     .title="Wired",
+     .subtitle="Wraps nmcli device connect/disconnect on the ethernet interface.",
      .current=az_status_wired,     .rows=ROWS_WIRED,     .nrows=AZN(ROWS_WIRED)},
-    {.id="network.bluetooth", .title="Bluetooth", .subtitle="Off by default.",
+    {.id="network.bluetooth", .title="Bluetooth",
+     .subtitle="Wraps systemctl (enable/disable bluetooth) + rfkill; bluetoothctl to scan. "
+               "Off by default.",
      .current=az_status_bluetooth, .rows=ROWS_BLUETOOTH, .nrows=AZN(ROWS_BLUETOOTH)},
-    {.id="network.airplane",  .title="Airplane mode", .subtitle="One switch for all radios.",
+    {.id="network.airplane",  .title="Airplane mode",
+     .subtitle="Wraps nmcli networking off/on (plus rfkill) -- one switch that really drops "
+               "the internet.",
      .current=az_status_airplane,  .rows=ROWS_AIRPLANE,  .nrows=AZN(ROWS_AIRPLANE)},
-    {.id="network.firewall",  .title="Firewall",  .subtitle="ufw front-end.",
+    {.id="network.firewall",  .title="Firewall",
+     .subtitle="Wraps ufw: enable/disable, status numbered, and allow/deny/delete a port.",
      .current=az_status_firewall,  .rows=ROWS_FIREWALL,  .nrows=AZN(ROWS_FIREWALL)},
     /* Volume: the "Current:" line shows the live level; the rows set a precise level (or step /
      * mute), each popping the bottom-middle cyan OSD bar. */
     {.id="volume",    .title="Volume",
-     .subtitle="Set a level, or step with the FN keys. Drag the on-screen bar for any value.",
+     .subtitle="Wraps wpctl set-volume / set-mute on @DEFAULT_AUDIO_SINK@ (PipeWire). "
+               "Drag the on-screen bar for any value.",
      .current=az_status_volume,    .rows=ROWS_VOLUME,    .nrows=AZN(ROWS_VOLUME)},
     /* Brightness: LAPTOP-ONLY. The "Current:" line reads the level on a laptop, or "not on a PC"
      * on a desktop (where the rows self-gate). Force Laptop on Machine Type to enable it. */
     {.id="brightness", .title="Brightness",
-     .subtitle="Laptops only -- a PC has no backlight (Machine Type can force Laptop).",
+     .subtitle="Writes the scaled value to /sys/class/backlight/*/brightness (sudo tee). "
+               "Laptops only -- a PC has no backlight.",
      .current=az_status_brightness, .rows=ROWS_BRIGHTNESS, .nrows=AZN(ROWS_BRIGHTNESS)},
     /* Machine Type: the "Current:" line shows what Az'arch recognises (PC / Laptop); the rows
      * hard-switch it. Brightness is a laptop-only control, so this is where a desktop can be
      * forced to "Laptop" to light the brightness UI up (or a laptop forced to "PC"). */
     {.id="machine",   .title="Machine Type",
-     .subtitle="PC or Laptop. Laptops get screen-brightness control; PCs do not.",
+     .subtitle="Writes ~/.config/azarch/machine-type (PC/Laptop) or removes it to autodetect. "
+               "Laptops get screen-brightness control; PCs do not.",
      .current=az_status_machine,   .rows=ROWS_MACHINE,   .nrows=AZN(ROWS_MACHINE)},
     { 0 },
 };

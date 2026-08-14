@@ -39,4 +39,11 @@ int az_action_authenticate(const char *password);
  * first for the needs_root applies). Runs via /bin/sh -c, like the old visible path. */
 int az_action_run_capture(const char *cmdline, char **out);
 
+/* Copy `text` to the X11 CLIPBOARD selection by piping it to `xclip -selection clipboard` (the
+ * clipboard tool shipped on this X11/OpenBox build). Feeds the bytes on the child's stdin and
+ * closes so xclip owns the selection, exactly as `printf '%s' text | xclip` would. Returns 1 on
+ * success (xclip found and exited 0), 0 otherwise -- so the UI can show "Copied" vs a fallback.
+ * No trailing newline is added (the copied command is a single line). */
+int az_action_copy_clipboard(const char *text);
+
 #endif /* AZ_ACTION_H */

@@ -260,6 +260,28 @@ static void activate(AzUI *ui)
     }
 }
 
+/* Copy the hovered row's command to the clipboard via xclip. `want_base` picks WHICH command:
+ * the underlying base command (x) or the azarch wrapper (c). Sets a one-line result message so
+ * the user gets feedback (the copied text, or why nothing was copied). A SCREEN row has no
+ * command to copy. */
+static void copy_hovered(AzUI *ui, int want_base)
+{
+    const AzRow *vis[64];
+    int nvis = az_visible_rows(ui, vis, 64);
+    if (ui->sel < 0 || ui->sel >= nvis) return;
+    const AzRow *row = vis[ui->sel];
+    const char *cmd = want_base ? az_row_base(row) : az_row_command(row);
+    const char *what = want_base ? "base command" : "azarch command";
+    if (!cmd || !cmd[0]) {
+        snprintf(ui->message, sizeof ui->message, "No %s to copy here.", what);
+        return;
+    }
+    if (az_action_copy_clipboard(cmd))
+        snprintf(ui->message, sizeof ui->message, "Copied: %s", cmd);
+    else
+        snprintf(ui->message, sizeof ui->message, "Copy failed (is xclip installed?).");
+}
+
 /* search-box editing */
 static void search_key(AzUI *ui, int k)
 {
@@ -449,6 +471,10 @@ int main(void)
                 go_back(&ui); break;
             case '/':
                 ui.mode = AZ_MODE_SEARCH; ui.searching = 1; break;
+            case 'c':      /* copy the hovered row's AZARCH WRAPPER command to the clipboard  */
+                copy_hovered(&ui, /*want_base=*/0); break;
+            case 'x':      /* copy the hovered row's BASE command to the clipboard            */
+                copy_hovered(&ui, /*want_base=*/1); break;
             case K_ESC:
                 /* ESC is GO BACK -- always, never quit (the spec: "ESC is 'go back' not
                  * 'quit'"). At the root there is nothing to go back to, so it is a no-op;
