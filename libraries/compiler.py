@@ -432,6 +432,14 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
     terminal_user_interface_build.install_previews(
         airootfs / terminal_user_interface_build.TERMINAL_USER_INTERFACE_PREVIEW_SYSTEM_DIR.lstrip("/")
     )
+    # The media OSD indicator (bottom-middle cyan volume/brightness bar). Like the terminal UI it
+    # is a COMPILED C program (osd.c -> azarch-osd), built from the SAME Makefile and installed
+    # next to the UI binary. `azarch volume/brightness` launches it; it draws a single, no-flicker
+    # Xlib window (so it links X11/Xrandr/Xft, on the build host per the UI build deps). Root-
+    # owned; the OFFLINE Calamares install rsyncs it onto the installed system with no extra step.
+    terminal_user_interface_build.build_osd(
+        airootfs / terminal_user_interface_build.OSD_BIN_SYSTEM_PATH.lstrip("/")
+    )
     # Az'arch timedate (OUR Flask Time + Calendar home page -- the site LibreWolf lands
     # on at localhost:49154). A pure-Python app: emit_plan() copies the app sources
     # (app.py/page.py), the launcher, and the azarch-timedate.service unit to their fixed

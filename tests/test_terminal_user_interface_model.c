@@ -20,34 +20,85 @@ static int failures = 0;
 } while (0)
 
 /* The top-level subsystems, in order (Network FIRST per the spec): Network, Theme, Wallpaper,
- * then Machine Type (the new PC/Laptop screen), and nothing else. */
+ * then the media controls Volume + Brightness (the follow-up spec added these -- they were
+ * missing from the UI), then Machine Type (the PC/Laptop screen), and nothing else. */
 static void test_top_level_is_network_theme_wallpaper(void)
 {
     const AzScreen *m = az_screen_find("main");
     CHECK(m != NULL);
-    CHECK(m->nrows == 4);
+    CHECK(m->nrows == 6);
     CHECK(strcmp(m->rows[0].label, "Network") == 0);   /* Network is the first option */
     CHECK(strcmp(m->rows[1].label, "Theme") == 0);
     CHECK(strcmp(m->rows[2].label, "Wallpaper") == 0);
-    CHECK(strcmp(m->rows[3].label, "Machine Type") == 0);
+    CHECK(strcmp(m->rows[3].label, "Volume") == 0);
+    CHECK(strcmp(m->rows[4].label, "Brightness") == 0);
+    CHECK(strcmp(m->rows[5].label, "Machine Type") == 0);
     /* the entry title is the (re)named "Az'arch Settings" */
     CHECK(strcmp(m->title, "Az'arch Settings") == 0);
 }
 
-/* Exactly the subsystems + the network sub-screens + the machine screen are reachable -- no
- * extras. */
+/* Exactly the subsystems + the network sub-screens + the volume/brightness + the machine screen
+ * are reachable -- no extras. */
 static void test_screen_set_is_exactly_expected(void)
 {
     const char *want[] = {
         "main", "theme", "wallpaper", "network",
         "network.wifi", "network.wired", "network.bluetooth",
-        "network.airplane", "network.firewall", "machine",
+        "network.airplane", "network.firewall",
+        "volume", "brightness", "machine",
     };
     int n = az_screen_count();
     CHECK(n == (int)(sizeof want / sizeof want[0]));
     for (size_t i = 0; i < sizeof want / sizeof want[0]; i++)
         CHECK(az_screen_find(want[i]) != NULL);
     CHECK(az_screen_find("nonesuch") == NULL);
+}
+
+/* Volume + Brightness screens (the follow-up spec: "I don't see Volume and Brightness settings,
+ * that should be there"). Volume shows the live level via a screen-level Current: probe and its
+ * rows set a PRECISE level (or step/mute) via `azarch volume ...`. Brightness is the same but
+ * LAPTOP-ONLY (its Current: probe reports PC vs Laptop). Neither needs sudo (the user session
+ * owns audio/backlight), and neither echoes a per-row status (Current: shows it once). */
+static void test_volume_and_brightness_screens(void)
+{
+    const AzScreen *v = az_screen_find("volume");
+    CHECK(v != NULL);
+    CHECK(strcmp(v->title, "Volume") == 0);
+    CHECK(v->current == az_status_volume);          /* live level shown once, up top */
+    CHECK(v->nrows >= 5);
+    int has_mute = 0, has_set50 = 0, has_set100 = 0;
+    for (int i = 0; i < v->nrows; i++) {
+        CHECK(v->rows[i].kind == AZ_ACT_APPLY);
+        CHECK(v->rows[i].needs_root == 0);          /* PipeWire/ALSA run in the user session */
+        CHECK(v->rows[i].status == NULL);           /* no per-row echo (Current: shows it) */
+        if (strcmp(v->rows[i].target, "azarch volume mute") == 0) has_mute = 1;
+        if (strcmp(v->rows[i].target, "azarch volume set 50") == 0) has_set50 = 1;
+        if (strcmp(v->rows[i].target, "azarch volume set 100") == 0) has_set100 = 1;
+    }
+    CHECK(has_mute == 1);
+    CHECK(has_set50 == 1);
+    CHECK(has_set100 == 1);
+
+    const AzScreen *b = az_screen_find("brightness");
+    CHECK(b != NULL);
+    CHECK(strcmp(b->title, "Brightness") == 0);
+    CHECK(b->current == az_status_brightness);      /* PC vs Laptop / the level, shown once */
+    CHECK(b->nrows >= 4);
+    int has_bset100 = 0;
+    for (int i = 0; i < b->nrows; i++) {
+        CHECK(b->rows[i].kind == AZ_ACT_APPLY);
+        CHECK(b->rows[i].needs_root == 0);
+        CHECK(b->rows[i].status == NULL);
+        if (strcmp(b->rows[i].target, "azarch brightness set 100") == 0) has_bset100 = 1;
+    }
+    CHECK(has_bset100 == 1);
+
+    /* the main-menu rows that descend here carry the live level as their at-a-glance summary */
+    const AzScreen *main_s = az_screen_find("main");
+    CHECK(main_s->rows[3].status == az_status_volume);
+    CHECK(strcmp(main_s->rows[3].target, "volume") == 0);
+    CHECK(main_s->rows[4].status == az_status_brightness);
+    CHECK(strcmp(main_s->rows[4].target, "brightness") == 0);
 }
 
 /* The Machine Type screen: it shows the recognised type ONCE via a screen-level `.current`
@@ -72,11 +123,12 @@ static void test_machine_type_screen(void)
         CHECK(m->rows[i].needs_root == 0);       /* writes the user's own config, no sudo */
         CHECK(m->rows[i].status == NULL);        /* no per-row echo (Current: shows it once) */
     }
-    /* the main-menu row that descends here carries the machine status as its at-a-glance summary */
+    /* the main-menu row that descends here carries the machine status as its at-a-glance summary
+     * (Machine Type is now the SIXTH row, after Volume + Brightness were added before it) */
     const AzScreen *main_s = az_screen_find("main");
-    CHECK(main_s->rows[3].status == az_status_machine);
-    CHECK(main_s->rows[3].kind == AZ_ACT_SCREEN);
-    CHECK(strcmp(main_s->rows[3].target, "machine") == 0);
+    CHECK(main_s->rows[5].status == az_status_machine);
+    CHECK(main_s->rows[5].kind == AZ_ACT_SCREEN);
+    CHECK(strcmp(main_s->rows[5].target, "machine") == 0);
 }
 
 /* Network rows all DESCEND into a real child screen (they are navigation, not applies). */
@@ -239,6 +291,7 @@ int main(void)
 {
     test_top_level_is_network_theme_wallpaper();
     test_screen_set_is_exactly_expected();
+    test_volume_and_brightness_screens();
     test_machine_type_screen();
     test_network_rows_descend();
     test_theme_rows_are_applies();

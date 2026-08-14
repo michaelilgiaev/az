@@ -59,8 +59,16 @@ TERMINAL_USER_INTERFACE_BIN_SYSTEM_PATH = f"{TERMINAL_USER_INTERFACE_LIB_DIR}/az
 # AZ_PREVIEW_DIR (a test pins the two together).
 TERMINAL_USER_INTERFACE_PREVIEW_SYSTEM_DIR = f"{TERMINAL_USER_INTERFACE_LIB_DIR}/previews"
 
-# The binary name the Makefile produces.
+# The media OSD indicator (osd.c) -- the bottom-middle cyan volume/brightness bar. It is a
+# COMPILED Xlib program (single window, no flicker, mouse-draggable), built by build_osd() from
+# the same Makefile ($(OSD_BIN)) and installed next to the terminal UI binary so the two travel
+# together. MUST match packages/azarch/media.py OSD_INDICATOR_BIN and openbox.AZARCH_OSD_SYSTEM_PATH
+# (tests pin them together so the launcher, the build, and the ISO wiring can never drift).
+OSD_BIN_SYSTEM_PATH = f"{TERMINAL_USER_INTERFACE_LIB_DIR}/azarch-osd"
+
+# The binary names the Makefile produces.
 TERMINAL_USER_INTERFACE_BIN_NAME = "azarch"
+OSD_BIN_NAME = "azarch-osd"
 
 # The theme-preview screenshots shipped verbatim from assets/previews/ to
 # TERMINAL_USER_INTERFACE_PREVIEW_SYSTEM_DIR. The names are the CONTRACT preview.c hard-codes: LibreWolf on the
@@ -74,10 +82,14 @@ PREVIEW_ASSETS = (
     "previews/files_white.png",
 )
 
-# Host BUILD dependency: just the C compiler. Listed for compiler._check_host_deps /
-# the Dockerfile (gcc is already pulled in for the application-menu build, so this is
-# effectively already satisfied; kept explicit for clarity + a slimmer host).
-TERMINAL_USER_INTERFACE_BUILD_DEPS = ["gcc"]
+# Host BUILD dependencies. The terminal UI itself needs just the C compiler (pure libc). The
+# media OSD (osd.c) additionally links X11 + Xrandr + Xft, so its -dev headers/libs must be on
+# the BUILD host: libx11 (Xlib), libxrandr (primary-monitor geometry), libxft (anti-aliased
+# percent text). These are the Arch package names (they carry the headers on Arch, no separate
+# -dev split); on the live/installed GUEST the runtime .so's are already present (it runs an X
+# session). Listed for compiler._check_host_deps / the Dockerfile. gcc is already pulled in for
+# the application-menu build, so only the X libs are effectively new.
+TERMINAL_USER_INTERFACE_BUILD_DEPS = ["gcc", "libx11", "libxrandr", "libxft"]
 
 
 def _csrc_files() -> list[Path]:
@@ -110,6 +122,28 @@ def build_terminal_user_interface(dest: Path, *, make: str = "make") -> Path:
             shutil.copy2(src, build_dir / src.name)
         subprocess.run([make, TERMINAL_USER_INTERFACE_BIN_NAME], cwd=build_dir, check=True)
         built = build_dir / TERMINAL_USER_INTERFACE_BIN_NAME
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(built, dest)
+        dest.chmod(0o755)
+    return dest
+
+
+def build_osd(dest: Path, *, make: str = "make") -> Path:
+    """Compile the media OSD (osd.c -> azarch-osd) and install the binary at `dest`.
+
+    Same throwaway-temp-dir build as build_terminal_user_interface() (nothing lands in version
+    control), but makes the Makefile's $(OSD_BIN) target, which links X11 + Xrandr + Xft. Raises
+    CalledProcessError if the build fails -- a broken OSD MUST fail the ISO build loudly rather
+    than ship a missing binary (the FN keys would then change the level with no on-screen bar).
+    Returns the destination path. The X -dev libraries must be on the build host (see
+    TERMINAL_USER_INTERFACE_BUILD_DEPS)."""
+    dest = Path(dest)
+    with tempfile.TemporaryDirectory(prefix="azarch-osd-build-") as tmp:
+        build_dir = Path(tmp)
+        for src in _csrc_files():
+            shutil.copy2(src, build_dir / src.name)
+        subprocess.run([make, OSD_BIN_NAME], cwd=build_dir, check=True)
+        built = build_dir / OSD_BIN_NAME
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(built, dest)
         dest.chmod(0o755)

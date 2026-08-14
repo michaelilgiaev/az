@@ -69,6 +69,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_volume(argv[1:])
     if cmd == "brightness":
         return cmd_brightness(argv[1:])
+    if cmd == "media-init":
+        return cmd_media_init(argv[1:])
     if cmd == "machine":
         return cmd_machine(argv[1:])
     if cmd == "--sshd-hypervisor":

@@ -301,61 +301,210 @@ def test_brightness_step_never_blanks_the_panel(monkeypatch):
     assert int(writes[-1]) >= 1                                # never a raw 0 (black panel)
 
 
-# --- the OSD is centered, cyan, iconed, self-dismissing ---------------------
+# --- `set <N>`: a PRECISE level (the follow-up spec) ------------------------
+
+def test_parse_percent_accepts_number_percent_and_clamps():
+    """`set` parses an int/float, optional trailing '%', and clamps to 0..100; junk -> None."""
+    cli = _command_line_interface()
+    assert cli._parse_percent("65") == 65.0
+    assert cli._parse_percent("65%") == 65.0
+    assert cli._parse_percent(" 12.5 ") == 12.5
+    assert cli._parse_percent("120") == 100.0     # clamp high
+    assert cli._parse_percent("-5") == 0.0        # clamp low
+    assert cli._parse_percent("nope") is None
+
+
+def test_volume_set_writes_precise_level_and_shows_osd(monkeypatch, capsys):
+    """The follow-up spec: `azarch volume` should let me select PRECISELY how much. `volume set N`
+    writes exactly N (clamped) and pops the OSD; a missing/bad N is rc 2."""
+    cli = _command_line_interface()
+    written = {}
+    monkeypatch.setattr(cli, "_volume_write", lambda p: (written.__setitem__("p", p), True)[1])
+    osd = {}
+    monkeypatch.setattr(cli, "_show_osd", lambda kind, pct, muted=False: osd.update(kind=kind, pct=pct))
+    assert cli.cmd_volume(["set", "65"]) == 0
+    assert written["p"] == 65.0
+    assert osd == {"kind": "volume", "pct": 65.0}
+    assert "Volume: 65%" in capsys.readouterr().out
+    # a missing percent is a usage error (rc 2)
+    assert cli.cmd_volume(["set"]) == 2
+    assert "set needs a percent" in capsys.readouterr().err
+
+
+def test_brightness_set_is_laptop_only(monkeypatch, capsys):
+    """`brightness set N` is gated to laptops (like up/down): a PC refuses (rc 1, no write); a
+    laptop writes exactly N."""
+    cli = _command_line_interface()
+    written = {"p": None}
+    monkeypatch.setattr(cli, "_brightness_write", lambda p: (written.__setitem__("p", p), True)[1])
+    monkeypatch.setattr(cli, "_show_osd", lambda *a, **k: None)
+    # PC -> refused, nothing written
+    monkeypatch.setattr(cli, "is_laptop", lambda: False)
+    assert cli.cmd_brightness(["set", "40"]) == 1
+    assert written["p"] is None
+    assert "laptop-only" in capsys.readouterr().err
+    # laptop -> writes exactly 40
+    monkeypatch.setattr(cli, "is_laptop", lambda: True)
+    assert cli.cmd_brightness(["set", "40"]) == 0
+    assert written["p"] == 40.0
+
+
+# --- the one-time defaults seed (50% volume / 100% brightness) --------------
+
+def test_media_init_seeds_50_and_100_once(tmp_path, monkeypatch):
+    """The follow-up spec: the pre/post-install default is 50% volume and 100% brightness, applied
+    ONCE; after the user configures anything it persists. `media-init` seeds 50/100 (brightness
+    only on a laptop), drops a marker, and on a SECOND run does nothing (so a later user level is
+    never clobbered)."""
+    cli = _command_line_interface()
+    assert cli.MEDIA_DEFAULT_VOLUME == 50.0
+    assert cli.MEDIA_DEFAULT_BRIGHTNESS == 100.0
+    marker = tmp_path / ".config" / "azarch" / "media-seeded"
+    monkeypatch.setattr(cli, "_media_seed_file", lambda: str(marker))
+    vols, brs = [], []
+    monkeypatch.setattr(cli, "_volume_write", lambda p: (vols.append(p), True)[1])
+    monkeypatch.setattr(cli, "_brightness_write", lambda p: (brs.append(p), True)[1])
+    monkeypatch.setattr(cli, "is_laptop", lambda: True)      # laptop: brightness seeded too
+    # first run: seeds 50/100 and writes the marker
+    assert cli.cmd_media_init([]) == 0
+    assert vols == [50.0] and brs == [100.0]
+    assert marker.exists()
+    # second run: marker present -> NOTHING re-applied (user's later choice is respected)
+    assert cli.cmd_media_init([]) == 0
+    assert vols == [50.0] and brs == [100.0]      # unchanged
+
+
+def test_media_init_skips_brightness_on_a_pc(tmp_path, monkeypatch):
+    """On a PC (no backlight) media-init seeds the volume but NOT brightness (a PC has none)."""
+    cli = _command_line_interface()
+    marker = tmp_path / "media-seeded"
+    monkeypatch.setattr(cli, "_media_seed_file", lambda: str(marker))
+    vols, brs = [], []
+    monkeypatch.setattr(cli, "_volume_write", lambda p: (vols.append(p), True)[1])
+    monkeypatch.setattr(cli, "_brightness_write", lambda p: (brs.append(p), True)[1])
+    monkeypatch.setattr(cli, "is_laptop", lambda: False)
+    assert cli.cmd_media_init([]) == 0
+    assert vols == [50.0]
+    assert brs == []          # no backlight on a PC -> brightness left alone
+
+
+def test_media_init_is_wired_into_dispatch_and_autostart():
+    """`azarch media-init` is a real dispatch branch, and the OpenBox autostart runs it once at
+    login (both live and installed sessions) so a fresh machine boots at the defaults."""
+    src = desktop.azarch_command_line_interface()
+    assert 'cmd == "media-init"' in src and "return cmd_media_init(argv[1:])" in src
+    for autostart in (desktop.openbox_autostart(), desktop.openbox_autostart_installed()):
+        assert "media-init" in autostart
+
+
+def test_autostart_shortens_the_fn_hold_autorepeat():
+    """The follow-up spec: holding an FN key has too long a delay before it kicks into fast drag;
+    make it wait a little less. The autostart shortens the X autorepeat delay via `xset r rate`."""
+    for autostart in (desktop.openbox_autostart(), desktop.openbox_autostart_installed()):
+        assert "xset r rate" in autostart
+    # xset must be shipped for the (guarded) line to actually take effect on the guest
+    pkgs = (paths.PACKAGES_FILE).read_text(encoding="utf-8")
+    assert "xorg-xset" in pkgs
+
+
+# --- the OSD is a C/Xlib program: bottom-middle, cyan, iconed, no-flicker, draggable ---------
+# The OSD was REWRITTEN from the tkinter osd_indicator.py to a compiled Xlib program (osd.c),
+# per the follow-up spec: "written in C, not Python", "it should not flicker", "bottom middle",
+# "stay a tiny bit longer / fade", "hover with mouse to drag ... add some sort of highlighter".
+# These tests pin those contracts against the C SOURCE (osd.c) -- the artifact the ISO compiles.
 
 def _osd_src() -> str:
-    return (paths.AZARCH_COMMAND_LINE_INTERFACE_DIR / "osd_indicator.py").read_text(encoding="utf-8")
+    return (paths.AZARCH_COMMAND_LINE_INTERFACE_DIR / "osd.c").read_text(encoding="utf-8")
+
+
+def test_osd_is_written_in_c_not_python():
+    """The spec: this should be written in C, not Python. The OSD is osd.c (an Xlib program), and
+    the old tkinter osd_indicator.py is gone."""
+    d = paths.AZARCH_COMMAND_LINE_INTERFACE_DIR
+    assert (d / "osd.c").exists(), "osd.c (the C OSD) must exist"
+    assert not (d / "osd_indicator.py").exists(), "the old tkinter OSD must be removed"
+    src = _osd_src()
+    assert "#include <X11/Xlib.h>" in src            # a real Xlib program
+    assert "int main(void)" in src
 
 
 def test_osd_uses_the_logo_cyan_for_the_bar():
-    """The spec: use the Az'arch logo colour, cyan, for the bars. The OSD's accent is #06B8FD."""
+    """The spec: use the Az'arch logo colour, cyan, for the bars. The OSD accent is #06B8FD."""
     src = _osd_src()
-    assert "#06B8FD" in src
-    assert 'ACCENT = "#06B8FD"' in src
+    assert "0x06B8FD" in src
+    assert "COL_ACCENT" in src and "0x06B8FD" in src
 
 
-def test_osd_is_centered_on_the_primary_monitor():
-    """The spec: put it in the middle. The OSD centers on the primary monitor (parsed from
-    xrandr, like the speech-to-text indicator)."""
+def test_osd_is_bottom_middle_on_the_primary_monitor():
+    """The follow-up spec: position it BOTTOM MIDDLE (Manjaro Cinnamon style), not centered. The
+    OSD resolves the PRIMARY monitor (RandR) and places the chip horizontally centered, resting
+    above the bottom edge by a margin."""
     src = _osd_src()
-    assert "primary_geometry" in src
-    assert "xrandr" in src and "listmonitors" in src
-    # centered: (mw - WIN_W)//2, (mh - WIN_H)//2
-    assert "(mw - WIN_W) // 2" in src
-    assert "(mh - WIN_H) // 2" in src
+    assert "XRRGetMonitors" in src                    # primary-monitor geometry via RandR
+    assert "place_bottom_middle" in src
+    # horizontally centered, and offset up from the bottom by MARGIN_BOTTOM (not vertically centered)
+    assert "(o->mon_w - WIN_W) / 2" in src
+    assert "mon_h - WIN_H - MARGIN_BOTTOM" in src
+    assert "MARGIN_BOTTOM" in src
+
+
+def test_osd_is_single_instance_so_it_never_flickers():
+    """The follow-up spec: it should NOT flicker on increase/decrease/mute. The fix is a SINGLE
+    resident window: the process binds a per-user abstract socket; a later invocation fails to
+    bind, connects, and FORWARDS its line to the running window (which repaints in place) instead
+    of mapping a second window."""
+    src = _osd_src()
+    assert "azarch-osd" in src                        # the single-instance socket name base
+    assert "AF_UNIX" in src and "bind(" in src        # tries to bind the control socket
+    assert "EADDRINUSE" in src                        # already-running detection
+    assert "connect(" in src                          # forward to the resident instance
+    # double-buffered (draw into a pixmap, blit once) -> tear/flicker free
+    assert "XCreatePixmap" in src and "XCopyArea" in src
 
 
 def test_osd_draws_simple_volume_and_brightness_icons():
-    """The spec: create simple icons for volume and brightness. They are DRAWN on the canvas
-    (a speaker for volume, a sun for brightness) -- simple primitives, no image files."""
+    """The spec: create simple icons for volume and brightness. They are DRAWN with X primitives
+    (a speaker for volume, a sun for brightness) -- simple, no image files."""
     src = _osd_src()
-    assert "_draw_speaker" in src        # the volume icon
-    assert "_draw_sun" in src            # the brightness icon
+    assert "draw_speaker" in src         # the volume icon
+    assert "draw_sun" in src             # the brightness icon
     # it chooses the icon by kind
-    assert 'self.kind == "brightness"' in src
+    assert 'strcmp(o->kind, "brightness")' in src
     # a muted state is representable (the speaker shows an x)
-    assert "self.muted" in src
+    assert "o->muted" in src
 
 
-def test_osd_scale_is_full_range_and_self_dismisses():
-    """The spec: give me 100% (a full-range bar). The OSD bar is a 0..100 percent fill, and it
-    fades out / closes on its own after a hold so a keypress just flashes it."""
+def test_osd_scale_is_full_range_holds_longer_and_fades():
+    """The spec: a full-range 0..100 bar that stays a TINY BIT LONGER, then FADES away. The bar
+    fills to percent/100; the window holds, then fades via _NET_WM_WINDOW_OPACITY, then closes."""
     src = _osd_src()
-    assert "self.percent / 100.0" in src         # a 0..100 percent fill
-    assert "_start_fade" in src and "-alpha" in src
-    assert "override_redirect" not in src        # (spelled overrideredirect)
-    assert "overrideredirect(True)" in src
-    assert "-topmost" in src
+    assert "o->percent / 100.0" in src               # a 0..100 percent fill
+    assert "HOLD_MS" in src and "FADE_MS" in src     # a hold-then-fade dismissal
+    assert "_NET_WM_WINDOW_OPACITY" in src           # the fade (compositor opacity, like Tk -alpha)
+    assert "override_redirect = True" in src          # borderless/unmanaged
+    assert "_NET_WM_STATE_ABOVE" in src              # kept on top
+
+
+def test_osd_supports_mouse_hover_drag_with_a_highlight():
+    """The follow-up spec: allow the user to hover with the mouse and DRAG to increase/decrease,
+    with a HIGHLIGHTER indicating the drag is live. The OSD selects pointer events, drags map x
+    to a percent and run `azarch <kind> set <pct>`, and a highlight ring is drawn on hover."""
+    src = _osd_src()
+    assert "ButtonPressMask" in src and "PointerMotionMask" in src and "EnterWindowMask" in src
+    assert "x_to_percent" in src                     # pointer x -> 0..100
+    assert "spawn_set" in src and '"set"' in src     # a drag sets a precise level via the CLI
+    assert "o->hover" in src or "o->dragging" in src  # the highlight is gated on hover/drag
+    assert "COL_HILITE" in src                       # the drag highlight colour
 
 
 def test_osd_never_steals_focus():
-    """Inherited from the speech-to-text indicator: the OSD must never steal focus (no
-    focus_set/force, no key bindings) so typing is never interrupted."""
+    """The OSD must never steal focus (override-redirect, notification window type, no focus
+    calls) so typing is never interrupted -- the same constraint the tkinter indicator had."""
     src = _osd_src()
-    # No focus-grabbing CALLS (the words may appear in the design-notes docstring explaining the
-    # constraint; what must be absent is an actual .focus_force()/.focus_set() invocation).
-    assert ".focus_force(" not in src
-    assert ".focus_set(" not in src
+    assert "override_redirect = True" in src
+    assert "_NET_WM_WINDOW_TYPE_NOTIFICATION" in src
+    # no explicit focus grab
+    assert "XSetInputFocus" not in src
 
 
 # --- the launcher (media.py) wires to the shipped OSD, non-blocking ----------
@@ -404,88 +553,46 @@ def test_openbox_documents_the_per_machine_fn_mapping():
 
 
 def test_osd_ships_executable_and_pinned():
-    """The OSD script ships (root-owned, executable) next to the terminal user interface binary, and is pinned
-    0755 in the ISO file_permissions (archiso would otherwise ship it 0644 and the launcher's
-    X_OK guard would silently skip the bar)."""
-    # a PLAN entry emits it to the lib dir, executable, root-owned
-    entry = next(e for e in desktop.emit_plan()
-                 if e["dest"] == "/usr/local/lib/azarch/azarch-osd")
-    assert entry["owner"] == "root"
-    assert entry["mode"] == desktop._EXEC
-    # the builder emits the indicator source verbatim (with its python3 shebang)
-    body = entry["builder"]()
-    assert body.startswith("#!/usr/bin/env python3")
+    """The OSD ships (root-owned, executable) next to the terminal user interface binary. It is a
+    COMPILED C binary now, so it is built + installed by terminal_user_interface_build.build_osd()
+    (invoked from compiler.py), NOT emitted as a text PLAN entry -- and it is pinned 0755 in the
+    ISO file_permissions (archiso would otherwise ship it 0644 and the launcher's X_OK guard would
+    silently skip the bar)."""
+    from packages.azarch import terminal_user_interface_build as tb
+    # the build wiring targets the same lib-dir path media.py + openbox refer to
+    assert tb.OSD_BIN_SYSTEM_PATH == desktop.AZARCH_OSD_SYSTEM_PATH == "/usr/local/lib/azarch/azarch-osd"
+    assert hasattr(tb, "build_osd")
+    # it is NO LONGER a text-emitted PLAN entry (that was the tkinter script era)
+    assert all(e["dest"] != "/usr/local/lib/azarch/azarch-osd" for e in desktop.emit_plan())
+    assert not hasattr(desktop, "azarch_osd"), "the text OSD emitter must be gone"
     # pinned executable in the ISO
     perms = profiledef.FILE_PERMISSIONS
     assert perms["/usr/local/lib/azarch/azarch-osd"] == "0:0:755"
+    # the X client libs the OSD links are declared as build-host deps
+    assert {"libx11", "libxrandr", "libxft"} <= set(tb.TERMINAL_USER_INTERFACE_BUILD_DEPS)
 
 
 def test_osd_is_not_bundled_into_the_fast_cli():
-    """The OSD is a SEPARATE GUI process (it imports tkinter); it must NOT be bundled into the
-    `azarch` script, whose fast path must not pay a tkinter import."""
+    """The OSD is a SEPARATE compiled program (osd.c); it must NOT be bundled into the `azarch`
+    script (the bundle is Python modules only), and the fast command line interface path must not
+    import tkinter (nothing does anymore -- the OSD is C)."""
+    assert "osd.c" not in MODULE_ORDER
     assert "osd_indicator.py" not in MODULE_ORDER
     assert "import tkinter" not in bundle_source()
 
 
-def test_osd_never_lingers_on_empty_or_bad_stdin():
-    """REGRESSION: the OSD must self-terminate even when stdin closes with NO usable message
-    (the launcher died before writing, or wrote only blanks/garbage). A stuck, process-alive
-    window on that path would wedge on every FN press whose payload failed to arrive. The window
-    starts WITHDRAWN and closes on an empty EOF, and a hard MAX_LIFETIME backstop bounds every
-    path. Drive the real script under a timeout and assert it exits promptly, not on the kill.
+def test_osd_never_lingers_and_hard_backstop_bounds_lifetime():
+    """The OSD must self-terminate even when stdin closes with NO usable message (the launcher
+    died before writing, or wrote only blanks/garbage). This is a SOURCE-CONTRACT test only -- it
+    reads osd.c and never compiles or RUNS it, so the suite stays pure (no X server touched, no
+    window ever mapped -- `tests.sh` never fires the UI).
 
-    Skipped without a DISPLAY or without tkinter (headless CI): the script exits 2 immediately
-    when tkinter is unavailable, which is itself non-lingering, but we only assert the
-    interesting path where a window could actually be mapped."""
-    import os
-    import shutil
-
-    if not os.environ.get("DISPLAY"):
-        pytest.skip("no DISPLAY: the OSD cannot map a window to linger")
-    try:
-        import tkinter  # noqa: F401
-    except Exception:
-        pytest.skip("no tkinter available")
-
-    osd = paths.AZARCH_COMMAND_LINE_INTERFACE_DIR / "osd_indicator.py"
-    py = shutil.which("python3") or shutil.which("python")
-    assert py, "no python interpreter to run the OSD"
-    # A generous timeout, but well ABOVE the ~1.35s normal flash and the 4s hard backstop, so a
-    # clean exit lands far inside it while a genuine hang trips the timeout (returncode != 0).
-    # The payloads cover EVERY no-usable-message shape: nothing, blanks, non-JSON garbage, AND
-    # JSON that DECODES but is not a dict (null / a list / a number / a string) -- the last group
-    # is the subtle case an adversary found hanging under load, because such a payload looks like
-    # input but reveals no window; the pump now treats a non-dict as "no message" and exits
-    # deterministically on EOF.
-    for stdin_text in ("", "   \n\n", "not-json\n", "null\n", "[1,2,3]\n", "42\n", '"hi"\n'):
-        proc = subprocess.run(
-            [py, str(osd)], input=stdin_text.encode(),
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            timeout=12,
-        )
-        # subprocess.run raises TimeoutExpired if it hung; reaching here means it self-exited.
-        assert proc.returncode == 0, (
-            f"OSD exited {proc.returncode} on stdin={stdin_text!r} (expected a clean 0)"
-        )
-
-
-def test_osd_starts_withdrawn_and_closes_on_empty_eof():
-    """The source contract behind the regression above: the window is created WITHDRAWN (revealed
-    only in show() on the first real message); the EOF handler exits DETERMINISTICALLY (os._exit,
-    keyed off a synchronously-set `dispatched` flag, so a non-dict payload cannot wedge it and a
-    just-queued real message is not killed early); and a hard max-lifetime backstop runs on its
-    OWN THREAD (immune to Tk event-loop starvation under many concurrent OSDs)."""
+    Contract: an absolute MAX_LIFE_MS backstop bounds EVERY path (checked at the top of the tick
+    loop against a monotonic birth time), and reaching it returns 1 => the window closes."""
     src = _osd_src()
-    # withdrawn until a message arrives (no unconditional deiconify in __init__)
-    assert "self._shown = False" in src
-    assert "self.root.deiconify()" in src            # present -- but inside show(), guarded by _shown
-    # the EOF teardown keys off `dispatched` (set synchronously in the pump) and hard-exits, so a
-    # non-dict payload (null / list / number) that reveals no window cannot leave it lingering.
-    assert "dispatched" in src
-    assert "if not dispatched" in src
-    assert "os._exit(0)" in src
-    assert "isinstance(msg, dict)" in src            # non-dict decoded payloads don't count as input
-    # the hard-lifetime backstop is a WATCHDOG THREAD (not a Tk `after` timer, which could starve)
-    assert "_start_watchdog" in src
-    assert "MAX_LIFETIME_S" in src
-    assert "threading.Thread(target=watchdog" in src
+    assert "MAX_LIFE_MS" in src
+    assert "now - o->born_ms > MAX_LIFE_MS" in src   # the hard lifetime backstop (in tick())
+    assert "return 1" in src                          # ... and hitting it tears the window down
+    # the poll loop always wakes on a short timeout so the fade/hold/backstop advance even with
+    # no X or socket traffic (it can never block forever waiting for input)
+    assert "poll(pfds, 2, timeout)" in src

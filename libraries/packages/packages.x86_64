@@ -180,6 +180,18 @@ xorg-server
 xorg-xinit
 xorg-xrandr
 xorg-xsetroot
+# xset: `azarch`'s OpenBox autostart runs `xset r rate 300 25` to shorten the keyboard
+# autorepeat delay, so HOLDING an FN volume/brightness key ramps quickly (each repeat is one
+# step). Without this package `xset` is absent and that (guarded) line is a silent no-op.
+xorg-xset
+# The X client libraries the compiled media OSD (azarch-osd) links: libx11 (Xlib), libxrandr
+# (primary-monitor geometry for the bottom-middle placement), libxft (anti-aliased percent text,
+# matching the old tkinter look). They are normally pulled in transitively by xorg-server/kitty,
+# but the OSD hard-links them, so they are named EXPLICITLY here (and are the build-host -dev
+# deps too -- see terminal_user_interface_build.TERMINAL_USER_INTERFACE_BUILD_DEPS).
+libx11
+libxrandr
+libxft
 xcb-util-cursor
 mesa
 feh

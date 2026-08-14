@@ -57,6 +57,11 @@ FROM archlinux:latest
 #                 Makefile resolves (compiler._check_host_deps requires the `gedit` pkg).
 #   gcc        -> the compiler both Makefiles invoke (provided by base-devel; listed in
 #                 the code's dep sets, present here via base-devel).
+#   libx11 / libxrandr / libxft -> the X client dev headers/libs the media OSD (osd.c ->
+#                 azarch-osd) links: Xlib, RandR (primary-monitor geometry), Xft (anti-aliased
+#                 percent text). The OSD is compiled during the desktop emit (build_osd), BEFORE
+#                 makepkg, so these must be baked in here. Keep in sync with
+#                 terminal_user_interface_build.TERMINAL_USER_INTERFACE_BUILD_DEPS.
 #
 # PINNED to an Arch Linux Archive (ALA) snapshot instead of the rolling live mirrors.
 # The live `core`/`extra` repos are periodically INTERNALLY INCONSISTENT for short
@@ -85,6 +90,9 @@ RUN printf 'Server = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n' "$
         gtk3 \
         pkgconf \
         gedit \
+        libx11 \
+        libxrandr \
+        libxft \
     && pacman -Scc --noconfirm
 
 # Initialize pacman's trust database. Installing archlinux-keyring above only

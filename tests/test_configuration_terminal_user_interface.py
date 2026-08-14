@@ -208,18 +208,57 @@ def test_tui_binary_is_pinned_executable_in_the_iso():
     assert perms[terminal_user_interface_build.TERMINAL_USER_INTERFACE_BIN_SYSTEM_PATH].endswith(":755")
 
 
-def test_tui_build_dep_is_only_gcc_no_ncurses_no_gtk():
-    """The UI is pure libc + raw ANSI (previews shell out to kitty at runtime), so the ONLY
-    build dep is a C compiler -- no ncurses, no GTK LINKAGE (checked on the recipe, not the
-    comments, which do mention 'no ncurses')."""
-    assert terminal_user_interface_build.TERMINAL_USER_INTERFACE_BUILD_DEPS == ["gcc"]
-    # Look only at the non-comment recipe lines: no library linkage, no pkg-config.
+def test_tui_binary_is_pure_libc_no_ncurses_no_gtk():
+    """The terminal UI BINARY (azarch) is pure libc + raw ANSI (previews shell out to kitty at
+    runtime): its link recipe uses no ncurses and no GTK. (The media OSD, a SEPARATE binary, does
+    link X -- see the next test -- but the terminal UI itself does not.)"""
+    # The $(BIN) link line must carry no library discovery / no ncurses / no gtk linkage.
     recipe = "\n".join(ln for ln in _src("Makefile").splitlines()
                        if not ln.lstrip().startswith("#"))
+    # the terminal UI is linked from its objects with just $(LDFLAGS) -- no -l libs on that rule
+    assert "$(OBJS) -o $@ $(LDFLAGS)" in recipe
     assert "-lncurses" not in recipe
     assert "-lgtk" not in recipe
     assert "gtk+-3.0" not in recipe
-    assert "pkg-config" not in recipe        # no library discovery needed
+
+
+def test_osd_build_deps_include_the_x_libraries():
+    """The media OSD (azarch-osd) is an Xlib program, so the build deps grew beyond gcc to add
+    the X client libraries it links (libx11 for Xlib, libxrandr for the primary-monitor
+    geometry, libxft for anti-aliased text). gcc stays first."""
+    deps = terminal_user_interface_build.TERMINAL_USER_INTERFACE_BUILD_DEPS
+    assert deps[0] == "gcc"
+    assert {"libx11", "libxrandr", "libxft"} <= set(deps)
+    # the OSD link rule pulls the X libs in via pkg-config (with a plain -l fallback)
+    recipe = "\n".join(ln for ln in _src("Makefile").splitlines()
+                       if not ln.lstrip().startswith("#"))
+    assert "$(OSD_BIN)" in recipe
+    assert "x11" in recipe and "xrandr" in recipe and "xft" in recipe
+    # the OSD source itself is a build input
+    assert "osd.c" in {p.name for p in terminal_user_interface_build._csrc_files()}
+
+
+def test_osd_x_build_deps_are_provisioned_on_the_build_host():
+    """REGRESSION GUARD (mirrors the menu-daemon one): the OSD is compiled DURING the ISO build
+    (build_osd -> make) BEFORE the makepkg makedepends step, so its X dev deps must be baked into
+    the build-host toolchain. This fails (not just skips) if the Dockerfile or _check_host_deps
+    ever drops them -- the gap that would let a green dev-host suite hide a broken Docker build
+    (osd.c not compiling for want of X11/Xrandr/Xft headers)."""
+    import re
+    from pathlib import Path
+
+    deps = terminal_user_interface_build.TERMINAL_USER_INTERFACE_BUILD_DEPS
+    repo = Path(paths.AZARCH_COMMAND_LINE_INTERFACE_DIR).parents[2]   # .../libraries/packages/azarch -> repo root
+    # The Docker build image bakes the X dev libs in (the OSD compile runs before makepkg).
+    dockerfile = (repo / "Dockerfile").read_text(encoding="utf-8")
+    for dep in ("libx11", "libxrandr", "libxft"):
+        assert dep in deps, f"{dep} missing from the build deps"
+        assert re.search(rf"^\s*{re.escape(dep)}\s*\\?\s*$", dockerfile, re.M), (
+            f"Dockerfile must install '{dep}' (needed to compile the media OSD)"
+        )
+    # compiler._check_host_deps folds in the SAME set on a non-Docker Arch host.
+    compiler_src = (repo / "libraries" / "compiler.py").read_text(encoding="utf-8")
+    assert "terminal_user_interface_build.TERMINAL_USER_INTERFACE_BUILD_DEPS" in compiler_src
 
 
 # --- the spec's specifics, pinned in the C source ---------------------------

@@ -966,7 +966,19 @@ command -v xcape >/dev/null 2>&1 && \\
 # 3. Az'arch application-menu daemon: build the menu once and keep it hidden so the
 #    first Super press is instant (the C/GTK3 daemon, see application_menu/menu.c).
 [ -x '{MENU_DAEMON_BIN}' ] && \\
-    setsid '{MENU_DAEMON_BIN}' >/dev/null 2>&1 < /dev/null &"""
+    setsid '{MENU_DAEMON_BIN}' >/dev/null 2>&1 < /dev/null &
+
+# 4. FN media keys, hold-to-drag: X autorepeat governs how fast HOLDING an FN volume/brightness
+#    key repeats (each repeat is one `azarch volume/brightness` step -> the OSD "fast drag").
+#    The default ~660ms delay before repeats start feels sluggish when you just want to hold to
+#    ramp, so shorten the initial DELAY to 300ms and set a brisk RATE of 25/s. `xset r rate
+#    <delay> <rate>`; guarded so a missing xset never breaks the session.
+command -v xset >/dev/null 2>&1 && xset r rate 300 25 &
+
+# 5. Media defaults: seed the STARTING levels (50% volume, 100% brightness on a laptop) ONCE.
+#    `azarch media-init` keys off a per-user marker, so it applies the defaults on a fresh
+#    machine but never clobbers a level the user has since chosen. Silent (no OSD), always rc 0.
+[ -x '{AZARCH_BIN_PATH}' ] && '{AZARCH_BIN_PATH}' media-init >/dev/null 2>&1 &"""
 
 
 def openbox_autostart() -> str:
@@ -998,13 +1010,13 @@ def openbox_autostart() -> str:
 
 {_openbox_autostart_common()}
 
-# 4. LIVE-ONLY -- keyboard layouts: US English (default) + Hebrew, Alt+Shift to toggle.
+# 6. LIVE-ONLY -- keyboard layouts: US English (default) + Hebrew, Alt+Shift to toggle.
 #    An install writes a region keyboard to /etc/X11/xorg.conf.d/00-keyboard.conf, so
 #    this fixed us,il is stripped from the installed autostart (it would override it).
 command -v setxkbmap >/dev/null 2>&1 && \\
     setxkbmap -layout '{layouts}' -option '{KEYBOARD_TOGGLE}' &
 
-# 5. LIVE-ONLY -- Calamares installer, once, a couple seconds in (Manjaro-style
+# 7. LIVE-ONLY -- Calamares installer, once, a couple seconds in (Manjaro-style
 #    first-run). The wrapper elevates via passwordless sudo on the live medium. Stripped
 #    from the installed autostart so an installed system never re-opens the installer.
 if [ -x '{INSTALL_WRAPPER_PATH}' ]; then
@@ -1131,12 +1143,14 @@ Keywords=install;calamares;setup;
 # and ships the result to /usr/local/bin/azarch. See paths.AZARCH_COMMAND_LINE_INTERFACE_DIR and packages/azarch/.
 AZARCH_BIN_PATH = "/usr/local/bin/azarch"
 
-# The media OSD indicator (the centered cyan volume/brightness bar) is a STANDALONE tkinter
-# script -- it is a separate, long-lived GUI process that `azarch volume/brightness` launches
-# and feeds one JSON line, exactly like the speech-to-text REC indicator. It is NOT part of the
-# bundled `azarch` script (which would drag tkinter into the fast command line interface path); it ships as its
-# own file next to the C terminal user interface binary in the azarch lib dir, so the two travel together. Kept
-# in lock-step with packages/azarch/media.py OSD_INDICATOR_BIN (a test pins the two).
+# The media OSD indicator (the bottom-middle cyan volume/brightness bar) is a COMPILED Xlib
+# program now (osd.c -> azarch-osd), NOT a tkinter script -- it is a separate GUI process that
+# `azarch volume/brightness` launches and feeds one JSON line. It is a SINGLE resident window: a
+# second launch forwards to the one already up (no flicker) instead of spawning another. It ships
+# next to the C terminal user interface binary in the azarch lib dir (built by
+# terminal_user_interface_build.build_osd), so the two travel together. Kept in lock-step with
+# packages/azarch/media.py OSD_INDICATOR_BIN and terminal_user_interface_build.OSD_BIN_SYSTEM_PATH
+# (tests pin them). This constant remains the single name openbox refers to it by.
 AZARCH_OSD_SYSTEM_PATH = "/usr/local/lib/azarch/azarch-osd"
 
 # Marker lines (in the bundled source, originally from country_table.py) bracketing the
@@ -1176,16 +1190,10 @@ def azarch_command_line_interface() -> str:
 
 
 # --- 8b. /usr/local/lib/azarch/azarch-osd (the media OSD indicator) ---------
-def azarch_osd() -> str:
-    """The media OSD indicator (packages/azarch/osd_indicator.py) shipped VERBATIM as the
-    standalone /usr/local/lib/azarch/azarch-osd script. It is the centered cyan bar shown when
-    the FN keys change the volume/brightness: `azarch volume/brightness` launches it detached and
-    writes it one JSON line. It carries its own `#!/usr/bin/env python3` shebang and uses only
-    the standard library + tkinter (present in the system python), so it runs as an executable
-    with no venv. Emitted whole (not bundled into `azarch`) because it is a separate GUI process,
-    exactly like the speech-to-text indicator it is modelled on."""
-    import paths  # noqa: E402 (repo path roots; imported lazily like the bundler above)
-    return (paths.AZARCH_COMMAND_LINE_INTERFACE_DIR / "osd_indicator.py").read_text(encoding="utf-8")
+# The OSD is a COMPILED C program (osd.c) now, so there is no text builder here anymore: it is
+# built + installed by terminal_user_interface_build.build_osd() (invoked from compiler.py right
+# after the terminal UI binary), and pinned executable in profile.FILE_PERMISSIONS. The old
+# azarch_osd() text emitter (which shipped the tkinter osd_indicator.py verbatim) is gone.
 
 
 # --- 9. /usr/local/bin/azarch-install (privileged Calamares launcher) -------
@@ -1390,18 +1398,10 @@ PLAN = [
         "mode": _EXEC,
         "owner": "root",
     },
-    {
-        # The media OSD indicator (centered cyan volume/brightness bar), shipped as a
-        # standalone executable Python script next to the C terminal user interface binary.
-        # `azarch volume/brightness` launches it. Root-owned system path; EXECUTABLE (0o755)
-        # so it runs directly (it carries a python3 shebang). Pinned 0755 in FILE_PERMISSIONS
-        # too, since archiso would otherwise normalize it to 0644 in the squashfs and the
-        # launcher (which checks os.access X_OK) would silently skip the on-screen bar.
-        "builder": azarch_osd,
-        "dest": AZARCH_OSD_SYSTEM_PATH,
-        "mode": _EXEC,
-        "owner": "root",
-    },
+    # NOTE: the media OSD indicator (/usr/local/lib/azarch/azarch-osd) is NOT emitted here as a
+    # text file anymore -- it is a COMPILED C program (osd.c). compiler.py builds and installs it
+    # via terminal_user_interface_build.build_osd(), exactly like the terminal UI binary. It is
+    # still pinned 0755 in FILE_PERMISSIONS so archiso ships it executable.
 ]
 
 # The .bash_profile snippet is handled separately from PLAN because it is not a

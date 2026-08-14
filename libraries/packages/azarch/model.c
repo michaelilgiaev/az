@@ -411,6 +411,48 @@ const char *az_status_machine(char *buf, size_t n)
     return buf;
 }
 
+const char *az_status_volume(char *buf, size_t n)
+{
+    /* `azarch volume get` prints "<pct>" or "<pct> muted" on its first line. Report a tidy
+     * "NN%" (or "NN% (muted)") for the Volume row / its "Current:" line. Degrades to "n/a" if
+     * azarch is missing or the read fails, so the cell is never blank. */
+    const char *argv[] = {"azarch", "volume", "get", NULL};
+    char raw[64] = {0};
+    if (have("azarch") && az_capture(argv, raw, sizeof raw) == 0 && raw[0]) {
+        int pct = atoi(raw);
+        if (strstr(raw, "muted")) snprintf(buf, n, "%d%% (muted)", pct);
+        else snprintf(buf, n, "%d%%", pct);
+        return buf;
+    }
+    snprintf(buf, n, "n/a");
+    return buf;
+}
+
+const char *az_status_brightness(char *buf, size_t n)
+{
+    /* Brightness is a LAPTOP-ONLY control. On a PC there is no backlight, so the row should say
+     * so rather than show a number. We ask `azarch machine` (which honours the hard override)
+     * whether this is a Laptop; if not, report "not on a PC". On a laptop, `azarch brightness
+     * get` prints the percent (or "n/a" if the backlight is unreadable). */
+    char mt[32] = {0};
+    const char *margv[] = {"azarch", "machine", NULL};
+    int is_laptop = 0;
+    if (have("azarch") && az_capture(margv, mt, sizeof mt) == 0) {
+        /* first line: "Machine type: Laptop" / "Machine type: PC" */
+        if (strstr(mt, "Laptop")) is_laptop = 1;
+    }
+    if (!is_laptop) { snprintf(buf, n, "not on a PC"); return buf; }
+    const char *argv[] = {"azarch", "brightness", "get", NULL};
+    char raw[64] = {0};
+    if (az_capture(argv, raw, sizeof raw) == 0 && raw[0]) {
+        if (strstr(raw, "n/a")) { snprintf(buf, n, "n/a"); return buf; }
+        snprintf(buf, n, "%d%%", atoi(raw));
+        return buf;
+    }
+    snprintf(buf, n, "n/a");
+    return buf;
+}
+
 /* --- filter (the search box) ------------------------------------------------ */
 static int ci_contains(const char *hay, const char *needle)
 {
@@ -466,10 +508,12 @@ const char *az_row_command(const AzRow *r)
  * status -- it is a genuine at-a-glance summary of the sub-screen (e.g. "firewall active"),
  * NOT a redundant echo, and the main screen has no "Current:" line of its own. */
 static const AzRow ROWS_MAIN[] = {
-    {.label="Network",      .kind=AZ_ACT_SCREEN, .target="network",   .status=az_status_network},
-    {.label="Theme",        .kind=AZ_ACT_SCREEN, .target="theme",     .status=az_status_theme},
-    {.label="Wallpaper",    .kind=AZ_ACT_SCREEN, .target="wallpaper", .status=az_status_wallpaper},
-    {.label="Machine Type", .kind=AZ_ACT_SCREEN, .target="machine",   .status=az_status_machine},
+    {.label="Network",      .kind=AZ_ACT_SCREEN, .target="network",    .status=az_status_network},
+    {.label="Theme",        .kind=AZ_ACT_SCREEN, .target="theme",      .status=az_status_theme},
+    {.label="Wallpaper",    .kind=AZ_ACT_SCREEN, .target="wallpaper",  .status=az_status_wallpaper},
+    {.label="Volume",       .kind=AZ_ACT_SCREEN, .target="volume",     .status=az_status_volume},
+    {.label="Brightness",   .kind=AZ_ACT_SCREEN, .target="brightness", .status=az_status_brightness},
+    {.label="Machine Type", .kind=AZ_ACT_SCREEN, .target="machine",    .status=az_status_machine},
 };
 
 /* Theme / Wallpaper rows carry NO per-row status: the live state is shown ONCE as the
@@ -564,6 +608,36 @@ static const AzRow ROWS_MACHINE[] = {
      .hint="Forget the override -- detect from the backlight, then the DMI chassis."},
 };
 
+/* Volume: the "Current:" line shows the live level (az_status_volume); the rows set a PRECISE
+ * level via `azarch volume set <N>` (the same subcommand the OSD mouse-drag uses) plus the two
+ * 7.5% steps and mute. Each pops the bottom-middle cyan OSD bar. No sudo (PipeWire/ALSA run in
+ * the user session), so needs_root stays 0; each runs captured in the UI and shows its result. */
+static const AzRow ROWS_VOLUME[] = {
+    {.label="Mute / unmute",   .kind=AZ_ACT_APPLY, .target="azarch volume mute"},
+    {.label="Louder (+7.5%)",  .kind=AZ_ACT_APPLY, .target="azarch volume up"},
+    {.label="Quieter (-7.5%)", .kind=AZ_ACT_APPLY, .target="azarch volume down"},
+    {.label="Set to 0%",       .kind=AZ_ACT_APPLY, .target="azarch volume set 0"},
+    {.label="Set to 25%",      .kind=AZ_ACT_APPLY, .target="azarch volume set 25"},
+    {.label="Set to 50%",      .kind=AZ_ACT_APPLY, .target="azarch volume set 50"},
+    {.label="Set to 75%",      .kind=AZ_ACT_APPLY, .target="azarch volume set 75"},
+    {.label="Set to 100%",     .kind=AZ_ACT_APPLY, .target="azarch volume set 100",
+     .hint="Tip: hover the on-screen bar and drag to set any level. FN keys step 7.5%."},
+};
+
+/* Brightness: LAPTOP-ONLY (a PC has no backlight). The "Current:" line reads "not on a PC" on a
+ * desktop; the set/step rows still run `azarch brightness ...`, which SELF-GATES (it refuses and
+ * says so on a PC), so selecting one on a desktop is harmless and explains itself. Force the type
+ * on the Machine Type screen to light this up on a desktop. No sudo needed for the UI wrapper. */
+static const AzRow ROWS_BRIGHTNESS[] = {
+    {.label="Brighter (+7.5%)", .kind=AZ_ACT_APPLY, .target="azarch brightness up"},
+    {.label="Dimmer (-7.5%)",   .kind=AZ_ACT_APPLY, .target="azarch brightness down"},
+    {.label="Set to 25%",       .kind=AZ_ACT_APPLY, .target="azarch brightness set 25"},
+    {.label="Set to 50%",       .kind=AZ_ACT_APPLY, .target="azarch brightness set 50"},
+    {.label="Set to 75%",       .kind=AZ_ACT_APPLY, .target="azarch brightness set 75"},
+    {.label="Set to 100%",      .kind=AZ_ACT_APPLY, .target="azarch brightness set 100",
+     .hint="Laptops only. On a PC this is not an option (use Machine Type to force Laptop)."},
+};
+
 #define AZN(a) (int)(sizeof(a) / sizeof((a)[0]))
 
 /* Only Theme and Wallpaper set `.current` (the top "Current:" line); every other screen
@@ -592,6 +666,16 @@ static const AzScreen SCREENS[] = {
      .current=az_status_airplane,  .rows=ROWS_AIRPLANE,  .nrows=AZN(ROWS_AIRPLANE)},
     {.id="network.firewall",  .title="Firewall",  .subtitle="ufw front-end.",
      .current=az_status_firewall,  .rows=ROWS_FIREWALL,  .nrows=AZN(ROWS_FIREWALL)},
+    /* Volume: the "Current:" line shows the live level; the rows set a precise level (or step /
+     * mute), each popping the bottom-middle cyan OSD bar. */
+    {.id="volume",    .title="Volume",
+     .subtitle="Set a level, or step with the FN keys. Drag the on-screen bar for any value.",
+     .current=az_status_volume,    .rows=ROWS_VOLUME,    .nrows=AZN(ROWS_VOLUME)},
+    /* Brightness: LAPTOP-ONLY. The "Current:" line reads the level on a laptop, or "not on a PC"
+     * on a desktop (where the rows self-gate). Force Laptop on Machine Type to enable it. */
+    {.id="brightness", .title="Brightness",
+     .subtitle="Laptops only -- a PC has no backlight (Machine Type can force Laptop).",
+     .current=az_status_brightness, .rows=ROWS_BRIGHTNESS, .nrows=AZN(ROWS_BRIGHTNESS)},
     /* Machine Type: the "Current:" line shows what Az'arch recognises (PC / Laptop); the rows
      * hard-switch it. Brightness is a laptop-only control, so this is where a desktop can be
      * forced to "Laptop" to light the brightness UI up (or a laptop forced to "PC"). */

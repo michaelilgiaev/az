@@ -6,11 +6,13 @@ these subcommands (see modifications/openbox rc.xml):
 
     azarch volume up        raise the volume by one step (7.5%)
     azarch volume down       lower the volume by one step (7.5%)
+    azarch volume set <N>    set the volume to a precise percent (0-100)
     azarch volume mute       toggle mute
     azarch volume get        print the current volume percent (0-100)
 
     azarch brightness up     raise screen brightness by one step (7.5%)  [LAPTOP ONLY]
     azarch brightness down   lower screen brightness by one step (7.5%)  [LAPTOP ONLY]
+    azarch brightness set <N>  set screen brightness to a precise percent [LAPTOP ONLY]
     azarch brightness get    print the current brightness percent (0-100)
 
 STEP + RANGE. Both go 0..100% and every press moves 7.5% (the spec's step), so the scale is
@@ -24,12 +26,14 @@ The gate is `machine.is_laptop()` (which honours the hard override), so forcing 
 "PC" turns them off on a laptop -- exactly what the manual switch is for. `get` still prints a
 reading regardless so a caller can query without tripping the gate.
 
-THE ON-SCREEN UI. Each up/down (and mute) pops a small CENTERED on-screen display -- a cyan
-bar (the Az'arch logo cyan) filling to the new percent, with a volume or brightness icon --
-by launching the OSD indicator (osd_indicator.py, shipped to OSD_INDICATOR_BIN) detached and
-feeding it one JSON line describing what to show. The OSD dismisses itself after a moment; a
-second press just refreshes the same on-screen bar. This is the speech-to-text indicator's
-approach (a real borderless top-most window), reused for the media keys.
+THE ON-SCREEN UI. Each up/down/set (and mute) pops a small BOTTOM-MIDDLE on-screen display (the
+Manjaro Cinnamon resting spot) -- a cyan bar (the Az'arch logo cyan) filling to the new percent,
+with a volume or brightness icon -- by launching the OSD indicator (the compiled Xlib program
+azarch-osd, shipped to OSD_INDICATOR_BIN) detached and feeding it one JSON line describing what
+to show. The OSD is a SINGLE resident window: a second press does NOT spawn a second window (that
+was the old flicker) -- it forwards the new level to the one already up, which repaints in place,
+holds, then fades out. It is a real borderless top-most window (in the spirit of the speech-to-
+text indicator), rewritten from tkinter to C so it never flickers and can be mouse-dragged.
 
 BACKENDS (root-free where possible). Volume goes through PipeWire's `wpctl` on the default
 audio sink (the ISO ships pipewire + wireplumber), falling back to ALSA `amixer` if wpctl is
@@ -50,14 +54,21 @@ MEDIA_STEP_PERCENT = 7.5
 MEDIA_MIN_PERCENT = 0.0
 MEDIA_MAX_PERCENT = 100.0
 
+# The pre/post-install STARTING levels (the spec: "the first default when its pre/post install
+# is: 50% volume and 100% brightness"). Applied ONCE (see cmd_media_init / _media_seed_file);
+# after the user changes anything their choice persists -- we never re-seed.
+MEDIA_DEFAULT_VOLUME = 50.0
+MEDIA_DEFAULT_BRIGHTNESS = 100.0
+
 # The kernel backlight dir (mirrors machine.py). Brightness is read/written under the first
 # backlight device found here: <dev>/brightness (current, writable by root) and
 # <dev>/max_brightness (the raw ceiling the percent scales against).
 _BACKLIGHT_DIR = "/sys/class/backlight"
 
-# The shipped OSD indicator (a standalone tkinter script, osd_indicator.py). Installed next to
-# the C terminal user interface binary in the azarch lib dir so the two travel together. Kept in lock-step with
-# modifications/openbox (OSD_INDICATOR_SYSTEM_PATH) -- a test pins the two so they cannot drift.
+# The shipped OSD indicator (the compiled Xlib program azarch-osd, built from osd.c). Installed
+# next to the C terminal user interface binary in the azarch lib dir so the two travel together.
+# Kept in lock-step with modifications/openbox (AZARCH_OSD_SYSTEM_PATH) -- a test pins the two so
+# they cannot drift.
 OSD_INDICATOR_BIN = "/usr/local/lib/azarch/azarch-osd"
 
 
@@ -72,12 +83,26 @@ def _step_percent(current: float, direction: int) -> float:
     return _clamp_percent(current + direction * MEDIA_STEP_PERCENT)
 
 
+def _parse_percent(s: str) -> float | None:
+    """Parse a user-supplied percent for `set <N>`: an int/float, optionally with a trailing
+    '%'. Returns the CLAMPED 0..100 value, or None if it is not a number. This is what lets
+    `azarch volume set 65` (and the TUI's Volume rows / the OSD mouse-drag) pick a PRECISE
+    level instead of only stepping 7.5% at a time."""
+    s = s.strip().rstrip("%").strip()
+    try:
+        return _clamp_percent(float(s))
+    except ValueError:
+        return None
+
+
 # --- the on-screen display ---------------------------------------------------
 def _show_osd(kind: str, percent: float, muted: bool = False) -> None:
-    """Pop the centered cyan OSD bar for `kind` ("volume"/"brightness") at `percent`, marking
-    it muted when asked. Best-effort and non-blocking: the indicator is launched DETACHED with
-    a single JSON line on its stdin, so the FN key returns instantly and a missing indicator (or
-    no display) never makes the volume/brightness change itself fail. No DISPLAY => skip it."""
+    """Pop the bottom-middle cyan OSD bar for `kind` ("volume"/"brightness") at `percent`,
+    marking it muted when asked. Best-effort and non-blocking: the indicator is launched
+    DETACHED with a single JSON line on its stdin, so the FN key returns instantly and a missing
+    indicator (or no display) never makes the volume/brightness change itself fail. If a resident
+    OSD window is already up, that one JSON line just updates it in place (no second window, no
+    flicker) -- the single-instance handling lives in the azarch-osd program. No DISPLAY => skip."""
     if not os.environ.get("DISPLAY"):
         return
     if not (os.path.exists(OSD_INDICATOR_BIN) and os.access(OSD_INDICATOR_BIN, os.X_OK)):
@@ -197,8 +222,9 @@ def _volume_toggle_mute() -> bool:
 
 
 def cmd_volume(args: list[str]) -> int:
-    """Dispatch `azarch volume up|down|mute|get`. up/down step 7.5% and show the OSD; mute
-    toggles and shows the OSD; get prints the percent. Unknown verb -> usage + rc 2."""
+    """Dispatch `azarch volume up|down|set <N>|mute|get`. up/down step 7.5%; set <N> jumps to a
+    precise 0..100 percent; both show the OSD. mute toggles and shows the OSD; get prints the
+    percent. Unknown verb -> usage + rc 2."""
     verb = args[0] if args else "get"
     if verb in ("up", "down"):
         cur, _muted = _volume_read()
@@ -208,6 +234,20 @@ def cmd_volume(args: list[str]) -> int:
             return 1
         _show_osd("volume", new, muted=False)
         print(f"Volume: {int(round(new))}%")
+        return 0
+    if verb in ("set", "="):
+        # Set a PRECISE level (the spec: "select precisely how much volume I want"). Drives the
+        # TUI's Volume rows and the OSD mouse-drag. The percent is the next arg (or glued: set=65).
+        arg = args[1] if len(args) > 1 else verb.split("=", 1)[1] if "=" in verb else ""
+        pct = _parse_percent(arg)
+        if pct is None:
+            _err(f"azarch volume: set needs a percent 0-100 (got {arg!r})")
+            return 2
+        if not _volume_write(pct):
+            _err("azarch volume: no audio backend (wpctl/amixer) available")
+            return 1
+        _show_osd("volume", pct, muted=False)
+        print(f"Volume: {int(round(pct))}%")
         return 0
     if verb in ("mute", "toggle", "togglemute"):
         if not _volume_toggle_mute():
@@ -290,21 +330,30 @@ def _brightness_write(percent: float) -> bool:
 
 
 def cmd_brightness(args: list[str]) -> int:
-    """Dispatch `azarch brightness up|down|get`. up/down step 7.5% and show the OSD, but ONLY
-    on a laptop (a PC has no backlight -- brightness is not an option); get always prints a
-    reading. Unknown verb -> usage + rc 2."""
+    """Dispatch `azarch brightness up|down|set <N>|get`. up/down step 7.5% and set <N> jumps to
+    a precise 0..100 percent -- both show the OSD, but ONLY on a laptop (a PC has no backlight --
+    brightness is not an option); get always prints a reading. Unknown verb -> usage + rc 2."""
     verb = args[0] if args else "get"
-    if verb in ("up", "down"):
+    if verb in ("up", "down", "set", "="):
         # Brightness is a LAPTOP-ONLY control (honours the machine hard override).
         if not is_laptop():
             _err("azarch brightness: not a laptop -- brightness is a laptop-only control "
                  "(this machine is a PC). Use `azarch machine --laptop` to force it on.")
             return 1
-        cur = _brightness_read()
-        if cur is None:
-            _err("azarch brightness: no backlight found under /sys/class/backlight")
-            return 1
-        new = _step_percent(cur, +1 if verb == "up" else -1)
+        if verb in ("set", "="):
+            # A PRECISE level (the TUI's Brightness rows / the OSD mouse-drag). No need to read
+            # the current value -- we jump straight to the requested percent.
+            arg = args[1] if len(args) > 1 else verb.split("=", 1)[1] if "=" in verb else ""
+            new = _parse_percent(arg)
+            if new is None:
+                _err(f"azarch brightness: set needs a percent 0-100 (got {arg!r})")
+                return 2
+        else:
+            cur = _brightness_read()
+            if cur is None:
+                _err("azarch brightness: no backlight found under /sys/class/backlight")
+                return 1
+            new = _step_percent(cur, +1 if verb == "up" else -1)
         if not _brightness_write(new):
             _err("azarch brightness: could not set the backlight")
             return 1
@@ -326,28 +375,68 @@ def cmd_brightness(args: list[str]) -> int:
     return 2
 
 
+# --- one-time defaults seed (50% volume / 100% brightness) -------------------
+def _media_seed_file() -> str:
+    """The per-user marker that records the one-time media seed has run:
+    ~/.config/azarch/media-seeded. Its mere EXISTENCE means "already seeded" -- so the defaults
+    are applied exactly once and a later user change is never clobbered on the next boot. Off ~
+    at runtime so it targets the current user (no sudo), like the theme/wallpaper pointers."""
+    return os.path.join(os.path.expanduser("~"), ".config/azarch/media-seeded")
+
+
+def cmd_media_init(args: list[str]) -> int:
+    """`azarch media-init` -- seed the STARTING media levels ONCE (50% volume, and 100%
+    brightness on a laptop), then drop a marker so it never runs again. This is the pre/post-
+    install default the spec asks for: a fresh machine boots at 50% volume / 100% brightness,
+    but the instant the user configures anything their choice persists (we key off the marker,
+    not off the current level, so we do NOT re-assert 50/100 on later boots).
+
+    Idempotent and silent (NO OSD -- this runs at login, not from a keypress). `--force`
+    re-seeds even if the marker exists (for testing / a deliberate reset). Always rc 0: a boot
+    hook must never fail the session just because, say, no audio backend is up yet."""
+    force = bool(args) and args[0] in ("--force", "-f")
+    marker = _media_seed_file()
+    if os.path.exists(marker) and not force:
+        return 0                      # already seeded -- respect whatever the user has since set
+    # Volume: everyone gets 50%. Best-effort -- if no backend is present we still write the
+    # marker so we do not retry forever every login (the next real change will set it anyway).
+    _volume_write(MEDIA_DEFAULT_VOLUME)
+    # Brightness: only meaningful on a laptop (a PC has no backlight). Honour the machine type.
+    if is_laptop():
+        _brightness_write(MEDIA_DEFAULT_BRIGHTNESS)
+    try:
+        os.makedirs(os.path.dirname(marker), exist_ok=True)
+        with open(marker, "w", encoding="utf-8") as fh:
+            fh.write("seeded\n")
+    except OSError:
+        pass
+    return 0
+
+
 def _media_usage(which: str) -> None:
     if which == "volume":
         print(
-            "Usage: azarch volume <up|down|mute|get>\n"
+            "Usage: azarch volume <up|down|set <N>|mute|get>\n"
             "\n"
-            "Change the system volume in 7.5% steps (0-100%), showing a centered cyan\n"
+            "Change the system volume in 7.5% steps (0-100%), showing a bottom-middle cyan\n"
             "on-screen bar. Bound to the FN volume keys by the OpenBox session.\n"
             "\n"
-            "  up      Raise the volume 7.5%.\n"
-            "  down    Lower the volume 7.5%.\n"
-            "  mute    Toggle mute.\n"
-            "  get     Print the current volume percent.\n"
+            "  up       Raise the volume 7.5%.\n"
+            "  down     Lower the volume 7.5%.\n"
+            "  set <N>  Set the volume to a precise percent (0-100).\n"
+            "  mute     Toggle mute.\n"
+            "  get      Print the current volume percent.\n"
         )
     else:
         print(
-            "Usage: azarch brightness <up|down|get>\n"
+            "Usage: azarch brightness <up|down|set <N>|get>\n"
             "\n"
-            "Change the screen brightness in 7.5% steps (0-100%), showing a centered cyan\n"
+            "Change the screen brightness in 7.5% steps (0-100%), showing a bottom-middle cyan\n"
             "on-screen bar. LAPTOP ONLY -- a PC has no backlight to control (use\n"
             "`azarch machine --laptop` to force it on). Bound to the FN brightness keys.\n"
             "\n"
-            "  up      Raise brightness 7.5%.\n"
-            "  down    Lower brightness 7.5%.\n"
-            "  get     Print the current brightness percent (n/a on a PC).\n"
+            "  up       Raise brightness 7.5%.\n"
+            "  down     Lower brightness 7.5%.\n"
+            "  set <N>  Set brightness to a precise percent (0-100).\n"
+            "  get      Print the current brightness percent (n/a on a PC).\n"
         )
