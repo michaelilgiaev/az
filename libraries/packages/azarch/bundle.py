@@ -40,6 +40,10 @@ MODULE_ORDER = [
     "resolver.py",
     "theme.py",
     "wallpaper.py",
+    # machine.py before media.py: media's brightness gate calls machine.is_laptop() by bare
+    # name (a laptop-only control), so the machine helpers must be defined first.
+    "machine.py",
+    "media.py",
     # firewall.py before network.py: network's status/dispatch call the firewall functions
     # by bare name, and this keeps every module under the per-file size budget.
     "firewall.py",

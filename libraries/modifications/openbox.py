@@ -806,6 +806,29 @@ def openbox_rc_xml() -> str:
     <keybind key="C-A-Right">
       <action name="GoToDesktop"><to>right</to><wrap>no</wrap></action>
     </keybind>
+    <!-- FN media keys -> the `azarch` volume/brightness controls (7.5% steps, a centered
+         cyan on-screen bar). We bind the X "XF86" media KEYSYMS the keyboard emits, NOT a
+         fixed FN+F2/F3, because that physical mapping DIFFERS per machine: on the user's PC
+         keyboard FN+F2/F3 emit the AUDIO keysyms (volume), while on their laptop FN+F2/F3 emit
+         the BRIGHTNESS keysyms (dim/brighten). Binding the keysyms means each machine's FN keys
+         "just work" without us resolving the layout. Brightness is a LAPTOP-ONLY control, so
+         `azarch brightness` self-gates: on a PC (no backlight) these brightness binds harmlessly
+         do nothing, exactly as intended (a desktop has no screen backlight to dim). -->
+    <keybind key="XF86AudioRaiseVolume">
+      <action name="Execute"><command>{AZARCH_BIN_PATH} volume up</command></action>
+    </keybind>
+    <keybind key="XF86AudioLowerVolume">
+      <action name="Execute"><command>{AZARCH_BIN_PATH} volume down</command></action>
+    </keybind>
+    <keybind key="XF86AudioMute">
+      <action name="Execute"><command>{AZARCH_BIN_PATH} volume mute</command></action>
+    </keybind>
+    <keybind key="XF86MonBrightnessUp">
+      <action name="Execute"><command>{AZARCH_BIN_PATH} brightness up</command></action>
+    </keybind>
+    <keybind key="XF86MonBrightnessDown">
+      <action name="Execute"><command>{AZARCH_BIN_PATH} brightness down</command></action>
+    </keybind>
   </keyboard>
   <mouse>
     <dragThreshold>8</dragThreshold>
@@ -1108,6 +1131,14 @@ Keywords=install;calamares;setup;
 # and ships the result to /usr/local/bin/azarch. See paths.AZARCH_COMMAND_LINE_INTERFACE_DIR and packages/azarch/.
 AZARCH_BIN_PATH = "/usr/local/bin/azarch"
 
+# The media OSD indicator (the centered cyan volume/brightness bar) is a STANDALONE tkinter
+# script -- it is a separate, long-lived GUI process that `azarch volume/brightness` launches
+# and feeds one JSON line, exactly like the speech-to-text REC indicator. It is NOT part of the
+# bundled `azarch` script (which would drag tkinter into the fast command line interface path); it ships as its
+# own file next to the C terminal user interface binary in the azarch lib dir, so the two travel together. Kept
+# in lock-step with packages/azarch/media.py OSD_INDICATOR_BIN (a test pins the two).
+AZARCH_OSD_SYSTEM_PATH = "/usr/local/lib/azarch/azarch-osd"
+
 # Marker lines (in the bundled source, originally from country_table.py) bracketing the
 # generated COUNTRY_TABLE literal.
 _AZARCH_CC_START = "# AZARCH_CC_TABLE_START"
@@ -1142,6 +1173,19 @@ def azarch_command_line_interface() -> str:
         + "\n}\n"
     )
     return src[:start] + generated + src[end:]
+
+
+# --- 8b. /usr/local/lib/azarch/azarch-osd (the media OSD indicator) ---------
+def azarch_osd() -> str:
+    """The media OSD indicator (packages/azarch/osd_indicator.py) shipped VERBATIM as the
+    standalone /usr/local/lib/azarch/azarch-osd script. It is the centered cyan bar shown when
+    the FN keys change the volume/brightness: `azarch volume/brightness` launches it detached and
+    writes it one JSON line. It carries its own `#!/usr/bin/env python3` shebang and uses only
+    the standard library + tkinter (present in the system python), so it runs as an executable
+    with no venv. Emitted whole (not bundled into `azarch`) because it is a separate GUI process,
+    exactly like the speech-to-text indicator it is modelled on."""
+    import paths  # noqa: E402 (repo path roots; imported lazily like the bundler above)
+    return (paths.AZARCH_COMMAND_LINE_INTERFACE_DIR / "osd_indicator.py").read_text(encoding="utf-8")
 
 
 # --- 9. /usr/local/bin/azarch-install (privileged Calamares launcher) -------
@@ -1343,6 +1387,18 @@ PLAN = [
     {
         "builder": azarch_command_line_interface,
         "dest": AZARCH_BIN_PATH,
+        "mode": _EXEC,
+        "owner": "root",
+    },
+    {
+        # The media OSD indicator (centered cyan volume/brightness bar), shipped as a
+        # standalone executable Python script next to the C terminal user interface binary.
+        # `azarch volume/brightness` launches it. Root-owned system path; EXECUTABLE (0o755)
+        # so it runs directly (it carries a python3 shebang). Pinned 0755 in FILE_PERMISSIONS
+        # too, since archiso would otherwise normalize it to 0644 in the squashfs and the
+        # launcher (which checks os.access X_OK) would silently skip the on-screen bar.
+        "builder": azarch_osd,
+        "dest": AZARCH_OSD_SYSTEM_PATH,
         "mode": _EXEC,
         "owner": "root",
     },

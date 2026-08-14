@@ -390,6 +390,27 @@ const char *az_status_network(char *buf, size_t n)
     return buf;
 }
 
+const char *az_status_machine(char *buf, size_t n)
+{
+    /* The EFFECTIVE machine type as the command line interface reports it -- honouring any hard override --
+     * so the terminal user interface and `azarch machine` can never disagree. `azarch machine` prints
+     * "Machine type: PC" / "Machine type: Laptop" on its FIRST line; capture that and keep just
+     * the type word after the colon. Degrades to "PC" (the safe default) if azarch is missing
+     * or the line is malformed, so the cell is never blank. */
+    const char *argv[] = {"azarch", "machine", NULL};
+    char raw[128] = {0};
+    if (have("azarch") && az_capture(argv, raw, sizeof raw) == 0) {
+        const char *colon = strchr(raw, ':');
+        if (colon) {
+            colon++;
+            while (*colon == ' ') colon++;
+            if (*colon) { snprintf(buf, n, "%s", colon); return buf; }
+        }
+    }
+    snprintf(buf, n, "PC");
+    return buf;
+}
+
 /* --- filter (the search box) ------------------------------------------------ */
 static int ci_contains(const char *hay, const char *needle)
 {
@@ -445,9 +466,10 @@ const char *az_row_command(const AzRow *r)
  * status -- it is a genuine at-a-glance summary of the sub-screen (e.g. "firewall active"),
  * NOT a redundant echo, and the main screen has no "Current:" line of its own. */
 static const AzRow ROWS_MAIN[] = {
-    {.label="Network",   .kind=AZ_ACT_SCREEN, .target="network",   .status=az_status_network},
-    {.label="Theme",     .kind=AZ_ACT_SCREEN, .target="theme",     .status=az_status_theme},
-    {.label="Wallpaper", .kind=AZ_ACT_SCREEN, .target="wallpaper", .status=az_status_wallpaper},
+    {.label="Network",      .kind=AZ_ACT_SCREEN, .target="network",   .status=az_status_network},
+    {.label="Theme",        .kind=AZ_ACT_SCREEN, .target="theme",     .status=az_status_theme},
+    {.label="Wallpaper",    .kind=AZ_ACT_SCREEN, .target="wallpaper", .status=az_status_wallpaper},
+    {.label="Machine Type", .kind=AZ_ACT_SCREEN, .target="machine",   .status=az_status_machine},
 };
 
 /* Theme / Wallpaper rows carry NO per-row status: the live state is shown ONCE as the
@@ -528,6 +550,20 @@ static const AzRow ROWS_FIREWALL[] = {
      .hint="Remove the rule entirely, back to the default policy."},
 };
 
+/* Machine Type: show what Az'arch recognises (PC or Laptop) via the "Current:" line, and let
+ * the user HARD-SWITCH it -- Force PC / Force Laptop / Autodetect. The switch decides whether
+ * the brightness controls are offered (a PC has no backlight), so forcing "Laptop" turns them
+ * on even on a desktop. These write the user's own config pointer (no sudo), so needs_root
+ * stays 0; each runs captured inside the UI and shows its one-line result. */
+static const AzRow ROWS_MACHINE[] = {
+    {.label="Force PC",   .kind=AZ_ACT_APPLY, .target="azarch machine --pc",
+     .hint="No brightness control -- the FN keys only change the volume."},
+    {.label="Force Laptop", .kind=AZ_ACT_APPLY, .target="azarch machine --laptop",
+     .hint="Enables screen-brightness control (a laptop has a backlight)."},
+    {.label="Autodetect", .kind=AZ_ACT_APPLY, .target="azarch machine --auto",
+     .hint="Forget the override -- detect from the backlight, then the DMI chassis."},
+};
+
 #define AZN(a) (int)(sizeof(a) / sizeof((a)[0]))
 
 /* Only Theme and Wallpaper set `.current` (the top "Current:" line); every other screen
@@ -556,6 +592,12 @@ static const AzScreen SCREENS[] = {
      .current=az_status_airplane,  .rows=ROWS_AIRPLANE,  .nrows=AZN(ROWS_AIRPLANE)},
     {.id="network.firewall",  .title="Firewall",  .subtitle="ufw front-end.",
      .current=az_status_firewall,  .rows=ROWS_FIREWALL,  .nrows=AZN(ROWS_FIREWALL)},
+    /* Machine Type: the "Current:" line shows what Az'arch recognises (PC / Laptop); the rows
+     * hard-switch it. Brightness is a laptop-only control, so this is where a desktop can be
+     * forced to "Laptop" to light the brightness UI up (or a laptop forced to "PC"). */
+    {.id="machine",   .title="Machine Type",
+     .subtitle="PC or Laptop. Laptops get screen-brightness control; PCs do not.",
+     .current=az_status_machine,   .rows=ROWS_MACHINE,   .nrows=AZN(ROWS_MACHINE)},
     { 0 },
 };
 

@@ -132,6 +132,7 @@ const char *az_status_bluetooth(char *buf, size_t n);
 const char *az_status_airplane(char *buf, size_t n);
 const char *az_status_firewall(char *buf, size_t n);
 const char *az_status_network(char *buf, size_t n);
+const char *az_status_machine(char *buf, size_t n);
 
 /* Small shared helper (model.c): run `argv` (NULL-terminated), capture the first line of
  * stdout into buf (size n). Returns 0 on a clean exit, non-zero otherwise. Never blocks

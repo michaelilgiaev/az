@@ -29,6 +29,12 @@ def usage() -> None:
         "  network <wifi|wired|bluetooth|airplane|firewall|ip|status>  Everything\n"
         "                          network related; no option prints an overview. See "
         "`azarch network --help`\n"
+        "  volume <up|down|mute|get>  Change the volume in 7.5% steps (centered cyan bar).\n"
+        "                          See `azarch volume --help`\n"
+        "  brightness <up|down|get>  Change screen brightness in 7.5% steps (laptops only).\n"
+        "                          See `azarch brightness --help`\n"
+        "  machine [--pc|--laptop|--auto]  Show / hard-set the machine type (PC or Laptop);\n"
+        "                          no option prints it. See `azarch machine --help`\n"
         "  --sshd-hypervisor    Install host pubkey from ~/shared/authorized_keys "
         "and start sshd\n"
         "  --resolve-region     Geolocate by IP (pick a server) and set BOTH "
@@ -59,6 +65,12 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_wallpaper(argv[1:])
     if cmd == "network":
         return cmd_network(argv[1:])
+    if cmd == "volume":
+        return cmd_volume(argv[1:])
+    if cmd == "brightness":
+        return cmd_brightness(argv[1:])
+    if cmd == "machine":
+        return cmd_machine(argv[1:])
     if cmd == "--sshd-hypervisor":
         return sshd_hypervisor()
     if cmd == "--resolve-date-time":

@@ -19,32 +19,64 @@ static int failures = 0;
     if (!(cond)) { printf("FAIL: %s (line %d)\n", #cond, __LINE__); failures++; } \
 } while (0)
 
-/* The three top-level subsystems, in order (Network FIRST per the spec), and nothing else. */
+/* The top-level subsystems, in order (Network FIRST per the spec): Network, Theme, Wallpaper,
+ * then Machine Type (the new PC/Laptop screen), and nothing else. */
 static void test_top_level_is_network_theme_wallpaper(void)
 {
     const AzScreen *m = az_screen_find("main");
     CHECK(m != NULL);
-    CHECK(m->nrows == 3);
+    CHECK(m->nrows == 4);
     CHECK(strcmp(m->rows[0].label, "Network") == 0);   /* Network is the first option */
     CHECK(strcmp(m->rows[1].label, "Theme") == 0);
     CHECK(strcmp(m->rows[2].label, "Wallpaper") == 0);
+    CHECK(strcmp(m->rows[3].label, "Machine Type") == 0);
     /* the entry title is the (re)named "Az'arch Settings" */
     CHECK(strcmp(m->title, "Az'arch Settings") == 0);
 }
 
-/* Exactly the three subsystems + the network sub-screens are reachable -- no extras. */
+/* Exactly the subsystems + the network sub-screens + the machine screen are reachable -- no
+ * extras. */
 static void test_screen_set_is_exactly_expected(void)
 {
     const char *want[] = {
         "main", "theme", "wallpaper", "network",
         "network.wifi", "network.wired", "network.bluetooth",
-        "network.airplane", "network.firewall",
+        "network.airplane", "network.firewall", "machine",
     };
     int n = az_screen_count();
     CHECK(n == (int)(sizeof want / sizeof want[0]));
     for (size_t i = 0; i < sizeof want / sizeof want[0]; i++)
         CHECK(az_screen_find(want[i]) != NULL);
     CHECK(az_screen_find("nonesuch") == NULL);
+}
+
+/* The Machine Type screen: it shows the recognised type ONCE via a screen-level `.current`
+ * probe (PC/Laptop), and its rows HARD-SWITCH the type -- Force PC / Force Laptop / Autodetect
+ * -- each an apply that runs `azarch machine ...` (no sudo: it writes the user's own pointer).
+ * This backs the spec's "add Machine Type ... display what it recognizes ... allow a hard
+ * switch." */
+static void test_machine_type_screen(void)
+{
+    const AzScreen *m = az_screen_find("machine");
+    CHECK(m != NULL);
+    CHECK(strcmp(m->title, "Machine Type") == 0);
+    /* the recognised type is shown once, up top (a screen-level Current: probe) */
+    CHECK(m->current == az_status_machine);
+    /* three hard-switch rows: force PC, force Laptop, autodetect */
+    CHECK(m->nrows == 3);
+    CHECK(strcmp(m->rows[0].target, "azarch machine --pc") == 0);
+    CHECK(strcmp(m->rows[1].target, "azarch machine --laptop") == 0);
+    CHECK(strcmp(m->rows[2].target, "azarch machine --auto") == 0);
+    for (int i = 0; i < m->nrows; i++) {
+        CHECK(m->rows[i].kind == AZ_ACT_APPLY);
+        CHECK(m->rows[i].needs_root == 0);       /* writes the user's own config, no sudo */
+        CHECK(m->rows[i].status == NULL);        /* no per-row echo (Current: shows it once) */
+    }
+    /* the main-menu row that descends here carries the machine status as its at-a-glance summary */
+    const AzScreen *main_s = az_screen_find("main");
+    CHECK(main_s->rows[3].status == az_status_machine);
+    CHECK(main_s->rows[3].kind == AZ_ACT_SCREEN);
+    CHECK(strcmp(main_s->rows[3].target, "machine") == 0);
 }
 
 /* Network rows all DESCEND into a real child screen (they are navigation, not applies). */
@@ -207,6 +239,7 @@ int main(void)
 {
     test_top_level_is_network_theme_wallpaper();
     test_screen_set_is_exactly_expected();
+    test_machine_type_screen();
     test_network_rows_descend();
     test_theme_rows_are_applies();
     test_row_command();

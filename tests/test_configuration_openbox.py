@@ -56,7 +56,7 @@ def _load_azarch_command_line_interface():
 
 def test_plan_has_exactly_seventeen_entries():
     # compiler.py iterates PLAN; a dropped/extra entry silently un-emits a file. The
-    # panel-less OpenBox session ships exactly seventeen files via PLAN:
+    # panel-less OpenBox session ships exactly eighteen files via PLAN:
     #   1. ~/.xinitrc                               (startx -> openbox-session)
     #   2. ~/.config/openbox/rc.xml                 (keybinds, theme, titlebar-button binds)
     #   3. ~/.themes/Azarch-Dark/openbox-3/themerc  (DARK Az'arch theme -- the default)
@@ -74,9 +74,10 @@ def test_plan_has_exactly_seventeen_entries():
     #  15. ~/Desktop/azarch-install.desktop          (double-clickable installer launcher)
     #  16. /usr/local/bin/azarch-install             (privileged Calamares wrapper)
     #  17. /usr/local/bin/azarch                      (guest-side command line interface)
+    #  18. /usr/local/lib/azarch/azarch-osd           (the media OSD indicator -- cyan bar)
     # (entries 3-9 are the system theme: dark is the default; `azarch theme` toggles it.)
     # The .bash_profile snippet is appended by emit_plan(), NOT part of PLAN.
-    assert len(desktop.PLAN) == 17
+    assert len(desktop.PLAN) == 18
 
 
 def test_plan_entries_have_the_four_declared_keys():
@@ -143,16 +144,17 @@ def test_openbox_rc_xml_entry_is_home_owned_conf():
 
 
 def test_root_owned_dests_are_wrapper_cli_menu_entry_installed_autostart_and_dconf():
-    # Exactly six PLAN entries are root-owned: the azarch command line interface, the installer wrapper
-    # (both /usr/local/bin), the system-wide installer menu .desktop
-    # (/usr/share/applications), the STAGED "installed" OpenBox autostart the Calamares
-    # install copies onto the target, and the TWO dconf system-theme files (the
+    # Exactly seven PLAN entries are root-owned: the azarch command line interface + the media OSD
+    # indicator (both under /usr/local), the installer wrapper (/usr/local/bin), the system-wide
+    # installer menu .desktop (/usr/share/applications), the STAGED "installed" OpenBox autostart
+    # the Calamares install copies onto the target, and the TWO dconf system-theme files (the
     # color-scheme=prefer-dark keyfile + the dconf profile) under /etc. Everything else is a
     # /home/main dotfile handed to the live user (uid 1000, gid 998).
     root_dests = [e["dest"] for e in desktop.PLAN if e["owner"] == "root"]
     assert set(root_dests) == {
         desktop.INSTALL_WRAPPER_PATH,
         desktop.AZARCH_BIN_PATH,
+        desktop.AZARCH_OSD_SYSTEM_PATH,
         "/usr/share/applications/azarch-install.desktop",
         desktop.INSTALLED_AUTOSTART_STAGING_PATH,
         desktop.DCONF_THEME_KEYFILE_PATH,
@@ -226,9 +228,9 @@ def test_home_owner_gid_is_autologin_group():
 # --- emit_plan(): PLAN + bash_profile, without mutating PLAN ----------------
 
 def test_emit_plan_length_is_eighteen():
-    # 17 PLAN entries + the appended .bash_profile snippet = 18. emit_plan() is the
+    # 18 PLAN entries + the appended .bash_profile snippet = 19. emit_plan() is the
     # single sequence compiler.py iterates.
-    assert len(desktop.emit_plan()) == 18
+    assert len(desktop.emit_plan()) == 19
 
 
 def test_emit_plan_prefix_is_plan():
@@ -255,7 +257,7 @@ def test_emit_plan_does_not_mutate_module_plan():
     before = len(desktop.PLAN)
     desktop.emit_plan()
     desktop.emit_plan()
-    assert len(desktop.PLAN) == before == 17
+    assert len(desktop.PLAN) == before == 18
 
 
 # --- xinitrc: OpenBox X11 session, no flash ---------------------------------
