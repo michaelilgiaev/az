@@ -1184,6 +1184,17 @@ def cache_is_complete() -> bool:
     # full_compile=False is correct regardless of the eventual --full-compile flag.
     if not makepkg._repo_has_all(paths.PKG_REPO, makepkg.produced_names(full_compile=False)):
         return False
+    # Manifest-coverage clause (same spirit as the own-packages clause above): the
+    # offline repo must hold a package file for EVERY downloadable package the
+    # manifest names. A cache can pass all the structural markers yet still lack a
+    # package that was ADDED to packages.x86_64 after the cache was last warmed
+    # (e.g. xorg-xset) -- and an offline pacstrap then dies with "target not found:
+    # <pkg>". Treating any such gap as incomplete forces this run ONLINE to fetch
+    # exactly the missing packages; the next run is then genuinely offline-complete.
+    # The exclusion set (our own built packages) is tier-independent, so
+    # full_compile=False matches the produced_names call above.
+    if downloader.missing_from_repo(paths.PKG_REPO, full_compile=False):
+        return False
     # NOTE: a COMPLETE cache makes the build go offline for BOTH tiers, but the two
     # tiers then diverge inside makepkg.build_own_packages: the default tier trusts
     # the cached own packages and SKIPS makepkg, while a --full-compile offline rerun
@@ -1219,15 +1230,24 @@ class SudoKeepalive:
 
 
 def _stale_cache_notice(offline: bool) -> None:
-    if not offline:
+    # When we are going ONLINE despite an otherwise-warm cache, say WHY: name the
+    # manifest packages the offline repo is missing (the coverage clause in
+    # cache_is_complete demoted this run to online precisely because these have no
+    # file in cache/pkgs/repo/). Without this, adding a package to packages.x86_64
+    # would silently trigger a fresh download with no explanation. Best-effort:
+    # never let diagnostics abort the build.
+    if offline:
         return
-    idx = paths.LOCALREPO_INDEX_TAR
     try:
-        if idx.exists() and paths.PACKAGES_FILE.stat().st_mtime > idx.stat().st_mtime:
+        if not any(paths.PKG_REPO.glob("*.pkg.tar.zst")):
+            return  # no cache at all -- a normal cold build, nothing "stale".
+        missing = downloader.missing_from_repo(paths.PKG_REPO, full_compile=False)
+        if missing:
+            shown = ", ".join(missing[:12]) + (", ..." if len(missing) > 12 else "")
             sys.stderr.write(
-                "[!] packages.x86_64 is newer than the cached package index. If you ADDED\n"
-                "    packages, this offline build won't have them and pacstrap may fail with\n"
-                "    'target not found'. Re-run with FORCE_ONLINE=1 (or 'git clean -Xdf').\n"
+                f"[!] {len(missing)} manifest package(s) are not in the offline cache "
+                f"and will be downloaded: {shown}\n"
+                "    (packages.x86_64 gained entries since the cache was last warmed.)\n"
             )
     except OSError:
         pass

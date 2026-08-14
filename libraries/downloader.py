@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -28,9 +29,83 @@ import paths
 
 ProgressCb = Callable[[int], None]
 
+# Parallel-download back-off ladder for the `pacman -Sw` cache fetch.
+#
+# archive.archlinux.org (the PINNED snapshot host -- see pacman.ARCH_SNAPSHOT) rate-
+# limits aggressive parallel pulls: a full ~1.8 GiB transaction at 5 streams reliably
+# trips its abuse throttle partway through ("too many errors from archive.archlinux.org
+# ... failed to retrieve some files ... download library error"). Because `pacman -Sw
+# --cachedir` is RESUMABLE (finished packages are durable, partial files continue), the
+# fix is simply to retry -- each attempt gentler on the server: 5 streams, then 2, then
+# 1 (fully serial). Monotonically non-increasing so we never hammer the host harder
+# after it has already complained. Each retry re-fetches only what is still missing.
+_PARALLEL_LADDER = (5, 2, 1)
+
+# Seconds to pause before the Nth retry (index 0 == the pause after the first failure).
+# A short, growing back-off gives the archive's throttle a moment to relax without
+# stalling the build for long. len == ladder-1: there is no pause after the last rung.
+_RETRY_BACKOFF = (10, 30)
+
 
 class PackageError(RuntimeError):
     pass
+
+
+def _download_with_retry(attempt: Callable[[int], int],
+                         sleep: Callable[[float], None] = time.sleep) -> None:
+    """Run `attempt(parallel)` down the _PARALLEL_LADDER until one returns rc 0.
+
+    attempt(parallel) performs ONE `pacman -Sw` with that many parallel streams and
+    returns its exit code (0 == success). On a non-zero code we pause (per _RETRY_BACKOFF)
+    and drop to the next, gentler rung; the resumable cachedir means the retry only picks
+    up the packages the throttled attempt failed to fetch. If every rung fails, raise
+    PackageError. `sleep` is injected so the orchestration is unit-testable without real
+    pauses or a real pacman."""
+    for i, parallel in enumerate(_PARALLEL_LADDER):
+        if attempt(parallel) == 0:
+            return
+        remaining = len(_PARALLEL_LADDER) - i - 1
+        if remaining:
+            nxt = _PARALLEL_LADDER[i + 1]
+            pause = _RETRY_BACKOFF[min(i, len(_RETRY_BACKOFF) - 1)]
+            print(f"[!] Package download hit the archive server's rate limit "
+                  f"(parallel={parallel}). Backing off {pause}s, then retrying with "
+                  f"parallel={nxt} ({remaining} attempt(s) left).")
+            sleep(pause)
+    raise PackageError("package download")
+
+
+def manifest_packages() -> list[str]:
+    """The package names in packages.x86_64, parsed EXACTLY as mkarchiso (and the
+    on-disk installer) parse it: drop full-line and trailing `# ...` comments and
+    blank lines, keep the bare package names in order. This is the single source of
+    truth for "what the manifest asks for" -- _sync_and_download() (what to
+    download) and compiler.cache_is_complete() (what the offline repo must already
+    hold) both read it, so the download set and the completeness check can never
+    diverge. (Package names never contain '#'.)"""
+    return [tok for line in paths.PACKAGES_FILE.read_text().splitlines()
+            if (tok := line.split("#", 1)[0].strip())]
+
+
+def downloadable_packages(full_compile: bool = False) -> list[str]:
+    """manifest_packages() minus the packages the makepkg stage builds ITSELF
+    (calamares, librewolf). Those exist on no Arch mirror, so `pacman -Sw` would
+    abort on them, and they are never expected in the DOWNLOADED set -- they are
+    folded into the offline repo by the makepkg stage instead. This is the exact set
+    `-Sw` is given AND the exact set the offline repo must cover to be complete."""
+    from makepkg import produced_names
+    own = set(produced_names(full_compile))
+    return [p for p in manifest_packages() if p not in own]
+
+
+def missing_from_repo(pkg_repo: Path, full_compile: bool = False) -> list[str]:
+    """The downloadable manifest packages that have NO package file in pkg_repo.
+    Empty => the offline repo covers every package the manifest will pacstrap; a
+    non-empty result means an offline build would fail with 'target not found' for
+    exactly these, so the caller must go online and fetch them. Matching mirrors
+    makepkg._repo_has_all: a name is covered iff `<name>-*.pkg.tar.zst` exists."""
+    return [p for p in downloadable_packages(full_compile)
+            if not any(pkg_repo.glob(f"{p}-*.pkg.tar.zst"))]
 
 
 def _sudo() -> list[str]:
@@ -59,8 +134,8 @@ def _split_pkg(basename: str) -> tuple[str, str, str]:
     return key, name, f"{ver}-{rel}"
 
 
-def _write_download_conf(dest: Path) -> Path:
-    dest.write_text(pacman_cfg.download_conf() + "\n", encoding="utf-8")
+def _write_download_conf(dest: Path, parallel_downloads: int = 5) -> Path:
+    dest.write_text(pacman_cfg.download_conf(parallel_downloads) + "\n", encoding="utf-8")
     return dest
 
 
@@ -152,36 +227,34 @@ def _sync_and_download(sudo, dlconf, gpgdir, pkg_db, pkg_repo, progress, phase=l
             raise PackageError("Could not sync package databases and no cached DB to fall back on.")
 
     print("[*] Preparing package list...")
-    # Parse the manifest the SAME way mkarchiso does (and the on-disk installer):
-    # drop full-line and trailing `# ...` comments and blank lines, keeping only
-    # package names. packages.x86_64 carries a header + a Stock/Az'arch delimiter,
-    # so a bare .split() would feed those comment words to `pacman -Sw` as bogus
-    # targets and fail the cache download. (Package names never contain '#'.)
-    pkgs = [tok for line in paths.PACKAGES_FILE.read_text().splitlines()
-            if (tok := line.split("#", 1)[0].strip())]
-    # EXCLUDE the packages the makepkg stage builds ITSELF: they exist on no Arch
-    # mirror, so `pacman -Sw` would abort with "target not found". They are built by
-    # the makepkg stage (compiler.py step 13) and folded into the same offline repo
-    # right AFTER this download, then indexed alongside everything else.
-    #   Both tiers -> calamares AND librewolf are built here, so both are excluded.
-    #                 (calamares was in extra/ once, but Arch dropped it -- if it is
-    #                 NOT excluded, `pacman -Sw calamares` fails with "target not
-    #                 found" and the whole download aborts. This is that bug's fix.)
-    from makepkg import produced_names
-    own = set(produced_names(full_compile))
-    pkgs = [p for p in pkgs if p not in own]
+    # The manifest minus our own built packages -- see downloadable_packages().
+    # (calamares was in extra/ once, but Arch dropped it; librewolf lives on no
+    # mirror either -- both are compiled by the makepkg stage right after this
+    # download and folded into the same offline repo, so `pacman -Sw` must NOT be
+    # asked for them or it aborts the whole download with "target not found".)
+    # Sharing this with compiler.cache_is_complete() keeps the download set and the
+    # offline-completeness check from ever drifting apart.
+    pkgs = downloadable_packages(full_compile)
 
     print("[*] Downloading missing packages into the persistent cache (resumable)...")
     phase(f"downloading {len(pkgs)} packages into cache")
     progress(20)
-    # Teed so the minute-long download's per-package lines reach full.log live
-    # (run_teed already feeds stdin from /dev/null, as this call did explicitly).
-    rc = logstream.run_teed(
-        sudo + ["pacman", "-Sw", "--config", str(dlconf), "--gpgdir", str(gpgdir),
-                "--noconfirm", "--cachedir", str(pkg_repo), "--dbpath", str(pkg_db)] + pkgs,
-    )
-    if rc != 0:
-        raise PackageError("package download")
+
+    def _attempt(parallel: int) -> int:
+        # Rewrite the SAME download conf with this rung's parallelism (pacman has no
+        # CLI knob for it), then run one resumable `pacman -Sw`. Teed so the download's
+        # per-package lines reach full.log live (run_teed feeds stdin from /dev/null,
+        # as this call did explicitly).
+        _write_download_conf(dlconf, parallel_downloads=parallel)
+        return logstream.run_teed(
+            sudo + ["pacman", "-Sw", "--config", str(dlconf), "--gpgdir", str(gpgdir),
+                    "--noconfirm", "--cachedir", str(pkg_repo), "--dbpath", str(pkg_db)] + pkgs,
+        )
+
+    # Retry down the parallelism ladder: archive.archlinux.org throttles aggressive
+    # pulls, and the resumable cachedir makes each gentler retry cheap -- see
+    # _download_with_retry / _PARALLEL_LADDER. Raises PackageError if every rung fails.
+    _download_with_retry(_attempt)
     progress(440)
 
 

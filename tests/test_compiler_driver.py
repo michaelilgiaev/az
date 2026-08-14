@@ -217,10 +217,76 @@ def test_cache_complete_true_when_all_present(monkeypatch, tmp_path):
     (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "librewolf-1.0-1-x86_64.pkg.tar.zst").write_text("")
     (sync / "core.db").write_text("")
+    # Every DOWNLOADED manifest package must also have a file in the repo (the
+    # coverage clause). Point the manifest at a tiny file whose one entry is
+    # present, so completeness turns only on the structural + own-package markers.
+    manifest = tmp_path / "packages.x86_64"
+    manifest.write_text("# header\nsomepkg\n")
 
     monkeypatch.setattr(compiler.paths, "LOCALREPO_INDEX", idx)
     monkeypatch.setattr(compiler.paths, "PKG_REPO", repo)
     monkeypatch.setattr(compiler.paths, "PKG_SYNC_DB", sync)
+    monkeypatch.setattr(compiler.paths, "PACKAGES_FILE", manifest)
+    monkeypatch.setattr(compiler.downloader.paths, "PACKAGES_FILE", manifest)
+    assert compiler.cache_is_complete() is True
+
+
+def test_cache_complete_false_when_manifest_package_missing(monkeypatch, tmp_path):
+    # The 'target not found' guard: structure + synced DB + BOTH own packages are
+    # present, but a package named in packages.x86_64 was never downloaded into the
+    # offline repo (exactly what happens right after a new package is added to the
+    # manifest). This MUST read as incomplete so the build goes ONLINE and fetches
+    # the missing package -- otherwise the offline pacstrap aborts with
+    # 'error: target not found: <pkg>'. Regression test for the xorg-xset failure.
+    monkeypatch.setenv("FORCE_ONLINE", "0")
+    repo = tmp_path / "repo"
+    sync = tmp_path / "db" / "sync"
+    repo.mkdir(parents=True)
+    sync.mkdir(parents=True)
+    idx = repo / "pacstrap-azarch-repo.db"
+    idx.write_text("")
+    (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
+    (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
+    (repo / "librewolf-1.0-1-x86_64.pkg.tar.zst").write_text("")
+    (sync / "core.db").write_text("")
+    # Manifest names a second package that has NO file in the repo.
+    manifest = tmp_path / "packages.x86_64"
+    manifest.write_text("# header\nsomepkg\nxorg-xset\n")
+
+    monkeypatch.setattr(compiler.paths, "LOCALREPO_INDEX", idx)
+    monkeypatch.setattr(compiler.paths, "PKG_REPO", repo)
+    monkeypatch.setattr(compiler.paths, "PKG_SYNC_DB", sync)
+    monkeypatch.setattr(compiler.paths, "PACKAGES_FILE", manifest)
+    monkeypatch.setattr(compiler.downloader.paths, "PACKAGES_FILE", manifest)
+    assert compiler.cache_is_complete() is False
+
+
+def test_cache_complete_ignores_own_packages_absent_from_repo_files(monkeypatch, tmp_path):
+    # The coverage clause must EXCLUDE our own built packages the same way the
+    # downloader excludes them from `pacman -Sw`: calamares/librewolf live on no
+    # mirror, so their manifest entries must not be counted as "missing downloads"
+    # (their presence is already enforced by the own-packages clause via the file
+    # they DO get after makepkg). Here calamares is in the manifest AND present as a
+    # file, librewolf is in the manifest AND present -- and a plain Arch pkg covers.
+    monkeypatch.setenv("FORCE_ONLINE", "0")
+    repo = tmp_path / "repo"
+    sync = tmp_path / "db" / "sync"
+    repo.mkdir(parents=True)
+    sync.mkdir(parents=True)
+    idx = repo / "pacstrap-azarch-repo.db"
+    idx.write_text("")
+    (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
+    (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
+    (repo / "librewolf-1.0-1-x86_64.pkg.tar.zst").write_text("")
+    (sync / "core.db").write_text("")
+    manifest = tmp_path / "packages.x86_64"
+    manifest.write_text("# header\nsomepkg\ncalamares\nlibrewolf\n")
+
+    monkeypatch.setattr(compiler.paths, "LOCALREPO_INDEX", idx)
+    monkeypatch.setattr(compiler.paths, "PKG_REPO", repo)
+    monkeypatch.setattr(compiler.paths, "PKG_SYNC_DB", sync)
+    monkeypatch.setattr(compiler.paths, "PACKAGES_FILE", manifest)
+    monkeypatch.setattr(compiler.downloader.paths, "PACKAGES_FILE", manifest)
     assert compiler.cache_is_complete() is True
 
 

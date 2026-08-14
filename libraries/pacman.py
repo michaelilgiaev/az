@@ -223,8 +223,15 @@ def _net_repos(multilib: bool) -> str:
     return block
 
 
-def download_conf() -> str:
+def download_conf(parallel_downloads: int = 5) -> str:
     """Host-independent configuration for the package-cache download step (cache-pkgs).
+
+    parallel_downloads controls the ParallelDownloads line. It defaults to 5, but the
+    download retry (downloader._sync_and_download) regenerates this config with a LOWER
+    value on each attempt: archive.archlinux.org throttles aggressive parallel pulls
+    ("too many errors from archive.archlinux.org"), and pacman exposes ParallelDownloads
+    ONLY through the config file -- there is no CLI flag -- so backing off means
+    re-emitting the config.
 
     Fetches from a PINNED Arch Linux Archive snapshot (ARCH_SNAPSHOT) and never Includes
     the host mirrorlist, so the fetch behaves identically on Manjaro, real Arch, and
@@ -252,7 +259,7 @@ def download_conf() -> str:
 Architecture      = x86_64
 HoldPkg           = pacman glibc
 CheckSpace
-ParallelDownloads = 5
+ParallelDownloads = {parallel_downloads}
 SigLevel          = Never
 LocalFileSigLevel = Never
 # Intentionally NO 'DownloadUser = alpm': pacman runs as root here and writes into
