@@ -164,6 +164,10 @@ bluez-utils
 cups
 webp-pixbuf-loader
 xclip
+# xdotool: X11 automation CLI (simulate keys/clicks, find/activate/move windows by name or
+# class). A general-purpose scripting utility for the OpenBox desktop -- useful for user
+# automation and for driving/inspecting GUI apps from the shell.
+xdotool
 go
 zip
 unzip
@@ -274,7 +278,35 @@ mailcap
 librewolf
 gedit
 gimp
-# dolphin -- the file manager, kept as a standalone application (it is NOT part of
-# the removed Plasma shell; it pulls KDE Frameworks libs but runs under OpenBox fine).
-dolphin
+# --- Thunar file manager (GTK, replaces Dolphin) --------------------------
+# Dolphin (KDE/KF6) was DROPPED: too many Az'arch tweaks required fighting hardcoded
+# C++ strings, QRC templates and KIOSK lockdowns. Thunar (Xfce's GTK file manager) is
+# the better fit -- it matches the rest of the GTK desktop (gedit/gimp/xviewer + the
+# Adwaita theme + the QT_QPA_PLATFORMTHEME=gtk3 bridge), is minimal and stable, and its
+# custom right-click actions (~/.config/Thunar/uca.xml) are a first-class feature that
+# runs any command with mime/pattern conditions -- exactly what the "Create Link" and
+# "Edit with gedit/gimp" requirements need. Configured by modifications/thunar/.
+thunar
+# thunar-volman: removable-media handling (auto-mount/auto-run of USB drives, discs).
+# Thunar's "Removable drives and media" is this plugin; without it Thunar cannot manage
+# hotplugged volumes. (Its extra Settings launcher is suppressed in the app menu.)
+thunar-volman
+# thunar-archive-plugin: "Extract Here" / "Create Archive" right-click entries, backed by
+# file-roller (already pulled in). Makes archives first-class in the context menu.
+thunar-archive-plugin
+# tumbler: the thumbnail service Thunar calls to render image/video/PDF thumbnails in the
+# icon view. Without it Thunar shows generic icons instead of previews.
+tumbler
+# zenity: GTK dialog helper. The "Create Link" custom action prompts for a name + target
+# via zenity (GTK, fits the desktop better than kdialog). Also generally useful for
+# shell-driven GUI prompts.
+zenity
+# exo: provides exo-open, the Xfce "preferred applications" launcher Thunar's default
+# "Open Terminal Here" uses (`exo-open --launch TerminalEmulator`). Az'arch points the
+# preferred TerminalEmulator at kitty (packages/azarch/default_applications.py).
+exo
+# --- xviewer (the "Photos" default image viewer, GTK) ---------------------
+# The XDG "Photos"/image default (Default Applications maps image/* to it). Ships with an
+# off-putting "spying eye" icon that modifications/xviewer.py replaces with an Az'arch icon.
+xviewer
 qalculate-gtk

@@ -334,22 +334,25 @@ def test_gtk3_build_deps_are_provisioned_on_the_build_host():
     )
 
 
-# --- Usage seed (unchanged contract: LibreWolf, kitty, Dolphin) --------------
+# --- Usage seed (contract: LibreWolf, kitty, Thunar) -------------------------
 
 def test_usage_seed_orders_the_default_top_three():
     # A fresh profile has no launch history, so the menu would sort alphabetically. The
-    # seed store fixes the STARTING top THREE to LibreWolf, kitty, Dolphin (descending),
-    # keyed by .desktop id -- EXACTLY three per the user's request.
+    # seed store fixes the STARTING top THREE to LibreWolf, kitty, Thunar (descending),
+    # keyed by .desktop id -- EXACTLY three per the user's request. (Thunar replaced Dolphin
+    # as the file manager.)
     seed = json.loads(am.usage_seed_json())
     ranked = sorted(seed.items(), key=lambda kv: -kv[1])
     assert [k for k, _ in ranked] == [
         "librewolf.desktop",
         "kitty.desktop",
-        "org.kde.dolphin.desktop",
+        "thunar.desktop",
     ], ranked
     assert len(seed) == 3, seed
     assert "gimp.desktop" not in seed
     assert "systemsettings.desktop" not in seed
+    # The old Dolphin seed must be gone (Dolphin was dropped).
+    assert "org.kde.dolphin.desktop" not in seed
 
 
 def test_usage_seed_matches_store_format_and_is_home_owned():

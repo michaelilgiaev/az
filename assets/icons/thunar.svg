@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Az'arch file-manager (Thunar) icon. A clean folder in the Az'arch blue gradient on
+       the dark rounded-rect badge, matching assets/icons/azarch.svg (the installer icon):
+       same #010512 rounded square (rx 56) and the same top-to-bottom cyan->blue gradient.
+       Deliberately minimal to match the flat, get-out-of-the-way desktop. Rasterized to
+       hicolor PNGs by modifications/thunar. -->
+  <defs>
+    <linearGradient id="azFolder" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+    <linearGradient id="azFolderBack" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0698D6"/>
+      <stop offset="1" stop-color="#0052CC"/>
+    </linearGradient>
+  </defs>
+  <!-- The Az'arch dark badge. -->
+  <rect x="0" y="0" width="256" height="256" rx="56" ry="56" fill="#010512"/>
+  <!-- Folder back panel + tab (slightly darker, sits behind the front flap). -->
+  <path fill="url(#azFolderBack)"
+        d="M56 84
+           a16 16 0 0 1 16 -16
+           h44
+           a16 16 0 0 1 12 6
+           l12 15
+           h48
+           a16 16 0 0 1 16 16
+           v79
+           a16 16 0 0 1 -16 16
+           H72
+           a16 16 0 0 1 -16 -16
+           Z"/>
+  <!-- Folder front flap (the brighter gradient, offset down so the tab shows). -->
+  <path fill="url(#azFolder)"
+        d="M56 110
+           a16 16 0 0 1 16 -16
+           h112
+           a16 16 0 0 1 16 16
+           v70
+           a16 16 0 0 1 -16 16
+           H72
+           a16 16 0 0 1 -16 -16
+           Z"/>
+</svg>

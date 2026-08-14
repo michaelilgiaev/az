@@ -41,6 +41,7 @@ from ownership import Ownership
 from progress import ProgressBar
 from packages.application_menu import application_menu
 from packages.azarch import terminal_user_interface_build
+from packages.azarch import default_applications
 from packages.timedate import timedate
 from modifications.calamares import calamares
 from modifications.calamares import locale
@@ -58,6 +59,9 @@ from modifications import vlc
 from modifications import gedit
 from modifications import libreoffice
 from modifications import gimp
+from modifications import home_directory
+from modifications import thunar
+from modifications import xviewer
 import installer
 import pacman
 import profile
@@ -213,6 +217,7 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # into an OpenBox X11 session. The Calamares configuration tree lands under /etc/calamares.
     bar.step("Overlay OpenBox desktop and Calamares configuration")
     _emit_desktop(airootfs, home)
+    _emit_homedir(airootfs, home)
     _emit_apps(airootfs, home, ea)
     _emit_calamares(airootfs)
     _emit_tty1_autologin(airootfs)
@@ -504,9 +509,13 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
     # kitty (icon: SVG asset copy + PNG removals + titlebar PNG render) | vlc (home vlcrc) |
     # gedit (system .desktop + gschema override) | libreoffice (home registrymodifications.xcu,
     # skips the first-run popups) | gimp (home gimprc, skips the Tip-of-the-Day + fresh-profile
-    # Welcome intro dialogs; GIMP itself loads normally -- no preload). One loop over all five.
+    # Welcome intro dialogs; GIMP itself loads normally -- no preload) | thunar (home thunarrc +
+    # xfconf channel + gtk.css + bookmarks + uca.xml; system link script + custom icon +
+    # thunar.desktop override) | xviewer (custom icon + xviewer.desktop Icon override). One loop.
     for entry in (kitty.emit_plan() + vlc.emit_plan()
-                  + gedit.emit_plan() + libreoffice.emit_plan() + gimp.emit_plan()):
+                  + gedit.emit_plan() + libreoffice.emit_plan() + gimp.emit_plan()
+                  + thunar.emit_plan() + xviewer.emit_plan()
+                  + default_applications.emit_plan()):
         dest_abs = entry["dest"]                       # absolute path on the target
         # Package-owned override path? Redirect its body to the post-pacstrap staging dir
         # (or drop it if suppress-only) instead of writing into the conflicting overlay.
@@ -567,6 +576,41 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
         subprocess.run(_sudo() + ["glib-compile-schemas", str(schemas_dir)], check=False)
     # re-assert ownership of the live user's tree (new home files were added under it).
     subprocess.run(_sudo() + ["chown", "-R", "1000:998", str(home)], check=False)
+
+
+def _emit_homedir(airootfs: Path, home: Path) -> None:
+    """Create the home-directory LAYOUT -- the top-level folders and convenience symlinks
+    that modifications/home_directory defines as the single source of truth (and that Thunar's
+    sidebar mirrors). Unlike the emit_plan() modules this emits no file CONTENT: directories
+    and symlinks are not text, so it walks home_directory's plain data with emit.mkdir()/
+    emit.link() rather than a builder loop.
+
+    Everything is created in BOTH the live user's /home/main AND /etc/skel, so a
+    Calamares-created user on the installed system inherits the identical layout. Symlink
+    targets are RELATIVE (home_directory keeps them that way on purpose) so each link is
+    valid in every home it lands in -- an absolute /home/main/... target would dangle under
+    /etc/skel and in a copied-out /home/<newuser>. The XDG trash chain
+    (.local/share/Trash/{files,info}) is created BEFORE the "Trash" symlink so it resolves
+    to a real directory instead of dangling.
+
+    Runs before _emit_apps's closing `chown -R 1000:998`, so the new dirs/links in
+    /home/main are swept into the live user's ownership with the rest of the tree; /etc/skel
+    stays root-owned (skel is copied, not owned, by Calamares)."""
+    skel = airootfs / "etc/skel"
+    # The live user's /home/main (the passed `home`, == airootfs/home/main) AND /etc/skel.
+    roots = (home, skel)
+    for root in roots:
+        # 1. The top-level directories (Desktop, Downloads, ... Videos).
+        for name in home_directory.DIRECTORIES:
+            emit.mkdir(root / name)
+        # 2. The XDG trash chain -- created BEFORE the Trash symlink so it does not dangle.
+        for rel in home_directory.TRASH_DIRS:
+            emit.mkdir(root / rel)
+        # 3. The convenience symlinks (Trash/Cache/Config/Bashrc/Local). RELATIVE targets,
+        #    verbatim from home_directory.LINKS, so they resolve against the link's own
+        #    directory in every home. emit.link replaces any pre-existing entry.
+        for name, target in home_directory.LINKS:
+            emit.link(target, root / name)
 
 
 def _emit_calamares(airootfs: Path) -> None:

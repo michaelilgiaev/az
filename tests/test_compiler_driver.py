@@ -106,6 +106,46 @@ def test_link_services_enables_sleep_policy(tmp_path):
     assert os.readlink(link) == "/etc/systemd/system/azarch-sleep-policy.service"
 
 
+def test_run_calls_emit_homedir():
+    # run() must create the home-directory layout (folders + convenience symlinks) between
+    # the desktop overlay and the app overlay, so _emit_apps's closing chown covers it.
+    src = inspect.getsource(compiler.run)
+    assert "_emit_homedir(airootfs, home)" in src
+
+
+def test_emit_homedir_creates_layout_in_home_and_skel(tmp_path):
+    # BEHAVIORAL: _emit_homedir lays down the top-level folders, the XDG trash chain and the
+    # convenience symlinks in BOTH /home/main and /etc/skel (so a Calamares-created user
+    # inherits the identical layout). Symlinks must be relative (valid in every home).
+    import os
+
+    from modifications import home_directory as hd
+
+    airootfs = tmp_path / "airootfs"
+    home = airootfs / "home/main"
+    home.mkdir(parents=True)
+    (airootfs / "etc/skel").mkdir(parents=True)
+
+    compiler._emit_homedir(airootfs, home)
+
+    for root in (home, airootfs / "etc/skel"):
+        # 1. Every top-level directory exists and is a real dir.
+        for name in hd.DIRECTORIES:
+            assert (root / name).is_dir(), f"missing dir {name} under {root}"
+        # 2. The XDG trash chain exists (files + info) so Trash does not dangle.
+        for rel in hd.TRASH_DIRS:
+            assert (root / rel).is_dir(), f"missing trash dir {rel} under {root}"
+        # 3. Every convenience symlink exists, is a symlink, and has a RELATIVE target.
+        for name, target in hd.LINKS:
+            link = root / name
+            assert link.is_symlink(), f"{name} is not a symlink under {root}"
+            got = os.readlink(link)
+            assert got == target, f"{name} -> {got!r}, expected {target!r}"
+            assert not os.path.isabs(got), f"{name} target must be relative: {got!r}"
+        # 4. The Trash symlink resolves to a real directory (the chain made it non-dangling).
+        assert (root / "Trash").resolve().is_dir()
+
+
 def test_brand_boot_menus_writes_all_six_boot_files(tmp_path):
     # BEHAVIORAL: _brand_boot_menus lays the rebranded systemd-boot + syslinux menus
     # over a copied releng tree. Assert the exact six files land with our content.

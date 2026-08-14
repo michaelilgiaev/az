@@ -88,6 +88,39 @@ def test_app_override_cp_sh_plants_replacements_and_removes_suppressed():
     assert "rm -f /mnt/usr/share/pixmaps/kitty.png" in mnt
 
 
+def test_thunar_and_xviewer_desktop_overrides_are_planted():
+    # The Thunar rename/icon .desktop, the xviewer icon .desktop, and the four NoDisplay
+    # suppressions (Bulk Rename, Thunar Preferences, Removable Drives, About Xfce) are all
+    # package-owned, so they must be planted post-pacstrap from the staging dir. (Their bodies
+    # are staged by compiler._emit_apps from the module emit_plans.)
+    live = pacman.app_override_cp_sh()
+    for name in (
+        "thunar.desktop",
+        "xviewer.desktop",
+        "thunar-bulk-rename.desktop",
+        "thunar-settings.desktop",
+        "thunar-volman-settings.desktop",
+        "xfce4-about.desktop",
+    ):
+        assert (f"install -Dm644 /root/azarch/apps/{name} "
+                f"/usr/share/applications/{name}") in live, name
+
+
+def test_dolphin_is_gone_from_manifest_and_thunar_present():
+    # PROMPT: Dolphin dropped, Thunar added (+ companions), xviewer added.
+    import paths
+    toks = [line.split("#", 1)[0].strip()
+            for line in paths.PACKAGES_FILE.read_text().splitlines()]
+    toks = [t for t in toks if t]
+    assert "dolphin" not in toks
+    assert "thunar" in toks
+    assert "thunar-volman" in toks
+    assert "tumbler" in toks
+    assert "zenity" in toks
+    assert "exo" in toks
+    assert "xviewer" in toks
+
+
 def test_build_profile_conf_multilib_off():
     conf = pacman.build_profile_conf()
     assert "\n[multilib]\n" not in conf

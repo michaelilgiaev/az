@@ -76,7 +76,7 @@ MENU_DESKTOP_SYSTEM_PATH = (
 # orders apps most-launched first; on a FRESH profile there is no history, so without
 # this everything would sort alphabetically. Seeding a few counts fixes the STARTING top
 # of the list to EXACTLY the first three apps a new user wants -- LibreWolf, kitty,
-# Dolphin (descending) -- while leaving it fully dynamic: as the user opens apps the
+# Thunar (descending) -- while leaving it fully dynamic: as the user opens apps the
 # window watcher bumps these counts and the order re-sorts, so the seed only decides the
 # initial arrangement. Keyed by .desktop id (usage.c's key); counts are spaced so the
 # intended order is unambiguous. Emitted by modifications/openbox.py as a home-owned
@@ -88,12 +88,12 @@ MENU_USAGE_SEED_SYSTEM_PATH = (
 # desktop_id -> starting launch count. Descending so the menu's sort (-count, name) puts
 # them in exactly this order at the top of a fresh menu; the tail (everything else,
 # count 0) stays alphabetical. EXACTLY three are seeded per the user's request ("make it
-# those three when it's first installed"): LibreWolf, kitty, Dolphin. Everything else
+# those three when it's first installed"): LibreWolf, kitty, Thunar. Everything else
 # (GIMP included) starts in the count-0 alphabetical tail and floats up only as used.
 MENU_USAGE_SEED: dict[str, int] = {
     "librewolf.desktop": 3,          # LibreWolf (browser)
     "kitty.desktop": 2,              # kitty (terminal)
-    "org.kde.dolphin.desktop": 1,   # Dolphin (file manager)
+    "thunar.desktop": 1,             # Thunar (file manager -- replaced Dolphin)
 }
 
 # The menu launcher's icon glyph: the standard "application-menu" hamburger, so the
@@ -163,7 +163,7 @@ Keywords=menu;launcher;azarch;
 
 def usage_seed_json() -> str:
     """The seed launch-frequency store (usage.json) that fixes the STARTING top three of
-    the menu to LibreWolf, kitty, Dolphin on a fresh profile.
+    the menu to LibreWolf, kitty, Thunar on a fresh profile.
 
     Rendered in the SAME compact form the C usage store writes (json with separators
     (",", ":")) so the store reads it straight back (the emitter adds a trailing newline,

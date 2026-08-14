@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Az'arch "Photos" (xviewer) icon. Replaces xviewer's off-putting "spying eye" default
+       with the universal photo glyph (a framed picture of a sun over mountains) in the
+       Az'arch blue gradient on the dark rounded-rect badge, matching assets/icons/azarch.svg
+       and assets/icons/thunar.svg (same #010512 rx 56 square, same cyan to blue gradient).
+       Rasterized to hicolor PNGs by modifications/xviewer. -->
+  <defs>
+    <linearGradient id="azPhoto" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+  </defs>
+  <!-- The Az'arch dark badge. -->
+  <rect x="0" y="0" width="256" height="256" rx="56" ry="56" fill="#010512"/>
+  <!-- Picture frame (rounded rect in the brand gradient). -->
+  <rect x="52" y="60" width="152" height="136" rx="20" ry="20" fill="url(#azPhoto)"/>
+  <!-- Inner "photo" cut-out (the dark badge colour, so the scene reads as an image). -->
+  <rect x="68" y="76" width="120" height="104" rx="10" ry="10" fill="#010512"/>
+  <!-- Sun. -->
+  <circle cx="96" cy="104" r="13" fill="url(#azPhoto)"/>
+  <!-- Mountains (two peaks), clipped to the inner photo rounded rect. -->
+  <clipPath id="photoClip">
+    <rect x="68" y="76" width="120" height="104" rx="10" ry="10"/>
+  </clipPath>
+  <g clip-path="url(#photoClip)">
+    <path fill="url(#azPhoto)"
+          d="M68 180
+             L112 128
+             L140 160
+             L162 132
+             L188 168
+             V180
+             Z"/>
+  </g>
+</svg>
