@@ -37,6 +37,8 @@ from __future__ import annotations
 
 from modifications.thunar import actions
 from modifications.thunar import launcher
+from modifications.thunar import live_sidebar
+from modifications.thunar import locale
 from modifications.thunar import menu_cleanup
 from modifications.thunar import settings
 from modifications.thunar import sidebar
@@ -54,6 +56,7 @@ THUNAR_ICON_NAME = launcher.THUNAR_ICON_NAME
 ICON_ASSET = launcher.ICON_ASSET
 ICON_SCALABLE_PATH = launcher.ICON_SCALABLE_PATH
 ICON_PNG_SIZES = launcher.ICON_PNG_SIZES
+LIVE_SIDEBAR_SYNC_DEST = live_sidebar.SYNC_SCRIPT_DEST
 
 _CONF = 0o644
 _EXEC = 0o755
@@ -141,4 +144,20 @@ def emit_plan() -> list[dict]:
             "mode": _CONF,
             "owner": "root",
         })
+    # The gettext .mo override catalog (relabels "Places" -> "Home Directory", the built-in
+    # default-opener to "Edit with %s", and the Create Folder/Document labels -- PROMPT batch
+    # items 3/7/8). A BINARY blob (bytes_builder), shipped ROOT-owned at the standard system
+    # locale path for EACH locale the ISO generates, so it takes effect with the session LANG.
+    for loc in locale.LOCALES:
+        plan.append({
+            "builder": None,
+            "bytes_builder": locale.mo_bytes,
+            "dest": locale.mo_path(loc),
+            "mode": _CONF,
+            "owner": "root",
+        })
+    # The live-sidebar sync helper (regenerates the GTK bookmarks from the ACTUAL home contents
+    # at runtime, so additions show up in the sidebar -- PROMPT). Root-owned executable; wired
+    # into session startup by modifications/openbox's autostart.
+    plan += live_sidebar.emit_plan()
     return plan

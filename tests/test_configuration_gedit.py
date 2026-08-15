@@ -99,20 +99,23 @@ def test_schema_override_enables_the_notepad_plugin():
     assert gedit.ACTIVE_PLUGINS[-1] == "gedit-modifications"
 
 
-def test_schema_override_sets_editor_font_to_18():
-    # Az'arch pins a fixed 18pt editor font. use-default-font MUST be false (else gedit
-    # ignores editor-font and uses the system fixed-width font), and editor-font is the
-    # Pango description 'Monospace 18', under the editor preferences schema.
+def test_schema_override_sets_editor_font_from_scale():
+    # Az'arch pins a fixed editor font at the STOCK baseline from the single scale source (the
+    # GLOBAL SCALE's DPI channel bumps it -- at 1.35 it renders ~= the old 18pt). use-default-font
+    # MUST be false (else gedit ignores editor-font), and editor-font is 'Monospace <stock>'.
+    from modifications import scale
     out = gedit.gschema_override()
     assert gedit.GEDIT_EDITOR_SCHEMA == "org.gnome.gedit.preferences.editor"
     assert f"[{gedit.GEDIT_EDITOR_SCHEMA}]" in out
-    assert gedit.GEDIT_FONT_SIZE == 18
-    assert gedit.GEDIT_EDITOR_FONT == "Monospace 18"
+    # DERIVES from scale (== kitty's baseline; not a raw 18).
+    assert gedit.GEDIT_FONT_SIZE == scale.TERMINAL_EDITOR_FONT_STOCK
+    assert gedit.GEDIT_FONT_SIZE != 18
+    assert gedit.GEDIT_EDITOR_FONT == f"Monospace {gedit.GEDIT_FONT_SIZE}"
     assert gedit.GEDIT_USE_DEFAULT_FONT is False
-    # use-default-font off (so editor-font wins) and editor-font set to 18pt.
+    # use-default-font off (so editor-font wins) and editor-font set to the scale baseline.
     assert "use-default-font=false" in out
     assert "use-default-font=true" not in out
-    assert "editor-font='Monospace 18'" in out
+    assert f"editor-font='Monospace {gedit.GEDIT_FONT_SIZE}'" in out
 
 
 def test_schema_override_sets_dark_and_light_editor_style_schemes():

@@ -23,7 +23,10 @@ OSD_LIBS   := -lX11 -lXrandr -lXft
 OSD_CFLAGS := -I/usr/include/freetype2
 endif
 
-OBJS = main.o render.o model.o preview.o action.o
+# model.c holds the UI infrastructure (capture, probe cache, status probes, filter, row
+# helpers); model_tree.c holds the screen TREE data (ROWS_* + SCREENS[] + az_screens/find/count)
+# -- split so each stays under the per-file size budget.
+OBJS = main.o render.o model.o model_tree.o preview.o action.o
 BIN  = azarch
 OSD_BIN = azarch-osd
 

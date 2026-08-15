@@ -37,6 +37,17 @@ def write_exec(path: Path, text: str) -> Path:
     return write_text(path, text, mode=0o755)
 
 
+def write_bytes(path: Path, data: bytes, mode: int = 0o644) -> Path:
+    """Write generated BINARY content verbatim (no newline normalization), creating parent
+    dirs. For artifacts whose bytes are meaningful and must not be touched -- e.g. a compiled
+    gettext .mo catalog (modifications/thunar/locale.mo_bytes)."""
+    path = Path(path)
+    _ensure_parent(path)
+    path.write_bytes(data)
+    os.chmod(path, mode)
+    return path
+
+
 def copy_data(rel: str, dest: Path, mode: int | None = None) -> Path:
     """Copy a verbatim file from libraries/packages/<rel> to dest.
 

@@ -391,6 +391,28 @@ def test_shellprocess_removes_installer_menu_entry_post_install():
     assert csp.INSTALLER_MENU_DESKTOP == "/usr/share/applications/azarch-install.desktop"
 
 
+def test_shellprocess_removes_installer_wrapper_post_install():
+    # The privileged Calamares launcher wrapper (/usr/local/bin/azarch-install) makes sense on
+    # the LIVE medium (the autostart + both installer launchers exec it), but must NOT survive
+    # onto the INSTALLED system: once Calamares has installed Az'arch there is nothing left to
+    # install, so a leftover azarch-install wrapper is dead weight. The OFFLINE unpackfs install
+    # copies the whole live rootfs, so this root-owned file lands on the target and the cleanup
+    # step must delete it (post-install requirement: no azarch-install wrapper on the installed
+    # system). The LIVE ISO is unchanged -- the wrapper is still shipped there.
+    from modifications.calamares import calamares_shellprocess as csp
+    from modifications import openbox as desktop
+    d = yaml.safe_load(calamares.shellprocess_conf())
+    cmd = _installer_cleanup_command(d["script"])
+    assert f"rm -f {csp.INSTALLER_WRAPPER}" in cmd
+    # Single source of truth: the path this removes is exactly the one openbox.py ships.
+    assert csp.INSTALLER_WRAPPER == desktop.INSTALL_WRAPPER_PATH
+    assert csp.INSTALLER_WRAPPER == "/usr/local/bin/azarch-install"
+    # The LIVE medium still ships the wrapper (an emit_plan entry writes it to that path):
+    # the cleanup only strips it from the TARGET chroot, not from the live ISO.
+    plan_dests = {e["dest"] for e in desktop.emit_plan()}
+    assert desktop.INSTALL_WRAPPER_PATH in plan_dests
+
+
 def test_installer_cleanup_command_uses_no_shell_variables():
     # Same no-`$` rule as the other shellprocess commands (Calamares macro-expansion).
     # rm -f / cp -f so an absent path is a no-op and a shipped-file copy never prompts.

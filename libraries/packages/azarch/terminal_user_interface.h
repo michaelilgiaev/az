@@ -152,6 +152,25 @@ const char *az_status_network(char *buf, size_t n);
 const char *az_status_machine(char *buf, size_t n);
 const char *az_status_volume(char *buf, size_t n);
 const char *az_status_brightness(char *buf, size_t n);
+/* Default Applications: one probe per category, each reporting the handler that category
+ * currently resolves to (via `azarch default-applications get <key>`). The category set is
+ * pinned to default_applications.py. */
+const char *az_status_da_web(char *buf, size_t n);
+const char *az_status_da_html(char *buf, size_t n);
+const char *az_status_da_music(char *buf, size_t n);
+const char *az_status_da_video(char *buf, size_t n);
+const char *az_status_da_photos(char *buf, size_t n);
+const char *az_status_da_word(char *buf, size_t n);
+const char *az_status_da_spreadsheet(char *buf, size_t n);
+const char *az_status_da_pdf(char *buf, size_t n);
+const char *az_status_da_source_code(char *buf, size_t n);
+const char *az_status_da_file_manager(char *buf, size_t n);
+const char *az_status_da_plain_text(char *buf, size_t n);
+const char *az_status_da_calculator(char *buf, size_t n);
+const char *az_status_da_terminal(char *buf, size_t n);
+/* Display: a summary probe (current resolution + scale) and the global-scale probe. */
+const char *az_status_display(char *buf, size_t n);
+const char *az_status_display_scale(char *buf, size_t n);
 
 /* Small shared helper (model.c): run `argv` (NULL-terminated), capture the first line of
  * stdout into buf (size n). Returns 0 on a clean exit, non-zero otherwise. Never blocks

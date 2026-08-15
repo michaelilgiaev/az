@@ -24,7 +24,7 @@ from xml.dom import minidom
 
 from modifications import thunar
 from modifications import home_directory
-from modifications.thunar import actions, launcher, menu_cleanup, settings, sidebar
+from modifications.thunar import actions, launcher, locale, menu_cleanup, settings, sidebar
 
 
 # --- thunarrc + xfconf channel (settings.py) --------------------------------
@@ -40,8 +40,10 @@ def test_thunarrc_and_xfconf_render_the_same_settings():
             assert f"{rc_key}={'TRUE' if value else 'FALSE'}" in rc, rc_key
             assert f'name="{prop}" type="bool" value="{"true" if value else "false"}"' in xml, prop
         else:
+            # string OR uint (misc-max-number-of-templates): thunarrc renders the value
+            # verbatim; the xfconf XML carries the kind as the type= attribute.
             assert f"{rc_key}={value}" in rc, rc_key
-            assert f'name="{prop}" type="string" value="{value}"' in xml, prop
+            assert f'name="{prop}" type="{kind}" value="{value}"' in xml, prop
 
 
 def test_location_bar_is_the_text_entry():
@@ -105,42 +107,154 @@ def test_gtk_css_font_bump_is_scoped_and_relative():
     assert f"{settings.THUNAR_FONT_SCALE:g}em" in css
 
 
+# --- Thunar refinements batch (settings.py) ---------------------------------
+
+def test_default_view_is_icon_view():
+    # PROMPT batch item 2: default view = Icon view (was ThunarDetailsView/list).
+    d = {rc: value for rc, _p, _k, value in settings.SETTINGS}
+    assert d["LastView"] == "ThunarIconView"
+    assert "ThunarDetailsView" != d["LastView"]
+    # thunarrc carries it (not the list view as the default).
+    assert "LastView=ThunarIconView" in settings.thunarrc()
+
+
+def test_devices_and_file_system_removed_via_hidden_bookmarks():
+    # PROMPT batch item 1: remove the "Devices" section entirely, INCLUDING the permanent
+    # "File System" row. VERIFIED against thunar-shortcuts-model.c: File System has the URI
+    # "file:///" and is hidden via hidden-bookmarks (NOT hidden-devices); with it hidden and no
+    # removable volumes, the whole Devices heading auto-hides.
+    assert "file:///" in settings.HIDDEN_BOOKMARKS
+    xml = settings.xfconf_channel_xml()
+    assert '<value type="string" value="file:///"/>' in xml
+
+
+def test_home_username_row_hidden_and_replaced():
+    # PROMPT batch item 4: the built-in Home shortcut shows the bare username "main" (the home
+    # GFile's display-name). Hide it (its URI is file:///home/main). CRUCIAL: the replacement
+    # "Home Directory" bookmark must NOT point straight at file:///home/main -- Thunar hides
+    # bookmarks by CANONICAL URI, so that would be hidden by the same entry. It points at the
+    # hidden `.home-directory -> .` symlink (a DISTINCT URI that survives the hiding and resolves
+    # into the home dir). This is the collision the adversary caught; the symlink is the fix.
+    from modifications import home_directory
+    assert f"file://{settings.HOME}" in settings.HIDDEN_BOOKMARKS
+    bm = sidebar.gtk_bookmarks()
+    first = bm.splitlines()[0]
+    # the "Home Directory" bookmark is FIRST and uses the distinct .home-directory URI.
+    assert first == f"file://{settings.HOME}/.home-directory Home Directory", first
+    assert home_directory.HOME_DIR_BOOKMARK_URI == f"file://{settings.HOME}/.home-directory"
+    # the replacement URI is NOT the built-in Home URI (else it would be hidden too).
+    assert home_directory.HOME_DIR_BOOKMARK_URI != f"file://{settings.HOME}"
+    assert sidebar.HOME_BOOKMARK_LABEL == "Home Directory"
+
+
+def test_templates_prefs_hide_about_and_cap():
+    # PROMPT batch item 8: hide the modal "About Templates" dialog + cap the submenu.
+    d = {rc: value for rc, _p, _k, value in settings.SETTINGS}
+    assert d["MiscShowAboutTemplates"] is False
+    assert d["MiscMaxNumberOfTemplates"] == 100
+    # the uint pref renders as type="uint" in the xfconf XML.
+    assert '<property name="misc-max-number-of-templates" type="uint" value="100"/>' \
+        in settings.xfconf_channel_xml()
+
+
+def test_resolve_links_pref_present_but_documented_as_4_21_only():
+    # PROMPT batch item 5: ship misc-resolve-links=true (resolves the symlink path in the
+    # location bar). It is a 4.21.6+ pref (ignored by 4.20), documented honestly in the module.
+    d = {rc: value for rc, _p, _k, value in settings.SETTINGS}
+    assert d["MiscResolveLinks"] is True
+    # the honesty note is present in the module docstring/comments (no silent faking).
+    assert "4.21.6" in settings.__doc__ or "4.21.6" in open(settings.__file__).read()
+
+
+# --- gettext .mo override (locale.py) ---------------------------------------
+
+def test_mo_overrides_relabel_the_hardcoded_strings():
+    # PROMPT batch items 3/7/8-wording: the .mo catalog relabels the hardcoded Thunar strings.
+    o = locale.OVERRIDES
+    assert o["Places"] == "Home Directory"                       # item 3 header
+    assert o['_Open With "%s"'] == "_Edit with %s"               # item 7 (built-in -> "Edit with gedit")
+    assert o["Create _Folder..."] == "Create New _Folder..."     # item 8 wording
+    assert o["Create _Document"] == "Create New _Document..."     # item 8 wording
+
+
+def test_mo_bytes_are_a_valid_gettext_catalog(tmp_path):
+    # The pure-Python .mo generator must produce a catalog real gettext can read (Thunar uses
+    # C gettext). Write it and load it back with Python's gettext (same binary format).
+    import gettext
+    d = tmp_path / "en_US" / "LC_MESSAGES"
+    d.mkdir(parents=True)
+    (d / "thunar.mo").write_bytes(locale.mo_bytes())
+    t = gettext.translation("thunar", localedir=str(tmp_path), languages=["en_US"])
+    for msgid, msgstr in locale.OVERRIDES.items():
+        assert t.gettext(msgid) == msgstr, msgid
+
+
+def test_mo_catalog_shipped_under_generated_locales_root_owned():
+    # The catalog is shipped at the standard system locale path for BOTH generated locales
+    # (en_US display + en_GB date), root-owned (a system catalog, not a dotfile).
+    plan = thunar.emit_plan()
+    by_dest = {e["dest"]: e for e in plan}
+    for loc in locale.LOCALES:
+        p = locale.mo_path(loc)
+        assert p in by_dest, p
+        assert by_dest[p]["owner"] == "root"
+        assert by_dest[p]["bytes_builder"] is locale.mo_bytes
+    assert set(locale.LOCALES) == {"en_US", "en_GB"}
+
+
+def test_gtk_menu_images_enabled_for_open_with_icons():
+    # PROMPT batch item 6: "Open With" entries show app icons only if gtk-menu-images=true.
+    # It lives in ~/.config/gtk-3.0/settings.ini (the openbox shipped default + the `azarch
+    # theme` CLI, kept byte-for-byte in lock-step -- see test_configuration_theme). Assert the
+    # openbox default (a plain module) and the BUNDLED CLI (theme.py is a bundle module that
+    # needs common.py's imports, so it is exec'd from the bundle) both carry it.
+    import types
+    from modifications import openbox
+    from packages.azarch.bundle import bundle_source
+    assert "gtk-menu-images=true" in openbox.gtk3_settings_ini_default()
+    cli = types.ModuleType("azarch_cli")
+    exec(compile(bundle_source(), "azarch_cli", "exec"), cli.__dict__)
+    assert "gtk-menu-images=true" in cli.gtk3_settings_ini(True)
+    assert "gtk-menu-images=true" in cli.gtk3_settings_ini(False)
+
+
 # --- uca.xml + link script (actions.py) -------------------------------------
 
-def test_uca_xml_is_wellformed_with_all_four_actions():
-    # A malformed uca.xml (e.g. an unescaped &&) makes Thunar drop actions silently.
+def test_uca_xml_is_wellformed_with_the_three_actions():
+    # A malformed uca.xml (e.g. an unescaped &&) makes Thunar drop actions silently. After the
+    # batch (item 7), "Edit with gedit" is NOT a uca action anymore -- it comes from the built-in
+    # default-opener relabelled by the gettext .mo -- so the uca set is gimp + Create Link +
+    # Open Terminal (in that order).
     dom = minidom.parseString(actions.uca_xml())
     names = [n.firstChild.data for n in dom.getElementsByTagName("name")]
     assert names == [
-        "Edit with gedit",
         "Edit with gimp",
         "Create Link (Website URL or Directory or File)",
         "Open Terminal Here",
     ]
+    # gedit must NOT reappear as a uca action (that was the duplicate we removed).
+    assert "Edit with gedit" not in names
 
 
-def test_uca_gedit_first_on_any_file_gimp_on_images_only():
-    # PROMPT task 2: first option "Edit with gedit" on ANY file; "Edit with gimp" only on
-    # images. gedit's action carries all file-type conditions; gimp's carries only image-files.
+def test_uca_gimp_on_images_only():
+    # PROMPT batch item 7: keep "Edit with gimp" on IMAGES only. (gedit is handled by the .mo
+    # relabel of the built-in default-opener, tested in test_configuration_thunar_locale-style
+    # asserts below, not as a uca action.)
     dom = minidom.parseString(actions.uca_xml())
     acts = dom.getElementsByTagName("action")
-    gedit_act = acts[0]
-    assert gedit_act.getElementsByTagName("name")[0].firstChild.data == "Edit with gedit"
-    gedit_conds = {c.tagName for c in gedit_act.childNodes if c.nodeType == c.ELEMENT_NODE}
-    for cond in ("audio-files", "image-files", "other-files", "text-files", "video-files"):
-        assert cond in gedit_conds, cond
-    assert "directories" not in gedit_conds  # gedit is for FILES, not folders
-    gimp_act = acts[1]
+    gimp_act = acts[0]
+    assert gimp_act.getElementsByTagName("name")[0].firstChild.data == "Edit with gimp"
     gimp_conds = {c.tagName for c in gimp_act.childNodes if c.nodeType == c.ELEMENT_NODE}
     assert "image-files" in gimp_conds
     assert "text-files" not in gimp_conds  # gimp ONLY on images
+    assert "directories" not in gimp_conds
 
 
 def test_uca_folder_actions_carry_range_for_background_visibility():
     # VERIFIED: without <range>, the folder-only actions (Create Link, Open Terminal Here) do
-    # NOT appear on the folder background. Every action must carry <range>.
+    # NOT appear on the folder background. Every action must carry <range> (now three actions).
     xml = actions.uca_xml()
-    assert xml.count("<range></range>") == 4  # one per action
+    assert xml.count("<range></range>") == 3  # one per action (gimp, Create Link, Open Terminal)
 
 
 def test_uca_create_link_and_terminal_target_the_right_commands():

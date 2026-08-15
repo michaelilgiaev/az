@@ -208,6 +208,12 @@ def build_daemon(dest: Path, *, make: str = "make") -> Path:
         build_dir = Path(tmp)
         for src in _csrc_files():
             shutil.copy2(src, build_dir / src.name)
+        # OVERWRITE the checked-in scale-1.0 az_scale.h with the real GLOBAL_SCALE ratio, so the
+        # shipped menu's fixed-PIXEL geometry (theme.h AZ_SCALED(...)) derives from the single
+        # scale source (modifications/scale). The source-tree copy stays scale 1.0 for the C
+        # tests. (The menu's point fonts scale via the DPI channel, not this header.)
+        from modifications import scale as _scale
+        (build_dir / "az_scale.h").write_text(_scale.menu_scale_header(), encoding="utf-8")
         subprocess.run(
             [make, MENU_DAEMON_BIN_NAME],
             cwd=build_dir,

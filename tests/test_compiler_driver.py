@@ -106,6 +106,22 @@ def test_link_services_enables_sleep_policy(tmp_path):
     assert os.readlink(link) == "/etc/systemd/system/azarch-sleep-policy.service"
 
 
+def test_link_services_enables_spice_vdagentd(tmp_path):
+    # BEHAVIORAL: _link_services must enable spice-vdagentd -- the SPICE guest agent daemon that
+    # bridges the com.redhat.spice.0 channel so the session spice-vdagent can sync the guest
+    # pointer with the SPICE client. This is the fix for the SPICE-guest pointer regression (no
+    # hover / dropped clicks / stuck labels); without the daemon the agent has nothing to talk
+    # to. Enabled on both ISOs + (via unpackfs) the installed system.
+    import os
+    airootfs = tmp_path / "airootfs"
+    (airootfs / "etc/systemd/system").mkdir(parents=True)
+    compiler._link_services(airootfs)
+    link = (airootfs / "etc/systemd/system/multi-user.target.wants"
+            / "spice-vdagentd.service")
+    assert link.is_symlink()
+    assert os.readlink(link) == "/usr/lib/systemd/system/spice-vdagentd.service"
+
+
 def test_run_calls_emit_homedir():
     # run() must create the home-directory layout (folders + convenience symlinks) between
     # the desktop overlay and the app overlay, so _emit_apps's closing chown covers it.

@@ -22,7 +22,8 @@ xfconf-query):
     show the path as an editable text path".
   * last-side-pane = ThunarShortcutsPane -- the SHORTCUTS pane (our sidebar), not the tree
     pane (ThunarTreePane) and not hidden.
-  * last-view = ThunarDetailsView -- open in the details (list) view by default.
+  * last-view = ThunarIconView -- open in the ICON view by default (PROMPT batch item 2;
+    was the details/list view). The 150% icon zoom below pairs with it.
   * misc-enable-expandable-folders = false -- NO inline +/- disclosure triangles to expand a
     directory in place. PROMPT: "disable that (Thunar's expandable behavior)".
   * misc-always-enable-split-view = false + last-splitview-separator-position pinned -- the
@@ -36,6 +37,29 @@ xfconf-query):
     the path box + menu, not a chromeless window).
   * last-show-hidden = false -- hidden files off by default.
   * misc-folders-first = true -- list folders before files.
+
+VIEW ORDERING (PROMPT ordering task, the folder-VIEW half -- HONEST NOTE). The required order is
+directories -> files -> symbolic links -> "Trash" last. Thunar's built-in sort is
+name/size/type/date with a "folders first" toggle only; it has NO native "symlinks as their own
+third group" and NO "pin Trash to the bottom" in the main pane (verified against Thunar 4.20 --
+the sort keys are exactly those). So the VIEW cannot reproduce the full four-way grouping with
+any stock thunarrc key: misc-folders-first=true (set above) gets us the FIRST split
+(directories before files), which is as close as Thunar genuinely allows without patching. We do
+NOT fake the rest. The SIDEBAR half (the firm requirement) IS fully satisfied -- the bookmarks
+order is entirely ours (dirs -> files -> symlinks -> Trash last), applied to the curated seed
+(sidebar.py / home_directory) AND to the live contents at runtime (live_sidebar.py).
+  * misc-show-about-templates = false + misc-max-number-of-templates = 100 (PROMPT batch
+    item 8) -- hide the modal "About Templates" dialog and cap the Create Document submenu;
+    the real templates come from ~/Templates (home_directory).
+  * misc-resolve-links = true (PROMPT batch item 5) -- always show the fully-resolved
+    (symlink-dereferenced) path in the location bar. HONEST CAVEAT: this pref was added
+    UPSTREAM in Thunar 4.21.6 and is IGNORED by 4.20.x, so on the current 4.20 build entering
+    a symlink still shows the symlink path in the location entry (there is no 4.20 config lever
+    for it -- verified against the 4.20 source: the location entry prints g_file_get_path() of
+    the as-requested GFile with no canonicalization). We ship the pref anyway: it is harmless
+    on 4.20 and takes effect the instant Thunar is updated to >=4.21.6. The SIDEBAR half is
+    already correct on 4.20 -- the bookmarks point at RESOLVED targets (sidebar.py), so opening
+    a shortcut shows the real path today.
 
 THE ZOOM BUMP (PROMPT task 7, scale-relative). last-icon-view-zoom-level is bumped one step
 above stock to THUNAR_ZOOM_LEVEL_150_PERCENT (stock is _100_PERCENT = 48px icons; 150% =
@@ -78,7 +102,9 @@ THUNAR_FONT_SCALE = 1.2
 _TRUE = True
 _FALSE = False
 SETTINGS: tuple[tuple[str, str, str, object], ...] = (
-    ("LastView", "last-view", "string", "ThunarDetailsView"),
+    # Default view = ICON view (PROMPT batch item 2 -- was ThunarDetailsView/list). The icon
+    # zoom bump below (150%) is the sensible icon-view zoom to pair with it.
+    ("LastView", "last-view", "string", "ThunarIconView"),
     ("LastLocationBar", "last-location-bar", "string", "ThunarLocationEntry"),
     ("LastSidePane", "last-side-pane", "string", "ThunarShortcutsPane"),
     ("LastIconViewZoomLevel", "last-icon-view-zoom-level", "string",
@@ -92,6 +118,22 @@ SETTINGS: tuple[tuple[str, str, str, object], ...] = (
     ("MiscSingleClick", "misc-single-click", "bool", _FALSE),
     ("MiscVolumeManagement", "misc-volume-management", "bool", _FALSE),
     ("MiscFoldersFirst", "misc-folders-first", "bool", _TRUE),
+    # Templates submenu (PROMPT batch item 8). misc-show-about-templates=false hides the
+    # modal "About Templates" dialog (the "weird templates label"); with real templates
+    # shipped in ~/Templates (home_directory), the Create Document submenu lists them. The
+    # cap defaults to 100 (verified in the 4.20 binary: uint, default 100) -- pinned so the
+    # value is explicit and a test can prove it is not an absolute-pixel-style magic number.
+    ("MiscShowAboutTemplates", "misc-show-about-templates", "bool", _FALSE),
+    ("MiscMaxNumberOfTemplates", "misc-max-number-of-templates", "uint", 100),
+    # ALWAYS show the fully-resolved (symlink-dereferenced) path in the location bar (PROMPT
+    # batch item 5). misc-resolve-links (bool, default TRUE) reassigns the current directory
+    # to the resolved target so entering a symlink (e.g. ~/Cache -> ~/.cache) shows
+    # /home/main/.cache, not /home/main/Cache. VERIFIED: this pref was added upstream in
+    # thunar 4.21.6 (commit 079503c0) and is IGNORED by 4.20.x -- see the module docstring's
+    # honest note. It is shipped anyway (harmless on 4.20, correct the moment Thunar is
+    # updated to >=4.21.6); the sidebar bookmarks already point at resolved targets so the
+    # shortcut route is correct on 4.20 today.
+    ("MiscResolveLinks", "misc-resolve-links", "bool", _TRUE),
 )
 
 # --- Hidden built-in side-pane shortcuts (PROMPT task 2: remove Devices/Network clutter) --
@@ -112,19 +154,37 @@ HIDDEN_BOOKMARKS: tuple[str, ...] = (
     "trash:///",      # the built-in Trash place -- we ship our OWN resolved-path Trash bookmark
                       # (file://.../Trash/files, PROMPT task 2), so hide the trash:/// built-in
                       # to avoid a duplicate. (Our bookmark's URI differs, so it survives.)
+    # REMOVE the "Devices" section entirely, including its permanent "File System" row (PROMPT
+    # batch item 1). VERIFIED against the Thunar 4.20 source (thunar-shortcuts-model.c): the
+    # File System row is a built-in with device==NULL and URI EXACTLY "file:///", so
+    # hidden-devices (which only governs real ThunarDevice volumes/mounts) never hides it --
+    # BUT thunar_shortcuts_model_get_hidden() matches the shortcut's dup'd URI against
+    # hidden-bookmarks, so "file:///" here DOES hide it. And Thunar auto-hides a group HEADER
+    # whose child count is 0, so with the File System row hidden and no removable volumes
+    # (MiscVolumeManagement=false), the whole "Devices" heading disappears too.
+    "file:///",
+    # REMOVE the "main" username label on the built-in Home shortcut (PROMPT batch item 4).
+    # VERIFIED: the built-in Home shortcut has name==NULL and falls back to the home GFile's
+    # display-name, which GIO returns as the bare username "main" (only Trash and "/" are
+    # special-cased). There is no rename pref, so we HIDE the built-in Home (its URI is exactly
+    # "file:///home/main") here and ship our OWN "Home Directory"-labelled bookmark pointing at
+    # /home/main in the sidebar (see sidebar.py HOME_BOOKMARK) -- so the entry reads "Home
+    # Directory", never "main".
+    f"file://{HOME}",
 )
 HIDDEN_DEVICES: tuple[str, ...] = (
     "computer:///",   # "Computer" under Devices
     "network:///",    # "Network" under Devices (Browse Network)
 )
-# NOTE on the "File System" (filesystem root) device: Thunar shows a permanent "File System"
-# entry under Devices that CANNOT be hidden -- it has no hide/eject affordance and is not
-# governed by hidden-devices (verified against Thunar 4.20: right-clicking it offers no Hide,
-# and file:/// in hidden-devices does not remove it). This is by design (it is the user's
-# filesystem-access anchor, not removable clutter), so it legitimately remains. Removable
-# media is kept out via MiscVolumeManagement=false above (no auto-mount), and the
-# Computer/Network/Recent built-ins are hidden above -- which is the "Devices/Network clutter"
-# the PROMPT asks to remove.
+# NOTE on the "File System" (filesystem root) row under Devices: on Thunar 4.20 it is NOT
+# governed by hidden-devices (it has device==NULL and no eject/hide affordance). The way it is
+# actually removed is via hidden-bookmarks (its URI "file:///" is added above) -- verified
+# against thunar-shortcuts-model.c (get_hidden matches the shortcut URI against
+# hidden-bookmarks). With File System hidden and removable media kept out
+# (MiscVolumeManagement=false), the Devices group has zero children and Thunar auto-hides the
+# heading, so there is no "Devices" section and no "File System"/removable rows in the side
+# pane. (If a USB volume is later plugged in, the Devices heading reappears with that one
+# device -- there is no config that permanently deletes the heading widget itself.)
 
 
 def _bool_thunarrc(value: bool) -> str:

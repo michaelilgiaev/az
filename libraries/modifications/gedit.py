@@ -118,7 +118,14 @@ SHOW_TABS_MODE = "never"   # 'never' | 'auto' | 'always' (case-sensitive)
 # preferences schema and are set in the SAME override file as show-tabs-mode/active-plugins.
 GEDIT_EDITOR_SCHEMA = "org.gnome.gedit.preferences.editor"
 GEDIT_USE_DEFAULT_FONT = False   # false so editor-font (below) actually takes effect
-GEDIT_FONT_SIZE = 18
+# The editor font is an explicit pt size that pango renders AT the screen DPI, so it takes the
+# STOCK (scale-1.0) baseline from the single scale source (modifications.scale) and the GLOBAL
+# SCALE's Xft.dpi channel bumps it -- at scale 1.35 it renders ~= the old hardcoded 18pt. kitty
+# uses the SAME baseline, so the terminal and the editor stay equal at any scale. Deriving it
+# from scale.py (not a raw 18) keeps ONE source of truth for the scale.
+from modifications import scale as _scale  # noqa: E402  (single source of truth for the scale)
+
+GEDIT_FONT_SIZE = _scale.TERMINAL_EDITOR_FONT_STOCK   # STOCK pt; DPI channel scales it (== kitty)
 GEDIT_EDITOR_FONT = f"Monospace {GEDIT_FONT_SIZE}"   # Pango font description: family + size
 # The GtkSourceView editor STYLE SCHEME (the text-area colours), so gedit's editor follows
 # the system theme too. gedit 50 (the gedit-technology fork) keeps TWO scheme keys and picks

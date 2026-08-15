@@ -75,6 +75,28 @@ LINKS: tuple[tuple[str, str], ...] = (
     ("Local", ".local"),
 )
 
+# The Trash shortcut's name. It is itself a symlink but the spec pins it to the very END of the
+# sidebar/view ordering (after every other symlink), so both the static sidebar_entries() and
+# the runtime live-sidebar sync special-case it.
+TRASH_LINK_NAME = "Trash"
+
+# The "Home Directory" sidebar bookmark target (PROMPT batch item 4: the sidebar's Home entry
+# must NOT read the bare username "main"). Thunar 4.20 shows the built-in Home shortcut with the
+# home folder's display-name (the username) and offers NO rename; hiding the built-in via
+# hidden-bookmarks (file:///home/main) is the only removal lever -- but that lever matches by
+# CANONICAL URI, so a replacement bookmark pointing straight at /home/main would be hidden too
+# (the two URIs are identical). The fix: a HIDDEN home symlink `.home-directory -> .` (relative,
+# so it is valid under /etc/skel and every copied-out home). A bookmark at
+# file:///home/main/.home-directory has a DISTINCT URI (it survives the file:///home/main
+# hiding) yet resolves INTO the home directory when clicked. It starts with a dot, so the
+# live-sidebar sync (which skips hidden entries) never enumerates it as a stray shortcut, and it
+# does not clutter the folder view. (On Thunar >= 4.21.6, misc-resolve-links -- already shipped
+# -- makes the location bar show the resolved /home/main; on 4.20 it shows the symlink path, a
+# minor cosmetic quirk documented in modifications/thunar/sidebar.)
+HOME_DIR_SYMLINK_NAME = ".home-directory"
+HOME_DIR_SYMLINK_TARGET = "."   # relative -> the home dir itself
+HOME_DIR_BOOKMARK_URI = f"file://{HOME}/{HOME_DIR_SYMLINK_NAME}"
+
 # --- The XDG trash chain -------------------------------------------------------
 # The trash spec's two required dirs, created (relative to the home dir) BEFORE the
 # "Trash" symlink so it resolves to a real directory instead of dangling. `files` holds the
@@ -83,6 +105,16 @@ LINKS: tuple[tuple[str, str], ...] = (
 TRASH_DIRS: tuple[str, ...] = (
     ".local/share/Trash/files",
     ".local/share/Trash/info",
+)
+
+# --- Extra (non-sidebar) directories -------------------------------------------
+# Directories created in the home layout that are NOT part of the sidebar shortcut set (so they
+# are deliberately kept OUT of DIRECTORIES above, which drives the sidebar). ~/Templates holds
+# the Thunar "Create Document" template set (modifications/templates ships the template FILES
+# and the XDG_TEMPLATES_DIR pointer -- PROMPT batch item 8). Created in both /home/main and
+# /etc/skel by compiler._emit_homedir so the submenu works for the live and installed user.
+EXTRA_DIRECTORIES: tuple[str, ...] = (
+    "Templates",
 )
 
 
@@ -101,19 +133,32 @@ def resolved_home_path(rel_or_link_target: str) -> str:
 
 
 def sidebar_entries() -> list[tuple[str, str]]:
-    """Return the sidebar shortcut list as (label, absolute_resolved_target) pairs, in
-    display order: the directories first, then the symlinks (pointed at their RESOLVED
-    targets). This is the single list modifications/thunar turns into the GTK bookmarks file
-    and Thunar renders in the shortcuts pane -- so the sidebar and the on-disk layout are
-    the same set, by construction.
+    """Return the sidebar shortcut list as (label, absolute_resolved_target) pairs, in the
+    required display ORDER (PROMPT: directories -> files -> symbolic links -> "Trash" LAST).
+    This is the single list modifications/thunar turns into the GTK bookmarks file and Thunar
+    renders in the shortcuts pane -- so the sidebar and the on-disk layout are the same set,
+    by construction, in the same order.
+
+    The curated layout has: real DIRECTORIES (the dirs group), no plain files, and the LINKS
+    (all symlinks -- the symlinks group), of which "Trash" is forced to the very end. So the
+    order is: DIRECTORIES, then the non-Trash LINKS, then Trash. (The live sidebar sync applies
+    the identical dirs -> files -> symlinks -> Trash-last ordering to the ACTUAL home contents at
+    runtime; see modifications/thunar/live_sidebar.)
 
     For a plain directory the target is the directory itself (Desktop ->
     /home/main/Desktop). For a symlink the target is what the link resolves to (Config ->
     /home/main/.config, Trash -> /home/main/.local/share/Trash/files), so opening the
     shortcut shows the real path rather than the /home/main/Config symlink path."""
     entries: list[tuple[str, str]] = []
+    # 1. Real directories (the dirs group).
     for name in DIRECTORIES:
         entries.append((name, resolved_home_path(name)))
+    # 2. Files: the curated set has none. (The live sync inserts real files here at runtime.)
+    # 3. Symlinks (the LINKS), EXCEPT "Trash", which is pinned last.
     for name, target in LINKS:
+        if name == TRASH_LINK_NAME:
+            continue
         entries.append((name, resolved_home_path(target)))
+    # 4. "Trash" LAST (it is itself a symlink, forced to the very end per the spec).
+    entries.append((TRASH_LINK_NAME, resolved_home_path(dict(LINKS)[TRASH_LINK_NAME])))
     return entries

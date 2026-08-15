@@ -88,6 +88,11 @@ def gtk3_settings_ini(dark: bool) -> str:
         f"gtk-theme-name={theme}\n"
         f"gtk-application-prefer-dark-theme={prefer}\n"
         "gtk-icon-theme-name=Adwaita\n"
+        # Show icons in menus (PROMPT Thunar batch item 6). GTK3's gtk-menu-images defaults to
+        # FALSE, which is why Thunar's "Open With" entries render without their app icons; setting
+        # it true restores them (Thunar builds those items with xfce_gtk_image_menu_item, which
+        # honours this GtkSetting). Harmless/desirable for every other GTK app's menus too.
+        "gtk-menu-images=true\n"
     )
 
 

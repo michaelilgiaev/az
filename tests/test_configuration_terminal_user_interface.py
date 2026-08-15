@@ -59,7 +59,14 @@ def _command_line_interface():
 
 
 def _src(name: str) -> str:
-    return (TERMINAL_USER_INTERFACE_SRC_DIR / name).read_text(encoding="utf-8")
+    text = (TERMINAL_USER_INTERFACE_SRC_DIR / name).read_text(encoding="utf-8")
+    # model.c was split (it grew past the size budget): the UI infrastructure stays in model.c
+    # and the screen TREE (ROWS_* + SCREENS[]) moved to model_tree.c. The tests treat "the model"
+    # as one thing, so requesting model.c transparently returns BOTH concatenated -- a content
+    # check for a row/screen finds it wherever it now lives.
+    if name == "model.c":
+        text += "\n" + (TERMINAL_USER_INTERFACE_SRC_DIR / "model_tree.c").read_text(encoding="utf-8")
+    return text
 
 
 # --- dispatch wiring: bare azarch -> run_terminal_user_interface -> exec the C binary ------------

@@ -54,9 +54,9 @@ def _load_azarch_command_line_interface():
 
 # --- PLAN mode/owner/dest table --------------------------------------------
 
-def test_plan_has_exactly_seventeen_entries():
+def test_plan_has_exactly_eighteen_entries():
     # compiler.py iterates PLAN; a dropped/extra entry silently un-emits a file. The
-    # panel-less OpenBox session ships exactly seventeen files via PLAN:
+    # panel-less OpenBox session ships exactly eighteen files via PLAN:
     #   1. ~/.xinitrc                               (startx -> openbox-session)
     #   2. ~/.config/openbox/rc.xml                 (keybinds, theme, titlebar-button binds)
     #   3. ~/.themes/Azarch-Dark/openbox-3/themerc  (DARK Az'arch theme -- the default)
@@ -66,20 +66,22 @@ def test_plan_has_exactly_seventeen_entries():
     #   7. ~/.gtkrc-2.0                              (GTK2 dark theme default)
     #   8. /etc/dconf/db/local.d/00-azarch-theme     (dconf color-scheme=prefer-dark default)
     #   9. /etc/dconf/profile/user                   (dconf profile so the system db backs user)
-    #  10. ~/.config/openbox/autostart              (feh, setxkbmap, xcape, menu daemon, installer)
-    #  11. ~/.config/openbox/environment            (XDG_CURRENT_DESKTOP=openbox)
-    #  12. /usr/local/share/azarch/openbox-autostart-installed (staged "installed" autostart)
-    #  13. ~/.local/share menu usage seed            (default menu ordering)
-    #  14. /usr/share/applications/azarch-install.desktop (menu re-open entry, system)
-    #  15. ~/Desktop/azarch-install.desktop          (double-clickable installer launcher)
-    #  16. /usr/local/bin/azarch-install             (privileged Calamares wrapper)
-    #  17. /usr/local/bin/azarch                      (guest-side command line interface)
-    # (entries 3-9 are the system theme: dark is the default; `azarch theme` toggles it.)
+    #  10. ~/.Xresources                             (GLOBAL SCALE backbone: Xft.dpi + Xcursor.size)
+    #  11. ~/.config/openbox/autostart              (feh, setxkbmap, xcape, menu daemon, installer)
+    #  12. ~/.config/openbox/environment            (XDG_CURRENT_DESKTOP + scale env)
+    #  13. /usr/local/share/azarch/openbox-autostart-installed (staged "installed" autostart)
+    #  14. ~/.local/share menu usage seed            (default menu ordering)
+    #  15. /usr/share/applications/azarch-install.desktop (menu re-open entry, system)
+    #  16. ~/Desktop/azarch-install.desktop          (double-clickable installer launcher)
+    #  17. /usr/local/bin/azarch-install             (privileged Calamares wrapper)
+    #  18. /usr/local/bin/azarch                      (guest-side command line interface)
+    # (entries 3-9 are the system theme: dark is the default; `azarch theme` toggles it; entry
+    # 10 is the GLOBAL SCALE, PROMPT Display/scale task.)
     # NOTE: the media OSD (/usr/local/lib/azarch/azarch-osd) is NO LONGER a PLAN entry -- it is a
     # COMPILED C binary now (osd.c), built + installed by terminal_user_interface_build.build_osd()
     # like the terminal UI binary, so it is not emitted as a text file here.
     # The .bash_profile snippet is appended by emit_plan(), NOT part of PLAN.
-    assert len(desktop.PLAN) == 17
+    assert len(desktop.PLAN) == 18
 
 
 def test_plan_entries_have_the_four_declared_keys():
@@ -229,11 +231,10 @@ def test_home_owner_gid_is_autologin_group():
 
 # --- emit_plan(): PLAN + bash_profile, without mutating PLAN ----------------
 
-def test_emit_plan_length_is_seventeen_plus_bash_profile():
-    # 17 PLAN entries + the appended .bash_profile snippet = 18. emit_plan() is the
-    # single sequence compiler.py iterates. (Was 18+1; the media OSD is no longer a text PLAN
-    # entry -- it is a compiled binary installed by build_osd -- so PLAN dropped to 17.)
-    assert len(desktop.emit_plan()) == 18
+def test_emit_plan_length_is_eighteen_plus_bash_profile():
+    # 18 PLAN entries + the appended .bash_profile snippet = 19. emit_plan() is the
+    # single sequence compiler.py iterates. (18 = 17 + the new ~/.Xresources GLOBAL SCALE entry.)
+    assert len(desktop.emit_plan()) == 19
 
 
 def test_emit_plan_prefix_is_plan():
@@ -260,7 +261,7 @@ def test_emit_plan_does_not_mutate_module_plan():
     before = len(desktop.PLAN)
     desktop.emit_plan()
     desktop.emit_plan()
-    assert len(desktop.PLAN) == before == 17
+    assert len(desktop.PLAN) == before == 18
 
 
 # --- xinitrc: OpenBox X11 session, no flash ---------------------------------
@@ -302,6 +303,31 @@ def test_xinitrc_prepaints_wallpaper_before_exec():
     feh_idx = out.index("feh --no-fehbg --bg-fill")
     exec_idx = out.index("exec openbox-session")
     assert feh_idx < exec_idx
+
+
+# --- SPICE guest agent: the pointer-regression fix ---------------------------
+
+def test_spice_vdagent_started_in_both_autostarts():
+    # ROOT CAUSE of the reported pointer regression: the VM is a SPICE guest (the
+    # com.redhat.spice.0 channel is present) but spice-vdagent was absent, so the guest pointer
+    # drifted out of sync with the SPICE client -- no hover highlight, dropped left-clicks, stale
+    # labels. The fix starts spice-vdagent from the session autostart (the SESSION half; the
+    # spice-vdagentd daemon is enabled via systemd). It must run on BOTH the live and the
+    # installed session (both inherit the shared common block). Guarded so it is harmless off
+    # SPICE (it exits with no channel).
+    for au in (desktop.openbox_autostart(), desktop.openbox_autostart_installed()):
+        assert "spice-vdagent" in au
+        assert "command -v spice-vdagent" in au   # guarded, never breaks the session
+
+
+def test_spice_vdagent_in_manifest():
+    # The SPICE agent package must be shipped (the releng baseline has open-vm-tools /
+    # qemu-guest-agent / virtualbox-guest-utils but NOT spice-vdagent).
+    import paths
+    manifest = paths.PACKAGES_FILE.read_text(encoding="utf-8")
+    pkgs = [ln.strip() for ln in manifest.splitlines()
+            if ln.strip() and not ln.strip().startswith("#")]
+    assert "spice-vdagent" in pkgs
 
 
 # --- OpenBox rc.xml: Super -> menu, no root menu, borderless menu window -----

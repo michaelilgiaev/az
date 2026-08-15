@@ -26,13 +26,15 @@ static void test_top_level_is_network_theme_wallpaper(void)
 {
     const AzScreen *m = az_screen_find("main");
     CHECK(m != NULL);
-    CHECK(m->nrows == 6);
+    CHECK(m->nrows == 8);
     CHECK(strcmp(m->rows[0].label, "Network") == 0);   /* Network is the first option */
     CHECK(strcmp(m->rows[1].label, "Theme") == 0);
     CHECK(strcmp(m->rows[2].label, "Wallpaper") == 0);
     CHECK(strcmp(m->rows[3].label, "Volume") == 0);
     CHECK(strcmp(m->rows[4].label, "Brightness") == 0);
-    CHECK(strcmp(m->rows[5].label, "Machine Type") == 0);
+    CHECK(strcmp(m->rows[5].label, "Default Applications") == 0);
+    CHECK(strcmp(m->rows[6].label, "Display") == 0);
+    CHECK(strcmp(m->rows[7].label, "Machine Type") == 0);
     /* the entry title is the (re)named "Az'arch Settings" */
     CHECK(strcmp(m->title, "Az'arch Settings") == 0);
 }
@@ -46,6 +48,16 @@ static void test_screen_set_is_exactly_expected(void)
         "network.wifi", "network.wired", "network.bluetooth",
         "network.airplane", "network.firewall",
         "volume", "brightness", "machine",
+        /* Default Applications: the category list + one screen per category (Mail excluded --
+         * no mail client shipped, so the TUI does not surface it). */
+        "defaultapps",
+        "defaultapps.web", "defaultapps.html", "defaultapps.music", "defaultapps.video",
+        "defaultapps.photos", "defaultapps.word", "defaultapps.spreadsheet", "defaultapps.pdf",
+        "defaultapps.source-code", "defaultapps.file-manager", "defaultapps.plain-text",
+        "defaultapps.calculator", "defaultapps.terminal",
+        /* Display: the screen + the scale chooser + the xrandr feature screens. */
+        "display", "display.scale", "display.resolution", "display.refresh",
+        "display.orientation", "display.monitors",
     };
     int n = az_screen_count();
     CHECK(n == (int)(sizeof want / sizeof want[0]));
@@ -124,11 +136,120 @@ static void test_machine_type_screen(void)
         CHECK(m->rows[i].status == NULL);        /* no per-row echo (Current: shows it once) */
     }
     /* the main-menu row that descends here carries the machine status as its at-a-glance summary
-     * (Machine Type is now the SIXTH row, after Volume + Brightness were added before it) */
+     * (Machine Type is now the EIGHTH row, after Volume, Brightness, Default Applications AND
+     * Display were added before it) */
     const AzScreen *main_s = az_screen_find("main");
-    CHECK(main_s->rows[5].status == az_status_machine);
+    CHECK(main_s->rows[7].status == az_status_machine);
+    CHECK(main_s->rows[7].kind == AZ_ACT_SCREEN);
+    CHECK(strcmp(main_s->rows[7].target, "machine") == 0);
+}
+
+/* Default Applications: a category list + one screen per category, each letting the user CHANGE
+ * that category's default via an `azarch default-applications set ...` apply. The category set,
+ * keys and the current-handler probes are the TUI half of the default_applications.py source;
+ * a Python test pins the labels/keys against that source so C and Python cannot drift. */
+static void test_default_applications_screens(void)
+{
+    /* the ROWS_MAIN entry that opens it */
+    const AzScreen *main_s = az_screen_find("main");
+    CHECK(strcmp(main_s->rows[5].label, "Default Applications") == 0);
     CHECK(main_s->rows[5].kind == AZ_ACT_SCREEN);
-    CHECK(strcmp(main_s->rows[5].target, "machine") == 0);
+    CHECK(strcmp(main_s->rows[5].target, "defaultapps") == 0);
+
+    /* the category list screen: 13 categories (Mail excluded), each a SCREEN row with a live
+     * current-handler status. */
+    const AzScreen *da = az_screen_find("defaultapps");
+    CHECK(da != NULL);
+    CHECK(strcmp(da->title, "Default Applications") == 0);
+    CHECK(da->nrows == 13);
+    const char *cats[] = {
+        "Web", "HTML", "Music", "Video", "Photos", "Word", "Spreadsheet", "PDF",
+        "Source Code", "File Manager", "Plain Text", "Calculator", "Terminal",
+    };
+    for (int i = 0; i < da->nrows; i++) {
+        CHECK(da->rows[i].kind == AZ_ACT_SCREEN);
+        CHECK(da->rows[i].status != NULL);          /* shows the live handler at a glance */
+        CHECK(strcmp(da->rows[i].label, cats[i]) == 0);
+    }
+    /* Mail is NOT a category screen (no mail client shipped). */
+    CHECK(az_screen_find("defaultapps.mail") == NULL);
+
+    /* each category screen shows the current handler up top and CHANGES it via an apply that
+     * runs `azarch default-applications set ...` -- no sudo (writes the user's own config). */
+    const AzScreen *web = az_screen_find("defaultapps.web");
+    CHECK(web != NULL);
+    CHECK(web->current == az_status_da_web);
+    CHECK(web->nrows >= 1);
+    CHECK(web->rows[0].kind == AZ_ACT_APPLY);
+    CHECK(web->rows[0].needs_root == 0);
+    CHECK(strncmp(web->rows[0].target, "azarch default-applications set web ",
+                  strlen("azarch default-applications set web ")) == 0);
+
+    /* a two-candidate category (Photos: xviewer + gimp) really offers both choices. */
+    const AzScreen *ph = az_screen_find("defaultapps.photos");
+    CHECK(ph != NULL);
+    CHECK(ph->current == az_status_da_photos);
+    CHECK(ph->nrows == 2);
+    int has_xviewer = 0, has_gimp = 0;
+    for (int i = 0; i < ph->nrows; i++) {
+        if (strstr(ph->rows[i].target, "xviewer.desktop")) has_xviewer = 1;
+        if (strstr(ph->rows[i].target, "gimp.desktop")) has_gimp = 1;
+    }
+    CHECK(has_xviewer == 1);
+    CHECK(has_gimp == 1);
+}
+
+/* Display: cinnamon-settings-display parity (xrandr) + the GLOBAL SCALE chooser. The scale
+ * chooser is the firm requirement; its rows set the ONE scale via `azarch display scale`. */
+static void test_display_screens(void)
+{
+    /* the ROWS_MAIN entry */
+    const AzScreen *main_s = az_screen_find("main");
+    CHECK(strcmp(main_s->rows[6].label, "Display") == 0);
+    CHECK(main_s->rows[6].kind == AZ_ACT_SCREEN);
+    CHECK(strcmp(main_s->rows[6].target, "display") == 0);
+    CHECK(main_s->rows[6].status == az_status_display);
+
+    const AzScreen *d = az_screen_find("display");
+    CHECK(d != NULL);
+    CHECK(strcmp(d->title, "Display") == 0);
+    /* the feature set: Global Scale + resolution/refresh/orientation/monitors */
+    int has_scale = 0, has_res = 0, has_refresh = 0, has_orient = 0, has_mon = 0;
+    for (int i = 0; i < d->nrows; i++) {
+        if (strcmp(d->rows[i].target, "display.scale") == 0) has_scale = 1;
+        if (strcmp(d->rows[i].target, "display.resolution") == 0) has_res = 1;
+        if (strcmp(d->rows[i].target, "display.refresh") == 0) has_refresh = 1;
+        if (strcmp(d->rows[i].target, "display.orientation") == 0) has_orient = 1;
+        if (strcmp(d->rows[i].target, "display.monitors") == 0) has_mon = 1;
+    }
+    CHECK(has_scale && has_res && has_refresh && has_orient && has_mon);
+
+    /* the GLOBAL SCALE chooser: offers the scale options, each an apply, none needing sudo. */
+    const AzScreen *sc = az_screen_find("display.scale");
+    CHECK(sc != NULL);
+    CHECK(sc->current == az_status_display_scale);
+    CHECK(sc->nrows == 6);                       /* 1.00 .. 2.00 */
+    int has_135 = 0, has_100 = 0, has_200 = 0;
+    for (int i = 0; i < sc->nrows; i++) {
+        CHECK(sc->rows[i].kind == AZ_ACT_APPLY);
+        CHECK(sc->rows[i].needs_root == 0);      /* the X resource DB is per-session, no sudo */
+        if (strcmp(sc->rows[i].target, "azarch display scale 1.35") == 0) has_135 = 1;
+        if (strcmp(sc->rows[i].target, "azarch display scale 1.00") == 0) has_100 = 1;
+        if (strcmp(sc->rows[i].target, "azarch display scale 2.00") == 0) has_200 = 1;
+    }
+    CHECK(has_135 && has_100 && has_200);
+
+    /* orientation offers the four rotations. */
+    const AzScreen *ori = az_screen_find("display.orientation");
+    CHECK(ori != NULL);
+    int has_normal = 0, has_left = 0, has_right = 0, has_inv = 0;
+    for (int i = 0; i < ori->nrows; i++) {
+        if (strstr(ori->rows[i].target, "rotate normal")) has_normal = 1;
+        if (strstr(ori->rows[i].target, "rotate left")) has_left = 1;
+        if (strstr(ori->rows[i].target, "rotate right")) has_right = 1;
+        if (strstr(ori->rows[i].target, "rotate inverted")) has_inv = 1;
+    }
+    CHECK(has_normal && has_left && has_right && has_inv);
 }
 
 /* Network rows all DESCEND into a real child screen (they are navigation, not applies). */
@@ -368,6 +489,8 @@ int main(void)
     test_screen_set_is_exactly_expected();
     test_volume_and_brightness_screens();
     test_machine_type_screen();
+    test_default_applications_screens();
+    test_display_screens();
     test_network_rows_descend();
     test_theme_rows_are_applies();
     test_row_command();

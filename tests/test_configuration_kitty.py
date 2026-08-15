@@ -81,19 +81,23 @@ def test_titlebar_icon_is_rendered_from_the_asset_into_home():
     assert entry["owner"] == "home"
 
 
-def test_kitty_conf_sets_font_size_18_in_home():
+def test_kitty_conf_sets_font_size_in_home():
     # A partial kitty.conf (owner "home", so chowned + skel-mirrored) sets ONLY font_size,
-    # to 18 -- matching gedit's editor font size. kitty.conf syntax is `<name> <value>`
-    # (space-separated, no '='), and kitty merges it over its defaults.
+    # to the STOCK baseline from the single scale source (matching gedit's editor font size).
+    # kitty renders a pt font at the screen DPI, so the GLOBAL SCALE's Xft.dpi channel bumps it
+    # (at 1.35 it renders ~= the old hardcoded 18pt). kitty.conf syntax is `<name> <value>`.
+    from modifications import scale
     entry = next(e for e in kitty.emit_plan() if e["dest"] == kitty.KITTY_CONF_PATH)
     assert entry["dest"] == "/home/main/.config/kitty/kitty.conf"
     assert entry["dest"].startswith(kitty.HOME + "/")
     assert entry["builder"] is kitty.kitty_conf
     assert entry["owner"] == "home"
     assert entry["mode"] == 0o644
-    assert kitty.KITTY_FONT_SIZE == 18
+    # DERIVES from scale (not a raw 18 -- that would be a second hardcoded size).
+    assert kitty.KITTY_FONT_SIZE == scale.TERMINAL_EDITOR_FONT_STOCK
+    assert kitty.KITTY_FONT_SIZE != 18
     out = kitty.kitty_conf()
-    assert "font_size 18" in out
+    assert f"font_size {kitty.KITTY_FONT_SIZE}" in out
     # kitty.conf uses space-separated options, not INI '=' assignments.
     assert "font_size=" not in out
 

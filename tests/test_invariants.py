@@ -117,13 +117,15 @@ def test_emitter_family_covers_all_config_modules():
     # application-menu usage.json seed, the system + Desktop installer launchers, the
     # install wrapper, the azarch command line interface -- plus the appended bash_profile. The
     # media OSD is NO LONGER here: it is a compiled binary now (osd.c), installed by build_osd,
-    # not a text emitter) + 6 installer +
+    # not a text emitter. NOW 19: the 18 PLAN entries -- the +1 over the old 17 is the new
+    # ~/.Xresources GLOBAL SCALE entry, PROMPT Display/scale task -- plus the appended
+    # bash_profile) + 6 installer +
     # locale + profile + 4 pacman + 4 pkgbuild (calamares + librewolf.desktop + the two
     # librewolf PKGBUILD tiers) + 1 librewolf emit_plan builder (the AutoConfig override,
     # now a home file at the profile path, not a packaged /opt file) + 5 timedate
     # emit_plan builders (app.py, page.py, assets.py, the launcher, the
     # azarch-timedate.service unit).
-    assert len(_EMITTERS) == 19 + 18 + 6 + 1 + 1 + 4 + 4 + 1 + 5
+    assert len(_EMITTERS) == 19 + 19 + 6 + 1 + 1 + 4 + 4 + 1 + 5
 
 
 def test_recipe_dir_contents_are_nonempty_str_both_tiers():

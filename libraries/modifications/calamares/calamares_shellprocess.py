@@ -64,21 +64,31 @@ INSTALLED_AUTOSTART_SRC = _openbox.INSTALLED_AUTOSTART_STAGING_PATH
 # Sourced from openbox.py so the path the live medium SHIPS and the path this step DELETES
 # are the same string.
 INSTALLER_MENU_DESKTOP = _openbox.INSTALL_MENU_DESKTOP_PATH
+# The privileged Calamares launcher wrapper (/usr/local/bin/azarch-install). It makes sense on
+# the LIVE medium -- the OpenBox autostart and both installer launchers (Desktop + app menu)
+# exec it -- but must NOT survive onto the INSTALLED system: once Calamares has installed
+# Az'arch there is nothing left to install, so a leftover "azarch-install" wrapper is dead
+# weight (and the app-menu / Desktop launchers that called it are already removed above). The
+# OFFLINE unpackfs install copies the whole live rootfs verbatim, so this root-owned file lands
+# on the target and this step must delete it. Sourced from openbox.py so the path the live
+# medium SHIPS and the path this step DELETES are the same string.
+INSTALLER_WRAPPER = _openbox.INSTALL_WRAPPER_PATH
 
 
 def _installer_cleanup_command() -> str:
     """A single shellprocess command (target chroot) that makes the INSTALLED system's
-    OpenBox session correct: no "Az'arch Linux Installer" ANYWHERE (no Desktop icon and no
-    application-menu entry), no first-run installer at login, and the region keyboard (not
-    the live us,il) in effect.
+    OpenBox session correct: no "Az'arch Linux Installer" ANYWHERE (no Desktop icon, no
+    application-menu entry, and no `azarch-install` wrapper), no first-run installer at login,
+    and the region keyboard (not the live us,il) in effect.
 
-    Deletes the Desktop launcher from the reused /home/main AND /etc/skel AND the system-wide
-    application-menu launcher, then OVERWRITES the inherited OpenBox autostart (home + skel)
-    with the "installed" variant staged on the ISO -- which drops the two live-only lines
-    (the fixed us,il setxkbmap and the first-run Calamares launch) while keeping
-    wallpaper/xcape/menu-daemon. `set -e` with plain `rm -f`/`cp -f` (a `cp` of a shipped
-    file that always exists), and NO `$` (Calamares macro-expands $WORD and aborts on an
-    unknown one -- see _mkinitcpio_reset_command), so only fixed paths are used."""
+    Deletes the Desktop launcher from the reused /home/main AND /etc/skel, the system-wide
+    application-menu launcher, AND the /usr/local/bin/azarch-install wrapper those launchers
+    exec (dead on an installed system), then OVERWRITES the inherited OpenBox autostart
+    (home + skel) with the "installed" variant staged on the ISO -- which drops the two
+    live-only lines (the fixed us,il setxkbmap and the first-run Calamares launch) while
+    keeping wallpaper/xcape/menu-daemon. `set -e` with plain `rm -f`/`cp -f` (a `cp` of a
+    shipped file that always exists), and NO `$` (Calamares macro-expands $WORD and aborts on
+    an unknown one -- see _mkinitcpio_reset_command), so only fixed paths are used."""
     return (
         "set -e\n"
         f"rm -f {INSTALLER_DESKTOP_LAUNCHER}\n"
@@ -87,6 +97,10 @@ def _installer_cleanup_command() -> str:
         # menu on the installed system (calamares itself is also try_removed, so keeping it
         # would just leave a dead launcher). `rm -f` is a no-op if it is already absent.
         f"rm -f {INSTALLER_MENU_DESKTOP}\n"
+        # Remove the privileged launcher wrapper itself: on an installed system there is
+        # nothing left to install, so /usr/local/bin/azarch-install is dead weight (and every
+        # launcher that called it is removed above). `rm -f` is a no-op if it is already gone.
+        f"rm -f {INSTALLER_WRAPPER}\n"
         # Replace the inherited live autostart (home + skel) with the installed variant
         # (no fixed keyboard, no first-run installer). The source is a root-owned file
         # unpackfs copied onto the target, so it is always present.

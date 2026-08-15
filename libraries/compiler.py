@@ -60,6 +60,7 @@ from modifications import gedit
 from modifications import libreoffice
 from modifications import gimp
 from modifications import home_directory
+from modifications import templates
 from modifications import thunar
 from modifications import xviewer
 import installer
@@ -515,7 +516,7 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
     for entry in (kitty.emit_plan() + vlc.emit_plan()
                   + gedit.emit_plan() + libreoffice.emit_plan() + gimp.emit_plan()
                   + thunar.emit_plan() + xviewer.emit_plan()
-                  + default_applications.emit_plan()):
+                  + default_applications.emit_plan() + templates.emit_plan()):
         dest_abs = entry["dest"]                       # absolute path on the target
         # Package-owned override path? Redirect its body to the post-pacstrap staging dir
         # (or drop it if suppress-only) instead of writing into the conflicting overlay.
@@ -545,6 +546,16 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
             emit.render_svg_png(r["asset"], target, r["size"], mode=entry["mode"])
             if skel_dest is not None:
                 emit.render_svg_png(r["asset"], skel_dest, r["size"], mode=entry["mode"])
+            continue
+        # Binary-content entries (e.g. thunar's compiled gettext .mo catalog): the builder
+        # returns raw bytes written verbatim (no newline normalization). System locale
+        # catalogs are root-owned, so skel_dest is None for them; the mirror is handled
+        # generically in case a HOME binary is ever added.
+        if entry.get("bytes_builder"):
+            data = entry["bytes_builder"]()
+            emit.write_bytes(target, data, mode=entry["mode"])
+            if skel_dest is not None:
+                emit.write_bytes(skel_dest, data, mode=entry["mode"])
             continue
         content = entry["builder"]()
         emit.write_text(target, content, mode=entry["mode"])
@@ -603,6 +614,9 @@ def _emit_homedir(airootfs: Path, home: Path) -> None:
         # 1. The top-level directories (Desktop, Downloads, ... Videos).
         for name in home_directory.DIRECTORIES:
             emit.mkdir(root / name)
+        # 1b. Extra non-sidebar directories (~/Templates for the Thunar Create Document set).
+        for name in home_directory.EXTRA_DIRECTORIES:
+            emit.mkdir(root / name)
         # 2. The XDG trash chain -- created BEFORE the Trash symlink so it does not dangle.
         for rel in home_directory.TRASH_DIRS:
             emit.mkdir(root / rel)
@@ -611,6 +625,12 @@ def _emit_homedir(airootfs: Path, home: Path) -> None:
         #    directory in every home. emit.link replaces any pre-existing entry.
         for name, target in home_directory.LINKS:
             emit.link(target, root / name)
+        # 3b. The hidden ".home-directory -> ." symlink backing the "Home Directory" sidebar
+        #     bookmark (PROMPT batch item 4). Relative target so it is valid in every home; its
+        #     distinct URI lets the bookmark survive the built-in-Home hiding (see
+        #     home_directory.HOME_DIR_SYMLINK_*). Hidden (dot-prefixed) so it does not clutter.
+        emit.link(home_directory.HOME_DIR_SYMLINK_TARGET,
+                  root / home_directory.HOME_DIR_SYMLINK_NAME)
 
 
 def _emit_calamares(airootfs: Path) -> None:
@@ -942,7 +962,14 @@ def _link_services(airootfs: Path) -> None:
     # Az'arch. `azarch network bluetooth on` enables + starts it (and rfkill-unblocks the
     # radio) on demand; leaving it out of multi-user.target.wants keeps the radio down at
     # boot. NetworkManager (the network stack) and CUPS (printing) stay auto-enabled.
-    for svc in ("NetworkManager.service", "org.cups.cupsd.service"):
+    # spice-vdagentd is the SPICE guest agent's system daemon: it bridges the
+    # com.redhat.spice.0 virtio channel so the session spice-vdagent can sync the guest
+    # pointer/clipboard/resolution with the SPICE client. Enabling it fixes the SPICE-guest
+    # pointer regression (no hover / dropped clicks / stuck labels) -- see the spice-vdagent
+    # note in packages.x86_64 and the autostart line in modifications/openbox. Harmless on
+    # non-SPICE systems (the daemon idles with no channel). Auto-enabled on BOTH ISOs and,
+    # via unpackfs, the installed system.
+    for svc in ("NetworkManager.service", "org.cups.cupsd.service", "spice-vdagentd.service"):
         emit.link(f"/usr/lib/systemd/system/{svc}", base / f"multi-user.target.wants/{svc}")
     emit.link("/etc/systemd/system/locale-setup.service", base / "multi-user.target.wants/locale-setup.service")
     emit.link("/etc/systemd/system/pkgs-setup.service", base / "multi-user.target.wants/pkgs-setup.service")

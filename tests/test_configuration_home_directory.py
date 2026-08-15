@@ -78,11 +78,14 @@ def test_resolved_home_path_joins_and_normalizes():
 def test_sidebar_entries_are_directories_then_links_resolved():
     entries = hd.sidebar_entries()
     labels = [label for label, _ in entries]
-    # Directories first (in order), then link names (in order).
+    # PROMPT ordering: directories first (in order), then the symlinks (in order), with "Trash"
+    # forced to the very END (it is a symlink but pinned last). No plain files in the curated
+    # set, so the order is DIRECTORIES, then non-Trash LINKS, then Trash.
     assert labels == [
         "Desktop", "Downloads", "Vault", "Documents", "Ignore",
         "Music", "Pictures", "Projects", "Videos",
-        "Trash", "Cache", "Config", "Bashrc", "Local",
+        "Cache", "Config", "Bashrc", "Local",
+        "Trash",
     ]
     targets = dict(entries)
     # A directory shortcut points at itself.
@@ -95,6 +98,19 @@ def test_sidebar_entries_are_directories_then_links_resolved():
     assert targets["Local"] == "/home/main/.local"
     # Bashrc is a FILE target (.bashrc); still resolved under HOME.
     assert targets["Bashrc"] == "/home/main/.bashrc"
+
+
+def test_home_directory_symlink_backs_the_home_bookmark():
+    # PROMPT batch item 4 fix: a hidden ".home-directory -> ." symlink gives the "Home Directory"
+    # sidebar bookmark a DISTINCT URI so it survives Thunar hiding the built-in Home
+    # (file:///home/main). The target is RELATIVE (valid under /etc/skel), and the name is
+    # dot-prefixed so the live-sidebar (which skips hidden entries) never lists it as clutter.
+    assert hd.HOME_DIR_SYMLINK_NAME == ".home-directory"
+    assert hd.HOME_DIR_SYMLINK_TARGET == "."
+    assert not hd.HOME_DIR_SYMLINK_TARGET.startswith("/")   # relative
+    assert hd.HOME_DIR_BOOKMARK_URI == "file:///home/main/.home-directory"
+    # distinct from the built-in Home URI (else the bookmark would be hidden with it).
+    assert hd.HOME_DIR_BOOKMARK_URI != f"file://{hd.HOME}"
 
 
 def test_no_absolute_paths_leak_into_layout_names():

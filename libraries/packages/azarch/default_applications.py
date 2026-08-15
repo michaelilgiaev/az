@@ -130,6 +130,85 @@ def mime_defaults() -> list[tuple[str, str]]:
     return pairs
 
 
+# --- The TUI derivation (PROMPT: the azarch "Default Applications" screen derives its rows from
+# THIS table, no second copy). Each category the TUI shows becomes a sub-screen; the user can
+# pick a new handler from the CANDIDATES for that category, which rewrites the default. The C
+# model.c rows and the `azarch default-applications` CLI are pinned to these by tests (the
+# wallpaper.py <-> model.c lock-step pattern) so they cannot drift.
+
+# A stable KEY for each category (used on the `azarch default-applications` command line and as
+# the C screen id suffix), keyed by the category label. Lowercase, no spaces -- safe as a CLI
+# token and a screen id. Kept here (with the label) so the CLI, the C model, and this emitter
+# all speak the same identifiers.
+CATEGORY_KEYS: dict[str, str] = {
+    "Web": "web",
+    "Mail": "mail",
+    "HTML": "html",
+    "Music": "music",
+    "Video": "video",
+    "Photos": "photos",
+    "Word": "word",
+    "Spreadsheet": "spreadsheet",
+    "PDF": "pdf",
+    "Source Code": "source-code",
+    "File Manager": "file-manager",
+    "Plain Text": "plain-text",
+    "Calculator": "calculator",
+    "Terminal": "terminal",
+}
+
+# The candidate handlers offered PER category when the user changes its default (first entry is
+# the Az'arch shipped default from CATEGORIES). Only .desktop ids that Az'arch actually ships are
+# listed, so a pick always resolves. "Terminal" is special (no MIME; wired via the exo
+# TerminalEmulator helper), so its candidates are terminal .desktop ids. A test asserts the
+# first candidate of each category equals that category's CATEGORIES default.
+CANDIDATES: dict[str, tuple[str, ...]] = {
+    "Web": ("librewolf.desktop",),
+    "Mail": (),  # no mail client shipped -- nothing to pick
+    "HTML": ("librewolf.desktop", "org.gnome.gedit.desktop"),
+    "Music": ("vlc.desktop",),
+    "Video": ("vlc.desktop",),
+    "Photos": ("xviewer.desktop", "gimp.desktop"),
+    "Word": ("libreoffice-writer.desktop",),
+    "Spreadsheet": ("libreoffice-calc.desktop",),
+    "PDF": ("librewolf.desktop",),
+    "Source Code": ("org.gnome.gedit.desktop",),
+    "File Manager": ("thunar.desktop",),
+    "Plain Text": ("org.gnome.gedit.desktop",),
+    "Calculator": ("qalculate-gtk.desktop",),
+    "Terminal": ("kitty.desktop",),
+}
+
+
+def category_by_key(key: str) -> tuple[str, str, str, tuple[str, ...]] | None:
+    """Return the CATEGORIES row (group, label, desktop_id, mimes) for a category key, or None."""
+    for row in CATEGORIES:
+        _group, label, _desktop_id, _mimes = row
+        if CATEGORY_KEYS.get(label) == key:
+            return row
+    return None
+
+
+def representative_mime(label: str) -> str:
+    """The ONE MIME type used to query/set a category's default via xdg-mime (the first MIME in
+    its CATEGORIES row). Empty for the non-MIME categories (Mail/Terminal/Calculator/File
+    Manager has inode/directory) -- those are handled specially by the CLI."""
+    for _group, lbl, _desktop_id, mimes in CATEGORIES:
+        if lbl == label:
+            return mimes[0] if mimes else ""
+    return ""
+
+
+def tui_categories() -> list[tuple[str, str, str, str]]:
+    """Return the ordered rows the TUI's Default Applications screen shows, as
+    (group, label, key, default_desktop_id) -- derived from CATEGORIES (the single source of
+    truth). The C model and the CLI are pinned to this order/labels by tests."""
+    out: list[tuple[str, str, str, str]] = []
+    for _group, label, desktop_id, _mimes in CATEGORIES:
+        out.append((_group, label, CATEGORY_KEYS[label], desktop_id))
+    return out
+
+
 def mimeapps_list() -> str:
     """Return ~/.config/mimeapps.list -- the freedesktop default-applications file. One
     `mimetype=desktop_id` line per (mime, handler) in mime_defaults(), under the

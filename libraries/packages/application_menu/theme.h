@@ -15,9 +15,18 @@
 #ifndef AZ_THEME_H
 #define AZ_THEME_H
 
-/* --- Geometry (px) ------------------------------------------------------- */
-#define AZ_DEFAULT_WIDTH   582   /* menu window width  */
-#define AZ_DEFAULT_HEIGHT  497   /* menu window height */
+/* The GLOBAL UI SCALE ratio (modifications/scale). AZ_SCALED(x) scales a fixed-PIXEL dimension by
+ * it; the point FONTS below are left STOCK and scale via the DPI channel (gtk-xft-dpi, from
+ * Xft.dpi) instead -- so they are NOT wrapped in AZ_SCALED (that would double-scale). The
+ * checked-in az_scale.h is scale 1.0 (so the C tests compile stock); the ISO build overwrites it
+ * with the real ratio, so the shipped menu's geometry derives from the one scale source. */
+#include "az_scale.h"
+
+/* --- Geometry (px) -- STOCK (scale-1.0) values, scaled by AZ_SCALED() ------
+ * The stock values are the old hand-tuned "looks right at 1.35" numbers divided by 1.35, so
+ * AZ_SCALED(stock) at the 1.35 default reproduces them (+-1px rounding) and scale 1.0 is stock. */
+#define AZ_DEFAULT_WIDTH   AZ_SCALED(431)   /* menu window width  (was 582 @1.35) */
+#define AZ_DEFAULT_HEIGHT  AZ_SCALED(368)   /* menu window height (was 497 @1.35) */
 
 /* How far OFF-screen the daemon parks the (still-mapped) window to hide it.
  * Instant-open key: a mapped window that is merely MOVED costs almost nothing to
@@ -77,28 +86,40 @@ const char *az_color(AzColorRole role);
 #define AZ_SCROLL_THUMB_HOVER  az_color(AZ_C_SCROLL_THUMB_HOVER)
 #define AZ_SCROLL_GROOVE_COLOR az_color(AZ_C_SCROLL_GROOVE)
 
-/* --- Scrollbar geometry (arrow-less rounded pill, Kickoff style) --------- */
-#define AZ_SCROLL_THUMB_WIDTH  6
-#define AZ_SCROLL_TRACK_WIDTH  12
-#define AZ_SCROLL_THUMB_MIN    32
+/* --- Scrollbar geometry (arrow-less rounded pill, Kickoff style) -- STOCK, AZ_SCALED --- */
+#define AZ_SCROLL_THUMB_WIDTH  AZ_SCALED(4)    /* was 6  @1.35 */
+#define AZ_SCROLL_TRACK_WIDTH  AZ_SCALED(9)    /* was 12 @1.35 */
+#define AZ_SCROLL_THUMB_MIN    AZ_SCALED(24)   /* was 32 @1.35 */
 
-/* --- Fonts --------------------------------------------------------------- */
+/* --- Fonts (POINTS) -- TWO scaling paths, because the menu draws text two different ways:
+ *   * The app-row NAME/TYPE (applist.c) and the power labels (power.c) are drawn with
+ *     pango_cairo_create_layout(cr), whose PangoContext defaults to 96 DPI and does NOT inherit
+ *     gtk-xft-dpi -- so those do NOT scale via the DPI channel and MUST be scaled EXPLICITLY at
+ *     build time with AZ_SCALED() (like the DPI-blind OpenBox titlebar). Stock = old/1.35, so
+ *     AZ_SCALED(stock) at the 1.35 default reproduces the old 13/10/12.
+ *   * The SEARCH box is a real GtkEntry with gtk_widget_override_font (menu.c), which DOES scale
+ *     via gtk-xft-dpi -- so it stays STOCK (wrapping it in AZ_SCALED would DOUBLE-scale).
+ * (This split -- verified by compiling both paths under a forced gtk-xft-dpi -- is why an earlier
+ * "all fonts STOCK" reconciliation made the app rows ~23% too small: the cairo path never saw the
+ * DPI.) Stock baselines come from modifications.scale.MENU_FONT_*_STOCK. The AZ_SCALED() results
+ * at the 1.35 default are 14/9/12 pt (integer round of stock*1.35) -- i.e. ~the old 13/10/12,
+ * within the +-1px rounding the codebase accepts for AZ_SCALED. */
 #define AZ_FONT_FAMILY   "Noto Sans"
-#define AZ_FONT_APP_NAME 13   /* app-row NAME (big line)         */
-#define AZ_FONT_APP_TYPE 10   /* app-row TYPE subtitle (muted)   */
-#define AZ_FONT_SEARCH   13   /* search box entry + placeholder  */
-#define AZ_FONT_POWER    12   /* bottom power-row button labels  */
+#define AZ_FONT_APP_NAME AZ_SCALED(10)  /* app-row NAME  (cairo path -> explicit scale); ->14 @1.35 (~13) */
+#define AZ_FONT_APP_TYPE AZ_SCALED(8)   /* app-row TYPE  (cairo path -> explicit scale); ->11 @1.35 (~10) */
+#define AZ_FONT_SEARCH   10             /* search GtkEntry (DPI path -> STOCK); ~13 @1.35 via DPI */
+#define AZ_FONT_POWER    AZ_SCALED(9)   /* power labels  (cairo path -> explicit scale); ->12 @1.35 */
 
-/* Icon sizes (px). */
-#define AZ_ICON_SIZE       44  /* app-row icon edge          */
-#define AZ_POWER_ICON_SIZE 24  /* bottom power-button icon   */
+/* Icon sizes (px) -- STOCK, AZ_SCALED. */
+#define AZ_ICON_SIZE       AZ_SCALED(33)  /* app-row icon edge;    was 44 @1.35 */
+#define AZ_POWER_ICON_SIZE AZ_SCALED(18)  /* power-button icon;    was 24 @1.35 */
 
-/* Row metrics (applist), from applist.py CanvasAppList. */
-#define AZ_ROW_H   56
-#define AZ_ROW_PAD_X 8
-#define AZ_ICON_X  26
-#define AZ_TEXT_X  78
-#define AZ_NAME_DY 18
-#define AZ_SUB_DY  38
+/* Row metrics (applist) -- STOCK, AZ_SCALED. */
+#define AZ_ROW_H   AZ_SCALED(41)   /* was 56 @1.35 */
+#define AZ_ROW_PAD_X AZ_SCALED(6)  /* was 8  @1.35 */
+#define AZ_ICON_X  AZ_SCALED(19)   /* was 26 @1.35 */
+#define AZ_TEXT_X  AZ_SCALED(58)   /* was 78 @1.35 */
+#define AZ_NAME_DY AZ_SCALED(13)   /* was 18 @1.35 */
+#define AZ_SUB_DY  AZ_SCALED(28)   /* was 38 @1.35 */
 
 #endif /* AZ_THEME_H */

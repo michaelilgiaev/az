@@ -95,7 +95,14 @@ KITTY_APP_ICON_PATH = f"{HOME}/.config/kitty/kitty.app.png"
 # '='). A HOME file (owner "home"): compiler.py chowns it 1000:998 and mirrors it into
 # /etc/skel so a Calamares-created user inherits the same font size.
 KITTY_CONF_PATH = f"{HOME}/.config/kitty/kitty.conf"
-KITTY_FONT_SIZE = 18   # pt; kept equal to gedit's editor font size (modifications.gedit.GEDIT_FONT_SIZE)
+# font_size: the STOCK (scale-1.0) point size from the single scale source
+# (modifications.scale.TERMINAL_EDITOR_FONT_STOCK, == gedit's baseline so "kitty == gedit"). kitty
+# renders a pt font at the screen DPI (it reads Xft.dpi), so the GLOBAL SCALE's Xft.dpi channel
+# bumps this automatically -- at scale 1.35 (Xft.dpi 130) it renders ~= the old hardcoded 18pt.
+# Deriving it from scale.py (not a raw 18) is what keeps ONE source of truth for the scale.
+from modifications import scale as _scale  # noqa: E402  (single source of truth for the scale)
+
+KITTY_FONT_SIZE = _scale.TERMINAL_EDITOR_FONT_STOCK   # STOCK pt; DPI channel scales it (== gedit)
 # Square size (px) the titlebar PNG is rasterized to. MUST be 128: on X11 the maximum
 # OS-window icon is 128x128, and kitty REFUSES a larger one -- it prints "The window icon
 # is too large (256x256). On X11 max window icon size is: 128x128" and leaves the window

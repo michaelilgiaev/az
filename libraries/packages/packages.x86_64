@@ -183,6 +183,29 @@ wireplumber
 xorg-server
 xorg-xinit
 xorg-xrandr
+# xrdb: loads ~/.Xresources (Xft.dpi + Xcursor.size) at session start (~/.xinitrc) -- the GLOBAL
+# SCALE backbone every X client reads. `azarch display scale` also re-runs `xrdb -merge` to
+# re-apply a scale change live. Without this package the whole fractional UI scale (e.g. 1.35)
+# silently does not take effect (the .xinitrc xrdb line is guarded, so it just no-ops).
+xorg-xrdb
+# spice-vdagent: the SPICE guest agent. The releng baseline ships open-vm-tools (VMware),
+# qemu-guest-agent and virtualbox-guest-utils, but NOT spice-vdagent -- a clear gap for the
+# QEMU/KVM guest the ISO is tested on, which is accessed over SPICE (verified: the
+# /dev/virtio-ports/com.redhat.spice.0 channel is present, but the agent was absent). It is the
+# standard SPICE guest-integration piece: with spice-vdagentd (the daemon that reads that
+# channel) + spice-vdagent (the session agent), the guest keeps the pointer in sync with the
+# SPICE client ("client mouse mode": no grab, no lag), auto-fits the resolution, and shares the
+# clipboard. It is the correct, low-risk fix for the reported pointer regression (no hover /
+# dropped clicks / stale labels are the classic symptoms of a SPICE guest whose pointer is not
+# agent-coordinated). NOTE: the test VM also enumerates BOTH a "QEMU Virtio Tablet" (absolute)
+# AND an emulated PS/2 mouse (relative); a relative+absolute pointer pair can itself make the
+# cursor erratic, so if symptoms persist after the agent the next lever is the host device model
+# (drop the PS/2 mouse, keep the virtio-tablet) -- that is a HOST/QEMU config the ISO cannot set,
+# so it is documented rather than forced (disabling a PS/2 device guest-side would break real
+# PS/2 hardware). Harmless everywhere: spice-vdagent exits at once with no SPICE channel.
+# spice-vdagentd is enabled in _link_services; spice-vdagent is started from the OpenBox session
+# autostart (it needs a running X session).
+spice-vdagent
 xorg-xsetroot
 # xset: `azarch`'s OpenBox autostart runs `xset r rate 300 25` to shorten the keyboard
 # autorepeat delay, so HOLDING an FN volume/brightness key ramps quickly (each repeat is one

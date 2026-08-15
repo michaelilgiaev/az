@@ -35,6 +35,11 @@ def usage() -> None:
         "                          See `azarch brightness --help`\n"
         "  machine [--pc|--laptop|--auto]  Show / hard-set the machine type (PC or Laptop);\n"
         "                          no option prints it. See `azarch machine --help`\n"
+        "  default-applications <list|get|set|...>  List / change the XDG default apps (which\n"
+        "                          app opens which file type). See "
+        "`azarch default-applications --help`\n"
+        "  display <info|scale|resolution|...>  Configure the display (xrandr) and the global\n"
+        "                          UI scale. See `azarch display --help`\n"
         "  --sshd-hypervisor    Install host pubkey from ~/shared/authorized_keys "
         "and start sshd\n"
         "  --resolve-region     Geolocate by IP (pick a server) and set BOTH "
@@ -73,6 +78,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_media_init(argv[1:])
     if cmd == "machine":
         return cmd_machine(argv[1:])
+    if cmd == "default-applications":
+        return cmd_default_applications(argv[1:])
+    if cmd == "display":
+        return cmd_display(argv[1:])
     if cmd == "--sshd-hypervisor":
         return sshd_hypervisor()
     if cmd == "--resolve-date-time":

@@ -453,6 +453,118 @@ const char *az_status_brightness(char *buf, size_t n)
     return buf;
 }
 
+/* --- Default Applications probes --------------------------------------------
+ * Each category's "Current:" line shows the handler it currently resolves to, read by asking
+ * the SAME command surface the apply rows drive: `azarch default-applications get <key>`. The
+ * probe signature takes no arguments (it is a fn ptr the renderer memoises), so there is one
+ * tiny probe per category, all sharing az_da_get(). The <key> strings and the category set are
+ * pinned to packages/azarch/default_applications.py by a test (the wallpaper.py <-> model.c
+ * lock-step), so C and Python cannot drift. */
+static const char *az_da_get(const char *key, char *buf, size_t n)
+{
+    const char *argv[] = {"azarch", "default-applications", "get", key, NULL};
+    char raw[128] = {0};
+    if (have("azarch") && az_capture(argv, raw, sizeof raw) == 0 && raw[0]) {
+        snprintf(buf, n, "%s", raw);
+        return buf;
+    }
+    snprintf(buf, n, "(unknown)");
+    return buf;
+}
+
+/* One probe per category key. DA_PROBE(fn, "key") expands to a status function that reports the
+ * live handler for that category. Keys MUST match default_applications.CATEGORY_KEYS (pinned). */
+#define DA_PROBE(fn, key) \
+    const char *fn(char *buf, size_t n) { return az_da_get(key, buf, n); }
+DA_PROBE(az_status_da_web,          "web")
+DA_PROBE(az_status_da_mail,         "mail")
+DA_PROBE(az_status_da_html,         "html")
+DA_PROBE(az_status_da_music,        "music")
+DA_PROBE(az_status_da_video,        "video")
+DA_PROBE(az_status_da_photos,       "photos")
+DA_PROBE(az_status_da_word,         "word")
+DA_PROBE(az_status_da_spreadsheet,  "spreadsheet")
+DA_PROBE(az_status_da_pdf,          "pdf")
+DA_PROBE(az_status_da_source_code,  "source-code")
+DA_PROBE(az_status_da_file_manager, "file-manager")
+DA_PROBE(az_status_da_plain_text,   "plain-text")
+DA_PROBE(az_status_da_calculator,   "calculator")
+DA_PROBE(az_status_da_terminal,     "terminal")
+#undef DA_PROBE
+
+/* --- Display probes ---------------------------------------------------------
+ * The Display screen and its scale chooser show live state read from `azarch display`. The
+ * summary probe reports the current resolution + scale at a glance; the scale probe reports the
+ * global UI scale. Both degrade to a readable word so a cell is never blank. */
+const char *az_status_display_scale(char *buf, size_t n)
+{
+    /* `azarch display scale get` -> "Global scale: 1.35" on its first line. Report "1.35x". */
+    const char *argv[] = {"azarch", "display", "scale", "get", NULL};
+    char raw[128] = {0};
+    if (have("azarch") && az_capture(argv, raw, sizeof raw) == 0) {
+        const char *colon = strchr(raw, ':');
+        if (colon) {
+            colon++;
+            while (*colon == ' ') colon++;
+            if (*colon) { snprintf(buf, n, "%sx", colon); return buf; }
+        }
+    }
+    snprintf(buf, n, "1.35x");
+    return buf;
+}
+
+const char *az_status_display(char *buf, size_t n)
+{
+    /* A one-line summary: the primary output's current resolution (from xrandr, the line marked
+     * with a '*') and the global scale. Falls back to just the scale if xrandr is unreadable. */
+    char scalebuf[64] = {0};
+    az_status_display_scale(scalebuf, sizeof scalebuf);
+    if (have("xrandr")) {
+        /* grab the current mode: xrandr marks the active mode with a trailing '*'. Fork xrandr
+         * and scan its output for the first "  <WxH> ... *" line (az_capture is first-line only,
+         * so this reads the pipe directly). */
+        const char *argv[] = {"xrandr", "--query", NULL};
+        char res[32] = {0};
+        char line[512];
+        int pipefd[2];
+        if (pipe(pipefd) == 0) {
+            pid_t pid = fork();
+            if (pid == 0) {
+                int dn = open("/dev/null", O_RDWR);
+                if (dn >= 0) { dup2(dn, 0); dup2(dn, 2); }
+                dup2(pipefd[1], 1); close(pipefd[0]); close(pipefd[1]);
+                if (dn > 2) close(dn);
+                execvp(argv[0], (char *const *)argv);
+                _exit(127);
+            }
+            close(pipefd[1]);
+            FILE *f = fdopen(pipefd[0], "r");
+            if (f) {
+                while (fgets(line, sizeof line, f)) {
+                    if (strchr(line, '*')) {
+                        /* first token on a mode line is the resolution */
+                        char *p = line;
+                        while (*p == ' ' || *p == '\t') p++;
+                        int i = 0;
+                        while (p[i] && p[i] != ' ' && p[i] != '\t' && i < (int)sizeof res - 1) {
+                            res[i] = p[i]; i++;
+                        }
+                        res[i] = '\0';
+                        break;
+                    }
+                }
+                fclose(f);
+            } else {
+                close(pipefd[0]);
+            }
+            int st; waitpid(pid, &st, 0); (void)st;
+        }
+        if (res[0]) { snprintf(buf, n, "%s @ %s", res, scalebuf); return buf; }
+    }
+    snprintf(buf, n, "scale %s", scalebuf);
+    return buf;
+}
+
 /* --- filter (the search box) ------------------------------------------------ */
 static int ci_contains(const char *hay, const char *needle)
 {
@@ -509,259 +621,3 @@ const char *az_row_base(const AzRow *r)
     return r->base;
 }
 
-/* --- the screen tree -------------------------------------------------------- */
-/* Actions are shell command lines run through the installed `azarch` command line interface. main.c runs
- * them INSIDE the UI (output captured, shown in the results overlay), then shows a result. */
-
-/* All rows use DESIGNATED initializers: any field not named is zero (NULL / AZ_PV_NONE /
- * needs_root==0 / show_output==0), so adding a field never forces touching every row and the
- * intent of each row is self-documenting. `.needs_root = 1` marks an apply that first secures a
- * sudo credential; `.show_output = 1` shows its captured output in the overlay. */
-
-/* Network is FIRST (it is what a fresh machine needs first). The main rows keep their live
- * status -- it is a genuine at-a-glance summary of the sub-screen (e.g. "firewall active"),
- * NOT a redundant echo, and the main screen has no "Current:" line of its own. */
-static const AzRow ROWS_MAIN[] = {
-    {.label="Network",      .kind=AZ_ACT_SCREEN, .target="network",    .status=az_status_network},
-    {.label="Theme",        .kind=AZ_ACT_SCREEN, .target="theme",      .status=az_status_theme},
-    {.label="Wallpaper",    .kind=AZ_ACT_SCREEN, .target="wallpaper",  .status=az_status_wallpaper},
-    {.label="Volume",       .kind=AZ_ACT_SCREEN, .target="volume",     .status=az_status_volume},
-    {.label="Brightness",   .kind=AZ_ACT_SCREEN, .target="brightness", .status=az_status_brightness},
-    {.label="Machine Type", .kind=AZ_ACT_SCREEN, .target="machine",    .status=az_status_machine},
-};
-
-/* Theme / Wallpaper rows carry NO per-row status: the live state is shown ONCE as the
- * "Current:" line at the top of the screen (the screen's `current` probe), so echoing
- * "white"/"years" after each option would just be noise -- exactly what the spec calls out.
- * Applying a theme/wallpaper needs no sudo (it configures the user session), so needs_root
- * stays 0; the apply still runs inside the UI (captured), so no command line interface text flashes over it. */
-static const AzRow ROWS_THEME[] = {
-    {.label="Dark",  .kind=AZ_ACT_APPLY, .target="azarch theme --dark",
-     .base="gsettings set org.gnome.desktop.interface color-scheme prefer-dark",
-     .preview=AZ_PV_THEME, .preview_arg="dark"},
-    {.label="White", .kind=AZ_ACT_APPLY, .target="azarch theme --white",
-     .base="gsettings set org.gnome.desktop.interface color-scheme prefer-light",
-     .preview=AZ_PV_THEME, .preview_arg="white"},
-};
-
-static const AzRow ROWS_WALLPAPER[] = {
-    {.label="Years",   .kind=AZ_ACT_APPLY, .target="azarch wallpaper --years.png",
-     .base="feh --no-fehbg --bg-fill " AZ_WALLPAPERS_DIR "/years/contents/images/" AZ_WALLPAPER_RES ".png",
-     .preview=AZ_PV_WALLPAPER, .preview_arg="years"},
-    {.label="Decades", .kind=AZ_ACT_APPLY, .target="azarch wallpaper --decades.png",
-     .base="feh --no-fehbg --bg-fill " AZ_WALLPAPERS_DIR "/decades/contents/images/" AZ_WALLPAPER_RES ".png",
-     .preview=AZ_PV_WALLPAPER, .preview_arg="decades"},
-};
-
-static const AzRow ROWS_NETWORK[] = {
-    {.label="Wifi",          .kind=AZ_ACT_SCREEN, .target="network.wifi",      .status=az_status_wifi},
-    {.label="Wired",         .kind=AZ_ACT_SCREEN, .target="network.wired",     .status=az_status_wired},
-    {.label="Bluetooth",     .kind=AZ_ACT_SCREEN, .target="network.bluetooth", .status=az_status_bluetooth},
-    {.label="Airplane mode", .kind=AZ_ACT_SCREEN, .target="network.airplane",  .status=az_status_airplane},
-    {.label="Firewall",      .kind=AZ_ACT_SCREEN, .target="network.firewall",  .status=az_status_firewall},
-};
-
-/* The sub-screen action rows carry NO per-row .status -- the live state is shown ONCE as the
- * screen's "Current:" line (its .current probe), exactly like Theme/Wallpaper. This is the fix
- * for the repeated "radio enabled" spam: every row on a screen was echoing the same probe. */
-/* Every network apply runs privileged tools (nmcli/rfkill/systemctl/ufw), so needs_root=1:
- * the UI secures a sudo credential (masked, in-UI, cached) before running it, and runs it
- * captured -- no black screen, no scrollback. The list/scan verbs set show_output=1 so their
- * table lands in the results overlay; the toggles just show a one-line result. */
-static const AzRow ROWS_WIFI[] = {
-    {.label="Turn wifi on",         .kind=AZ_ACT_APPLY, .target="azarch network wifi on",   .needs_root=1,
-     .base="sudo nmcli radio wifi on"},
-    {.label="Turn wifi off",        .kind=AZ_ACT_APPLY, .target="azarch network wifi off",  .needs_root=1,
-     .base="sudo nmcli radio wifi off"},
-    {.label="Scan / list networks", .kind=AZ_ACT_APPLY, .target="azarch network wifi list", .needs_root=1, .show_output=1,
-     .base="nmcli -f IN-USE,SSID,SIGNAL,SECURITY device wifi list"},
-    {.label="Disconnect",           .kind=AZ_ACT_APPLY, .target="azarch network wifi disconnect", .needs_root=1,
-     .base="sudo nmcli device disconnect <iface>"},
-};
-
-static const AzRow ROWS_WIRED[] = {
-    {.label="Turn wired on",  .kind=AZ_ACT_APPLY, .target="azarch network wired on",  .needs_root=1,
-     .base="sudo nmcli device connect <iface>"},
-    {.label="Turn wired off", .kind=AZ_ACT_APPLY, .target="azarch network wired off", .needs_root=1,
-     .base="sudo nmcli device disconnect <iface>"},
-};
-
-static const AzRow ROWS_BLUETOOTH[] = {
-    {.label="Turn bluetooth on",   .kind=AZ_ACT_APPLY, .target="azarch network bluetooth on",  .needs_root=1,
-     .base="sudo systemctl enable --now bluetooth"},
-    {.label="Turn bluetooth off",  .kind=AZ_ACT_APPLY, .target="azarch network bluetooth off", .needs_root=1,
-     .base="sudo systemctl disable --now bluetooth"},
-    {.label="Scan / list devices", .kind=AZ_ACT_APPLY, .target="azarch network bluetooth scan", .needs_root=1, .show_output=1,
-     .base="bluetoothctl devices"},
-};
-
-static const AzRow ROWS_AIRPLANE[] = {
-    {.label="Turn airplane mode on",  .kind=AZ_ACT_APPLY, .target="azarch network airplane on", .needs_root=1,
-     .base="sudo nmcli networking off"},
-    {.label="Turn airplane mode off", .kind=AZ_ACT_APPLY, .target="azarch network airplane off", .needs_root=1,
-     .base="sudo nmcli networking on"},
-};
-
-/* Firewall: enable/disable, LIST the port rules right here in the overlay (show_output=1),
- * and open/close/delete a port by TYPING its number (AZ_ACT_PORT prompts, then appends the
- * port to the command). This is the in-UI firewall config the spec asks for -- no dropping
- * to a shell, no guessing the command line interface. */
-static const AzRow ROWS_FIREWALL[] = {
-    {.label="Enable firewall",   .kind=AZ_ACT_APPLY, .target="azarch network firewall enable",  .needs_root=1,
-     .base="sudo ufw --force enable"},
-    {.label="Disable firewall",  .kind=AZ_ACT_APPLY, .target="azarch network firewall disable", .needs_root=1,
-     .base="sudo ufw disable"},
-    {.label="List ports",        .kind=AZ_ACT_APPLY, .target="azarch network firewall port list", .needs_root=1, .show_output=1,
-     .base="sudo ufw status numbered"},
-    {.label="Open a port",       .kind=AZ_ACT_PORT,  .target="azarch network firewall port open",   .needs_root=1, .show_output=1,
-     .base="sudo ufw allow"},
-    {.label="Close a port",      .kind=AZ_ACT_PORT,  .target="azarch network firewall port close",  .needs_root=1, .show_output=1,
-     .base="sudo ufw deny"},
-    {.label="Delete a port rule", .kind=AZ_ACT_PORT, .target="azarch network firewall port delete", .needs_root=1, .show_output=1,
-     .base="sudo ufw delete allow"},
-};
-
-/* Machine Type: show what Az'arch recognises (PC or Laptop) via the "Current:" line, and let
- * the user HARD-SWITCH it -- Force PC / Force Laptop / Autodetect. The switch decides whether
- * the brightness controls are offered (a PC has no backlight), so forcing "Laptop" turns them
- * on even on a desktop. These write the user's own config pointer (no sudo), so needs_root
- * stays 0; each runs captured inside the UI and shows its one-line result. */
-static const AzRow ROWS_MACHINE[] = {
-    /* Machine type is a pure config-pointer write (~/.config/azarch/machine-type) -- there is
-     * no system tool behind it, so the "base command" is the equivalent file write / removal. */
-    {.label="Force PC",   .kind=AZ_ACT_APPLY, .target="azarch machine --pc",
-     .base="printf 'PC\\n' > ~/.config/azarch/machine-type"},
-    {.label="Force Laptop", .kind=AZ_ACT_APPLY, .target="azarch machine --laptop",
-     .base="printf 'Laptop\\n' > ~/.config/azarch/machine-type"},
-    {.label="Autodetect", .kind=AZ_ACT_APPLY, .target="azarch machine --auto",
-     .base="rm -f ~/.config/azarch/machine-type"},
-};
-
-/* Volume: the "Current:" line shows the live level (az_status_volume); the rows set a PRECISE
- * level via `azarch volume set <N>` (the same subcommand the OSD mouse-drag uses) plus the two
- * 7.5% steps and mute. Each pops the bottom-middle cyan OSD bar. No sudo (PipeWire/ALSA run in
- * the user session), so needs_root stays 0; each runs captured in the UI and shows its result. */
-static const AzRow ROWS_VOLUME[] = {
-    {.label="Mute / unmute",   .kind=AZ_ACT_APPLY, .target="azarch volume mute",
-     .base="wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"},
-    {.label="Louder (+7.5%)",  .kind=AZ_ACT_APPLY, .target="azarch volume up",
-     .base="wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 7.5%+"},
-    {.label="Quieter (-7.5%)", .kind=AZ_ACT_APPLY, .target="azarch volume down",
-     .base="wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 7.5%-"},
-    {.label="Set to 0%",       .kind=AZ_ACT_APPLY, .target="azarch volume set 0",
-     .base="wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 0%"},
-    {.label="Set to 25%",      .kind=AZ_ACT_APPLY, .target="azarch volume set 25",
-     .base="wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 25%"},
-    {.label="Set to 50%",      .kind=AZ_ACT_APPLY, .target="azarch volume set 50",
-     .base="wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 50%"},
-    {.label="Set to 75%",      .kind=AZ_ACT_APPLY, .target="azarch volume set 75",
-     .base="wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 75%"},
-    {.label="Set to 100%",     .kind=AZ_ACT_APPLY, .target="azarch volume set 100",
-     .base="wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 100%"},
-};
-
-/* Brightness: LAPTOP-ONLY (a PC has no backlight). The "Current:" line reads "not on a PC" on a
- * desktop; the set/step rows still run `azarch brightness ...`, which SELF-GATES (it refuses and
- * says so on a PC), so selecting one on a desktop is harmless and explains itself. Force the type
- * on the Machine Type screen to light this up on a desktop. No sudo needed for the UI wrapper. */
-/* Brightness has NO brightnessctl on this build: azarch scales percent -> the raw kernel value
- * (percent/100 * max_brightness) and writes it to the backlight device's brightness file under
- * /sys/class/backlight via sudo tee. The base commands mirror that exactly, scaling inline so
- * they are copy-pasteable on any laptop (the glob picks the single backlight device, e.g.
- * intel_backlight). */
-static const AzRow ROWS_BRIGHTNESS[] = {
-    {.label="Brighter (+7.5%)", .kind=AZ_ACT_APPLY, .target="azarch brightness up",
-     .base="sudo sh -c 'b=/sys/class/backlight/*; echo $(( $(cat $b/brightness) + 8*$(cat $b/max_brightness)/100 )) > $b/brightness'"},
-    {.label="Dimmer (-7.5%)",   .kind=AZ_ACT_APPLY, .target="azarch brightness down",
-     .base="sudo sh -c 'b=/sys/class/backlight/*; echo $(( $(cat $b/brightness) - 8*$(cat $b/max_brightness)/100 )) > $b/brightness'"},
-    {.label="Set to 25%",       .kind=AZ_ACT_APPLY, .target="azarch brightness set 25",
-     .base="sudo sh -c 'b=/sys/class/backlight/*; echo $(( 25*$(cat $b/max_brightness)/100 )) > $b/brightness'"},
-    {.label="Set to 50%",       .kind=AZ_ACT_APPLY, .target="azarch brightness set 50",
-     .base="sudo sh -c 'b=/sys/class/backlight/*; echo $(( 50*$(cat $b/max_brightness)/100 )) > $b/brightness'"},
-    {.label="Set to 75%",       .kind=AZ_ACT_APPLY, .target="azarch brightness set 75",
-     .base="sudo sh -c 'b=/sys/class/backlight/*; echo $(( 75*$(cat $b/max_brightness)/100 )) > $b/brightness'"},
-    {.label="Set to 100%",      .kind=AZ_ACT_APPLY, .target="azarch brightness set 100",
-     .base="sudo sh -c 'b=/sys/class/backlight/*; cat $b/max_brightness > $b/brightness'"},
-};
-
-#define AZN(a) (int)(sizeof(a) / sizeof((a)[0]))
-
-/* Only Theme and Wallpaper set `.current` (the top "Current:" line); every other screen
- * leaves it NULL. The main screen's subtitle is empty (the spec removed the "Move with the
- * arrow keys..." line -- the nav hints at the bottom already say how to move). Designated
- * initializers throughout, so the NULL terminator is simply an empty pair of braces. */
-static const AzScreen SCREENS[] = {
-    {.id="main",      .title="Az'arch Settings", .subtitle="",
-     .rows=ROWS_MAIN, .nrows=AZN(ROWS_MAIN)},
-    /* Subtitles now say WHAT tool each screen drives and WHAT it does (the spec: the top label
-     * should explain the wrapped commands), not a bare tagline. The Theme one keeps the pinned
-     * "Kitty does not follow the system theme" phrase. */
-    {.id="theme",     .title="Theme",
-     .subtitle="Wraps gsettings color-scheme (prefer-dark/prefer-light) to switch dark/white. "
-               "Kitty does not follow the system theme.",
-     .current=az_status_theme,     .rows=ROWS_THEME,     .nrows=AZN(ROWS_THEME)},
-    /* Wallpaper subtitle is the DIRECTORY PATH -- coloured cyan (subtitle_accent) and placed
-     * tight above the "Current:" line, per the spec. It keeps the /usr/share/wallpapers path. */
-    {.id="wallpaper", .title="Wallpaper",
-     .subtitle="Wallpapers directory: " AZ_WALLPAPERS_DIR "/", .subtitle_accent=1,
-     .current=az_status_wallpaper, .rows=ROWS_WALLPAPER, .nrows=AZN(ROWS_WALLPAPER)},
-    {.id="network",   .title="Network",
-     .subtitle="A front-end over nmcli, rfkill, bluetoothctl and ufw -- wifi, wired, "
-               "bluetooth, airplane and the firewall.",
-     .rows=ROWS_NETWORK, .nrows=AZN(ROWS_NETWORK)},
-    /* Each network sub-screen shows its live state ONCE via .current (the "Current:" line at
-     * the top), so the rows below stay label-only -- no repeated status echo. */
-    {.id="network.wifi",      .title="Wifi",
-     .subtitle="Wraps nmcli radio wifi (on/off) and nmcli device wifi (list/disconnect).",
-     .current=az_status_wifi,      .rows=ROWS_WIFI,      .nrows=AZN(ROWS_WIFI)},
-    {.id="network.wired",     .title="Wired",
-     .subtitle="Wraps nmcli device connect/disconnect on the ethernet interface.",
-     .current=az_status_wired,     .rows=ROWS_WIRED,     .nrows=AZN(ROWS_WIRED)},
-    {.id="network.bluetooth", .title="Bluetooth",
-     .subtitle="Wraps systemctl (enable/disable bluetooth) + rfkill; bluetoothctl to scan. "
-               "Off by default.",
-     .current=az_status_bluetooth, .rows=ROWS_BLUETOOTH, .nrows=AZN(ROWS_BLUETOOTH)},
-    {.id="network.airplane",  .title="Airplane mode",
-     .subtitle="Wraps nmcli networking off/on (plus rfkill) -- one switch that really drops "
-               "the internet.",
-     .current=az_status_airplane,  .rows=ROWS_AIRPLANE,  .nrows=AZN(ROWS_AIRPLANE)},
-    {.id="network.firewall",  .title="Firewall",
-     .subtitle="Wraps ufw: enable/disable, status numbered, and allow/deny/delete a port.",
-     .current=az_status_firewall,  .rows=ROWS_FIREWALL,  .nrows=AZN(ROWS_FIREWALL)},
-    /* Volume: the "Current:" line shows the live level; the rows set a precise level (or step /
-     * mute), each popping the bottom-middle cyan OSD bar. */
-    {.id="volume",    .title="Volume",
-     .subtitle="Wraps wpctl set-volume / set-mute on @DEFAULT_AUDIO_SINK@ (PipeWire). "
-               "Drag the on-screen bar for any value.",
-     .current=az_status_volume,    .rows=ROWS_VOLUME,    .nrows=AZN(ROWS_VOLUME)},
-    /* Brightness: LAPTOP-ONLY. The "Current:" line reads the level on a laptop, or "not on a PC"
-     * on a desktop (where the rows self-gate). Force Laptop on Machine Type to enable it. */
-    {.id="brightness", .title="Brightness",
-     .subtitle="Writes the scaled value to /sys/class/backlight/*/brightness (sudo tee). "
-               "Laptops only -- a PC has no backlight.",
-     .current=az_status_brightness, .rows=ROWS_BRIGHTNESS, .nrows=AZN(ROWS_BRIGHTNESS)},
-    /* Machine Type: the "Current:" line shows what Az'arch recognises (PC / Laptop); the rows
-     * hard-switch it. Brightness is a laptop-only control, so this is where a desktop can be
-     * forced to "Laptop" to light the brightness UI up (or a laptop forced to "PC"). */
-    {.id="machine",   .title="Machine Type",
-     .subtitle="Writes ~/.config/azarch/machine-type (PC/Laptop) or removes it to autodetect. "
-               "Laptops get screen-brightness control; PCs do not.",
-     .current=az_status_machine,   .rows=ROWS_MACHINE,   .nrows=AZN(ROWS_MACHINE)},
-    { 0 },
-};
-
-const AzScreen *az_screens(void) { return SCREENS; }
-
-int az_screen_count(void)
-{
-    int c = 0;
-    while (SCREENS[c].id) c++;
-    return c;
-}
-
-const AzScreen *az_screen_find(const char *id)
-{
-    for (int i = 0; SCREENS[i].id; i++)
-        if (strcmp(SCREENS[i].id, id) == 0) return &SCREENS[i];
-    return NULL;
-}

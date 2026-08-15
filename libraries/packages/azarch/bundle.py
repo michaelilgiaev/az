@@ -48,6 +48,12 @@ MODULE_ORDER = [
     # by bare name, and this keeps every module under the per-file size budget.
     "firewall.py",
     "network.py",
+    # default_applications_cli.py: the `azarch default-applications` surface behind the TUI's
+    # Default Applications screen. Standalone (bundled), before command_line_interface.py.
+    "default_applications_cli.py",
+    # display.py: the `azarch display` surface (xrandr + the GLOBAL SCALE) behind the TUI's
+    # Display screen. Standalone (bundled), before command_line_interface.py.
+    "display.py",
     "sshd.py",
     # terminal_user_interface.py is the bare-`azarch` full-screen UI. It calls the theme/wallpaper/network
     # helpers by bare name, so it MUST be bundled after all of them; and before command_line_interface.py,
