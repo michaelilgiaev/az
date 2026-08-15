@@ -385,6 +385,27 @@ def test_emit_plan_desktop_overrides_match_iso_app_overrides():
         assert dest in override_targets, dest
 
 
+def test_mo_locale_catalog_dests_are_iso_app_overrides():
+    # REGRESSION (build broke with "thunar: .../en_GB/LC_MESSAGES/thunar.mo exists in
+    # filesystem"): the `thunar` package OWNS the en_GB locale catalog, so every locale .mo
+    # dest Thunar emits MUST be in pacman.ISO_APP_OVERRIDES -- otherwise compiler._emit_apps
+    # plants it in the airootfs overlay and pacstrap's pre-extraction file-conflict check
+    # aborts the whole ISO build. This pins the fix so the .mo cannot regress back into the
+    # overlay path.
+    import pacman
+    override_targets = {t for _b, t, _r in pacman.ISO_APP_OVERRIDES}
+    mo_dests = [e["dest"] for e in thunar.emit_plan()
+                if e["dest"].startswith("/usr/share/locale/")
+                and e["dest"].endswith("/thunar.mo")]
+    assert set(mo_dests) == {locale.mo_path(l) for l in locale.LOCALES}, mo_dests
+    for dest in mo_dests:
+        assert dest in override_targets, dest
+    # And each is NoExtract'd (the property that actually prevents the pacstrap conflict).
+    noextract = pacman._ISO_NOEXTRACT
+    for dest in mo_dests:
+        assert dest.lstrip("/") in noextract, dest
+
+
 def test_icon_asset_exists():
     import paths
     assert (paths.ASSETSDIR / launcher.ICON_ASSET).is_file()

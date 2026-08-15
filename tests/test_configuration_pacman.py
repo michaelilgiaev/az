@@ -86,6 +86,12 @@ def test_app_override_cp_sh_plants_replacements_and_removes_suppressed():
     mnt = pacman.app_override_cp_sh("/mnt")
     assert "/mnt/usr/share/applications/org.gnome.gedit.desktop" in mnt
     assert "rm -f /mnt/usr/share/pixmaps/kitty.png" in mnt
+    # Staged basenames of the REPLACEMENT entries must be unique: they all land in the same
+    # /root/azarch/apps/ staging dir, so a collision would silently overwrite one body with
+    # another's (e.g. two locales sharing "thunar.mo"). The en_US/en_GB catalogs are the case
+    # that forced per-locale basenames -- guard the invariant.
+    staged = [b for b, _t, remove in pacman.ISO_APP_OVERRIDES if not remove and b is not None]
+    assert len(staged) == len(set(staged)), staged
 
 
 def test_thunar_and_xviewer_desktop_overrides_are_planted():
@@ -104,6 +110,13 @@ def test_thunar_and_xviewer_desktop_overrides_are_planted():
     ):
         assert (f"install -Dm644 /root/azarch/apps/{name} "
                 f"/usr/share/applications/{name}") in live, name
+    # Thunar gettext .mo override catalogs: the en_GB path is package-owned, so both locale
+    # catalogs are planted post-pacstrap from the staging dir (per-locale staged basenames).
+    for basename, target in (
+        ("thunar.en_US.mo", "/usr/share/locale/en_US/LC_MESSAGES/thunar.mo"),
+        ("thunar.en_GB.mo", "/usr/share/locale/en_GB/LC_MESSAGES/thunar.mo"),
+    ):
+        assert (f"install -Dm644 /root/azarch/apps/{basename} {target}") in live, basename
 
 
 def test_dolphin_is_gone_from_manifest_and_thunar_present():

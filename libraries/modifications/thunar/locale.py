@@ -39,6 +39,15 @@ well-specified table of msgid/msgstr offsets). No external `msgfmt` dependency, 
 compiler._emit_apps ships the .mo as a ROOT-owned system file at each locale path (it is a
 system locale catalog, not a per-user dotfile) -- so every user on the installed system gets
 the relabelled Thunar. (Delivered via the "mo" plan-entry kind that compiler writes verbatim.)
+
+IMPORTANT -- the en_GB catalog path is OWNED BY THE `thunar` PACKAGE. `thunar` ships 67 locale
+catalogs including /usr/share/locale/en_GB/LC_MESSAGES/thunar.mo. pacman's file-conflict check
+runs BEFORE extraction (and is NOT suppressed by NoExtract), so pre-placing our en_GB catalog in
+the airootfs overlay aborts pacstrap with "thunar.mo exists in filesystem". Both locale dests are
+therefore routed through pacman.ISO_APP_OVERRIDES (NoExtract + post-pacstrap install) exactly like
+the .desktop overrides -- see mo_path()/LOCALES wired into ISO_APP_OVERRIDES and the compiler's
+_override_basename redirect. (en_US carries no package catalog -- Thunar's msgids ARE American
+English -- so it never conflicts, but travels the same path for symmetry.)
 """
 
 from __future__ import annotations

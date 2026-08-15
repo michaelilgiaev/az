@@ -180,6 +180,18 @@ ISO_APP_OVERRIDES = [
     ("thunar-volman-settings.desktop",
      "/usr/share/applications/thunar-volman-settings.desktop", False),
     ("xfce4-about.desktop", "/usr/share/applications/xfce4-about.desktop", False),
+    # Thunar gettext .mo override catalog (modifications/thunar/locale): relabels the
+    # hardcoded menu strings ("Places" -> "Home Directory", etc.). The `thunar` package
+    # OWNS /usr/share/locale/en_GB/LC_MESSAGES/thunar.mo (one of 67 shipped locale
+    # catalogs), so pre-placing our catalog in the overlay hit the file-conflict wall
+    # ("thunar.mo exists in filesystem" -> pacstrap abort). Same cure as the .desktop
+    # overrides: NoExtract the path and plant our catalog post-pacstrap. en_US carries no
+    # package catalog (Thunar's msgids are American English), so it never conflicts, but we
+    # route it through the SAME machinery for symmetry -- a NoExtract of an unowned path is a
+    # harmless no-op and app_override_cp_sh installs it just like en_GB. Staged basenames are
+    # per-locale (unique under /root/azarch/apps/) and match the emit_plan dests below.
+    ("thunar.en_US.mo", "/usr/share/locale/en_US/LC_MESSAGES/thunar.mo", False),
+    ("thunar.en_GB.mo", "/usr/share/locale/en_GB/LC_MESSAGES/thunar.mo", False),
 ]
 
 # Files the ISO overrides / suppresses. pacstrap must NOT extract the owning

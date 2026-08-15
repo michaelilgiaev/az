@@ -148,6 +148,10 @@ def emit_plan() -> list[dict]:
     # default-opener to "Edit with %s", and the Create Folder/Document labels -- PROMPT batch
     # items 3/7/8). A BINARY blob (bytes_builder), shipped ROOT-owned at the standard system
     # locale path for EACH locale the ISO generates, so it takes effect with the session LANG.
+    # Both dests are in pacman.ISO_APP_OVERRIDES: the en_GB path is package-owned (thunar ships
+    # it), so it is NoExtract'd + planted post-pacstrap -- planting it in the overlay aborts
+    # pacstrap ("thunar.mo exists in filesystem"). compiler._emit_apps redirects the bytes to
+    # the post-pacstrap staging dir when the dest matches an override target.
     for loc in locale.LOCALES:
         plan.append({
             "builder": None,
