@@ -774,16 +774,33 @@ def test_install_wrapper_unsets_runtime_dir_before_exec():
     # come strictly before the exec that elevates.
     out = desktop.install_wrapper_sh()
     unset_idx = out.index("unset XDG_RUNTIME_DIR")
-    exec_idx = out.index("exec sudo -E calamares")
+    exec_idx = out.index("exec sudo -E env QT_SCALE_FACTOR=1 calamares")
     assert unset_idx < exec_idx
 
 
 def test_install_wrapper_exec_line_present():
-    # The exact privileged launch: sudo -E (preserve X env). NO `-c /etc/calamares`:
+    # The exact privileged launch: sudo -E (preserve X env) with QT_SCALE_FACTOR=1
+    # re-set across the sudo boundary (see the scale test below). NO `-c /etc/calamares`:
     # that overrides the app-data dir and makes Calamares look for qml/ under
     # /etc/calamares (absent) -> fatal startup error. Calamares reads
     # /etc/calamares/settings.conf and branding by default without it.
-    assert "exec sudo -E calamares\n" in desktop.install_wrapper_sh()
+    assert "exec sudo -E env QT_SCALE_FACTOR=1 calamares\n" in desktop.install_wrapper_sh()
+
+
+def test_install_wrapper_pins_qt_scale_factor_one():
+    # The installer scale fix: Calamares (Qt) inherits BOTH the session's high Xft.dpi
+    # (=96*scale) AND QT_SCALE_FACTOR=<scale>, so it double-scaled (~1.82x at 1.35) and
+    # came up nearly full-screen. The wrapper pins QT_SCALE_FACTOR=1 so it scales by the
+    # DPI channel alone (like every other app). Because `sudo -E` would carry the
+    # session's value into the root process, the factor must also be re-set ACROSS the
+    # sudo boundary with `env QT_SCALE_FACTOR=1` on the exec line -- exporting it in the
+    # unprivileged shell alone is not enough.
+    out = desktop.install_wrapper_sh()
+    exec_line = next(ln for ln in out.splitlines() if ln.startswith("exec "))
+    assert "env QT_SCALE_FACTOR=1 calamares" in exec_line
+    # And the session's fractional QT_SCALE_FACTOR must NOT survive to the exec: no
+    # `QT_SCALE_FACTOR=<fraction>` is passed through (only the pinned integer 1).
+    assert "QT_SCALE_FACTOR=1.35" not in out
 
 
 def test_install_wrapper_does_not_override_appdata_dir():
@@ -796,7 +813,7 @@ def test_install_wrapper_does_not_override_appdata_dir():
         if ln.startswith("exec ")
     )
     assert "-c" not in exec_line
-    assert exec_line == "exec sudo -E calamares"
+    assert exec_line == "exec sudo -E env QT_SCALE_FACTOR=1 calamares"
 
 
 def test_install_wrapper_is_sh_script():

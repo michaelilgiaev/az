@@ -1286,7 +1286,20 @@ def install_wrapper_sh() -> str:
     so `-c /etc/calamares` made Calamares die at startup with "FATAL: explicitly
     configured application data directory is missing qml/". With no `-c`, Calamares
     reads /etc/calamares/settings.conf and branding by default (that IS the sysconfdir
-    it checks first) and finds QML under /usr/share, so the installer launches."""
+    it checks first) and finds QML under /usr/share, so the installer launches.
+
+    SCALE (the "installer is scaled way too much" report): Calamares is a Qt app, and
+    the OpenBox session (openbox_environment) exports BOTH desktop scaling channels --
+    the high DPI (Xft.dpi = round(96 * GLOBAL_SCALE), which Qt reads because
+    QT_ENABLE_HIGHDPI_SCALING=1) AND an explicit QT_SCALE_FACTOR=<scale>. Every OTHER
+    app is scaled by exactly ONE channel (GTK/kitty/gedit by the DPI alone -- see
+    modifications/scale), but Calamares, inheriting both, scaled by ~scale x scale
+    (~1.82x at 1.35) and came up nearly full-screen (measured 1872x1023 on 1920x1080).
+    So we pin QT_SCALE_FACTOR=1 for the installer ONLY (via `env` across the sudo
+    boundary, since -E would otherwise carry the session's 1.35 into the root process),
+    leaving it scaled by the DPI channel alone like everything else (~1.35x -> a
+    centered ~1387x758). This is the ONE app that needed the explicit factor dropped;
+    the session env is unchanged so the rest of the desktop keeps its Qt factor."""
     return """\
 #!/bin/sh
 # azarch-install -- privileged Calamares launcher for the live session.
@@ -1301,8 +1314,15 @@ def install_wrapper_sh() -> str:
 # No `-c /etc/calamares`: that flag overrides the app-data dir and makes Calamares look
 # for qml/ under /etc/calamares (which does not exist), a fatal startup error.
 # Calamares already reads /etc/calamares/settings.conf and branding by default.
+#
+# QT_SCALE_FACTOR=1 for the installer ONLY: the session exports QT_SCALE_FACTOR=<scale>
+# AND a high Xft.dpi (=96*scale), and Qt would apply BOTH -- double-scaling Calamares to
+# ~scale*scale (~1.82x at 1.35), nearly full-screen. Pinning the factor to 1 leaves it
+# scaled by the DPI channel alone, like every other app (~1.35x). `env QT_SCALE_FACTOR=1`
+# re-sets it ACROSS the sudo boundary (sudo -E would carry the session's value into root).
 unset XDG_RUNTIME_DIR
-exec sudo -E calamares
+export QT_SCALE_FACTOR=1
+exec sudo -E env QT_SCALE_FACTOR=1 calamares
 """
 
 
