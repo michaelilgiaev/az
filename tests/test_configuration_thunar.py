@@ -128,23 +128,17 @@ def test_devices_and_file_system_removed_via_hidden_bookmarks():
     assert '<value type="string" value="file:///"/>' in xml
 
 
-def test_home_username_row_hidden_and_replaced():
-    # PROMPT batch item 4: the built-in Home shortcut shows the bare username "main" (the home
-    # GFile's display-name). Hide it (its URI is file:///home/main). CRUCIAL: the replacement
-    # "Home Directory" bookmark must NOT point straight at file:///home/main -- Thunar hides
-    # bookmarks by CANONICAL URI, so that would be hidden by the same entry. It points at the
-    # hidden `.home-directory -> .` symlink (a DISTINCT URI that survives the hiding and resolves
-    # into the home dir). This is the collision the adversary caught; the symlink is the fix.
-    from modifications import home_directory
+def test_home_row_hidden_and_not_replaced():
+    # The user deleted the sidebar's Home entry entirely ("just delete it ... there is a home
+    # button"). So the built-in Home shortcut (URI file:///home/main) stays HIDDEN, and there is
+    # NO "Home Directory" replacement bookmark and no ".home-directory" URI anywhere.
     assert f"file://{settings.HOME}" in settings.HIDDEN_BOOKMARKS
     bm = sidebar.gtk_bookmarks()
-    first = bm.splitlines()[0]
-    # the "Home Directory" bookmark is FIRST and uses the distinct .home-directory URI.
-    assert first == f"file://{settings.HOME}/.home-directory Home Directory", first
-    assert home_directory.HOME_DIR_BOOKMARK_URI == f"file://{settings.HOME}/.home-directory"
-    # the replacement URI is NOT the built-in Home URI (else it would be hidden too).
-    assert home_directory.HOME_DIR_BOOKMARK_URI != f"file://{settings.HOME}"
-    assert sidebar.HOME_BOOKMARK_LABEL == "Home Directory"
+    assert not any(ln.endswith(" Home Directory") for ln in bm.splitlines())
+    assert ".home-directory" not in bm
+    # the replacement-bookmark constants/label are gone from the sidebar module.
+    assert not hasattr(sidebar, "HOME_BOOKMARK_LABEL")
+    assert not hasattr(sidebar, "HOME_BOOKMARK_URI")
 
 
 def test_templates_prefs_hide_about_and_cap():
@@ -169,9 +163,11 @@ def test_resolve_links_pref_present_but_documented_as_4_21_only():
 # --- gettext .mo override (locale.py) ---------------------------------------
 
 def test_mo_overrides_relabel_the_hardcoded_strings():
-    # PROMPT batch items 3/7/8-wording: the .mo catalog relabels the hardcoded Thunar strings.
+    # The .mo catalog relabels the hardcoded Thunar strings. The "Places" -> "Home Directory"
+    # header rename was DROPPED (the Home Directory sidebar concept was deleted), so the header
+    # stays the stock "Places" -- assert the override is GONE and the others remain.
     o = locale.OVERRIDES
-    assert o["Places"] == "Home Directory"                       # item 3 header
+    assert "Places" not in o                                     # header rename dropped
     assert o['_Open With "%s"'] == "_Edit with %s"               # item 7 (built-in -> "Edit with gedit")
     assert o["Create _Folder..."] == "Create New _Folder..."     # item 8 wording
     assert o["Create _Document"] == "Create New _Document..."     # item 8 wording

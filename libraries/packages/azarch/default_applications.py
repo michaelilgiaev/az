@@ -158,23 +158,27 @@ CATEGORY_KEYS: dict[str, str] = {
 }
 
 # The candidate handlers offered PER category when the user changes its default (first entry is
-# the Az'arch shipped default from CATEGORIES). Only .desktop ids that Az'arch actually ships are
-# listed, so a pick always resolves. "Terminal" is special (no MIME; wired via the exo
-# TerminalEmulator helper), so its candidates are terminal .desktop ids. A test asserts the
-# first candidate of each category equals that category's CATEGORIES default.
+# the Az'arch shipped default from CATEGORIES). These are the QUICK-PICK options the TUI lists;
+# they include every app Az'arch ships that fits the category, so common choices are one keypress
+# away -- notably FIREFOX (shipped alongside LibreWolf) now appears for Web/HTML/PDF, which the
+# user said was missing. This is NOT an exhaustive allow-list: the CLI `set` accepts ANY installed
+# .desktop (see default_applications_cli._da_set / the `desktops` subcommand), so a developer can
+# set a handler the quick-picks don't list. Only ids Az'arch actually ships are listed here so a
+# quick-pick always resolves. A test asserts the first candidate of each category equals that
+# category's CATEGORIES default.
 CANDIDATES: dict[str, tuple[str, ...]] = {
-    "Web": ("librewolf.desktop",),
+    "Web": ("librewolf.desktop", "firefox.desktop"),
     "Mail": (),  # no mail client shipped -- nothing to pick
-    "HTML": ("librewolf.desktop", "org.gnome.gedit.desktop"),
+    "HTML": ("librewolf.desktop", "firefox.desktop", "org.gnome.gedit.desktop"),
     "Music": ("vlc.desktop",),
     "Video": ("vlc.desktop",),
-    "Photos": ("xviewer.desktop", "gimp.desktop"),
+    "Photos": ("xviewer.desktop", "gimp.desktop", "feh.desktop"),
     "Word": ("libreoffice-writer.desktop",),
     "Spreadsheet": ("libreoffice-calc.desktop",),
-    "PDF": ("librewolf.desktop",),
-    "Source Code": ("org.gnome.gedit.desktop",),
+    "PDF": ("librewolf.desktop", "firefox.desktop"),
+    "Source Code": ("org.gnome.gedit.desktop", "vim.desktop"),
     "File Manager": ("thunar.desktop",),
-    "Plain Text": ("org.gnome.gedit.desktop",),
+    "Plain Text": ("org.gnome.gedit.desktop", "vim.desktop"),
     "Calculator": ("qalculate-gtk.desktop",),
     "Terminal": ("kitty.desktop",),
 }

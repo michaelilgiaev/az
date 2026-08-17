@@ -544,16 +544,17 @@ static void az_render_menu(const AzUI *ui, AzRect *preview_out)
     if (nvis > 0 && sel < nvis) {
         const char *base = az_row_base(vis[sel]);
         const char *cmd  = az_row_command(vis[sel]);
-        char line[768];
+        /* The "$ " prompt goes in the WHITE label, NOT the cyan value: the user wants the
+         * shell prompt to read white ("Base Command: $" / "Azarch Wrapper: $"), with only the
+         * command itself in cyan. So the label carries "<name>: $ " (all AZ_SGR_TEXT) and the
+         * value is the bare command (AZ_SGR_ACCENT). */
         if (base && base[0]) {
-            snprintf(line, sizeof line, "$ %s", base);
-            put_center_labeled(&b, ui, rows - 4, AZ_SGR_TEXT, "Base Command: ",
-                               AZ_SGR_ACCENT, line);
+            put_center_labeled(&b, ui, rows - 4, AZ_SGR_TEXT, "Base Command: $ ",
+                               AZ_SGR_ACCENT, base);
         }
         if (cmd && cmd[0]) {
-            snprintf(line, sizeof line, "$ %s", cmd);
-            put_center_labeled(&b, ui, rows - 3, AZ_SGR_TEXT, "Azarch Wrapper: ",
-                               AZ_SGR_ACCENT, line);
+            put_center_labeled(&b, ui, rows - 3, AZ_SGR_TEXT, "Azarch Wrapper: $ ",
+                               AZ_SGR_ACCENT, cmd);
         }
     }
 

@@ -129,6 +129,23 @@ INSTALL_WRAPPER_PATH = "/usr/local/bin/azarch-install"
 CALAMARES_WM_NAME = "calamares"   # res_name  (argv[0] basename, lowercase)
 CALAMARES_WM_CLASS = "Calamares"  # res_class (applicationName, CAPITAL C)
 
+# --- Default window geometry (open MAXIMIZED, restore to a wide rectangle) --------------
+# The user wants every app to OPEN maximized (not as a small box) and, when "restored down",
+# to become a wide "classic terminal" rectangle (wider than tall), never a little square.
+# OpenBox does this with a wildcard `<application class="*">` rule (see the <applications>
+# block in openbox_rc_xml):
+#   * <maximized>yes</maximized> makes the window MAP maximized.
+#   * <size> sets the window's NORMAL (un-maximized) size, i.e. the size it snaps to when the
+#     user restores it down -- so restore-down lands on this wide rectangle instead of the
+#     client's tiny default. <position> centers that restored window.
+# The size is a 16:10 landscape rectangle (WIDTH > HEIGHT): decidedly "wider than tall", the
+# classic terminal shape. It is an ABSOLUTE OpenBox size (OpenBox <size> takes pixels, not a
+# ratio), chosen to sit comfortably inside a 1920x1080 desktop with room to spare; a smaller
+# screen just clamps it. A width:height pair (not a magic single number) so the landscape
+# intent is explicit and a test can assert width > height.
+RESTORED_WINDOW_WIDTH = 1200
+RESTORED_WINDOW_HEIGHT = 750       # 1200x750 == 16:10, unmistakably wider than tall
+
 # The system-wide application-menu launcher for the installer. Present on the LIVE medium
 # so the installer can be reopened from the Az'arch menu; REMOVED from the installed system
 # by the Calamares cleanup step (calamares_shellprocess) so the installer does not appear in
@@ -946,6 +963,28 @@ def openbox_rc_xml() -> str:
     </context>
   </mouse>
   <applications>
+    <!-- DEFAULT for EVERY window (class="*"): open MAXIMIZED, and when restored down snap to a
+         wide "classic terminal" rectangle instead of a tiny box. <maximized>yes</maximized>
+         maps the window maximized; <size> is its NORMAL (un-maximized) geometry, so a
+         restore-down lands on {RESTORED_WINDOW_WIDTH}x{RESTORED_WINDOW_HEIGHT} (16:10, wider
+         than tall) rather than the client's small default; <position> centers that restored
+         window. force="no" on the position means it only steers the FIRST map, so the user can
+         freely move the window afterwards. This rule is listed FIRST so the specific rules
+         below (menu, Calamares) can override individual fields (OpenBox merges per-window
+         settings from all matching application rules, last matching value wins per field). The
+         application menu is override-redirect (unmanaged), so this never affects it; the
+         Calamares rule opts OUT of maximize explicitly. -->
+    <application class="*">
+      <maximized>yes</maximized>
+      <size>
+        <width>{RESTORED_WINDOW_WIDTH}</width>
+        <height>{RESTORED_WINDOW_HEIGHT}</height>
+      </size>
+      <position force="no">
+        <x>center</x>
+        <y>center</y>
+      </position>
+    </application>
     <!-- The Az'arch application menu is a borderless override-redirect Tk window; it
          manages its own placement (centered) and needs no OpenBox decorations. -->
     <application name="*azarch*menu*">
@@ -963,6 +1002,11 @@ def openbox_rc_xml() -> str:
          matching is case-sensitive, so the capitalisation must be exact or the rule silently
          no-ops and the installer opens off-centre. -->
     <application name="{CALAMARES_WM_NAME}" class="{CALAMARES_WM_CLASS}">
+      <!-- Opt OUT of the wildcard's <maximized>yes</maximized> above: the installer sizes
+           itself (its pages assume its own window size), so it must NOT open maximized. This
+           later-matching rule wins on the maximized field; the centered position is kept
+           force="yes" so a REOPEN re-centres it (Calamares remembers its last geometry). -->
+      <maximized>no</maximized>
       <position force="yes">
         <x>center</x>
         <y>center</y>

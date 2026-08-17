@@ -100,17 +100,13 @@ def test_sidebar_entries_are_directories_then_links_resolved():
     assert targets["Bashrc"] == "/home/main/.bashrc"
 
 
-def test_home_directory_symlink_backs_the_home_bookmark():
-    # PROMPT batch item 4 fix: a hidden ".home-directory -> ." symlink gives the "Home Directory"
-    # sidebar bookmark a DISTINCT URI so it survives Thunar hiding the built-in Home
-    # (file:///home/main). The target is RELATIVE (valid under /etc/skel), and the name is
-    # dot-prefixed so the live-sidebar (which skips hidden entries) never lists it as clutter.
-    assert hd.HOME_DIR_SYMLINK_NAME == ".home-directory"
-    assert hd.HOME_DIR_SYMLINK_TARGET == "."
-    assert not hd.HOME_DIR_SYMLINK_TARGET.startswith("/")   # relative
-    assert hd.HOME_DIR_BOOKMARK_URI == "file:///home/main/.home-directory"
-    # distinct from the built-in Home URI (else the bookmark would be hidden with it).
-    assert hd.HOME_DIR_BOOKMARK_URI != f"file://{hd.HOME}"
+def test_no_home_directory_bookmark_machinery():
+    # The "Home Directory" sidebar bookmark was DELETED at the user's request ("just delete it,
+    # we dont actually need it there is a home button"), so the ".home-directory" symlink that
+    # used to back it (and its constants) must be GONE -- nothing should re-create that symlink.
+    assert not hasattr(hd, "HOME_DIR_SYMLINK_NAME")
+    assert not hasattr(hd, "HOME_DIR_SYMLINK_TARGET")
+    assert not hasattr(hd, "HOME_DIR_BOOKMARK_URI")
 
 
 def test_no_absolute_paths_leak_into_layout_names():

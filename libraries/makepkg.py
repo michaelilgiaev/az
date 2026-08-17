@@ -57,9 +57,15 @@ BUILDER_USER = "azarchbuilder"
 # full tier already did. The only thing --full-compile still changes is HOW each
 # is built (see produced_names / recipe_dirs), not WHICH are built.
 # This set is used to (a) exclude own packages from the Arch `pacman -Sw` download
-# (they exist on no mirror) and (b) know which built packages to re-add/refresh in
-# the offline repo + cache.
-PRODUCED = ("calamares", "librewolf")
+# and (b) know which built packages to re-add/refresh in the offline repo + cache.
+#
+# `thunar` is DIFFERENT from calamares/librewolf: it IS a real Arch package (in extra/ and in
+# the manifest packages.x86_64), which Az'arch REBUILDS from source with a symlink-resolve patch
+# (packages.pkgbuild.pkgbuild_thunar, pkgrel 2 so ours outranks extra/'s -1). Listing it here
+# excludes it from the Arch `pacman -Sw` download -- so ONLY our patched thunar lands in the
+# offline repo (no redundant fetch of extra/'s, and no ambiguity about which is installed). The
+# manifest still lists `thunar` (it must be pacstrapped); it is simply satisfied from our repo.
+PRODUCED = ("calamares", "librewolf", "thunar")
 
 
 def produced_names(full_compile: bool) -> tuple[str, ...]:

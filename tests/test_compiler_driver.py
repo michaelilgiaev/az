@@ -269,9 +269,11 @@ def test_cache_complete_true_when_all_present(monkeypatch, tmp_path):
     idx.write_text("")
     (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
     # OUR OWN built packages must be present too, else the cache is not complete
-    # (they are compiled by the makepkg stage, not downloaded).
+    # (they are compiled by the makepkg stage, not downloaded). thunar is now one of
+    # them (rebuilt from source with the symlink-resolve patch).
     (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "librewolf-1.0-1-x86_64.pkg.tar.zst").write_text("")
+    (repo / "thunar-4.20.9-2-x86_64.pkg.tar.zst").write_text("")
     (sync / "core.db").write_text("")
     # Every DOWNLOADED manifest package must also have a file in the repo (the
     # coverage clause). Point the manifest at a tiny file whose one entry is
@@ -334,9 +336,11 @@ def test_cache_complete_ignores_own_packages_absent_from_repo_files(monkeypatch,
     (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "librewolf-1.0-1-x86_64.pkg.tar.zst").write_text("")
+    # thunar is an own-built package too (rebuilt from source): in the manifest AND present.
+    (repo / "thunar-4.20.9-2-x86_64.pkg.tar.zst").write_text("")
     (sync / "core.db").write_text("")
     manifest = tmp_path / "packages.x86_64"
-    manifest.write_text("# header\nsomepkg\ncalamares\nlibrewolf\n")
+    manifest.write_text("# header\nsomepkg\ncalamares\nlibrewolf\nthunar\n")
 
     monkeypatch.setattr(compiler.paths, "LOCALREPO_INDEX", idx)
     monkeypatch.setattr(compiler.paths, "PKG_REPO", repo)

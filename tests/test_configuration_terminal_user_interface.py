@@ -518,23 +518,29 @@ def test_everything_is_centred():
 
 def test_hovered_row_shows_base_and_wrapper_command_lines():
     """PROMPT: under each setting, show TWO lines -- "Base Command: $ <base>" over
-    "Azarch Wrapper: $ azarch ..." -- with the labels WHITE and the commands CYAN. The renderer
+    "Azarch Wrapper: $ azarch ..." -- with the labels AND the "$" prompt WHITE and the commands
+    CYAN (the user: 'Base Command: $' and 'Azarch Wrapper: $' are to be white). The "$ " now
+    lives in the WHITE label (not the cyan value), so the prompt renders white. The renderer
     draws both via az_row_base / az_row_command; model.c exposes az_row_base."""
     render = _src("render.c")
     model = _src("model.c")
     header = _src("terminal_user_interface.h")
-    # the two exact labels the spec wants
-    assert '"Base Command: "' in render
-    assert '"Azarch Wrapper: "' in render
+    # the two exact labels the spec wants -- now INCLUDING the "$ " prompt, so it is white.
+    assert '"Base Command: $ "' in render
+    assert '"Azarch Wrapper: $ "' in render
     # both command accessors feed the lines
     assert "az_row_base" in render and "az_row_command" in render
     # the base accessor is a real, exported model function
     assert "az_row_base" in model and "az_row_base" in header
-    # labels are white (TEXT) and commands cyan (ACCENT): the two-tone helper is used with
-    # AZ_SGR_TEXT for the label and AZ_SGR_ACCENT for the command.
+    # the label (incl. "$ ") is white (TEXT) and the command cyan (ACCENT): the two-tone helper
+    # is used with AZ_SGR_TEXT for the label and AZ_SGR_ACCENT for the command.
     assert "put_center_labeled" in render
-    block = render[render.index("Base Command"):render.index("Azarch Wrapper") + 200]
-    assert "AZ_SGR_TEXT" in block and "AZ_SGR_ACCENT" in block
+    # The CALL SITE renders the white "<label>: $ " with AZ_SGR_TEXT and the bare command with
+    # AZ_SGR_ACCENT (base/cmd passed straight, no "$ %s" prefix): so the "$" prompt is white.
+    assert 'put_center_labeled(&b, ui, rows - 4, AZ_SGR_TEXT, "Base Command: $ ",' in render
+    assert '                               AZ_SGR_ACCENT, base);' in render
+    assert 'put_center_labeled(&b, ui, rows - 3, AZ_SGR_TEXT, "Azarch Wrapper: $ ",' in render
+    assert '                               AZ_SGR_ACCENT, cmd);' in render
     # every apply/port row carries a .base in the model (the underlying tool command)
     assert ".base=" in model
 

@@ -57,8 +57,10 @@ def _agent_line(conf: str, proto: str) -> str:
 
 def test_produced_names_default_tier_builds_calamares_and_librewolf():
     # Arch dropped calamares from extra/, so the default tier must build it too
-    # (it can no longer be pacman-downloaded). Both own packages are built here.
-    assert makepkg.produced_names(full_compile=False) == ("calamares", "librewolf")
+    # (it can no longer be pacman-downloaded). thunar is ALSO built here: it is a real Arch
+    # package that Az'arch rebuilds from source with the symlink-resolve patch, so it must be
+    # excluded from the Arch download and produced by makepkg. Both own packages + thunar build.
+    assert makepkg.produced_names(full_compile=False) == ("calamares", "librewolf", "thunar")
 
 
 def test_produced_names_is_tier_independent():
@@ -203,11 +205,13 @@ def test_scratch_has_sources_false_missing_pkgbuild(tmp_path):
 
 # --- build_own_packages offline branch, per tier ----------------------------
 def test_offline_default_skips_makepkg(monkeypatch, tmp_path):
-    # DEFAULT tier + complete cache -> skip makepkg entirely (the fast rerun).
+    # DEFAULT tier + complete cache -> skip makepkg entirely (the fast rerun). All THREE built
+    # packages (calamares, librewolf, thunar) must be present for the cache to look complete.
     monkeypatch.setattr(makepkg.paths, "PKG_REPO", tmp_path)
     monkeypatch.setattr(makepkg.paths, "is_root", lambda: False)
     (tmp_path / "calamares-1-1-x86_64.pkg.tar.zst").write_text("")
     (tmp_path / "librewolf-1-1-x86_64.pkg.tar.zst").write_text("")
+    (tmp_path / "thunar-4.20.9-2-x86_64.pkg.tar.zst").write_text("")
 
     def must_not_build(*a, **k):
         raise AssertionError("default offline rerun must not run makepkg")

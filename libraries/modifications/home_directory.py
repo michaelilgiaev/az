@@ -80,22 +80,11 @@ LINKS: tuple[tuple[str, str], ...] = (
 # the runtime live-sidebar sync special-case it.
 TRASH_LINK_NAME = "Trash"
 
-# The "Home Directory" sidebar bookmark target (PROMPT batch item 4: the sidebar's Home entry
-# must NOT read the bare username "main"). Thunar 4.20 shows the built-in Home shortcut with the
-# home folder's display-name (the username) and offers NO rename; hiding the built-in via
-# hidden-bookmarks (file:///home/main) is the only removal lever -- but that lever matches by
-# CANONICAL URI, so a replacement bookmark pointing straight at /home/main would be hidden too
-# (the two URIs are identical). The fix: a HIDDEN home symlink `.home-directory -> .` (relative,
-# so it is valid under /etc/skel and every copied-out home). A bookmark at
-# file:///home/main/.home-directory has a DISTINCT URI (it survives the file:///home/main
-# hiding) yet resolves INTO the home directory when clicked. It starts with a dot, so the
-# live-sidebar sync (which skips hidden entries) never enumerates it as a stray shortcut, and it
-# does not clutter the folder view. (On Thunar >= 4.21.6, misc-resolve-links -- already shipped
-# -- makes the location bar show the resolved /home/main; on 4.20 it shows the symlink path, a
-# minor cosmetic quirk documented in modifications/thunar/sidebar.)
-HOME_DIR_SYMLINK_NAME = ".home-directory"
-HOME_DIR_SYMLINK_TARGET = "."   # relative -> the home dir itself
-HOME_DIR_BOOKMARK_URI = f"file://{HOME}/{HOME_DIR_SYMLINK_NAME}"
+# NOTE: there is NO ".home-directory" symlink or "Home Directory" sidebar bookmark anymore. The
+# user deleted the "Home Directory" entry from Thunar's Places sidebar ("just delete it, we dont
+# actually need it there is a home button"), so the previous distinct-URI symlink trick that
+# backed that bookmark is gone. The built-in username Home shortcut stays hidden via
+# thunar/settings.HIDDEN_BOOKMARKS[file:///home/main]; navigating home uses Thunar's Home button.
 
 # --- The XDG trash chain -------------------------------------------------------
 # The trash spec's two required dirs, created (relative to the home dir) BEFORE the

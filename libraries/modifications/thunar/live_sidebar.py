@@ -31,15 +31,15 @@ system helper (like the other /usr/local/lib/azarch tools); it operates on the i
 own $HOME, so it needs no privilege.
 
 ORDERING (matches home_directory.sidebar_entries + the static seed):
-  1. "Home Directory" (a fixed top bookmark pointing at $HOME -- the built-in username Home is
-     hidden, see settings.HIDDEN_BOOKMARKS).
-  2. real DIRECTORIES  (alphabetical), EXCEPT Desktop (Thunar's built-in place already provides
+  1. real DIRECTORIES  (alphabetical), EXCEPT Desktop (Thunar's built-in place already provides
      it at the same path -- adding ours would duplicate it, same reason sidebar.py skips it).
-  3. regular FILES     (alphabetical).
-  4. SYMLINKS          (alphabetical), each bookmarked at its RESOLVED target, EXCEPT "Trash".
-  5. "Trash" LAST      (it is a symlink but the spec pins it to the very end).
-Hidden entries (dotfiles) are skipped -- the curated convenience symlinks (Cache/Config/...) are
-NON-hidden names, so the surfaced set matches the intent without dumping every dotfile.
+  2. regular FILES     (alphabetical).
+  3. SYMLINKS          (alphabetical), each bookmarked at its RESOLVED target, EXCEPT "Trash".
+  4. "Trash" LAST      (it is a symlink but the spec pins it to the very end).
+There is NO "Home Directory" bookmark: the user deleted it from the sidebar (there is a Home
+toolbar button), so the list starts straight at the directories. Hidden entries (dotfiles) are
+skipped -- the curated convenience symlinks (Cache/Config/...) are NON-hidden names, so the
+surfaced set matches the intent without dumping every dotfile.
 """
 
 from __future__ import annotations
@@ -57,14 +57,9 @@ SYNC_SCRIPT_DEST = "/usr/local/lib/azarch/azarch-sidebar-sync"
 # The bookmarks file it regenerates (the same path the static seed writes).
 GTK_BOOKMARKS_PATH = f"{HOME}/.config/gtk-3.0/bookmarks"
 
-# The fixed top bookmark (matches sidebar.HOME_BOOKMARK_*): "Home Directory". It points at the
-# hidden ".home-directory -> ." symlink, NOT straight at $HOME -- Thunar hides bookmarks by
-# canonical URI, and the built-in "main" Home is removed via hidden-bookmarks[file:///home/main],
-# so a bookmark at file://$HOME would be hidden too. The symlink gives a distinct URI that
-# survives the hiding and resolves into the home dir (see home_directory.HOME_DIR_SYMLINK_*).
-# Kept in lock-step with modifications/thunar/sidebar (a test pins them equal).
-HOME_BOOKMARK_LABEL = "Home Directory"
-HOME_DIR_SYMLINK_NAME = home_directory.HOME_DIR_SYMLINK_NAME   # ".home-directory"
+# No "Home Directory" bookmark -- the user deleted it from the sidebar (see the module docstring);
+# the regenerated file starts straight at the directories. The built-in username Home stays
+# hidden via settings.HIDDEN_BOOKMARKS[file:///home/main].
 
 # The Desktop entry is skipped (Thunar's built-in place already provides it -- see sidebar.py).
 SKIP_NAMES = ("Desktop",)
@@ -87,8 +82,6 @@ def sync_script() -> str:
     on the ISO, no inotify-tools. The bookmark URI for a symlink is `realpath -m` of the link
     (so the location bar shows the real target); for a dir/file it is the entry path. Every
     non-blank line is a bookmark (the GTK format has no comments), so the file carries none."""
-    home_label = HOME_BOOKMARK_LABEL
-    home_symlink = HOME_DIR_SYMLINK_NAME      # ".home-directory" (distinct-URI Home bookmark)
     skip_case = "|".join(SKIP_NAMES)          # e.g. "Desktop"
     trash = TRASH_NAME
     interval = WATCH_INTERVAL_SECS
@@ -134,12 +127,12 @@ regen() {{
 "
         fi
     done
-    # Sort each group alphabetically by label (field 2). Emit: Home Directory, dirs, files,
-    # links, then Trash last. `sort` on empty input is a no-op. Write atomically via a temp file.
+    # Sort each group alphabetically by label (field 2). Emit: dirs, files, links, then Trash
+    # last (NO "Home Directory" -- the user deleted it from the sidebar). `sort` on empty input
+    # is a no-op. Write atomically via a temp file.
     tmp="$BM.azarch.$$"
     mkdir -p "$(dirname "$BM")"
     if {{
-        printf 'file://%s/{home_symlink} {home_label}\\n' "$HOME"
         [ -n "$dirs" ]  && printf '%s' "$dirs"  | sort -k2
         [ -n "$files" ] && printf '%s' "$files" | sort -k2
         [ -n "$links" ] && printf '%s' "$links" | sort -k2

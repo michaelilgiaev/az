@@ -185,18 +185,20 @@ static void test_default_applications_screens(void)
     CHECK(strncmp(web->rows[0].target, "azarch default-applications set web ",
                   strlen("azarch default-applications set web ")) == 0);
 
-    /* a two-candidate category (Photos: xviewer + gimp) really offers both choices. */
+    /* a multi-candidate category (Photos: xviewer + gimp + feh) really offers all choices. */
     const AzScreen *ph = az_screen_find("defaultapps.photos");
     CHECK(ph != NULL);
     CHECK(ph->current == az_status_da_photos);
-    CHECK(ph->nrows == 2);
-    int has_xviewer = 0, has_gimp = 0;
+    CHECK(ph->nrows == 3);
+    int has_xviewer = 0, has_gimp = 0, has_feh = 0;
     for (int i = 0; i < ph->nrows; i++) {
         if (strstr(ph->rows[i].target, "xviewer.desktop")) has_xviewer = 1;
         if (strstr(ph->rows[i].target, "gimp.desktop")) has_gimp = 1;
+        if (strstr(ph->rows[i].target, "feh.desktop")) has_feh = 1;
     }
     CHECK(has_xviewer == 1);
     CHECK(has_gimp == 1);
+    CHECK(has_feh == 1);
 }
 
 /* Display: cinnamon-settings-display parity (xrandr) + the GLOBAL SCALE chooser. The scale
@@ -213,14 +215,24 @@ static void test_display_screens(void)
     const AzScreen *d = az_screen_find("display");
     CHECK(d != NULL);
     CHECK(strcmp(d->title, "Display") == 0);
-    /* the feature set: Global Scale + resolution/refresh/orientation/monitors */
+    /* the top "Current: scale 1.35x" line was REMOVED at the user's request: the display screen
+     * has NO .current, and each row shows its OWN current value inline via .status instead. */
+    CHECK(d->current == NULL);
+    /* the feature set: Global Scale + resolution/refresh/orientation/monitors, EACH with an
+     * inline current-value probe (.status). */
     int has_scale = 0, has_res = 0, has_refresh = 0, has_orient = 0, has_mon = 0;
     for (int i = 0; i < d->nrows; i++) {
-        if (strcmp(d->rows[i].target, "display.scale") == 0) has_scale = 1;
-        if (strcmp(d->rows[i].target, "display.resolution") == 0) has_res = 1;
-        if (strcmp(d->rows[i].target, "display.refresh") == 0) has_refresh = 1;
-        if (strcmp(d->rows[i].target, "display.orientation") == 0) has_orient = 1;
-        if (strcmp(d->rows[i].target, "display.monitors") == 0) has_mon = 1;
+        CHECK(d->rows[i].status != NULL);   /* every display row shows its current value inline */
+        if (strcmp(d->rows[i].target, "display.scale") == 0)
+            { has_scale = 1; CHECK(d->rows[i].status == az_status_display_scale); }
+        if (strcmp(d->rows[i].target, "display.resolution") == 0)
+            { has_res = 1; CHECK(d->rows[i].status == az_status_display_resolution); }
+        if (strcmp(d->rows[i].target, "display.refresh") == 0)
+            { has_refresh = 1; CHECK(d->rows[i].status == az_status_display_refresh); }
+        if (strcmp(d->rows[i].target, "display.orientation") == 0)
+            { has_orient = 1; CHECK(d->rows[i].status == az_status_display_orientation); }
+        if (strcmp(d->rows[i].target, "display.monitors") == 0)
+            { has_mon = 1; CHECK(d->rows[i].status == az_status_display_monitors); }
     }
     CHECK(has_scale && has_res && has_refresh && has_orient && has_mon);
 

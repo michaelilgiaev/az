@@ -625,12 +625,8 @@ def _emit_homedir(airootfs: Path, home: Path) -> None:
         #    directory in every home. emit.link replaces any pre-existing entry.
         for name, target in home_directory.LINKS:
             emit.link(target, root / name)
-        # 3b. The hidden ".home-directory -> ." symlink backing the "Home Directory" sidebar
-        #     bookmark (PROMPT batch item 4). Relative target so it is valid in every home; its
-        #     distinct URI lets the bookmark survive the built-in-Home hiding (see
-        #     home_directory.HOME_DIR_SYMLINK_*). Hidden (dot-prefixed) so it does not clutter.
-        emit.link(home_directory.HOME_DIR_SYMLINK_TARGET,
-                  root / home_directory.HOME_DIR_SYMLINK_NAME)
+        # (No ".home-directory" symlink: the "Home Directory" sidebar bookmark it used to back
+        #  was deleted at the user's request -- see home_directory.py and thunar/sidebar.py.)
 
 
 def _emit_calamares(airootfs: Path) -> None:

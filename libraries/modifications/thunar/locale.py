@@ -11,7 +11,6 @@ WHAT WE OVERRIDE (each msgid is the EXACT string from the 4.20 binary; the mnemo
 `...` ellipsis are part of the msgid and must match byte-for-byte or gettext falls through to
 the original):
 
-  * "Places"            -> "Home Directory"   (batch item 3: rename the shortcuts-pane header)
   * '_Open With "%s"'   -> "_Edit with %s"     (batch item 7: the built-in default-opener at the
         top of the context menu -- for a text file whose default is gedit it reads
         `Open With "gedit"`. Overriding the format to `Edit with %s` makes that top item read
@@ -72,7 +71,9 @@ def mo_path(locale: str) -> str:
 # (mnemonics and ellipses included) -- a byte mismatch means gettext falls through to the
 # original, so these must not be "cleaned up". VERIFIED via `strings /usr/bin/thunar`.
 OVERRIDES: dict[str, str] = {
-    "Places": "Home Directory",
+    # (The "Places" -> "Home Directory" header rename was DROPPED: the "Home Directory" sidebar
+    # concept was deleted at the user's request, so the shortcuts header stays the stock
+    # "Places".)
     '_Open With "%s"': "_Edit with %s",
     "Create _Folder...": "Create New _Folder...",
     "Create _Document": "Create New _Document...",

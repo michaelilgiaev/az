@@ -454,21 +454,100 @@ const char *az_status_brightness(char *buf, size_t n)
 }
 
 /* --- Default Applications probes --------------------------------------------
- * Each category's "Current:" line shows the handler it currently resolves to, read by asking
- * the SAME command surface the apply rows drive: `azarch default-applications get <key>`. The
- * probe signature takes no arguments (it is a fn ptr the renderer memoises), so there is one
- * tiny probe per category, all sharing az_da_get(). The <key> strings and the category set are
- * pinned to packages/azarch/default_applications.py by a test (the wallpaper.py <-> model.c
- * lock-step), so C and Python cannot drift. */
+ * Each category's "Current:" line shows the handler it currently resolves to. SNAPPINESS: this
+ * used to fork `azarch default-applications get <key>` per category per keystroke, and THAT
+ * forked `xdg-mime query` -- 13 nested subprocess pairs on every Default Applications frame,
+ * which is exactly the lag the user reported. Instead we read the handler DIRECTLY, in-process,
+ * from the two small config files xdg-mime/exo write:
+ *   * MIME categories -> the `<mime>=<id>` line under [Default Applications] in
+ *     ~/.config/mimeapps.list (XDG_CONFIG_HOME honoured). This is the SAME file `xdg-mime
+ *     query default` reads, so the value is identical -- just with no forks.
+ *   * Terminal        -> the TerminalEmulator= line in ~/.config/xfce4/helpers.rc.
+ * No subprocess at all, so the screen is instant. The key->representative-MIME table below is
+ * pinned to default_applications.py by a test (the representative MIME is that category's FIRST
+ * mime), so C and Python cannot drift. */
+
+/* ~/.config (honours XDG_CONFIG_HOME), the dir mimeapps.list + helpers.rc live in. */
+static void az_config_home(char *out, size_t n)
+{
+    const char *xdg = getenv("XDG_CONFIG_HOME");
+    if (xdg && xdg[0]) { snprintf(out, n, "%s", xdg); return; }
+    const char *home = getenv("HOME");
+    snprintf(out, n, "%s/.config", home ? home : "");
+}
+
+/* Read a `key=value` (or `key value`) line's value from a small keyfile-ish config, matching the
+ * first line whose start equals `key` followed by `sep`. Trims trailing whitespace. Returns 1 on
+ * a hit (value copied into out), 0 otherwise. Used for both mimeapps.list and helpers.rc. */
+static int az_read_kv(const char *path, const char *key, char sep, char *out, size_t n)
+{
+    FILE *f = fopen(path, "r");
+    if (!f) return 0;
+    char line[1024];
+    size_t klen = strlen(key);
+    int found = 0;
+    while (fgets(line, sizeof line, f)) {
+        if (strncmp(line, key, klen) == 0 && line[klen] == sep) {
+            const char *v = line + klen + 1;
+            while (*v == ' ' || *v == '\t') v++;
+            snprintf(out, n, "%s", v);
+            size_t l = strlen(out);
+            while (l > 0 && (out[l-1] == '\n' || out[l-1] == '\r' ||
+                             out[l-1] == ' ' || out[l-1] == '\t')) out[--l] = '\0';
+            found = out[0] ? 1 : 0;
+            break;
+        }
+    }
+    fclose(f);
+    return found;
+}
+
+/* The representative MIME per MIME-backed category key (its FIRST mime in
+ * default_applications.CATEGORIES -- pinned by a test). Empty categories (mail/calculator) and
+ * terminal are handled separately in az_da_get. */
+static const char *az_da_mime_for(const char *key)
+{
+    if (strcmp(key, "web") == 0)          return "x-scheme-handler/http";
+    if (strcmp(key, "html") == 0)         return "text/html";
+    if (strcmp(key, "music") == 0)        return "audio/mpeg";
+    if (strcmp(key, "video") == 0)        return "video/mp4";
+    if (strcmp(key, "photos") == 0)       return "image/jpeg";
+    if (strcmp(key, "word") == 0)
+        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    if (strcmp(key, "spreadsheet") == 0)
+        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    if (strcmp(key, "pdf") == 0)          return "application/pdf";
+    if (strcmp(key, "source-code") == 0)  return "text/x-csrc";
+    if (strcmp(key, "file-manager") == 0) return "inode/directory";
+    if (strcmp(key, "plain-text") == 0)   return "text/plain";
+    return "";   /* mail / calculator / terminal: no representative MIME */
+}
+
 static const char *az_da_get(const char *key, char *buf, size_t n)
 {
-    const char *argv[] = {"azarch", "default-applications", "get", key, NULL};
-    char raw[128] = {0};
-    if (have("azarch") && az_capture(argv, raw, sizeof raw) == 0 && raw[0]) {
-        snprintf(buf, n, "%s", raw);
+    char cfg[512], path[768], val[256];
+    az_config_home(cfg, sizeof cfg);
+    if (strcmp(key, "terminal") == 0) {
+        /* exo TerminalEmulator selection from helpers.rc (value is the bin name, e.g. "kitty"). */
+        snprintf(path, sizeof path, "%s/xfce4/helpers.rc", cfg);
+        if (az_read_kv(path, "TerminalEmulator", '=', val, sizeof val)) {
+            /* present as "<name>.desktop" for a uniform display unless it already is one. */
+            size_t l = strlen(val);
+            int has_suffix = l >= 8 && strcmp(val + l - 8, ".desktop") == 0;
+            snprintf(buf, n, has_suffix ? "%s" : "%s.desktop", val);
+            return buf;
+        }
+        snprintf(buf, n, "(none)");
         return buf;
     }
-    snprintf(buf, n, "(unknown)");
+    const char *mime = az_da_mime_for(key);
+    if (!mime[0]) { snprintf(buf, n, "(none)"); return buf; }  /* mail / calculator */
+    snprintf(path, sizeof path, "%s/mimeapps.list", cfg);
+    if (az_read_kv(path, mime, '=', val, sizeof val)) {
+        snprintf(buf, n, "%s", val);
+        return buf;
+    }
+    snprintf(buf, n, "(none)");
     return buf;
 }
 
@@ -562,6 +641,122 @@ const char *az_status_display(char *buf, size_t n)
         if (res[0]) { snprintf(buf, n, "%s @ %s", res, scalebuf); return buf; }
     }
     snprintf(buf, n, "scale %s", scalebuf);
+    return buf;
+}
+
+/* The INLINE per-row Display probes. The Display screen's top "Current:" line was removed (the
+ * user: "just fucking remove that 'Current: scale 1.35x' label ... add current to each line"),
+ * so each row now carries its OWN current value: Global Scale keeps az_status_display_scale;
+ * Resolution/Refresh/Orientation report from xrandr; Monitors reports the connected-output
+ * count. All read `xrandr --query` ONCE via az_capture_all and scan it (cheap; memoised by the
+ * 1.5s probe cache and only run while the Display screen is on-screen). Each degrades to a
+ * readable word so a cell is never blank when xrandr is missing (e.g. a bare VM). */
+
+/* Fill `line` (size ln) with the FIRST active xrandr mode line (the one marked with a trailing
+ * '*'), or leave it empty. Returns 1 if found. Shared by the resolution/refresh probes. */
+static int az_xrandr_active_mode_line(char *line, size_t ln)
+{
+    line[0] = '\0';
+    if (!have("xrandr")) return 0;
+    const char *argv[] = {"xrandr", "--query", NULL};
+    char raw[4096] = {0};
+    if (az_capture_all(argv, raw, sizeof raw) != 0 || !raw[0]) return 0;
+    char *save = NULL;
+    for (char *l = strtok_r(raw, "\n", &save); l; l = strtok_r(NULL, "\n", &save)) {
+        if (strchr(l, '*')) { snprintf(line, ln, "%s", l); return 1; }
+    }
+    return 0;
+}
+
+const char *az_status_display_resolution(char *buf, size_t n)
+{
+    /* The active mode's resolution: the first token on the '*'-marked xrandr line (e.g. from
+     * "   1920x1080     60.00*+" -> "1920x1080"). */
+    char line[512];
+    if (az_xrandr_active_mode_line(line, sizeof line)) {
+        char *p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        int i = 0;
+        while (p[i] && p[i] != ' ' && p[i] != '\t' && i < (int)n - 1) { buf[i] = p[i]; i++; }
+        buf[i] = '\0';
+        if (buf[0]) return buf;
+    }
+    snprintf(buf, n, "(unknown)");
+    return buf;
+}
+
+const char *az_status_display_refresh(char *buf, size_t n)
+{
+    /* The active refresh rate: on the '*'-marked xrandr line the rate is the numeric column
+     * carrying the '*' (e.g. "1920x1080  60.00*+  75.00" -> "60 Hz"). Scan tokens for the one
+     * containing '*' and print its integer part with " Hz". */
+    char line[512];
+    if (az_xrandr_active_mode_line(line, sizeof line)) {
+        char *save = NULL;
+        for (char *t = strtok_r(line, " \t", &save); t; t = strtok_r(NULL, " \t", &save)) {
+            if (strchr(t, '*')) {
+                int hz = 0;
+                for (const char *c = t; *c && *c != '.' && *c != '*'; c++)
+                    if (*c >= '0' && *c <= '9') hz = hz * 10 + (*c - '0');
+                if (hz > 0) { snprintf(buf, n, "%d Hz", hz); return buf; }
+            }
+        }
+    }
+    snprintf(buf, n, "(unknown)");
+    return buf;
+}
+
+const char *az_status_display_orientation(char *buf, size_t n)
+{
+    /* The primary output's rotation. xrandr prints it on the "<output> connected [primary]
+     * WxH+X+Y (rotation) ..." line: the rotation word (normal/left/right/inverted) sits right
+     * before the parenthesised capabilities list. Find the connected-primary line (fall back to
+     * the first connected line) and read the orientation token. */
+    if (have("xrandr")) {
+        const char *argv[] = {"xrandr", "--query", NULL};
+        char raw[8192] = {0};
+        if (az_capture_all(argv, raw, sizeof raw) == 0 && raw[0]) {
+            char *save = NULL, *chosen = NULL, *first = NULL;
+            for (char *l = strtok_r(raw, "\n", &save); l; l = strtok_r(NULL, "\n", &save)) {
+                if (strstr(l, " connected")) {
+                    if (!first) first = l;
+                    if (strstr(l, "primary")) { chosen = l; break; }
+                }
+            }
+            if (!chosen) chosen = first;
+            if (chosen) {
+                /* orientation is whichever of these words appears on the line (inverted before
+                 * "normal" would misread, so test the specific rotations first). */
+                const char *words[] = {"left", "right", "inverted", "normal"};
+                for (size_t i = 0; i < sizeof words / sizeof words[0]; i++) {
+                    if (strstr(chosen, words[i])) { snprintf(buf, n, "%s", words[i]); return buf; }
+                }
+                snprintf(buf, n, "normal");   /* connected but no explicit token -> normal */
+                return buf;
+            }
+        }
+    }
+    snprintf(buf, n, "(unknown)");
+    return buf;
+}
+
+const char *az_status_display_monitors(char *buf, size_t n)
+{
+    /* How many outputs are connected (e.g. "1 connected" / "2 connected"). Count the
+     * " connected" lines in xrandr --query. */
+    if (have("xrandr")) {
+        const char *argv[] = {"xrandr", "--query", NULL};
+        char raw[8192] = {0};
+        if (az_capture_all(argv, raw, sizeof raw) == 0 && raw[0]) {
+            int count = 0;
+            char *save = NULL;
+            for (char *l = strtok_r(raw, "\n", &save); l; l = strtok_r(NULL, "\n", &save))
+                if (strstr(l, " connected")) count++;
+            snprintf(buf, n, "%d connected", count);
+            return buf;
+        }
+    }
+    snprintf(buf, n, "(unknown)");
     return buf;
 }
 

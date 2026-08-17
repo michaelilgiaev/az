@@ -726,17 +726,22 @@ def test_overrides_delivered_to_profile_path_not_opt():
 
 def test_recipe_dirs_default_tier():
     # DEFAULT tier: calamares first (Arch dropped extra/calamares, so it must be
-    # built here now), then librewolf. calamares carries its PKGBUILD + the source
-    # patch that sets the installer UI defaults; the librewolf dir carries PKGBUILD +
-    # two companion files, and its PKGBUILD is the repackage recipe (no bsys6 make
-    # targets).
+    # built here now), then thunar (rebuilt from source with the symlink-resolve
+    # patch), then librewolf. calamares carries its PKGBUILD + the source patch that
+    # sets the installer UI defaults; thunar carries its PKGBUILD + the resolve patch;
+    # the librewolf dir carries PKGBUILD + the .desktop, its PKGBUILD the repackage
+    # recipe (no bsys6 make targets).
     dirs = pkgbuild.recipe_dirs(False)
     names = [name for name, _ in dirs]
-    assert names == ["calamares", "librewolf"]
+    assert names == ["calamares", "thunar", "librewolf"]
     assert set(dict(dirs)["calamares"]) == {
         "PKGBUILD",
         pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME,
         pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME,
+    }
+    assert set(dict(dirs)["thunar"]) == {
+        "PKGBUILD",
+        pkgbuild.THUNAR_RESOLVE_SYMLINK_PATCH_NAME,
     }
     files = dict(dirs)["librewolf"]
     # PKGBUILD + the .desktop only. The AutoConfig override is NO LONGER a companion
@@ -746,16 +751,20 @@ def test_recipe_dirs_default_tier():
 
 
 def test_recipe_dirs_full_tier():
-    # FULL tier: calamares first (index 0), then librewolf; librewolf's PKGBUILD
-    # is now the from-source recipe (has the bsys6 make targets).
+    # FULL tier: calamares first (index 0), then thunar, then librewolf; librewolf's
+    # PKGBUILD is now the from-source recipe (has the bsys6 make targets).
     dirs = pkgbuild.recipe_dirs(True)
     names = [name for name, _ in dirs]
-    assert names == ["calamares", "librewolf"]
+    assert names == ["calamares", "thunar", "librewolf"]
     assert dirs[0][0] == "calamares"
     assert set(dict(dirs)["calamares"]) == {
         "PKGBUILD",
         pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME,
         pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME,
+    }
+    assert set(dict(dirs)["thunar"]) == {
+        "PKGBUILD",
+        pkgbuild.THUNAR_RESOLVE_SYMLINK_PATCH_NAME,
     }
     assert "make fetch" in dict(dirs)["librewolf"]["PKGBUILD"]
 

@@ -168,9 +168,15 @@ const char *az_status_da_file_manager(char *buf, size_t n);
 const char *az_status_da_plain_text(char *buf, size_t n);
 const char *az_status_da_calculator(char *buf, size_t n);
 const char *az_status_da_terminal(char *buf, size_t n);
-/* Display: a summary probe (current resolution + scale) and the global-scale probe. */
+/* Display: a summary probe (current resolution + scale) and the global-scale probe, plus one
+ * INLINE probe per Display row so each row shows its own current value (the top "Current:"
+ * line was removed -- see model_tree.c ROWS_DISPLAY / the display screen has no .current). */
 const char *az_status_display(char *buf, size_t n);
 const char *az_status_display_scale(char *buf, size_t n);
+const char *az_status_display_resolution(char *buf, size_t n);
+const char *az_status_display_refresh(char *buf, size_t n);
+const char *az_status_display_orientation(char *buf, size_t n);
+const char *az_status_display_monitors(char *buf, size_t n);
 
 /* Small shared helper (model.c): run `argv` (NULL-terminated), capture the first line of
  * stdout into buf (size n). Returns 0 on a clean exit, non-zero otherwise. Never blocks

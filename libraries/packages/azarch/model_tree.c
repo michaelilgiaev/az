@@ -220,10 +220,14 @@ static const AzRow ROWS_BRIGHTNESS[] = {
 static const AzRow ROWS_DA_WEB[] = {
     {.label="Set to LibreWolf", .kind=AZ_ACT_APPLY, .target="azarch default-applications set web librewolf.desktop",
      .base="xdg-mime default librewolf.desktop x-scheme-handler/http x-scheme-handler/https"},
+    {.label="Set to Firefox",   .kind=AZ_ACT_APPLY, .target="azarch default-applications set web firefox.desktop",
+     .base="xdg-mime default firefox.desktop x-scheme-handler/http x-scheme-handler/https"},
 };
 static const AzRow ROWS_DA_HTML[] = {
     {.label="Set to LibreWolf", .kind=AZ_ACT_APPLY, .target="azarch default-applications set html librewolf.desktop",
      .base="xdg-mime default librewolf.desktop text/html application/xhtml+xml"},
+    {.label="Set to Firefox",   .kind=AZ_ACT_APPLY, .target="azarch default-applications set html firefox.desktop",
+     .base="xdg-mime default firefox.desktop text/html application/xhtml+xml"},
     {.label="Set to gedit",     .kind=AZ_ACT_APPLY, .target="azarch default-applications set html org.gnome.gedit.desktop",
      .base="xdg-mime default org.gnome.gedit.desktop text/html application/xhtml+xml"},
 };
@@ -240,6 +244,8 @@ static const AzRow ROWS_DA_PHOTOS[] = {
      .base="xdg-mime default xviewer.desktop image/jpeg image/png image/gif ..."},
     {.label="Set to GIMP",    .kind=AZ_ACT_APPLY, .target="azarch default-applications set photos gimp.desktop",
      .base="xdg-mime default gimp.desktop image/jpeg image/png image/gif ..."},
+    {.label="Set to feh",     .kind=AZ_ACT_APPLY, .target="azarch default-applications set photos feh.desktop",
+     .base="xdg-mime default feh.desktop image/jpeg image/png image/gif ..."},
 };
 static const AzRow ROWS_DA_WORD[] = {
     {.label="Set to LibreOffice Writer", .kind=AZ_ACT_APPLY, .target="azarch default-applications set word libreoffice-writer.desktop",
@@ -252,10 +258,14 @@ static const AzRow ROWS_DA_SPREADSHEET[] = {
 static const AzRow ROWS_DA_PDF[] = {
     {.label="Set to LibreWolf", .kind=AZ_ACT_APPLY, .target="azarch default-applications set pdf librewolf.desktop",
      .base="xdg-mime default librewolf.desktop application/pdf"},
+    {.label="Set to Firefox",   .kind=AZ_ACT_APPLY, .target="azarch default-applications set pdf firefox.desktop",
+     .base="xdg-mime default firefox.desktop application/pdf"},
 };
 static const AzRow ROWS_DA_SOURCE_CODE[] = {
     {.label="Set to gedit", .kind=AZ_ACT_APPLY, .target="azarch default-applications set source-code org.gnome.gedit.desktop",
      .base="xdg-mime default org.gnome.gedit.desktop text/x-csrc text/x-python ..."},
+    {.label="Set to Vim",   .kind=AZ_ACT_APPLY, .target="azarch default-applications set source-code vim.desktop",
+     .base="xdg-mime default vim.desktop text/x-csrc text/x-python ..."},
 };
 static const AzRow ROWS_DA_FILE_MANAGER[] = {
     {.label="Set to Thunar", .kind=AZ_ACT_APPLY, .target="azarch default-applications set file-manager thunar.desktop",
@@ -264,6 +274,8 @@ static const AzRow ROWS_DA_FILE_MANAGER[] = {
 static const AzRow ROWS_DA_PLAIN_TEXT[] = {
     {.label="Set to gedit", .kind=AZ_ACT_APPLY, .target="azarch default-applications set plain-text org.gnome.gedit.desktop",
      .base="xdg-mime default org.gnome.gedit.desktop text/plain"},
+    {.label="Set to Vim",   .kind=AZ_ACT_APPLY, .target="azarch default-applications set plain-text vim.desktop",
+     .base="xdg-mime default vim.desktop text/plain"},
 };
 static const AzRow ROWS_DA_CALCULATOR[] = {
     {.label="Set to Qalculate", .kind=AZ_ACT_APPLY, .target="azarch default-applications set calculator qalculate-gtk.desktop",
@@ -366,13 +378,16 @@ static const AzRow ROWS_DISPLAY_MONITORS[] = {
      .base="xrandr --output <o> --right-of <primary>"},
 };
 
-/* The Display screen: the scale chooser + the xrandr feature screens. */
+/* The Display screen: the scale chooser + the xrandr feature screens. Every row shows its OWN
+ * current value inline (.status) -- the user asked for the standalone top "Current: scale 1.35x"
+ * line to be removed and the current value put on each line instead, so the display screen has
+ * NO .current (see SCREENS[]) and each row carries an inline probe. */
 static const AzRow ROWS_DISPLAY[] = {
     {.label="Global Scale", .kind=AZ_ACT_SCREEN, .target="display.scale",       .status=az_status_display_scale},
-    {.label="Resolution",   .kind=AZ_ACT_SCREEN, .target="display.resolution"},
-    {.label="Refresh Rate", .kind=AZ_ACT_SCREEN, .target="display.refresh"},
-    {.label="Orientation",  .kind=AZ_ACT_SCREEN, .target="display.orientation"},
-    {.label="Monitors",     .kind=AZ_ACT_SCREEN, .target="display.monitors"},
+    {.label="Resolution",   .kind=AZ_ACT_SCREEN, .target="display.resolution",  .status=az_status_display_resolution},
+    {.label="Refresh Rate", .kind=AZ_ACT_SCREEN, .target="display.refresh",     .status=az_status_display_refresh},
+    {.label="Orientation",  .kind=AZ_ACT_SCREEN, .target="display.orientation", .status=az_status_display_orientation},
+    {.label="Monitors",     .kind=AZ_ACT_SCREEN, .target="display.monitors",    .status=az_status_display_monitors},
 };
 
 #define AZN(a) (int)(sizeof(a) / sizeof((a)[0]))
@@ -443,7 +458,8 @@ static const AzScreen SCREENS[] = {
      * `azarch default-applications set ...`. Derived from default_applications.py (pinned). */
     {.id="defaultapps", .title="Default Applications",
      .subtitle="Which app opens which file type (the XDG mimeapps defaults). Pick a category to "
-               "see its current handler and change it.",
+               "change its handler. To set ANY installed app (or find where .desktop files live): "
+               "azarch default-applications desktops [category].",
      .rows=ROWS_DEFAULTAPPS, .nrows=AZN(ROWS_DEFAULTAPPS)},
     {.id="defaultapps.web",          .title="Web",
      .subtitle="The browser for http/https links (wraps xdg-mime default).",
@@ -484,10 +500,12 @@ static const AzScreen SCREENS[] = {
     {.id="defaultapps.terminal",     .title="Terminal",
      .subtitle="The terminal Thunar's 'Open Terminal Here' opens (exo TerminalEmulator helper).",
      .current=az_status_da_terminal,     .rows=ROWS_DA_TERMINAL,     .nrows=AZN(ROWS_DA_TERMINAL)},
-    /* Display: cinnamon-settings-display parity (xrandr) + the GLOBAL SCALE chooser. */
+    /* Display: cinnamon-settings-display parity (xrandr) + the GLOBAL SCALE chooser. NO
+     * .current here -- the top "Current: scale 1.35x" line was removed at the user's request;
+     * each ROWS_DISPLAY row shows its own current value inline via .status instead. */
     {.id="display",   .title="Display",
      .subtitle="Resolution, refresh, orientation, monitors (xrandr) and the global UI scale.",
-     .current=az_status_display,   .rows=ROWS_DISPLAY,   .nrows=AZN(ROWS_DISPLAY)},
+     .rows=ROWS_DISPLAY,   .nrows=AZN(ROWS_DISPLAY)},
     {.id="display.scale", .title="Global Scale",
      .subtitle="The ONE UI scale every app obeys (Xft.dpi + Xcursor.size, re-applied live via "
                "xrdb). Thunar and DPI-aware apps rescale at once; others on next launch.",

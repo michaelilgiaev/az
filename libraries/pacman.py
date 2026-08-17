@@ -192,6 +192,25 @@ ISO_APP_OVERRIDES = [
     # per-locale (unique under /root/azarch/apps/) and match the emit_plan dests below.
     ("thunar.en_US.mo", "/usr/share/locale/en_US/LC_MESSAGES/thunar.mo", False),
     ("thunar.en_GB.mo", "/usr/share/locale/en_GB/LC_MESSAGES/thunar.mo", False),
+    # NUKE the "Devices" section from Thunar's shortcuts pane (the user: "no Devices, delete it,
+    # nuke it, I dont need it there"). Thunar's DEVICES rows come from the GVfs GVolumeMonitor,
+    # and `misc-volume-management=false` only stops AUTO-MOUNT -- it does NOT hide drives/volumes
+    # already reported by the monitor (verified on the VM: a VirtIO drive + a 9p "shared" mount
+    # still listed under Devices). There is no Thunar config to hide the whole section. The
+    # decisive, machine-agnostic lever is GVfs itself: the udisks2 volume monitor is registered
+    # by /usr/share/gvfs/remote-volume-monitors/udisks2.monitor. The base `gvfs` package ships
+    # ONLY that one monitor file; GVfs's other volume monitors (afc/goa/gphoto2/mtp) live in the
+    # separate gvfs-afc/gvfs-goa/gvfs-gphoto2/gvfs-mtp subpackages, and NONE of those are in the
+    # ISO manifest (packages.x86_64). So on the built image udisks2.monitor is the only volume
+    # monitor present, and removing it leaves GVfs with ZERO volume monitors -- Thunar's
+    # GVolumeMonitor is empty and NO Devices section renders at all, on a VM or bare metal alike.
+    # (If a gvfs-* backend subpackage is ever added to the manifest, its monitor must be removed
+    # here too, or its devices would reappear.) Owned by `gvfs`, so it takes the same NoExtract +
+    # post-pacstrap `rm -f` route as the suppress-only kitty PNGs (basename None, remove True).
+    # Trade-offs (all acceptable given the explicit "no Devices" ask): the 9p/USB mounts no
+    # longer APPEAR in the pane (they stay reachable as normal paths; on-demand `gio mount` /
+    # `udisksctl` still work), and Trash is unaffected (gvfsd-trash is a separate daemon).
+    (None, "/usr/share/gvfs/remote-volume-monitors/udisks2.monitor", True),
 ]
 
 # Files the ISO overrides / suppresses. pacstrap must NOT extract the owning

@@ -163,13 +163,11 @@ HIDDEN_BOOKMARKS: tuple[str, ...] = (
     # whose child count is 0, so with the File System row hidden and no removable volumes
     # (MiscVolumeManagement=false), the whole "Devices" heading disappears too.
     "file:///",
-    # REMOVE the "main" username label on the built-in Home shortcut (PROMPT batch item 4).
-    # VERIFIED: the built-in Home shortcut has name==NULL and falls back to the home GFile's
-    # display-name, which GIO returns as the bare username "main" (only Trash and "/" are
-    # special-cased). There is no rename pref, so we HIDE the built-in Home (its URI is exactly
-    # "file:///home/main") here and ship our OWN "Home Directory"-labelled bookmark pointing at
-    # /home/main in the sidebar (see sidebar.py HOME_BOOKMARK) -- so the entry reads "Home
-    # Directory", never "main".
+    # REMOVE the built-in Home shortcut entirely. The user deleted the sidebar's Home entry
+    # ("just delete it, we dont actually need it there is a home button"), so we hide the
+    # built-in Home (its URI is exactly "file:///home/main") and ship NO replacement bookmark
+    # (see thunar/sidebar.py). The Places sidebar therefore has no Home row at all; Thunar's
+    # Home toolbar button covers navigating home.
     f"file://{HOME}",
 )
 HIDDEN_DEVICES: tuple[str, ...] = (

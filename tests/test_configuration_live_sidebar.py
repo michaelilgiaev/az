@@ -34,9 +34,11 @@ def test_static_sidebar_order_is_dirs_then_symlinks_then_trash_last():
     assert labels[-1] == home_directory.TRASH_LINK_NAME, labels
 
 
-def test_static_sidebar_bookmarks_put_trash_last_and_home_first():
+def test_static_sidebar_bookmarks_put_trash_last_and_no_home():
     bm = sidebar.gtk_bookmarks().splitlines()
-    assert bm[0].endswith(" Home Directory")          # Home Directory first
+    # NO "Home Directory" bookmark anywhere (the user deleted it from the sidebar).
+    assert not any(ln.endswith(" Home Directory") for ln in bm)
+    assert not any(".home-directory" in ln for ln in bm)
     assert bm[-1].endswith(" Trash")                  # Trash last
     # Trash resolves to the real trash files dir (resolved-path behaviour).
     assert bm[-1].startswith("file:///home/main/.local/share/Trash/files ")
@@ -105,10 +107,9 @@ def test_functional_ordering_dirs_files_symlinks_trash_last(tmp_path):
 
     lines = _run_sync(tmp_path)
     labels = [ln.split(" ", 1)[1] for ln in lines]
-    # Home Directory first, pointing at the DISTINCT .home-directory URI (so it is not hidden by
-    # the built-in-Home hiding -- the adversary-caught collision fix).
-    assert labels[0] == "Home Directory"
-    assert lines[0] == f"file://{tmp_path}/.home-directory Home Directory"
+    # NO "Home Directory" bookmark (deleted from the sidebar); the list starts at the dirs.
+    assert "Home Directory" not in labels
+    assert not any(".home-directory" in ln for ln in lines)
     # Desktop skipped, .hidden_file skipped.
     assert "Desktop" not in labels
     assert ".hidden_file" not in labels
