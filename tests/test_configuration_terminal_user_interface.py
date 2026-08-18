@@ -60,12 +60,14 @@ def _command_line_interface():
 
 def _src(name: str) -> str:
     text = (TERMINAL_USER_INTERFACE_SRC_DIR / name).read_text(encoding="utf-8")
-    # model.c was split (it grew past the size budget): the UI infrastructure stays in model.c
-    # and the screen TREE (ROWS_* + SCREENS[]) moved to model_tree.c. The tests treat "the model"
-    # as one thing, so requesting model.c transparently returns BOTH concatenated -- a content
-    # check for a row/screen finds it wherever it now lives.
+    # model.c was split (it grew past the size budget): the UI infrastructure stays in model.c,
+    # the static screen TREE (ROWS_* + SCREENS[]) moved to model_tree.c, and the RUNTIME Default
+    # Applications screens moved to model_defaultapps.c. The tests treat "the model" as one thing,
+    # so requesting model.c transparently returns ALL THREE concatenated -- a content check for a
+    # row/screen/probe finds it wherever it now lives.
     if name == "model.c":
-        text += "\n" + (TERMINAL_USER_INTERFACE_SRC_DIR / "model_tree.c").read_text(encoding="utf-8")
+        for extra in ("model_tree.c", "model_defaultapps.c"):
+            text += "\n" + (TERMINAL_USER_INTERFACE_SRC_DIR / extra).read_text(encoding="utf-8")
     return text
 
 
@@ -143,6 +145,8 @@ def test_build_tui_inputs_are_the_c_sources():
     assert "main.c" in names
     assert "render.c" in names
     assert "model.c" in names
+    assert "model_tree.c" in names           # the static screen tree (split from model.c)
+    assert "model_defaultapps.c" in names    # the runtime Default Applications screens
     assert "preview.c" in names
     assert "action.c" in names       # apply execution + in-UI sudo credential
     assert "Makefile" in names

@@ -381,42 +381,50 @@ def test_rc_xml_menu_window_is_undecorated():
     assert "<decor>no</decor>" in out
 
 
-def test_rc_xml_forces_calamares_centered():
-    # The Calamares installer must open CENTERED every time, including on a REOPEN.
-    # Calamares remembers its last window geometry, so branding.desc windowPlacement:center
-    # (first-map only) and OpenBox's global Smart/center (only for windows that request no
-    # position) are not enough. A per-application <position force="yes"> centered on both
-    # axes, matched on the installer's WM_CLASS, overrides the remembered geometry per map.
+def test_rc_xml_opens_calamares_restored_and_centered():
+    # The Calamares installer must open RESTORED-DOWN (NOT maximized) and CENTERED every time,
+    # including on a REOPEN, so the live wallpaper stays visible around it. Every other app
+    # opens maximized (the wildcard rule); the installer opts out with <maximized>no</maximized>
+    # and a per-application <position force="yes"> that overrides Calamares' remembered geometry.
     import xml.etree.ElementTree as ET
 
     root = ET.fromstring(desktop.openbox_rc_xml())
     ns = {"ob": "http://openbox.org/3.4/rc"}
     app = None
     for a in root.findall(".//ob:applications/ob:application", ns):
-        # Match on the CLASS field (res_class "Calamares", capital C) -- the load-bearing
-        # attribute. name= is also present (res_name "calamares", lowercase).
+        # Match on the CLASS field (res_class, lowercase "calamares"). name= is also present
+        # (res_name, likewise lowercase "calamares").
         if a.get("class") == desktop.CALAMARES_WM_CLASS:
             app = a
             break
-    assert app is not None, "no <application class='Calamares'> rule in rc.xml"
-    # Both WM_CLASS fields matched, each with its exact case (OpenBox matching is
-    # case-sensitive; a lowercase class= would not match res_class 'Calamares').
+    assert app is not None, "no <application class='calamares'> rule in rc.xml"
+    # Both WM_CLASS fields matched, each with its exact (lowercase) case -- OpenBox matching is
+    # case-sensitive, so a capitalised class= would not match the real res_class and the rule
+    # would silently no-op (letting the installer open maximized, the bug this guards against).
     assert app.get("name") == desktop.CALAMARES_WM_NAME
     assert app.get("class") == desktop.CALAMARES_WM_CLASS
+    # LOAD-BEARING for the new prompt: the installer must OPT OUT of the wildcard's
+    # <maximized>yes</maximized>, otherwise it opens full-screen (no visible background).
+    maximized = app.find("ob:maximized", ns)
+    assert maximized is not None and maximized.text == "no", \
+        "Calamares rule must set <maximized>no</maximized> (restored-down, background visible)"
     pos = app.find("ob:position", ns)
     assert pos is not None and pos.get("force") == "yes", "position must be force='yes'"
     assert pos.find("ob:x", ns).text == "center"
     assert pos.find("ob:y", ns).text == "center"
 
 
-def test_calamares_wm_class_constants_match_qt_derivation():
-    # Qt derives the installer window's WM_CLASS as two DIFFERENTLY-cased fields:
+def test_calamares_wm_class_constants_match_verified_derivation():
+    # The installer window's WM_CLASS was VERIFIED with `xprop WM_CLASS` on the running
+    # installer in the live VM -- BOTH fields are the lowercase "calamares":
+    #     WM_CLASS(STRING) = "calamares", "calamares"
     #   res_name  = argv[0] basename = "calamares" (our wrapper runs `sudo -E calamares`)
-    #   res_class = applicationName() = "Calamares" (Calamares hardcodes setApplicationName)
-    # OpenBox matching is case-sensitive, so these constants must carry the exact case or
-    # the centering rule silently no-ops. Pinned so a drift is caught here, not on the guest.
+    #   res_class = applicationName() = "calamares" (NOT a capitalised "Calamares" -- an
+    #               earlier guess used a capital C, which made the OpenBox rule silently no-op
+    #               because matching is case-sensitive, so the installer opened maximized).
+    # Pinned so a drift is caught here, not on the guest.
     assert desktop.CALAMARES_WM_NAME == "calamares"
-    assert desktop.CALAMARES_WM_CLASS == "Calamares"
+    assert desktop.CALAMARES_WM_CLASS == "calamares"
 
 
 def test_rc_xml_is_wellformed_xml():

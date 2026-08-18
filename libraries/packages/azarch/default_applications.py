@@ -157,31 +157,48 @@ CATEGORY_KEYS: dict[str, str] = {
     "Terminal": "terminal",
 }
 
-# The candidate handlers offered PER category when the user changes its default (first entry is
-# the Az'arch shipped default from CATEGORIES). These are the QUICK-PICK options the TUI lists;
-# they include every app Az'arch ships that fits the category, so common choices are one keypress
-# away -- notably FIREFOX (shipped alongside LibreWolf) now appears for Web/HTML/PDF, which the
-# user said was missing. This is NOT an exhaustive allow-list: the CLI `set` accepts ANY installed
-# .desktop (see default_applications_cli._da_set / the `desktops` subcommand), so a developer can
-# set a handler the quick-picks don't list. Only ids Az'arch actually ships are listed here so a
-# quick-pick always resolves. A test asserts the first candidate of each category equals that
-# category's CATEGORIES default.
+# The CURATED handlers per category -- the Az'arch shipped default FIRST, then any other apps
+# Az'arch itself ships that fit the category. This is the SEED, not the whole list: at RUNTIME
+# the TUI (and `azarch default-applications candidates`) resolves the OFFERED handlers as the
+# union of {these curated ids that are actually installed} and {every OTHER installed .desktop
+# that declares this category's MIME type in its MimeType=}. So the list is SELF-RESOLVING --
+# install Firefox and firefox.desktop appears under Web/HTML/PDF automatically; remove it and it
+# disappears -- WITHOUT it being hard-listed here (the user does not ship Firefox and asked for
+# the list to update itself when apps come and go). FIREFOX IS DELIBERATELY NOT LISTED: Az'arch
+# ships only LibreWolf; Firefox surfaces purely via the installed+MIME resolution when present.
+# The curated seed guarantees the shipped choices are always offered (and, for the non-MIME
+# categories Calculator/Terminal that have no MIME to resolve against, it is the whole list). The
+# `set` verb still accepts ANY installed .desktop (see default_applications_cli._da_set). A test
+# asserts the first curated candidate of each category equals that category's CATEGORIES default.
 CANDIDATES: dict[str, tuple[str, ...]] = {
-    "Web": ("librewolf.desktop", "firefox.desktop"),
+    "Web": ("librewolf.desktop",),
     "Mail": (),  # no mail client shipped -- nothing to pick
-    "HTML": ("librewolf.desktop", "firefox.desktop", "org.gnome.gedit.desktop"),
+    "HTML": ("librewolf.desktop", "org.gnome.gedit.desktop"),
     "Music": ("vlc.desktop",),
     "Video": ("vlc.desktop",),
     "Photos": ("xviewer.desktop", "gimp.desktop", "feh.desktop"),
     "Word": ("libreoffice-writer.desktop",),
     "Spreadsheet": ("libreoffice-calc.desktop",),
-    "PDF": ("librewolf.desktop", "firefox.desktop"),
+    "PDF": ("librewolf.desktop",),
     "Source Code": ("org.gnome.gedit.desktop", "vim.desktop"),
     "File Manager": ("thunar.desktop",),
     "Plain Text": ("org.gnome.gedit.desktop", "vim.desktop"),
     "Calculator": ("qalculate-gtk.desktop",),
     "Terminal": ("kitty.desktop",),
 }
+
+# The freedesktop application directories, in the order xdg-mime / GIO consult them (the per-user
+# dir first, so a user override wins). This is WHERE THE .DESKTOP FILES LIVE -- disclosed on the
+# Default Applications screens exactly like the Wallpaper screen discloses its directory, and the
+# set the runtime candidate resolution scans. Kept here (the single source of truth) so the CLI
+# mirror, the C model's disclosure subtitle, and any test all name the same dirs. The literal
+# defaults match the XDG spec ($XDG_DATA_HOME or ~/.local/share, then $XDG_DATA_DIRS or
+# /usr/local/share:/usr/share); the live resolution honours the env vars.
+DESKTOP_DIRS_DISPLAY: tuple[str, ...] = (
+    "~/.local/share/applications",
+    "/usr/local/share/applications",
+    "/usr/share/applications",
+)
 
 
 def category_by_key(key: str) -> tuple[str, str, str, tuple[str, ...]] | None:

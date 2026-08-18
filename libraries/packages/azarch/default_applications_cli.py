@@ -44,15 +44,15 @@ from __future__ import annotations
 # first candidate is the Az'arch shipped default. Order matters: it is the TUI's row order.
 DA_CATEGORIES: tuple[tuple[str, str, str, tuple[str, ...], tuple[str, ...]], ...] = (
     # key,            label,          group,        mimes,                                       candidates
-    ("web",          "Web",          "Internet",   ("x-scheme-handler/http", "x-scheme-handler/https"), ("librewolf.desktop", "firefox.desktop")),
+    ("web",          "Web",          "Internet",   ("x-scheme-handler/http", "x-scheme-handler/https"), ("librewolf.desktop",)),
     ("mail",         "Mail",         "Internet",   (),                                          ()),
-    ("html",         "HTML",         "Internet",   ("text/html", "application/xhtml+xml"),      ("librewolf.desktop", "firefox.desktop", "org.gnome.gedit.desktop")),
+    ("html",         "HTML",         "Internet",   ("text/html", "application/xhtml+xml"),      ("librewolf.desktop", "org.gnome.gedit.desktop")),
     ("music",        "Music",        "Multimedia", ("audio/mpeg", "audio/flac", "audio/ogg", "audio/x-wav", "audio/x-vorbis+ogg", "audio/mp4", "audio/aac", "audio/x-m4a"), ("vlc.desktop",)),
     ("video",        "Video",        "Multimedia", ("video/mp4", "video/x-matroska", "video/webm", "video/x-msvideo", "video/quicktime", "video/mpeg", "video/x-flv"), ("vlc.desktop",)),
     ("photos",       "Photos",       "Multimedia", ("image/jpeg", "image/png", "image/gif", "image/bmp", "image/tiff", "image/webp", "image/x-xpixmap", "image/svg+xml"), ("xviewer.desktop", "gimp.desktop", "feh.desktop")),
     ("word",         "Word",         "Office",     ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword", "application/vnd.oasis.opendocument.text", "application/rtf"), ("libreoffice-writer.desktop",)),
     ("spreadsheet",  "Spreadsheet",  "Office",     ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel", "application/vnd.oasis.opendocument.spreadsheet", "text/csv"), ("libreoffice-calc.desktop",)),
-    ("pdf",          "PDF",          "Office",     ("application/pdf",),                        ("librewolf.desktop", "firefox.desktop")),
+    ("pdf",          "PDF",          "Office",     ("application/pdf",),                        ("librewolf.desktop",)),
     ("source-code",  "Source Code",  "Office",     ("text/x-csrc", "text/x-chdr", "text/x-python", "text/x-shellscript", "application/javascript", "text/x-c++src", "application/json", "text/markdown", "text/xml"), ("org.gnome.gedit.desktop", "vim.desktop")),
     ("file-manager", "File Manager", "System",     ("inode/directory",),                        ("thunar.desktop",)),
     ("plain-text",   "Plain Text",   "System",     ("text/plain",),                             ("org.gnome.gedit.desktop", "vim.desktop")),
@@ -199,6 +199,71 @@ def _da_desktop_exists(desktop_id: str) -> bool:
     return False
 
 
+def _da_desktop_declares_mime(path: str, mimes: tuple[str, ...]) -> bool:
+    """True if the .desktop at <path> lists ANY of <mimes> on its MimeType= line (the
+    freedesktop key that says which MIME types an app can open) and is not Hidden/NoDisplay.
+    Parsed line-by-line (stdlib only, no configparser edge cases with duplicate keys)."""
+    want = set(mimes)
+    if not want:
+        return False
+    try:
+        hidden = False
+        declared: set[str] = set()
+        in_entry = False
+        for line in open(path, encoding="utf-8", errors="replace"):
+            s = line.strip()
+            if s.startswith("[") and s.endswith("]"):
+                in_entry = (s == "[Desktop Entry]")
+                continue
+            if not in_entry or "=" not in s:
+                continue
+            k, v = s.split("=", 1)
+            k = k.strip()
+            if k == "MimeType":
+                declared.update(t for t in v.strip().split(";") if t)
+            elif k in ("Hidden", "NoDisplay") and v.strip().lower() == "true":
+                hidden = True
+        return bool(declared & want) and not hidden
+    except OSError:
+        return False
+
+
+def _da_resolved_candidates(key: str) -> list[str]:
+    """The handlers OFFERED for a category, resolved LIVE against what is installed -- the union
+    of the curated seed (CANDIDATES, only the ones actually installed) and every OTHER installed
+    .desktop that declares this category's MIME type. Curated-installed come FIRST (curated order,
+    so the shipped default stays on top), then the MIME-discovered extras (sorted). This is what
+    makes the list self-resolving: install Firefox and firefox.desktop joins Web/HTML/PDF; remove
+    it and it drops off -- no hard-coding. For the non-MIME categories (Calculator/Terminal) there
+    is nothing to discover, so the curated seed IS the list (filtered to installed, but those ship
+    with Az'arch so they resolve). Order/def pinned to default_applications.py's CANDIDATES."""
+    row = _da_row(key)
+    if row is None:
+        return []
+    _k, _label, _group, mimes, cands = row
+    out: list[str] = []
+    seen: set[str] = set()
+    for c in cands:
+        if c not in seen and _da_desktop_exists(c):
+            out.append(c)
+            seen.add(c)
+    if mimes:
+        extra: list[str] = []
+        for d in _da_desktop_dirs():
+            try:
+                names = os.listdir(d)
+            except OSError:
+                continue
+            for name in names:
+                if not name.endswith(".desktop") or name in seen:
+                    continue
+                if _da_desktop_declares_mime(os.path.join(d, name), mimes):
+                    extra.append(name)
+                    seen.add(name)
+        out.extend(sorted(extra))
+    return out
+
+
 def _da_set(key: str, desktop_id: str) -> int:
     """Set a category's default handler to <desktop_id>. MIME categories go through
     `xdg-mime default`; Terminal through the exo helper.
@@ -322,7 +387,10 @@ def cmd_default_applications(args: list[str]) -> int:
         if row is None:
             _err(f"azarch default-applications: unknown category: {args[1]}")
             return 2
-        for c in row[4]:
+        # RESOLVED live against what is installed (curated-installed + MIME-declaring apps), so
+        # e.g. firefox.desktop shows up here the moment Firefox is installed. This is the list
+        # the TUI's per-category screen offers.
+        for c in _da_resolved_candidates(args[1]):
             print(c)
         return 0
     if verb == "desktops":

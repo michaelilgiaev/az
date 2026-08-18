@@ -121,6 +121,22 @@ int az_screen_count(void);
 /* Find a screen by id, or NULL. */
 const AzScreen *az_screen_find(const char *id);
 
+/* The .desktop application directories as DISPLAYED on the Default Applications screens (the
+ * disclosure line, like the Wallpaper screen's directory). Mirrors
+ * default_applications.DESKTOP_DIRS_DISPLAY (a test pins it). Used by both the category-LIST
+ * screen subtitle (model_tree.c) and the runtime per-category screens (model_defaultapps.c),
+ * so it lives here. The LIVE candidate resolution honours $XDG_DATA_HOME / $XDG_DATA_DIRS. */
+#define AZ_DA_DIRS_LINE \
+    "~/.local/share/applications, /usr/local/share/applications, /usr/share/applications"
+
+/* Build the RUNTIME "defaultapps.<key>" screen (model_defaultapps.c): its candidate rows resolve
+ * live from the installed .desktop files (curated seed first, then MIME-declaring installed apps),
+ * labelled with the bare .desktop id, plus a disclosure subtitle. Returns a pointer to module-
+ * static storage rebuilt on each call (safe: only one defaultapps.* screen is ever on the stack
+ * and every consumer reads synchronously). Returns NULL if `id` is not a defaultapps category id.
+ * az_screen_find() delegates the "defaultapps." prefix here. */
+const AzScreen *az_da_screen(const char *id);
+
 /* filter_items: does row `r` match the search query `q` (case-insensitive substring of
  * the label or its live status)? Empty/NULL q matches everything. Pure -- unit-tested. */
 int az_row_matches(const AzRow *r, const char *q);

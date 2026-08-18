@@ -18,6 +18,10 @@
 
 #include <string.h>
 
+/* AZ_DA_DIRS_LINE (the .desktop directory disclosure line) is declared in
+ * terminal_user_interface.h -- it is shared with model_defaultapps.c (the runtime Default
+ * Applications screens) and used by the category-list screen subtitle below. */
+
 /* AZ_WALLPAPERS_DIR / AZ_WALLPAPER_RES are used by the wallpaper rows' base commands below.
  * They are defined in model.c too (for az_wallpaper_image); kept in lock-step with wallpaper.py
  * (a test pins the strings). Redefined here for the row base-command string literals. */
@@ -214,77 +218,19 @@ static const AzRow ROWS_BRIGHTNESS[] = {
  * are all pinned to packages/azarch/default_applications.py by a test, so C and Python cannot
  * drift. Applying a default writes the user's own mimeapps.list / exo helper -- no sudo. */
 
-/* Per-category candidate rows. Each "Set to <app>" runs `azarch default-applications set
- * <key> <id.desktop>`; base= is the underlying `xdg-mime default ...` line (or the exo helper
- * write for the terminal) the wrapper ultimately runs, for the teaching line + `x` copy. */
-static const AzRow ROWS_DA_WEB[] = {
-    {.label="Set to LibreWolf", .kind=AZ_ACT_APPLY, .target="azarch default-applications set web librewolf.desktop",
-     .base="xdg-mime default librewolf.desktop x-scheme-handler/http x-scheme-handler/https"},
-    {.label="Set to Firefox",   .kind=AZ_ACT_APPLY, .target="azarch default-applications set web firefox.desktop",
-     .base="xdg-mime default firefox.desktop x-scheme-handler/http x-scheme-handler/https"},
-};
-static const AzRow ROWS_DA_HTML[] = {
-    {.label="Set to LibreWolf", .kind=AZ_ACT_APPLY, .target="azarch default-applications set html librewolf.desktop",
-     .base="xdg-mime default librewolf.desktop text/html application/xhtml+xml"},
-    {.label="Set to Firefox",   .kind=AZ_ACT_APPLY, .target="azarch default-applications set html firefox.desktop",
-     .base="xdg-mime default firefox.desktop text/html application/xhtml+xml"},
-    {.label="Set to gedit",     .kind=AZ_ACT_APPLY, .target="azarch default-applications set html org.gnome.gedit.desktop",
-     .base="xdg-mime default org.gnome.gedit.desktop text/html application/xhtml+xml"},
-};
-static const AzRow ROWS_DA_MUSIC[] = {
-    {.label="Set to VLC", .kind=AZ_ACT_APPLY, .target="azarch default-applications set music vlc.desktop",
-     .base="xdg-mime default vlc.desktop audio/mpeg audio/flac audio/ogg ..."},
-};
-static const AzRow ROWS_DA_VIDEO[] = {
-    {.label="Set to VLC", .kind=AZ_ACT_APPLY, .target="azarch default-applications set video vlc.desktop",
-     .base="xdg-mime default vlc.desktop video/mp4 video/x-matroska video/webm ..."},
-};
-static const AzRow ROWS_DA_PHOTOS[] = {
-    {.label="Set to xviewer", .kind=AZ_ACT_APPLY, .target="azarch default-applications set photos xviewer.desktop",
-     .base="xdg-mime default xviewer.desktop image/jpeg image/png image/gif ..."},
-    {.label="Set to GIMP",    .kind=AZ_ACT_APPLY, .target="azarch default-applications set photos gimp.desktop",
-     .base="xdg-mime default gimp.desktop image/jpeg image/png image/gif ..."},
-    {.label="Set to feh",     .kind=AZ_ACT_APPLY, .target="azarch default-applications set photos feh.desktop",
-     .base="xdg-mime default feh.desktop image/jpeg image/png image/gif ..."},
-};
-static const AzRow ROWS_DA_WORD[] = {
-    {.label="Set to LibreOffice Writer", .kind=AZ_ACT_APPLY, .target="azarch default-applications set word libreoffice-writer.desktop",
-     .base="xdg-mime default libreoffice-writer.desktop application/vnd.oasis.opendocument.text ..."},
-};
-static const AzRow ROWS_DA_SPREADSHEET[] = {
-    {.label="Set to LibreOffice Calc", .kind=AZ_ACT_APPLY, .target="azarch default-applications set spreadsheet libreoffice-calc.desktop",
-     .base="xdg-mime default libreoffice-calc.desktop application/vnd.oasis.opendocument.spreadsheet ..."},
-};
-static const AzRow ROWS_DA_PDF[] = {
-    {.label="Set to LibreWolf", .kind=AZ_ACT_APPLY, .target="azarch default-applications set pdf librewolf.desktop",
-     .base="xdg-mime default librewolf.desktop application/pdf"},
-    {.label="Set to Firefox",   .kind=AZ_ACT_APPLY, .target="azarch default-applications set pdf firefox.desktop",
-     .base="xdg-mime default firefox.desktop application/pdf"},
-};
-static const AzRow ROWS_DA_SOURCE_CODE[] = {
-    {.label="Set to gedit", .kind=AZ_ACT_APPLY, .target="azarch default-applications set source-code org.gnome.gedit.desktop",
-     .base="xdg-mime default org.gnome.gedit.desktop text/x-csrc text/x-python ..."},
-    {.label="Set to Vim",   .kind=AZ_ACT_APPLY, .target="azarch default-applications set source-code vim.desktop",
-     .base="xdg-mime default vim.desktop text/x-csrc text/x-python ..."},
-};
-static const AzRow ROWS_DA_FILE_MANAGER[] = {
-    {.label="Set to Thunar", .kind=AZ_ACT_APPLY, .target="azarch default-applications set file-manager thunar.desktop",
-     .base="xdg-mime default thunar.desktop inode/directory"},
-};
-static const AzRow ROWS_DA_PLAIN_TEXT[] = {
-    {.label="Set to gedit", .kind=AZ_ACT_APPLY, .target="azarch default-applications set plain-text org.gnome.gedit.desktop",
-     .base="xdg-mime default org.gnome.gedit.desktop text/plain"},
-    {.label="Set to Vim",   .kind=AZ_ACT_APPLY, .target="azarch default-applications set plain-text vim.desktop",
-     .base="xdg-mime default vim.desktop text/plain"},
-};
-static const AzRow ROWS_DA_CALCULATOR[] = {
-    {.label="Set to Qalculate", .kind=AZ_ACT_APPLY, .target="azarch default-applications set calculator qalculate-gtk.desktop",
-     .base="(no MIME default -- qalculate-gtk is the recorded calculator)"},
-};
-static const AzRow ROWS_DA_TERMINAL[] = {
-    {.label="Set to kitty", .kind=AZ_ACT_APPLY, .target="azarch default-applications set terminal kitty.desktop",
-     .base="printf 'TerminalEmulator=kitty\\n' >> ~/.config/xfce4/helpers.rc"},
-};
+/* Per-category candidate rows are BUILT AT RUNTIME (az_da_screen, in model_defaultapps.c), not
+ * stored as static tables: the offered handlers RESOLVE LIVE against what is installed, so e.g.
+ * installing Firefox makes firefox.desktop appear under Web/HTML/PDF and removing it drops it --
+ * the user's "the list should resolve itself" requirement. Each generated row's label is the bare
+ * .desktop id (e.g. "librewolf.desktop") -- the old pretty "Set to <Name>" labels are gone -- its
+ * target is `azarch default-applications set <key> <id.desktop>` and its base is the underlying
+ * `xdg-mime default ...` (or exo helper) line, for the teaching line + `x` copy. The category
+ * set/keys/mimes/curated-seed mirror packages/azarch/default_applications.py (CATEGORIES /
+ * CANDIDATES / CATEGORY_KEYS) via the AZ_DA_CATS table (model_defaultapps.c), pinned by a test. */
+
+/* The AzDaCat descriptor table (AZ_DA_CATS: key + full MIME list + curated seed) that drives the
+ * runtime candidate resolution lives in model_defaultapps.c, alongside az_da_screen() which uses
+ * it. The category-LIST screen below is static (the per-category screens are built at runtime). */
 
 /* The category list (the `defaultapps` screen). Each row shows the live handler and descends
  * into its per-category screen. This is exactly the category set the PROMPT lists for the TUI
@@ -453,53 +399,16 @@ static const AzScreen SCREENS[] = {
      .subtitle="Writes ~/.config/azarch/machine-type (PC/Laptop) or removes it to autodetect. "
                "Laptops get screen-brightness control; PCs do not.",
      .current=az_status_machine,   .rows=ROWS_MACHINE,   .nrows=AZN(ROWS_MACHINE)},
-    /* Default Applications: the category list + one screen per category. Each category screen's
-     * "Current:" line shows the handler it resolves to now; its rows change the default via
-     * `azarch default-applications set ...`. Derived from default_applications.py (pinned). */
+    /* Default Applications: the category LIST is static (below); the 13 per-category screens
+     * (defaultapps.web, ...) are BUILT AT RUNTIME by az_screen_find -> az_da_screen, so their
+     * candidate rows resolve live against the installed .desktop files and each discloses WHERE
+     * the .desktop files live (like the Wallpaper screen discloses its directory). They are NOT
+     * listed here. The list screen's subtitle names the .desktop directories too. */
     {.id="defaultapps", .title="Default Applications",
      .subtitle="Which app opens which file type (the XDG mimeapps defaults). Pick a category to "
-               "change its handler. To set ANY installed app (or find where .desktop files live): "
-               "azarch default-applications desktops [category].",
+               "change its handler. The .desktop files live in " AZ_DA_DIRS_LINE
+               " (drop your own there). Options resolve automatically from what is installed.",
      .rows=ROWS_DEFAULTAPPS, .nrows=AZN(ROWS_DEFAULTAPPS)},
-    {.id="defaultapps.web",          .title="Web",
-     .subtitle="The browser for http/https links (wraps xdg-mime default).",
-     .current=az_status_da_web,          .rows=ROWS_DA_WEB,          .nrows=AZN(ROWS_DA_WEB)},
-    {.id="defaultapps.html",         .title="HTML",
-     .subtitle="The handler for .html / xhtml files (wraps xdg-mime default).",
-     .current=az_status_da_html,         .rows=ROWS_DA_HTML,         .nrows=AZN(ROWS_DA_HTML)},
-    {.id="defaultapps.music",        .title="Music",
-     .subtitle="The player for audio files (wraps xdg-mime default).",
-     .current=az_status_da_music,        .rows=ROWS_DA_MUSIC,        .nrows=AZN(ROWS_DA_MUSIC)},
-    {.id="defaultapps.video",        .title="Video",
-     .subtitle="The player for video files (wraps xdg-mime default).",
-     .current=az_status_da_video,        .rows=ROWS_DA_VIDEO,        .nrows=AZN(ROWS_DA_VIDEO)},
-    {.id="defaultapps.photos",       .title="Photos",
-     .subtitle="The viewer for image files (wraps xdg-mime default).",
-     .current=az_status_da_photos,       .rows=ROWS_DA_PHOTOS,       .nrows=AZN(ROWS_DA_PHOTOS)},
-    {.id="defaultapps.word",         .title="Word",
-     .subtitle="The handler for word-processor documents (wraps xdg-mime default).",
-     .current=az_status_da_word,         .rows=ROWS_DA_WORD,         .nrows=AZN(ROWS_DA_WORD)},
-    {.id="defaultapps.spreadsheet",  .title="Spreadsheet",
-     .subtitle="The handler for spreadsheet documents (wraps xdg-mime default).",
-     .current=az_status_da_spreadsheet,  .rows=ROWS_DA_SPREADSHEET,  .nrows=AZN(ROWS_DA_SPREADSHEET)},
-    {.id="defaultapps.pdf",          .title="PDF",
-     .subtitle="The handler for PDF files (wraps xdg-mime default).",
-     .current=az_status_da_pdf,          .rows=ROWS_DA_PDF,          .nrows=AZN(ROWS_DA_PDF)},
-    {.id="defaultapps.source-code",  .title="Source Code",
-     .subtitle="The editor for source files (wraps xdg-mime default).",
-     .current=az_status_da_source_code,  .rows=ROWS_DA_SOURCE_CODE,  .nrows=AZN(ROWS_DA_SOURCE_CODE)},
-    {.id="defaultapps.file-manager", .title="File Manager",
-     .subtitle="The handler for directories / inode/directory (wraps xdg-mime default).",
-     .current=az_status_da_file_manager, .rows=ROWS_DA_FILE_MANAGER, .nrows=AZN(ROWS_DA_FILE_MANAGER)},
-    {.id="defaultapps.plain-text",   .title="Plain Text",
-     .subtitle="The editor for text/plain files (wraps xdg-mime default).",
-     .current=az_status_da_plain_text,   .rows=ROWS_DA_PLAIN_TEXT,   .nrows=AZN(ROWS_DA_PLAIN_TEXT)},
-    {.id="defaultapps.calculator",   .title="Calculator",
-     .subtitle="The recorded calculator app (no MIME type of its own).",
-     .current=az_status_da_calculator,   .rows=ROWS_DA_CALCULATOR,   .nrows=AZN(ROWS_DA_CALCULATOR)},
-    {.id="defaultapps.terminal",     .title="Terminal",
-     .subtitle="The terminal Thunar's 'Open Terminal Here' opens (exo TerminalEmulator helper).",
-     .current=az_status_da_terminal,     .rows=ROWS_DA_TERMINAL,     .nrows=AZN(ROWS_DA_TERMINAL)},
     /* Display: cinnamon-settings-display parity (xrandr) + the GLOBAL SCALE chooser. NO
      * .current here -- the top "Current: scale 1.35x" line was removed at the user's request;
      * each ROWS_DISPLAY row shows its own current value inline via .status instead. */
@@ -538,6 +447,12 @@ int az_screen_count(void)
 
 const AzScreen *az_screen_find(const char *id)
 {
+    if (!id) return NULL;
+    /* Runtime-built Default Applications category screens (candidate rows resolve live). */
+    if (strncmp(id, "defaultapps.", 12) == 0) {
+        const AzScreen *dyn = az_da_screen(id);
+        if (dyn) return dyn;
+    }
     for (int i = 0; SCREENS[i].id; i++)
         if (strcmp(SCREENS[i].id, id) == 0) return &SCREENS[i];
     return NULL;

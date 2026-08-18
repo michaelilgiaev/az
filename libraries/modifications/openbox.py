@@ -113,21 +113,22 @@ def wallpaper_metadata_json(wp_id: str) -> str:
 # a menu launcher.
 INSTALL_WRAPPER_PATH = "/usr/local/bin/azarch-install"
 
-# The Calamares installer window's WM_CLASS. Qt sets it to two DIFFERENTLY-CASED fields:
-#   * res_NAME  = argv[0] basename = "calamares" (lowercase) -- our launcher runs
-#                 `exec sudo -E calamares`, so argv[0] is "calamares".
-#   * res_CLASS = QApplication::applicationName() = "Calamares" (CAPITAL C) -- Calamares
-#                 hardcodes setApplicationName("Calamares") (CALAMARES_APPLICATION_NAME).
-# So `xprop WM_CLASS` on the installer reads: "calamares", "Calamares".
-# OpenBox's <application> matching is CASE-SENSITIVE: name= matches res_name and class=
-# matches res_class, so the rule MUST use the exact case of each field (a lowercase
-# class="calamares" would NOT match res_class "Calamares" and the rule would silently
-# no-op). rc.xml matches BOTH fields (name + class, correct case) so it targets the
-# installer window precisely, to force it to open CENTERED every time (see the
-# <applications> block): Calamares remembers its last window geometry, so on a REOPEN it
-# would otherwise come up wherever it last sat rather than centered.
+# The Calamares installer window's WM_CLASS. VERIFIED with `xprop WM_CLASS` on the running
+# installer in the live VM: BOTH fields are the lowercase "calamares" --
+#     WM_CLASS(STRING) = "calamares", "calamares"
+#   * res_NAME  = argv[0] basename = "calamares" (our launcher runs `exec sudo -E calamares`).
+#   * res_CLASS = "calamares" too. (Calamares sets applicationName to "calamares" here, NOT a
+#                 capitalised "Calamares" -- an earlier guess used a capital C and was wrong.)
+# OpenBox's <application> matching is CASE-SENSITIVE: name= matches res_name and class= matches
+# res_class, so the rule MUST use the exact case of each field. A capital class="Calamares" does
+# NOT match the real lowercase res_class, so that rule SILENTLY NO-OPS -- which is exactly why
+# the installer was still opening MAXIMIZED (it fell through to the wildcard `<maximized>yes`
+# rule) instead of restored-down. Both fields are lowercase, matched precisely below, so the
+# installer opens RESTORED-DOWN and CENTERED every time (see the <applications> block):
+# Calamares remembers its last window geometry, so on a REOPEN it would otherwise come up
+# maximized/wherever it last sat rather than a centered, restored window.
 CALAMARES_WM_NAME = "calamares"   # res_name  (argv[0] basename, lowercase)
-CALAMARES_WM_CLASS = "Calamares"  # res_class (applicationName, CAPITAL C)
+CALAMARES_WM_CLASS = "calamares"  # res_class (applicationName, lowercase -- VERIFIED via xprop)
 
 # --- Default window geometry (open MAXIMIZED, restore to a wide rectangle) --------------
 # The user wants every app to OPEN maximized (not as a small box) and, when "restored down",
@@ -990,17 +991,19 @@ def openbox_rc_xml() -> str:
     <application name="*azarch*menu*">
       <decor>no</decor>
     </application>
-    <!-- The Calamares installer: ALWAYS open CENTERED, even on a REOPEN. Calamares saves
-         its last window geometry (Qt session state), so the second time it is launched it
-         comes up wherever it last sat, ignoring branding.desc's windowPlacement:center
-         (which only steers the FIRST map). OpenBox's global placement (Smart/center) also
-         only applies when the client does not request a position, and a window with
-         remembered geometry does request one. A per-application position with force="yes"
-         OVERRIDES the client's requested position on every map, so the installer is
-         re-centred each time it opens. Matched on BOTH WM_CLASS fields with their exact
-         case (res_name "calamares" via name=, res_class "Calamares" via class="); OpenBox
-         matching is case-sensitive, so the capitalisation must be exact or the rule silently
-         no-ops and the installer opens off-centre. -->
+    <!-- The Calamares installer: open RESTORED-DOWN (NOT maximized) and CENTERED, so the live
+         session's wallpaper stays visible around it (a deliberate hint that the live desktop can
+         still be used while the installer is up). Every OTHER app opens maximized (the wildcard
+         rule above), and the user likes that; only the installer opts out. It ALSO re-centres on
+         a REOPEN: Calamares saves its last window geometry (Qt session state), so the second
+         time it is launched it would come up wherever it last sat, ignoring branding.desc's
+         windowPlacement:center (which only steers the FIRST map); a per-app position with
+         force="yes" overrides the client's requested position on every map. Matched on BOTH
+         WM_CLASS fields with their exact (lowercase) case: res_name AND res_class are both
+         "calamares" (VERIFIED via xprop in the VM). OpenBox matching is case-sensitive, so this
+         MUST be lowercase. A capital class="Calamares" would not match the real res_class, the
+         rule would silently no-op, and the installer would fall through to the wildcard's
+         maximized:yes and open full-screen (which was the reported bug). -->
     <application name="{CALAMARES_WM_NAME}" class="{CALAMARES_WM_CLASS}">
       <!-- Opt OUT of the wildcard's <maximized>yes</maximized> above: the installer sizes
            itself (its pages assume its own window size), so it must NOT open maximized. This

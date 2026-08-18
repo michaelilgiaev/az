@@ -25,11 +25,13 @@ def _bundled():
 
 
 def _model_c() -> str:
-    # The screen TREE (ROWS_* + SCREENS[]) lives in model_tree.c since model.c was split for the
-    # size budget; read both so a row/screen check finds it wherever it is.
+    # The C model is split across three TUs for the per-file size budget: model.c (infra +
+    # probes), model_tree.c (static screen TREE: ROWS_* + SCREENS[]), and model_defaultapps.c
+    # (the runtime Default Applications screens + the AZ_DA_CATS descriptor table). Read all
+    # three so a row/screen/table check finds it wherever it lives.
     d = paths.LIBDIR / "packages/azarch"
-    return (d / "model.c").read_text(encoding="utf-8") + "\n" + \
-        (d / "model_tree.c").read_text(encoding="utf-8")
+    return "\n".join((d / f).read_text(encoding="utf-8")
+                     for f in ("model.c", "model_tree.c", "model_defaultapps.c"))
 
 
 # --- single source of truth: the CLI mirror matches default_applications.py -----
@@ -110,33 +112,88 @@ def test_cli_helpers_rc_path_matches_emitter():
 
 
 # --- the C model.c derives from the same source (pinning, wallpaper.py pattern) ---
+# NOTE: the per-category candidate ROWS are now BUILT AT RUNTIME in C (az_da_screen), resolving
+# against the installed .desktop files, so they are NOT static text in model.c anymore. What the
+# C model DOES carry statically is the AZ_DA_CATS descriptor table (key + full MIME list + curated
+# seed) that the runtime builder resolves from; the tests below pin THAT table to the single
+# source (default_applications.py), plus the category-list screen and the dynamic-build wiring.
 
-def test_model_c_defaultapps_screen_pinned_to_source():
+def test_model_c_defaultapps_list_screen_present():
     model = _model_c()
-    # ROWS_MAIN has the entry; the category list screen id + subtitle are present.
+    # ROWS_MAIN has the entry; the category LIST screen id is present (still static).
     assert '.label="Default Applications", .kind=AZ_ACT_SCREEN, .target="defaultapps"' in model
     assert '.id="defaultapps"' in model
-    # every TUI category (Mail excluded) has a row label, a per-category screen id, and its
-    # current-handler probe, using the EXACT key from default_applications.CATEGORY_KEYS.
+    # every TUI category (Mail excluded) is a row on the list screen that descends into its
+    # per-category screen id, using the EXACT key from default_applications.CATEGORY_KEYS.
     tui_labels = [label for _g, label, _d, _m in da.CATEGORIES if label != "Mail"]
     for label in tui_labels:
         key = da.CATEGORY_KEYS[label]
         assert f'.target="defaultapps.{key}"' in model, key
-        assert f'.id="defaultapps.{key}"' in model, key
         # the category row label appears (as a ROWS_DEFAULTAPPS entry).
         assert f'.label="{label}",' in model, label
     # Mail is NOT surfaced in the C model.
     assert '"defaultapps.mail"' not in model
 
 
-def test_model_c_set_commands_match_candidates():
+def test_model_c_builds_defaultapps_screens_at_runtime():
     model = _model_c()
-    # each candidate handler for each TUI category must appear as a
-    # `azarch default-applications set <key> <id>` apply target in model.c.
-    for _group, label, desktop_id, _mimes in da.CATEGORIES:
+    # The runtime builder exists and az_screen_find delegates the "defaultapps." prefix to it, so
+    # the candidate rows resolve live (the whole point: the list self-resolves from installed apps).
+    assert "az_da_screen" in model
+    assert 'strncmp(id, "defaultapps."' in model
+    # The rows are built as `azarch default-applications set <key> <id>` applies (label == the bare
+    # .desktop id, NOT "Set to ..."). Pin the set-command shape + that the old default-app row
+    # labels ("Set to LibreWolf" / "Set to Firefox" / "Set to gedit", ...) are gone. ("Set to X%"
+    # still legitimately labels the Volume/Brightness rows, which are unrelated -- so pin the
+    # specific app-name labels that used to exist on the Default Applications screens.)
+    assert "azarch default-applications set %s %s" in model
+    for gone in ("Set to LibreWolf", "Set to Firefox", "Set to gedit", "Set to VLC",
+                 "Set to Thunar", "Set to kitty", "Set to Qalculate", "Set to GIMP"):
+        assert gone not in model, f"old default-app label still present: {gone!r}"
+
+
+def test_model_c_da_cats_table_mirrors_source():
+    # The C AZ_DA_CATS descriptor table (key, space-joined MIME list, space-joined curated seed)
+    # must mirror default_applications.py exactly -- the wallpaper.py <-> model.c lock-step, so the
+    # runtime resolver in C offers the same seed / matches the same MIME types as the Python side.
+    #
+    # Pin the WHOLE row per category, not loose substrings: a row is written exactly as
+    #   {"<key>", "<mime1 mime2 ...>", "<seed1 seed2 ...>"},
+    # so we extract the three quoted fields that FOLLOW `{"<key>",` and compare each field to the
+    # source. (A loose `seed_join in model` check would MISS a single-element seed drifting to a
+    # value that happens to appear in another category's row -- e.g. web/pdf both seed
+    # "librewolf.desktop" -- so we bind the assertion to THIS key's row.)
+    import re
+    model = _model_c()
+    for group, label, desktop_id, mimes in da.CATEGORIES:
         if label == "Mail":
-            continue
+            continue  # Mail has no screen and no descriptor row
         key = da.CATEGORY_KEYS[label]
-        for cand in da.CANDIDATES[label]:
-            needle = f"azarch default-applications set {key} {cand}"
-            assert needle in model, needle
+        mimes_join = " ".join(mimes)
+        seed_join = " ".join(da.CANDIDATES[label])
+        # match `{"key", "field2", "field3"}` -- the exact AZ_DA_CATS row for this key.
+        m = re.search(
+            r'\{\s*"' + re.escape(key) + r'"\s*,\s*"([^"]*)"\s*,\s*"([^"]*)"\s*\}',
+            model)
+        assert m is not None, f"AZ_DA_CATS row for key {key!r} not found in model"
+        c_mimes, c_seed = m.group(1), m.group(2)
+        assert c_mimes == mimes_join, \
+            f"AZ_DA_CATS MIME list for {key}: C {c_mimes!r} != source {mimes_join!r}"
+        assert c_seed == seed_join, \
+            f"AZ_DA_CATS seed for {key}: C {c_seed!r} != source {seed_join!r}"
+
+
+def test_model_c_discloses_desktop_dirs_matching_source():
+    # Both the list screen and the runtime per-category screen disclose WHERE .desktop files live
+    # (like the Wallpaper screen discloses its directory). The disclosure dir list is the
+    # AZ_DA_DIRS_LINE macro, DEFINED in terminal_user_interface.h (shared by model_tree.c's list
+    # screen and model_defaultapps.c's per-category screens); its literal must name the same dirs
+    # as default_applications.DESKTOP_DIRS_DISPLAY, in order.
+    header = (paths.LIBDIR / "packages/azarch/terminal_user_interface.h").read_text(encoding="utf-8")
+    line = ", ".join(da.DESKTOP_DIRS_DISPLAY)
+    assert line in header, f"AZ_DA_DIRS_LINE (in the header) must be {line!r}"
+    assert "#define AZ_DA_DIRS_LINE" in header
+    # the model USES the macro (both the list screen subtitle and the per-category disclosure).
+    model = _model_c()
+    assert "AZ_DA_DIRS_LINE" in model
+    assert ".desktop files live in" in model
