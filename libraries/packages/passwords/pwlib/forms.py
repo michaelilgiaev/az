@@ -1,11 +1,10 @@
 """Curses sub-screens and primitives: line/multi-line prompts, the detail view,
-the element editor, the new-entry wizard, delete confirmation, help, and the
-sequential ('m') copy flow. Kept apart from tui.py so each file stays small."""
+the element editor, the new-entry wizard, delete confirmation, and the sequential
+('m') copy flow. Kept apart from tui.py so each file stays small."""
 
 import curses
 
 from . import clipboard
-from .help import HELP_LINES
 from .model import Entry, ESSENTIAL, clean_key
 
 ENTER_KEYS = (curses.KEY_ENTER, 10, 13)
@@ -144,7 +143,7 @@ def edit_entry(win, entry):
         h, _ = win.getmaxyx()
         addstr(win, 0, 0, 'EDIT: ' + entry.title, curses.A_BOLD)
         addstr(win, 1, 0,
-               'up/down move | e edit | k rename | a add | r remove | q done',
+               '↑↓ move   e edit   k rename   a add   r remove   ESC back',
                curses.A_DIM)
         row = 3
         for i, (key, value) in enumerate(entry.elements):
@@ -232,16 +231,3 @@ def sequential_copy(win, entry):
             if ch in (ord('q'), ESC):
                 return False
     return True
-
-
-def show_help(win):
-    win.erase()
-    h, _ = win.getmaxyx()
-    for i, line in enumerate(HELP_LINES):
-        if i >= h - 1:
-            break
-        attr = curses.A_BOLD if (line and not line.startswith(' ')
-                                 and line.strip().isupper()) else 0
-        addstr(win, i, 0, line, attr)
-    addstr(win, h - 1, 0, 'press any key to go back', curses.A_DIM)
-    win.getch()

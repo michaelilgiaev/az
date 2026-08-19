@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Set up the encrypted store.
+"""OPTIONAL importer: encrypt an EXISTING plaintext password list into the store.
 
-Asks where the plaintext password file is (default ~/Archive/passwords.txt), what
-the encrypted output file should be called, and the master password. Encrypts
-with GPG (AES256), VERIFIES the ciphertext decrypts back to the exact source,
-saves the paths to the config, and only then offers to delete the original
-plaintext. After this, use the `passwords` command.
+You do NOT need this to start using `passwords` -- running `passwords` with no
+store creates an empty encrypted one for you (see passwords.py). This script is
+only for the case where you already have a plaintext file (default
+~/Vault/passwords.txt, the documented format) and want to import it in bulk.
+
+Asks where the plaintext file is and the master password, encrypts it with GPG
+(AES256), VERIFIES the ciphertext decrypts back to the exact source, saves the
+paths to the config, and only then offers to delete the original plaintext. After
+this, use the `passwords` command.
 """
 
 import getpass
@@ -90,8 +94,7 @@ def main():
               'so this kept copy will be replaced and removed by the next run. '
               'Your data stays safe in the encrypted store.' % src)
 
-    print('Config saved. Open a new shell (or run "source ~/.bashrc"), '
-          'then use:  passwords')
+    print('Done. Run:  passwords')
     return 0
 
 

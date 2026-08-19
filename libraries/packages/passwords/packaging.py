@@ -15,8 +15,8 @@ installer step). Like timedate this is a PURE-PYTHON app (nothing to compile).
 
 Unlike timedate, the app is a PACKAGE (a pwlib/ dir), not a handful of flat modules, so
 the layout is two parts:
-  * emit_plan() places the three TOP-LEVEL single files -- the entry script, the one-time
-    setup script, and the /usr/local/bin/passwords launcher.
+  * emit_plan() places the three TOP-LEVEL single files -- the entry script, the optional
+    plaintext importer, and the /usr/local/bin/passwords launcher.
   * the pwlib/ package tree is copied wholesale by compiler.py via emit.copy_tree() right
     after the emit_plan loop (the emit_plan builder/dest/mode contract is one-file-per-
     entry and cannot express a directory). PWLIB_SRC_DIR / PWLIB_SYSTEM_DIR name the two
@@ -24,13 +24,13 @@ the layout is two parts:
 
 Layers:
   * SOURCE tree -- libraries/packages/passwords/ (paths.PASSWORDS_DIR):
-      passwords.py                    the `passwords` entry script (the UI driver)
-      encrypt_passwords_text_tile.py  one-time setup: encrypt the plaintext + record paths
+      passwords.py                    the `passwords` entry script (self-inits + UI driver)
+      encrypt_passwords_text_tile.py  optional importer: bulk-encrypt an existing plaintext
       pwlib/                          the working package (config/crypto/model/tui/...)
       packaging.py                    THIS module -- install paths, launcher, emit_plan()
   * INSTALLED layout (root-owned):
       /usr/local/lib/azarch-passwords/passwords.py                   the entry script
-      /usr/local/lib/azarch-passwords/encrypt_passwords_text_tile.py the setup script
+      /usr/local/lib/azarch-passwords/encrypt_passwords_text_tile.py the optional importer
       /usr/local/lib/azarch-passwords/pwlib/                         the package
       /usr/local/bin/passwords                        the launcher (execs passwords.py)
 
@@ -53,9 +53,10 @@ LIB_DIR = "/usr/local/lib/azarch-passwords"
 # The entry script the launcher execs. It does `sys.path.insert(0, <its own dir>)` then
 # `from pwlib import ...`, so it must land in LIB_DIR beside pwlib/.
 ENTRY_SYSTEM_PATH = f"{LIB_DIR}/passwords.py"
-# The one-time setup script (`encrypt_passwords_text_tile.py`): encrypts a plaintext file
-# into the ~/Vault store and records the paths. Ships beside the entry script; the entry
-# script's "no store yet" message tells the user to run it from here.
+# The OPTIONAL importer (`encrypt_passwords_text_tile.py`): bulk-encrypts an EXISTING
+# plaintext list into the ~/Vault store. Ships beside the entry script for power users, but
+# is NOT on the normal path -- `passwords` self-initializes an empty store on first run, so
+# a fresh user never has to touch this.
 SETUP_SYSTEM_PATH = f"{LIB_DIR}/encrypt_passwords_text_tile.py"
 # The bin entry point on PATH -- the actual `passwords` command. A tiny wrapper that execs
 # the system python on the entry script from LIB_DIR (so `import pwlib` resolves).
@@ -86,9 +87,10 @@ def entry_py() -> str:
 
 
 def setup_py() -> str:
-    """The one-time setup script (encrypt_passwords_text_tile.py), verbatim from the
-    source tree. Installed to SETUP_SYSTEM_PATH beside the entry script; it encrypts the
-    plaintext into ~/Vault/passwords.txt.gpg and records the paths."""
+    """The optional importer (encrypt_passwords_text_tile.py), verbatim from the source
+    tree. Installed to SETUP_SYSTEM_PATH beside the entry script; it bulk-encrypts an
+    existing plaintext list into ~/Vault/passwords.txt.gpg and records the paths. Not
+    required -- `passwords` self-initializes an empty store on first run."""
     return _read_source(_SRC_SETUP)
 
 

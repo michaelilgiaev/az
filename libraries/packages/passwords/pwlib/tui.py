@@ -3,10 +3,22 @@
 Two input states resolve the conflict between "type letters to search" and
 "single-letter commands":
 
-  SEARCH state (default) - printable keys filter by title, live. up/down or tab
-                           move into the result list. enter copies the password.
-  SELECT state           - the highlight is on a result; s/e/d/n/m/o/h/q and
-                           enter act on it. / or esc returns to SEARCH.
+  SEARCH state (default) - printable keys filter by title, live. the arrow keys
+                           or tab move into the result list. enter copies the
+                           password.
+  SELECT state           - the highlight is on a result; the action keys act on
+                           it. "/" or ESC returns to SEARCH.
+
+NAVIGATION mirrors the Az'arch terminal UI (packages/azarch/render.c): the same
+WASD / HJKL / arrow movement, "/" for search, ESC to go back and Q to quit. The
+bottom line is a plain, left-aligned "KEY label   KEY label" nav bar built the
+same way azarch draws its verbs (a keycap, a space, a dim label, a gap) -- NOT
+centred and NOT coloured, just structured the same.
+
+Because W/A/S/D and H/J/K/L are movement, the single-letter ACTIONS deliberately
+avoid every movement key: v show, e edit, n new, x del, m multi. ENTER copies
+the password. ESC is "go back" (SELECT -> SEARCH, then SEARCH quits); Q always
+quits immediately.
 """
 
 import curses
@@ -15,6 +27,64 @@ from . import clipboard, forms
 
 SEARCH, SELECT = 0, 1
 TAB = 9
+
+# Movement keys, mirroring azarch: WASD + HJKL + arrows all drive the vertical
+# list (there is only a vertical axis here, exactly like azarch's own list, whose
+# nav labels every one of these clusters simply "move"). Held as sets of the
+# ordinals so the handlers can test membership cheaply.
+_UP_KEYS = {curses.KEY_UP, ord('w'), ord('W'), ord('k'), ord('K'),
+            ord('a'), ord('A'), ord('h'), ord('H'), curses.KEY_LEFT}
+_DOWN_KEYS = {curses.KEY_DOWN, ord('s'), ord('S'), ord('j'), ord('J'),
+              ord('d'), ord('D'), ord('l'), ord('L'), curses.KEY_RIGHT}
+_MOVE_KEYS = _UP_KEYS | _DOWN_KEYS
+
+
+def _nav(win, y, pairs):
+    """Draw a left-aligned "KEY label   KEY label ..." nav bar on row y.
+
+    Structured like azarch's draw_nav (packages/azarch/render.c): each verb is a
+    keycap, a space, then a dim label, verbs separated by a 3-space gap. NOT
+    centred and NOT coloured -- the keycap is drawn normal and the label A_DIM,
+    matching the plain look the spec asks for. `pairs` is a list of (key, label)."""
+    h, w = win.getmaxyx()
+    x = 0
+    gap = '   '
+    for i, (key, label) in enumerate(pairs):
+        if i:
+            forms.addstr(win, y, x, gap, curses.A_DIM)
+            x += len(gap)
+        forms.addstr(win, y, x, key)
+        x += len(key)
+        if label:
+            forms.addstr(win, y, x, ' ' + label, curses.A_DIM)
+            x += 1 + len(label)
+        if x >= w - 1:
+            break
+
+
+# The SELECT-mode nav: the packed movement cluster (one "cell" whose key glyphs
+# read "WASD HJKL <arrows>" and whose label is "move"), then the verbs. Kept as
+# data so the drawing and the tests share one definition.
+_NAV_MOVE = ('WASD HJKL ←↑→↓', 'move')
+_NAV_SELECT = [
+    _NAV_MOVE,
+    ('ENTER', 'copy'),
+    ('v', 'show'),
+    ('e', 'edit'),
+    ('n', 'new'),
+    ('x', 'del'),
+    ('m', 'multi'),
+    ('/', 'search'),
+    ('ESC', 'back'),
+    ('Q', 'quit'),
+]
+_NAV_SEARCH = [
+    ('TYPE', 'filter'),
+    ('↓↑', 'select'),
+    ('ENTER', 'copy'),
+    ('ESC', 'quit'),
+    ('Q', 'quit'),
+]
 
 
 class App:
@@ -45,7 +115,7 @@ class App:
     def move(self, ch):
         if not self.results:
             return
-        if ch == curses.KEY_UP:
+        if ch in _UP_KEYS:
             self.sel = (self.sel - 1) % len(self.results)
         else:
             self.sel = (self.sel + 1) % len(self.results)
@@ -59,8 +129,8 @@ class App:
         header = ' passwords '
         if self.persistent:
             header += '[persistent] '
-        pad = max(0, w - len(header) - 8)
-        forms.addstr(s, 0, 0, header + ' ' * pad + '[h]elp', curses.A_REVERSE)
+        forms.addstr(s, 0, 0, header + ' ' * max(0, w - len(header)),
+                     curses.A_REVERSE)
 
         caret = ' _' if self.mode == SEARCH else ''
         forms.addstr(s, 1, 0, 'Search: ' + self.query + caret)
@@ -91,13 +161,11 @@ class App:
             forms.addstr(s, top, 0, '(no matches)', curses.A_DIM)
 
         if self.status:
-            hint = self.status
+            forms.addstr(s, h - 1, 0, self.status, curses.A_DIM)
         elif self.mode == SEARCH:
-            hint = 'type to filter | up/down select | enter copy pw | esc quit'
+            _nav(s, h - 1, _NAV_SEARCH)
         else:
-            hint = ('enter copy | s show | e edit | n new | d del | m multi | '
-                    'o open | h help | / search | q quit')
-        forms.addstr(s, h - 1, 0, hint, curses.A_DIM)
+            _nav(s, h - 1, _NAV_SELECT)
         self.status = ''
         s.refresh()
 
@@ -120,7 +188,8 @@ class App:
         return self.dirty
 
     def handle_search(self, ch):
-        if ch == forms.ESC:
+        # Q always quits; ESC "goes back" -- and SEARCH is the root, so back = quit.
+        if ch in (ord('Q'), forms.ESC):
             return False
         if ch == TAB:
             # Reachable even with zero results so 'n' (new) works on an empty
@@ -128,6 +197,8 @@ class App:
             self.mode = SELECT
             return True
         if ch in (curses.KEY_UP, curses.KEY_DOWN):
+            # In SEARCH only the ARROWS move into the list -- letters are query
+            # text here (WASD/HJKL become movement once in SELECT).
             if self.results:
                 self.mode = SELECT
                 self.move(ch)
@@ -148,11 +219,14 @@ class App:
         return True
 
     def handle_select(self, ch):
-        if ch in (curses.KEY_UP, curses.KEY_DOWN):
-            self.move(ch)
-            return True
+        # Q quits; ESC / "/" go back to SEARCH.
+        if ch == ord('Q'):
+            return False
         if ch in (TAB, forms.ESC, ord('/')):
             self.mode = SEARCH
+            return True
+        if ch in _MOVE_KEYS:
+            self.move(ch)
             return True
         if ch in forms.BACKSPACE_KEYS:
             self.mode = SEARCH
@@ -165,27 +239,18 @@ class App:
             self.copy_password()
             return self.persistent
         c = chr(ch) if 32 <= ch <= 126 else ''
-        if c == 'q':
-            return False
-        if c == 'h':
-            forms.show_help(self.stdscr)
-            return True
-        if c == 'o':
-            self.persistent = not self.persistent
-            self.status = 'persistent mode ' + ('ON' if self.persistent else 'OFF')
-            return True
         if c == 'n':
             self.action_new()
             return True
         entry = self.selected_entry()
         if entry is None:
             return True
-        if c == 's':
+        if c == 'v':
             forms.show_detail(self.stdscr, entry)
         elif c == 'e':
             if forms.edit_entry(self.stdscr, entry):
                 self.dirty = True
-        elif c == 'd':
+        elif c == 'x':
             if forms.confirm_delete(self.stdscr, entry):
                 self.store.entries.remove(entry)
                 self.dirty = True

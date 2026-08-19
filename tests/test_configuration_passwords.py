@@ -192,3 +192,74 @@ def test_gnupg_and_xclip_are_in_the_manifest():
             if (tok := line.split("#", 1)[0].strip())]
     assert "gnupg" in toks
     assert "xclip" in toks
+
+
+# --- the streamlined, self-initializing lifecycle (the NEW PROMPT) ----------
+def _entry_source() -> str:
+    return (paths.PASSWORDS_DIR / "passwords.py").read_text(encoding="utf-8")
+
+
+def test_entry_self_initializes_and_does_not_require_the_setup_script():
+    """The PROMPT: the store is 'already initialized' -- the end user must NOT have to run
+    encrypt_passwords_text_tile.py or source anything. So the shipped entry script must, on a
+    missing store, CREATE one itself (an empty encrypted store) rather than printing a 'run
+    the setup script' message. Pin the self-init seam so a regression to the old behaviour is
+    caught at build time (it never raises in Python; it only shows as a dead-end on the ISO)."""
+    src = _entry_source()
+    # It creates an empty store from the model rather than pointing at the setup script.
+    assert "_init_store" in src
+    assert "Store([]).serialize()" in src
+    # The old dead-end ("run the setup script first") must be gone from the entry script.
+    assert "encrypt_passwords_text_tile.py" not in src
+
+
+def test_nothing_shipped_tells_the_user_to_source_bashrc():
+    """Streamlined means NO 'source ~/.bashrc' / 'open a new shell' step: `passwords` is a
+    binary on PATH and self-initializes. Assert neither the entry script nor the optional
+    importer still tells the user to source bashrc."""
+    for name in ("passwords.py", "encrypt_passwords_text_tile.py"):
+        src = (paths.PASSWORDS_DIR / name).read_text(encoding="utf-8")
+        assert "source ~/.bashrc" not in src, name
+        assert ".bashrc" not in src, name
+
+
+def test_entry_recovers_a_stale_plaintext_on_startup():
+    """The PROMPT's crash-recovery ask: if the machine dies while `passwords` is open, a
+    plaintext session file can survive. On relaunch the entry script must detect it and
+    (since the master password is not stored) offer to re-encrypt it -- never silently open
+    over it. Pin the recovery seam exists and runs before the store is touched."""
+    src = _entry_source()
+    assert "_recover_stale_plaintext" in src
+    # Recovery is keyed on the session plaintext still being present at startup.
+    assert "os.path.exists(plain)" in src
+
+
+def test_launcher_is_a_binary_on_path_not_a_bashrc_command():
+    """The PROMPT: `passwords` should be a BINARY, not a bashrc alias/function. The only
+    delivery mechanism is the /usr/local/bin/passwords launcher (an executable on PATH); no
+    shell rc file defines it. Guard the launcher path + exec shape (the alias-free property is
+    covered by there being no bashrc emitter for it anywhere)."""
+    assert pw.LAUNCHER_SYSTEM_PATH == "/usr/local/bin/passwords"
+    sh = pw.launcher_sh()
+    assert sh.startswith("#!/bin/sh")
+    assert 'exec python -u passwords.py "$@"' in sh
+
+
+# --- the reworked TUI navigation (azarch-style) -----------------------------
+def test_tui_nav_mirrors_azarch_and_drops_open_and_help():
+    """The PROMPT reworks the TUI: azarch-style nav (WASD/HJKL/arrows movement, '/' search,
+    ESC back, Q quit) and the 'o open' + 'h help' verbs deleted. These are behavioural, but
+    pin the shipped tui.py source so the keymap cannot silently regress on the ISO."""
+    src = (pw.PWLIB_SRC_DIR / "tui.py").read_text(encoding="utf-8")
+    # Movement keys (WASD + HJKL + arrows) are wired.
+    assert "_UP_KEYS" in src and "_DOWN_KEYS" in src
+    for key in ("ord('w')", "ord('k')", "ord('j')", "curses.KEY_LEFT",
+                "curses.KEY_RIGHT"):
+        assert key in src, key
+    # ESC goes BACK (not quit) and Q quits: the nav data pairs both verbs.
+    assert "('ESC', 'back')" in src
+    assert "('Q', 'quit')" in src
+    assert "ord('Q')" in src
+    # The deleted verbs: no 'o' persistent-toggle and no in-UI 'h' help handler remain.
+    assert "self.persistent = not self.persistent" not in src
+    assert "forms.show_help" not in src
