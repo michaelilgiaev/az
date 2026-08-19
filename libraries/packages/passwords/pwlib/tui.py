@@ -4,21 +4,21 @@ Two input states resolve the conflict between "type letters to search" and
 "single-letter commands":
 
   SEARCH state (default) - printable keys filter by title, live. the arrow keys
-                           or tab move into the result list. enter copies the
-                           password.
+                           move into the result list; enter copies the password.
   SELECT state           - the highlight is on a result; the action keys act on
-                           it. "/" or ESC returns to SEARCH.
+                           it. "/" drops back to the search box.
 
 NAVIGATION mirrors the Az'arch terminal UI (packages/azarch/render.c): the same
-WASD / HJKL / arrow movement, "/" for search, ESC to go back and Q to quit. The
-bottom line is a plain, left-aligned "KEY label   KEY label" nav bar built the
-same way azarch draws its verbs (a keycap, a space, a dim label, a gap) -- NOT
-centred and NOT coloured, just structured the same.
+WASD / HJKL / arrow movement, "/" for search. The bottom line is a plain,
+left-aligned "KEY label   KEY label" nav bar built the same way azarch draws its
+verbs (a keycap, a space, a dim label, a gap) -- NOT centred and NOT coloured,
+just structured the same.
 
 Because W/A/S/D and H/J/K/L are movement, the single-letter ACTIONS deliberately
-avoid every movement key: v show, e edit, n new, x del, m multi. ENTER copies
-the password. ESC is "go back" (SELECT -> SEARCH, then SEARCH quits); Q always
-quits immediately.
+avoid every movement key: v show, e edit, n new, x delete, m multi. ENTER copies
+the password. There is no Tab. ESC never quits -- it jumps back to the START of
+the UI (clears the query, highlight to the top) and is safe to spam. Only q / Q
+quit.
 """
 
 import curses
@@ -26,7 +26,6 @@ import curses
 from . import clipboard, forms
 
 SEARCH, SELECT = 0, 1
-TAB = 9
 
 # Movement keys, mirroring azarch: WASD + HJKL + arrows all drive the vertical
 # list (there is only a vertical axis here, exactly like azarch's own list, whose
@@ -72,17 +71,10 @@ _NAV_SELECT = [
     ('v', 'show'),
     ('e', 'edit'),
     ('n', 'new'),
-    ('x', 'del'),
+    ('x', 'delete'),
     ('m', 'multi'),
     ('/', 'search'),
     ('ESC', 'back'),
-    ('Q', 'quit'),
-]
-_NAV_SEARCH = [
-    ('TYPE', 'filter'),
-    ('↓↑', 'select'),
-    ('ENTER', 'copy'),
-    ('ESC', 'quit'),
     ('Q', 'quit'),
 ]
 
@@ -119,6 +111,15 @@ class App:
             self.sel = (self.sel - 1) % len(self.results)
         else:
             self.sel = (self.sel + 1) % len(self.results)
+
+    def reset(self):
+        """ESC: jump back to the START of the UI -- clear the search query, put
+        the highlight at the top, and return to the search box. Spammable (a no-op
+        once already at the start)."""
+        self.query = ''
+        self.sel = 0
+        self.mode = SEARCH
+        self.refilter()
 
     # ----- drawing -----
 
@@ -162,8 +163,6 @@ class App:
 
         if self.status:
             forms.addstr(s, h - 1, 0, self.status, curses.A_DIM)
-        elif self.mode == SEARCH:
-            _nav(s, h - 1, _NAV_SEARCH)
         else:
             _nav(s, h - 1, _NAV_SELECT)
         self.status = ''
@@ -188,13 +187,12 @@ class App:
         return self.dirty
 
     def handle_search(self, ch):
-        # Q always quits; ESC "goes back" -- and SEARCH is the root, so back = quit.
-        if ch in (ord('Q'), forms.ESC):
+        # Only q/Q quit. ESC never quits -- it resets to the start of the UI
+        # (spammable): clears the query and puts the highlight back at the top.
+        if ch in (ord('q'), ord('Q')):
             return False
-        if ch == TAB:
-            # Reachable even with zero results so 'n' (new) works on an empty
-            # store or an unmatched filter.
-            self.mode = SELECT
+        if ch == forms.ESC:
+            self.reset()
             return True
         if ch in (curses.KEY_UP, curses.KEY_DOWN):
             # In SEARCH only the ARROWS move into the list -- letters are query
@@ -212,6 +210,11 @@ class App:
             self.query = self.query[:-1]
             self.refilter()
             return True
+        if ch == ord('n'):
+            # 'n' creates a new entry from the search box too, so the first entry
+            # can be added on an empty store (this used to need Tab, now removed).
+            self.action_new()
+            return True
         if 32 <= ch <= 126:
             self.query += chr(ch)
             self.refilter()
@@ -219,10 +222,14 @@ class App:
         return True
 
     def handle_select(self, ch):
-        # Q quits; ESC / "/" go back to SEARCH.
-        if ch == ord('Q'):
+        # Only q/Q quit. ESC never quits -- it resets to the start of the UI
+        # (spammable); "/" drops back to the search box.
+        if ch in (ord('q'), ord('Q')):
             return False
-        if ch in (TAB, forms.ESC, ord('/')):
+        if ch == forms.ESC:
+            self.reset()
+            return True
+        if ch == ord('/'):
             self.mode = SEARCH
             return True
         if ch in _MOVE_KEYS:

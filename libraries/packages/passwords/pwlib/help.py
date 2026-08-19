@@ -16,15 +16,15 @@ UNLOCK
 NAVIGATION (mirrors the Az'arch terminal UI)
   WASD / HJKL / arrows   move the highlight
   /                      search
-  ESC                    go back (from the list to search; from search, quit)
-  Q                      quit
+  ESC                    jump back to the start of the UI (never quits; spammable)
+  q / Q                  quit
 
 SEARCH MODE  (default; cursor in the search box)
   type           filter entries by title, updates live
-  arrows / tab   move into the result list (switches to SELECT mode; tab works
-                 even with no results, e.g. to add the first entry with 'n')
+  arrows         move into the result list (switches to SELECT mode)
   enter          copy the highlighted entry's password, then close
-  esc            quit
+  n              new entry (works even with no results -- add the first entry)
+  esc            jump back to the start of the UI
   q              quit
 
 SELECT MODE  (cursor on the result list)
@@ -36,8 +36,9 @@ SELECT MODE  (cursor on the result list)
   n                 new entry (title, password, more elements, notes)
   m                 multi-copy: clip each element in turn (notes excluded);
                     press enter for the next one, closes at the end
-  / or esc          back to SEARCH mode
-  backspace         back to SEARCH mode and delete the last query character
+  /                 drop back to the search box
+  esc               jump back to the start of the UI
+  backspace         back to the search box and delete the last query character
   q                 quit
 
 RESULT LINE
