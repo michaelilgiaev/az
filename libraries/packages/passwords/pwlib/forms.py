@@ -5,7 +5,7 @@ the element editor, the new-entry wizard, delete confirmation, and the sequentia
 import curses
 
 from . import clipboard
-from .model import Entry, ESSENTIAL, clean_key, strip_scheme
+from .model import ESSENTIAL, clean_key, move_element, notes_last
 
 ENTER_KEYS = (curses.KEY_ENTER, 10, 13)
 BACKSPACE_KEYS = (curses.KEY_BACKSPACE, 127, 8)
@@ -52,13 +52,23 @@ def nav_bar(win, y, pairs):
 # screen names exactly the keys that page answers to -- it is how the user learns
 # the controls -- so each page passes its own set to nav_bar(). Nothing advertised
 # here is a dead key on its page.
-_NAV_DETAIL = [
+#
+# The entry view (opened with ENTER on a result) is the hub that replaced the old
+# "v show" / "e edit" / "m multi" verbs: it shows every column, and its own input
+# picks an action -- a NUMBER copies that one column, "c" clips every column in
+# order, "e" edits the entry. Copies are paste-once (see clipboard.py).
+_NAV_ENTRY = [
+    ('number', 'copy column'),
+    ('c', 'clip in order'),
+    ('e', 'edit'),
     ('ESC', 'back'),
     ('Q', 'quit'),
 ]
-# New-entry: typing the title (the header updates live as you type).
+# New-entry: typing the title (the header updates live as you type). Every ENTER
+# hint in the app reads "ENTER continue" (the sole exception is the SELECT-mode
+# "ENTER copy") so the key does one consistent thing everywhere.
 _NAV_NEW_TITLE = [
-    ('ENTER', 'next'),
+    ('ENTER', 'continue'),
     ('ESC', 'back'),
 ]
 # New-entry: the column picker. Type a number then ENTER to open that column;
@@ -69,28 +79,33 @@ _NAV_PICK = [
 ]
 # New-entry: entering one column's value (its own NEW ENTRY-style page).
 _NAV_VALUE = [
-    ('ENTER', 'add'),
+    ('ENTER', 'continue'),
     ('ESC', 'cancel'),
 ]
 # Edit view (e): the element editor's key set, shown as a bottom bar like the
-# rest of the app instead of a top hint line.
+# rest of the app instead of a top hint line. "[ ]" reorder moves the highlighted
+# column up/down (the title is pinned first).
 _NAV_EDIT = [
     ('↑↓', 'move'),
+    ('[ ]', 'reorder'),
     ('e', 'edit'),
     ('k', 'rename'),
     ('a', 'add'),
     ('r', 'remove'),
     ('ESC', 'back'),
 ]
-# Multi-copy (m): stepping through each element; ENTER advances, q/ESC stops.
-_NAV_MULTI = [
-    ('ENTER', 'next'),
-    ('Q', 'stop'),
-    ('ESC', 'stop'),
+# The reorder screen (shared by the editor and the new-entry column picker):
+# arrows move the highlight, "[" / "]" move the highlighted column up / down.
+_NAV_REORDER = [
+    ('↑↓', 'move'),
+    ('[', 'up'),
+    (']', 'down'),
+    ('ESC', 'done'),
 ]
 
 
-def prompt_line(win, label, initial='', y=None, on_change=None, nav=None):
+def prompt_line(win, label, initial='', y=None, on_change=None, nav=None,
+                note=None):
     """Single-line input. Returns the string, or None on Esc.
 
     Drawn as plain text (no reverse-video highlight) so typing does not paint a
@@ -100,7 +115,10 @@ def prompt_line(win, label, initial='', y=None, on_change=None, nav=None):
     edit -- the new-entry wizard uses it to refresh its "NEW ENTRY <title>"
     header live as the user types. `nav`, if given, is a nav_bar() pairs list
     drawn on the bottom row while the prompt is live so the page keeps its
-    contextual key hints (the cursor stays on the input row)."""
+    contextual key hints (the cursor stays on the input row). `note`, if given, is
+    a dim one-line message drawn just BELOW the input row (used to echo "nothing
+    written -- press ENTER again to exit"); it shows only while the input is not on
+    the bottom row so it never collides with the nav bar."""
     buf = list(initial)
     curses.curs_set(1)
     try:
@@ -111,6 +129,10 @@ def prompt_line(win, label, initial='', y=None, on_change=None, nav=None):
                 win.move(h - 1, 0)
                 win.clrtoeol()
                 nav_bar(win, h - 1, nav)
+            if note and row + 1 < h - 1:
+                win.move(row + 1, 0)
+                win.clrtoeol()
+                addstr(win, row + 1, 0, note, curses.A_DIM)
             win.move(row, 0)
             win.clrtoeol()
             text = label + ''.join(buf)
@@ -176,55 +198,149 @@ def _label(key):
     return _BUILTIN_LABELS.get(key, key)
 
 
-def show_detail(win, entry):
-    """Render one entry:
+def _copyable_columns(entry):
+    """The columns the user can single-copy, numbered top to bottom: every element
+    except the title, notes forced last (so the numbering matches the on-screen
+    order). Returns a list of [key, value]. Notes IS copyable as a single column
+    (a user may want its text) even though it is excluded from the ordered clip."""
+    return [e for e in entry.display_elements() if e[0] != 'title']
 
-        Title) something.com
 
-        Username) some_user
-        Password) lol
+def _render_entry(win, entry, note=None):
+    """Draw the entry view body -- the title, then each column numbered for
+    single-copy, notes rendered last under a blank line -- and return the row just
+    below it (where the action input goes). `note`, if set, is a dim status line
+    (e.g. "clipped Password -- paste once") shown under the body.
 
-    -- the title first, a blank line, then each other element as "Label) value"
-    (multi-line notes indented under their label). The bottom row is the nav-hints
-    bar, not a "press any key" line."""
+    Layout mirrors PROMPT.md: title first, then columns, then a blank line and the
+    Notes block always at the bottom, its lines indented under the label."""
     win.erase()
     h, _ = win.getmaxyx()
     addstr(win, 0, 0, 'Title) ' + entry.title, curses.A_BOLD)
-    row = 2  # blank line 1 separates the title from the rest
-    for key, value in entry.elements:
-        if key == 'title':
-            continue
-        if row >= h - 1:
+    row = 2  # blank line separates the title from the columns
+    columns = _copyable_columns(entry)
+    for n, (key, value) in enumerate(columns, 1):
+        if row >= h - 2:
             break
         label = _label(key)
         if key == 'notes' or '\n' in value:
-            addstr(win, row, 0, label + ')', curses.A_BOLD)
+            # Notes (and any multi-line value) is a block: "N) Label)" then its
+            # lines indented beneath. A blank line above it sets it apart.
+            row += 1
+            if row >= h - 2:
+                break
+            addstr(win, row, 0, '%d) %s)' % (n, label), curses.A_BOLD)
             row += 1
             for vline in (value.split('\n') if value else []):
-                if row >= h - 1:
+                if row >= h - 2:
                     break
-                addstr(win, row, 2, vline)
+                addstr(win, row, 3, vline)
                 row += 1
         else:
-            addstr(win, row, 0, label + ') ', curses.A_BOLD)
-            addstr(win, row, len(label) + 2, value)
+            addstr(win, row, 0, '%d) %s) ' % (n, label), curses.A_BOLD)
+            addstr(win, row, len('%d) %s) ' % (n, label)), value)
             row += 1
-    nav_bar(win, h - 1, _NAV_DETAIL)
+    if note:
+        row += 1
+        addstr(win, min(row, h - 2), 0, note, curses.A_DIM)
+        row += 1
+    return columns, min(row + 1, h - 2)
+
+
+def entry_view(win, entry, do_copy=None, do_sequence=None):
+    """The entry hub: show every column and act on this entry.
+
+    Replaces the old "v show" (this is that display), "e edit" (now the "e" action
+    here), and "m multi" (now the "c" action). Its input takes:
+      * a NUMBER  -> copy that one column to the clipboard (paste once, then it
+                     clears); notes is copyable too;
+      * "c"       -> clip every column in order (email, username, password, ...)
+                     so the user pastes them one after another, then it clears;
+      * "e"       -> edit this entry (change / rename / add / remove / reorder);
+      * ESC       -> back to the list; Q -> quit the whole app.
+
+    do_copy(value) and do_sequence(values) perform the actual clipboard work; they
+    default to clipboard.copy / clipboard.copy_sequence and are injectable for
+    tests. Returns (changed, quit): `changed` True if an edit modified the entry,
+    `quit` True only if the user pressed q."""
+    if do_copy is None:
+        do_copy = clipboard.copy
+    if do_sequence is None:
+        do_sequence = clipboard.copy_sequence
+    changed = False
+    note = None
     while True:
-        ch = win.getch()
-        if ch in (ord('q'), ord('Q')):
-            return 'quit'          # q = FULL quit, propagated out of the app
-        if ch in (ESC,) + ENTER_KEYS:
-            return None            # ESC / ENTER = back to the list only
+        columns, input_row = _render_entry(win, entry, note)
+        note = None
+        h, _ = win.getmaxyx()
+        nav_bar(win, h - 1, _NAV_ENTRY)
+        choice = prompt_line(win, '> ', y=input_row, nav=_NAV_ENTRY)
+        if choice is None:
+            return changed, False            # ESC -> back to the list
+        choice = choice.strip()
+        if choice == '':
+            continue
+        low = choice.lower()
+        if low in ('q',):
+            return changed, True             # q -> full quit
+        if low == 'e':
+            ch_edit, quit_ = edit_entry(win, entry)
+            changed = changed or ch_edit
+            if quit_:
+                return changed, True
+            continue
+        if low == 'c':
+            seq = [v for _k, v in entry.copy_sequence()]
+            if not seq:
+                note = '(no columns to clip in order -- add some first)'
+                continue
+            do_sequence(seq)
+            names = ', '.join(_label(k) for k, _v in entry.copy_sequence())
+            note = 'clipping in order: %s -- paste each, then it clears' % names
+            continue
+        if choice.isdigit():
+            n = int(choice)
+            if 1 <= n <= len(columns):
+                key, value = columns[n - 1]
+                do_copy(value)
+                note = 'clipped %s -- paste once, then it clears' % _label(key)
+            else:
+                note = '(no column %s -- pick 1-%d)' % (choice, len(columns))
+            continue
+        note = '(type a column number, "c" to clip in order, "e" to edit)'
+
+
+# Delete confirmation: same shape as the new-entry title screen. Type "yes" then
+# ENTER to delete; ESC cancels. Its ENTER hint reads "ENTER continue" like every
+# other page (not "yes+ENTER delete").
+_NAV_DELETE = [
+    ('ENTER', 'continue'),
+    ('ESC', 'cancel'),
+]
 
 
 def confirm_delete(win, entry):
+    """Confirm deleting an entry. Works like the new-entry title screen: you type
+    "yes" and press ENTER to continue (delete). If "yes" was NOT written (empty or
+    anything else), it does not silently cancel -- it echoes that "yes" was not
+    written and that pressing ENTER again exits; a second such ENTER cancels. ESC
+    cancels at any time. Returns True only when "yes" was confirmed."""
     win.erase()
     addstr(win, 0, 0, 'DELETE: ' + entry.title, curses.A_BOLD)
     addstr(win, 2, 0, 'This permanently removes the entry from the store.')
-    ans = prompt_line(win, 'Type "yes" to confirm: ', y=4,
-                      nav=[('yes+ENTER', 'delete'), ('ESC', 'cancel')])
-    return ans is not None and ans.strip() == 'yes'
+    warned = False
+    while True:
+        note = ('"yes" was not written -- press ENTER again to exit, or type '
+                '"yes" to delete') if warned else None
+        ans = prompt_line(win, 'Type "yes" to confirm: ', y=4, nav=_NAV_DELETE,
+                          note=note)
+        if ans is None:
+            return False                     # ESC -> cancel
+        if ans.strip() == 'yes':
+            return True                      # confirmed -> delete
+        if warned:
+            return False                     # second non-"yes" ENTER -> exit
+        warned = True                        # first non-"yes" ENTER -> warn, stay
 
 
 # The offered columns after a title is entered. Order is the menu order; the key
@@ -243,192 +359,17 @@ _COLUMN_CHOICES = [
 _BUILTIN_LABELS = {key: label for label, key, _ml in _COLUMN_CHOICES}
 
 
-def _header_for_title(title):
-    """The NEW ENTRY header text for a (possibly URL-ish) title: the scheme/www
-    prefix is stripped so "NEW ENTRY https://www.x.com" reads "NEW ENTRY x.com"."""
-    shown = strip_scheme(title).strip()
-    return 'NEW ENTRY ' + shown if shown else 'NEW ENTRY'
-
-
-def _draw_new_header(win, title):
-    """Redraw the NEW ENTRY header row for the current title (called live as the
-    title is typed, and again on each column-picker redraw)."""
-    h, w = win.getmaxyx()
-    win.move(0, 0)
-    win.clrtoeol()
-    addstr(win, 0, 0, _header_for_title(title)[:w - 1], curses.A_BOLD)
-
-
-def _page_reset(win):
-    """Erase AND force the next refresh to repaint every cell from scratch.
-
-    The new-entry pages redraw a lot with per-row clrtoeol() (climbing note input,
-    live header), which can leave ncurses' cell-diff optimizer convinced a stale
-    glyph is still correct -- so a bare erase() sometimes leaves a leftover '>'
-    from the previous page. clearok(True) makes the next refresh unconditional, so
-    no stale cell can survive a page transition. Called at the top of each
-    new-entry page draw."""
-    win.erase()
-    try:
-        win.clearok(True)
-    except curses.error:
-        pass
-
-
-def _draw_added(win, elements, start_row):
-    """Draw the columns added so far, one per line, starting at start_row. These
-    populate ABOVE the "Add a column" menu so the entry grows on screen as the
-    user fills it in. Returns the next free row. Title is skipped (it is already
-    in the header). Values are shown inline; notes are shown as "(N lines)"."""
-    row = start_row
-    h, _ = win.getmaxyx()
-    for key, value in elements:
-        if key == 'title':
-            continue
-        if row >= h - 2:
-            break
-        if key == 'notes' or '\n' in value:
-            n = len([l for l in value.split('\n') if l]) if value else 0
-            shown = '(%d line%s)' % (n, '' if n == 1 else 's')
-        else:
-            shown = value
-        addstr(win, row, 0, _label(key) + ') ', curses.A_BOLD)
-        addstr(win, row, len(_label(key)) + 2, shown)
-        row += 1
-    return row
-
-
-def _add_columns(win, elements, title):
-    """Column picker page. Shows the NEW ENTRY header, the columns added so far
-    (populating above the menu), then "Add a column:" with a numbered menu whose
-    input sits one line under it. Loops until the user is done. Mutates `elements`.
-
-    Type a number then ENTER to open that column's value page; a column already
-    present is tagged "(added)" and re-picking it edits its value. ENTER on an
-    EMPTY input just notes that nothing was typed and stays. ESC finishes and
-    saves the entry."""
-    custom_n = len(_COLUMN_CHOICES) + 1
-    note = ''  # transient message under the input (e.g. "no input provided")
-    while True:
-        _page_reset(win)
-        _draw_new_header(win, title)
-        present = {k for k, _ in elements}
-        # Added columns populate directly under the header (row 1 down); then one
-        # blank line, then the menu.
-        row = _draw_added(win, elements, 1)
-        row += 1  # single blank line between the added list and the menu
-        addstr(win, row, 0, 'Add a column:', curses.A_BOLD)
-        row += 1
-        for i, (label, key, _ml) in enumerate(_COLUMN_CHOICES, 1):
-            tag = '  (added)' if key in present else ''
-            addstr(win, row, 2, '%d) %s%s' % (i, label, tag))
-            row += 1
-        addstr(win, row, 2, '%d) <CUSTOM COLUMN>' % custom_n)
-        row += 2  # single blank line between the menu and the input
-
-        # A transient hint (e.g. "no input provided") sits just below the input.
-        if note:
-            addstr(win, row + 1, 0, note, curses.A_DIM)
-        choice = prompt_line(win, '> ', y=row, nav=_NAV_PICK)
-        note = ''
-        if choice is None:
-            break                    # ESC = done (save and leave)
-        choice = choice.strip()
-        if choice == '':
-            note = '(no input provided -- type a number, or ESC to finish)'
-            continue
-        if not choice.isdigit():
-            note = '(not a number -- pick 1-%d)' % custom_n
-            continue
-        n = int(choice)
-        if 1 <= n <= len(_COLUMN_CHOICES):
-            label, key, multiline = _COLUMN_CHOICES[n - 1]
-            _set_column(win, elements, title, key, label, multiline)
-        elif n == custom_n:
-            name = _prompt_custom_name(win, title, elements)
-            if name:
-                _set_column(win, elements, title, name, name, False)
-        else:
-            note = '(no such option -- pick 1-%d)' % custom_n
-
-
-def _column_page_header_row(win, title, elements):
-    """Draw a value page's top (NEW ENTRY header + added list) and return the row
-    for the column's own heading -- one blank line under the added list."""
-    _page_reset(win)
-    _draw_new_header(win, title)
-    return _draw_added(win, elements, 1) + 1
-
-
-def _prompt_custom_name(win, title, elements):
-    """Value-page for a custom column's NAME (its own "NEW COLUMN" heading + input
-    right under it). Returns the cleaned name, or '' if cancelled/empty. The name
-    is stored verbatim -- we never change its capitalization."""
-    row = _column_page_header_row(win, title, elements)
-    addstr(win, row, 0, 'NEW COLUMN', curses.A_BOLD)
-    name = prompt_line(win, '', y=row + 1, nav=_NAV_VALUE)
-    if name is None:
-        return ''
-    return clean_key(name)
-
-
-def _set_column(win, elements, title, key, label, multiline):
-    """Open a column's own value page (mirrors the NEW ENTRY title screen: a
-    heading naming the column, the input right under it, contextual hints at the
-    bottom) and store the value under `key`, replacing any existing value so
-    re-picking a column edits it. Notes use the multi-line prompt.
-
-    The heading shows the label as-is (built-ins title-cased, a custom name kept
-    exactly as the user typed it -- never force-uppercased)."""
-    heading = _label(label)
-    if multiline:
-        row = _column_page_header_row(win, title, elements)
-        addstr(win, row, 0, heading, curses.A_BOLD)
-        # +2 so prompt_multiline's own "add a note line" hint (drawn one row above
-        # its region) lands below this heading rather than on top of it.
-        value = prompt_multiline(win, heading, start_row=row + 2)
-    else:
-        existing = next((v for k, v in elements if k == key), '')
-        row = _column_page_header_row(win, title, elements)
-        addstr(win, row, 0, heading, curses.A_BOLD)
-        value = prompt_line(win, '', existing, y=row + 1, nav=_NAV_VALUE)
-        if value is None:
-            return
-    for pair in elements:
-        if pair[0] == key:
-            pair[1] = value
-            return
-    elements.append([key, value])
-
-
-def new_entry(win):
-    """Wizard: title (only requirement) -> numbered column picker.
-
-    Only a title is needed to save. Pressing ENTER on an empty title is the same
-    as ESC -- it goes back (returns None). The title input sits directly under the
-    NEW ENTRY header, which updates live to show the title with any URL scheme /
-    www. prefix stripped."""
-    _page_reset(win)
-    _draw_new_header(win, '')
-    title = prompt_line(win, '', y=1, nav=_NAV_NEW_TITLE,
-                        on_change=lambda t: _draw_new_header(win, t))
-    if title is None:
-        return None
-    title = strip_scheme(title).strip()
-    if title == '':
-        # No title -> ENTER behaves like ESC: back, nothing saved.
-        return None
-    elements = [['title', title]]
-    _add_columns(win, elements, title)
-    return Entry(elements)
-
-
 def edit_entry(win, entry):
     """Interactive element editor.
 
     Returns (changed, quit): `changed` is True if any element changed; `quit` is
     True only if the user pressed q (a FULL quit that the caller propagates out of
-    the app). ESC just leaves the editor (back), quit stays False."""
+    the app). ESC just leaves the editor (back), quit stays False.
+
+    Notes is pinned to the bottom: the element list is normalized notes-last on
+    entry so the editor's indices match what is shown, and the reorder keys refuse
+    to move notes (or move anything past it)."""
+    entry.elements[:] = notes_last(entry.elements)
     changed = False
     sel = 0
     while True:
@@ -447,8 +388,12 @@ def edit_entry(win, entry):
         nav_bar(win, h - 1, _NAV_EDIT)   # bottom bar teaches the keys
         ch = win.getch()
         if ch in (ord('q'), ord('Q')):
+            if changed:
+                entry.mark_dirty()   # edited -> re-serialize canonically on save
             return changed, True     # q = FULL quit
         if ch == ESC:
+            if changed:
+                entry.mark_dirty()
             return changed, False    # ESC = back to the list only
         if not entry.elements:
             continue
@@ -456,6 +401,17 @@ def edit_entry(win, entry):
             sel = (sel - 1) % len(entry.elements)
         elif ch == curses.KEY_DOWN:
             sel = (sel + 1) % len(entry.elements)
+        elif ch == ord('['):
+            # Reorder: move the highlighted element up (title stays pinned first).
+            new_sel = move_element(entry.elements, sel, -1)
+            if new_sel != sel:
+                changed = True
+            sel = new_sel
+        elif ch == ord(']'):
+            new_sel = move_element(entry.elements, sel, +1)
+            if new_sel != sel:
+                changed = True
+            sel = new_sel
         elif ch in (ord('e'),) + ENTER_KEYS:
             key, value = entry.elements[sel]
             if key == 'notes':
@@ -494,33 +450,3 @@ def edit_entry(win, entry):
             del entry.elements[sel]
             changed = True
             sel = min(sel, len(entry.elements) - 1)
-
-
-def sequential_copy(win, entry):
-    """Clip each non-notes element in turn (password first). Enter advances,
-    q aborts. Returns True if every element was clipped."""
-    seq = entry.copy_sequence()
-    h, _ = win.getmaxyx()
-    if not seq:
-        win.erase()
-        addstr(win, 0, 0, 'nothing to copy (no elements besides title/notes).',
-               curses.A_BOLD)
-        nav_bar(win, h - 1, [('ESC', 'back'), ('any', 'back')])
-        win.getch()
-        return False
-    for i, (key, value) in enumerate(seq):
-        ok = clipboard.copy(value)
-        win.erase()
-        addstr(win, 0, 0, 'MULTI-COPY: ' + entry.title, curses.A_BOLD)
-        verb = 'clipped' if ok else 'clip FAILED'
-        addstr(win, 2, 0, '%s [%d/%d]  %s' % (verb, i + 1, len(seq), key),
-               curses.A_BOLD)
-        addstr(win, 3, 0, 'paste it, then advance to the next.', curses.A_DIM)
-        nav_bar(win, h - 1, _NAV_MULTI)   # bottom bar teaches the keys
-        while True:
-            ch = win.getch()
-            if ch in ENTER_KEYS:
-                break
-            if ch in (ord('q'), ESC):
-                return False
-    return True

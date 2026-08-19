@@ -4,9 +4,12 @@ Two input states resolve the conflict between "type letters to search" and
 "single-letter commands":
 
   SEARCH state (default) - printable keys filter by title, live. the arrow keys
-                           move into the result list; enter copies the password.
+                           OR enter move into the result list (enter lands the
+                           highlight on the first match; with no matches it is a
+                           no-op). enter here never copies and never quits.
   SELECT state           - the highlight is on a result; the action keys act on
-                           it. "/" drops back to the search box.
+                           it. ENTER "continue"s INTO the entry view (columns +
+                           copy/clip/edit). "/" drops back to the search box.
 
 NAVIGATION mirrors the Az'arch terminal UI (packages/azarch/render.c): the same
 WASD / HJKL / arrow movement, "/" for search. The bottom line is a plain,
@@ -15,15 +18,16 @@ verbs (a keycap, a space, a dim label, a gap) -- NOT centred and NOT coloured,
 just structured the same.
 
 Because W/A/S/D and H/J/K/L are movement, the single-letter ACTIONS deliberately
-avoid every movement key: v show, e edit, n new, x delete, m multi. ENTER copies
-the password. There is no Tab. ESC never quits -- it jumps back to the START of
-the UI (clears the query, highlight to the top) and is safe to spam. Only q / Q
-quit.
+avoid every movement key: n new, x delete. ENTER opens the entry view (where a
+number copies a column, "c" clips every column in order, and "e" edits) -- the
+old "v show", "e edit" and "m multi" verbs are folded into that view. There is no
+Tab. ESC never quits -- it jumps back to the START of the UI (clears the query,
+highlight to the top) and is safe to spam. Only q / Q quit.
 """
 
 import curses
 
-from . import clipboard, forms
+from . import forms, newentry
 
 SEARCH, SELECT = 0, 1
 
@@ -46,15 +50,17 @@ _nav = forms.nav_bar
 # The SELECT-mode nav: the packed movement cluster (one "cell" whose key glyphs
 # read "WASD HJKL <arrows>" and whose label is "move"), then the verbs. Kept as
 # data so the drawing and the tests share one definition.
+#
+# ENTER now "continue"s INTO the entry view (the hub that shows the columns and
+# offers copy-column / clip-in-order / edit) rather than copying the password
+# outright -- so the old "v show", "e edit" and "m multi" verbs are gone, folded
+# into that view.
 _NAV_MOVE = ('WASD HJKL ←↑→↓', 'move')
 _NAV_SELECT = [
     _NAV_MOVE,
-    ('ENTER', 'copy'),
-    ('v', 'show'),
-    ('e', 'edit'),
+    ('ENTER', 'continue'),
     ('n', 'new'),
     ('x', 'delete'),
-    ('m', 'multi'),
     ('/', 'search'),
     ('ESC', 'back'),
     ('Q', 'quit'),
@@ -67,7 +73,6 @@ class App:
         self.store = store
         self.query = ''
         self.mode = SEARCH
-        self.persistent = False
         self.dirty = False
         self.sel = 0
         self.status = ''
@@ -110,8 +115,6 @@ class App:
         s.erase()
         h, w = s.getmaxyx()
         header = ' passwords '
-        if self.persistent:
-            header += '[persistent] '
         forms.addstr(s, 0, 0, header + ' ' * max(0, w - len(header)),
                      curses.A_REVERSE)
 
@@ -184,10 +187,13 @@ class App:
                 self.move(ch)
             return True
         if ch in forms.ENTER_KEYS:
-            if self.selected_entry() is None:
-                return True
-            self.copy_password()
-            return self.persistent
+            # ENTER from the search box jumps the cursor DOWN into the results
+            # list (SELECT mode, highlight on the first match) -- it does NOT copy
+            # and does NOT quit. With no matches it is a no-op (stay in search).
+            if self.results:
+                self.mode = SELECT
+                self.sel = 0
+            return True
         if ch in forms.BACKSPACE_KEYS:
             self.query = self.query[:-1]
             self.refilter()
@@ -223,10 +229,19 @@ class App:
             self.refilter()
             return True
         if ch in forms.ENTER_KEYS:
-            if self.selected_entry() is None:
+            # ENTER "continue"s INTO the entry view (columns + copy/clip/edit),
+            # rather than copying the password and closing. The view handles the
+            # clipboard work itself; here we only propagate a full quit (q) and
+            # mark the store dirty if an edit inside it changed the entry.
+            entry = self.selected_entry()
+            if entry is None:
                 return True
-            self.copy_password()
-            return self.persistent
+            changed, quit_ = forms.entry_view(self.stdscr, entry)
+            if changed:
+                self.dirty = True
+            if quit_:
+                return False
+            return True
         c = chr(ch) if 32 <= ch <= 126 else ''
         if c == 'n':
             self.action_new()
@@ -234,38 +249,17 @@ class App:
         entry = self.selected_entry()
         if entry is None:
             return True
-        if c == 'v':
-            if forms.show_detail(self.stdscr, entry) == 'quit':
-                return False   # q inside the detail view quits the whole app
-        elif c == 'e':
-            changed, quit_ = forms.edit_entry(self.stdscr, entry)
-            if changed:
-                self.dirty = True
-            if quit_:
-                return False   # q inside the editor quits the whole app
-        elif c == 'x':
+        if c == 'x':
             if forms.confirm_delete(self.stdscr, entry):
                 self.store.entries.remove(entry)
                 self.dirty = True
                 self.refilter()
-                self.status = 'deleted'
-        elif c == 'm':
-            completed = forms.sequential_copy(self.stdscr, entry)
-            if completed and not self.persistent:
-                return False
         return True
 
     # ----- actions -----
 
-    def copy_password(self):
-        entry = self.selected_entry()
-        if entry is None:
-            return
-        ok = clipboard.copy(entry.password)
-        self.status = ('clipped password: ' if ok else 'clip FAILED: ') + entry.title
-
     def action_new(self):
-        entry = forms.new_entry(self.stdscr)
+        entry = newentry.new_entry(self.stdscr)
         if entry is None:
             return
         self.store.entries.append(entry)

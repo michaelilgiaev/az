@@ -22,31 +22,53 @@ NAVIGATION (mirrors the Az'arch terminal UI)
 SEARCH MODE  (default; cursor in the search box)
   type           filter entries by title, updates live
   arrows         move into the result list (switches to SELECT mode)
-  enter          copy the highlighted entry's password, then close
+  enter          jump the cursor down into the result list (first match); does
+                 NOT copy and does NOT quit. with no matches it does nothing
   n              new entry (works even with no results -- add the first entry);
                  only a title is required, and a leading http(s):// / www. is
-                 stripped from it. ENTER on an empty title just goes back.
+                 stripped from it. ENTER on an empty title warns you nothing was
+                 written; pressing ENTER again then exits the new entry.
   esc            jump back to the start of the UI
   q              quit
 
 SELECT MODE  (cursor on the result list)
   WASD/HJKL/arrows  move the highlight
-  enter             copy password, then close
-  v                 show all elements of the highlighted entry
-  e                 edit: change / rename / add / remove elements
-  x                 delete the entry (must type "yes")
+  enter             open the entry view (see below) for the highlighted entry
+  x                 delete the entry (must type "yes"); no label is left behind
   n                 new entry: enter a title (only requirement), then pick
                     columns from a numbered menu -- Email, Username, Password,
-                    Notes, or a custom-named column
-  m                 multi-copy: clip each element in turn (notes excluded);
-                    press enter for the next one, closes at the end
+                    Notes, or a custom-named column; type "r" in that menu to
+                    reorder the columns you have added (notes always stays last)
   /                 drop back to the search box
   esc               jump back to the start of the UI
   backspace         back to the search box and delete the last query character
   q                 quit
 
+ENTRY VIEW  (open with ENTER on a result)
+  shows every column (title first, notes always last under a blank line), then an
+  input to act on it:
+  a number       copy that one column to the clipboard
+  c              clip every column IN ORDER (e.g. email, then username, then
+                 password -- notes excluded) so you paste them one after another
+  e              edit: change / rename / add / remove / reorder elements
+                 ([ moves the highlighted column up, ] moves it down; the title
+                 stays pinned first and notes pinned last)
+  esc            back to the result list
+  q              quit
+
+CLIPBOARD  (paste once, then it clears)
+  a copied column is held for a SINGLE paste; after you paste it once the
+  clipboard clears itself. "clip in order" hands you the columns one at a time --
+  paste, and the next is ready -- clearing after the last. copying something else
+  yourself (in any app) cancels what the manager was holding. nothing survives a
+  reboot (a desktop clipboard manager with saved history is the one exception,
+  outside this app's control).
+
 RESULT LINE
-  > title   (N: name1, name2, ...)   N = count of non-title elements
+  > title   (N: name1, name2, ...)   N = count of non-title elements; the names
+  are listed in the order you arranged them (the order the columns were picked
+  when the entry was created, as changed by reorder; notes is always last)
+  entries themselves are listed alphabetically by title
 
 ON QUIT
   no changes -> the session plaintext is just deleted
