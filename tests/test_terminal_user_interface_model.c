@@ -12,7 +12,10 @@
 #include "terminal_user_interface.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 static int failures = 0;
 #define CHECK(cond) do { \
@@ -59,8 +62,13 @@ static void test_screen_set_is_exactly_expected(void)
         "display", "display.scale", "display.resolution", "display.refresh",
         "display.orientation", "display.monitors",
     };
+    /* az_screen_count() counts only the STATIC SCREENS[] table. The 13 per-category
+     * "defaultapps.<key>" screens are built at RUNTIME (az_da_screen), so they are findable but
+     * NOT part of the static count: the static count is the want[] size minus those 13. */
+    const int DYNAMIC_DEFAULTAPPS_SCREENS = 13;
     int n = az_screen_count();
-    CHECK(n == (int)(sizeof want / sizeof want[0]));
+    CHECK(n == (int)(sizeof want / sizeof want[0]) - DYNAMIC_DEFAULTAPPS_SCREENS);
+    /* every listed screen -- static AND runtime-built -- must resolve via az_screen_find. */
     for (size_t i = 0; i < sizeof want / sizeof want[0]; i++)
         CHECK(az_screen_find(want[i]) != NULL);
     CHECK(az_screen_find("nonesuch") == NULL);
@@ -148,8 +156,55 @@ static void test_machine_type_screen(void)
  * that category's default via an `azarch default-applications set ...` apply. The category set,
  * keys and the current-handler probes are the TUI half of the default_applications.py source;
  * a Python test pins the labels/keys against that source so C and Python cannot drift. */
+/* Write a stub .desktop (declaring the given MimeType) into <dir>. Used by the fixture so the
+ * per-category candidate resolution (az_da_screen scans the XDG dirs for installed .desktop
+ * files) is DETERMINISTIC on any host -- it must not depend on what happens to be installed on
+ * the machine running the tests. */
+static void write_desktop(const char *dir, const char *id, const char *mimetype)
+{
+    char path[1024];
+    snprintf(path, sizeof path, "%s/%s", dir, id);
+    FILE *f = fopen(path, "w");
+    if (!f) return;
+    fprintf(f, "[Desktop Entry]\nType=Application\nName=%s\n", id);
+    if (mimetype && mimetype[0]) fprintf(f, "MimeType=%s;\n", mimetype);
+    fclose(f);
+}
+
+/* Point XDG_DATA_HOME/XDG_DATA_DIRS at a private temp dir seeded with EXACTLY the .desktop files
+ * the assertions below expect (the shipped curated seeds for Web/Photos/... plus firefox as the
+ * MIME-discovered extra), so the live resolver produces a known, host-independent candidate set.
+ * Returns the applications dir path (into `out`). */
+static void seed_desktop_fixture(char *out, size_t n)
+{
+    char tmpl[] = "/tmp/azdatestXXXXXX";
+    char *base = mkdtemp(tmpl);
+    if (!base) { out[0] = '\0'; return; }
+    char apps[1024];
+    snprintf(apps, sizeof apps, "%s/applications", base);
+    mkdir(apps, 0755);
+    /* the curated seeds the category tests assert (each with the category's representative MIME
+     * so it would ALSO satisfy the MIME-discovery path). */
+    write_desktop(apps, "librewolf.desktop", "x-scheme-handler/http;text/html;application/pdf");
+    write_desktop(apps, "xviewer.desktop", "image/png;image/jpeg");
+    write_desktop(apps, "gimp.desktop", "image/png;image/jpeg");
+    write_desktop(apps, "feh.desktop", "image/png;image/jpeg");
+    write_desktop(apps, "org.gnome.gedit.desktop", "text/plain;text/html");
+    write_desktop(apps, "vlc.desktop", "audio/mpeg;video/mp4");
+    write_desktop(apps, "kitty.desktop", "");
+    /* a MIME-discovered extra that is NOT in any curated seed: firefox declares the http scheme,
+     * so it must surface under Web (the self-resolving behaviour) purely by its MimeType. */
+    write_desktop(apps, "firefox.desktop", "x-scheme-handler/http;text/html");
+    setenv("XDG_DATA_HOME", base, 1);
+    setenv("XDG_DATA_DIRS", base, 1);   /* only our fixture -> deterministic candidate set */
+    snprintf(out, n, "%s", apps);
+}
+
 static void test_default_applications_screens(void)
 {
+    char apps[1024];
+    seed_desktop_fixture(apps, sizeof apps);
+
     /* the ROWS_MAIN entry that opens it */
     const AzScreen *main_s = az_screen_find("main");
     CHECK(strcmp(main_s->rows[5].label, "Default Applications") == 0);
@@ -184,6 +239,18 @@ static void test_default_applications_screens(void)
     CHECK(web->rows[0].needs_root == 0);
     CHECK(strncmp(web->rows[0].target, "azarch default-applications set web ",
                   strlen("azarch default-applications set web ")) == 0);
+    /* SELF-RESOLVING (the load-bearing behaviour): the curated seed (librewolf) comes FIRST, and
+     * an app that is NOT curated but declares the category's MIME (firefox: x-scheme-handler/http)
+     * SURFACES purely from being installed -- exactly "install Firefox and it appears; remove it
+     * and it disappears" -- WITHOUT firefox being hard-listed. The fixture seeds both. */
+    CHECK(strstr(web->rows[0].target, "librewolf.desktop") != NULL);   /* curated seed first */
+    int web_has_firefox = 0, web_has_librewolf = 0;
+    for (int i = 0; i < web->nrows; i++) {
+        if (strstr(web->rows[i].target, "firefox.desktop")) web_has_firefox = 1;
+        if (strstr(web->rows[i].target, "librewolf.desktop")) web_has_librewolf = 1;
+    }
+    CHECK(web_has_librewolf == 1);
+    CHECK(web_has_firefox == 1);   /* MIME-discovered, proving live resolution */
 
     /* a multi-candidate category (Photos: xviewer + gimp + feh) really offers all choices. */
     const AzScreen *ph = az_screen_find("defaultapps.photos");

@@ -19,7 +19,7 @@
 #include <string.h>
 
 /* AZ_DA_DIRS_LINE (the .desktop directory disclosure line) is declared in
- * terminal_user_interface.h -- it is shared with model_defaultapps.c (the runtime Default
+ * terminal_user_interface.h -- it is shared with model_default_applications.c (the runtime Default
  * Applications screens) and used by the category-list screen subtitle below. */
 
 /* AZ_WALLPAPERS_DIR / AZ_WALLPAPER_RES are used by the wallpaper rows' base commands below.
@@ -218,7 +218,7 @@ static const AzRow ROWS_BRIGHTNESS[] = {
  * are all pinned to packages/azarch/default_applications.py by a test, so C and Python cannot
  * drift. Applying a default writes the user's own mimeapps.list / exo helper -- no sudo. */
 
-/* Per-category candidate rows are BUILT AT RUNTIME (az_da_screen, in model_defaultapps.c), not
+/* Per-category candidate rows are BUILT AT RUNTIME (az_da_screen, in model_default_applications.c), not
  * stored as static tables: the offered handlers RESOLVE LIVE against what is installed, so e.g.
  * installing Firefox makes firefox.desktop appear under Web/HTML/PDF and removing it drops it --
  * the user's "the list should resolve itself" requirement. Each generated row's label is the bare
@@ -226,10 +226,10 @@ static const AzRow ROWS_BRIGHTNESS[] = {
  * target is `azarch default-applications set <key> <id.desktop>` and its base is the underlying
  * `xdg-mime default ...` (or exo helper) line, for the teaching line + `x` copy. The category
  * set/keys/mimes/curated-seed mirror packages/azarch/default_applications.py (CATEGORIES /
- * CANDIDATES / CATEGORY_KEYS) via the AZ_DA_CATS table (model_defaultapps.c), pinned by a test. */
+ * CANDIDATES / CATEGORY_KEYS) via the AZ_DA_CATS table (model_default_applications.c), pinned by a test. */
 
 /* The AzDaCat descriptor table (AZ_DA_CATS: key + full MIME list + curated seed) that drives the
- * runtime candidate resolution lives in model_defaultapps.c, alongside az_da_screen() which uses
+ * runtime candidate resolution lives in model_default_applications.c, alongside az_da_screen() which uses
  * it. The category-LIST screen below is static (the per-category screens are built at runtime). */
 
 /* The category list (the `defaultapps` screen). Each row shows the live handler and descends
@@ -406,8 +406,8 @@ static const AzScreen SCREENS[] = {
      * listed here. The list screen's subtitle names the .desktop directories too. */
     {.id="defaultapps", .title="Default Applications",
      .subtitle="Which app opens which file type (the XDG mimeapps defaults). Pick a category to "
-               "change its handler. The .desktop files live in " AZ_DA_DIRS_LINE
-               " (drop your own there). Options resolve automatically from what is installed.",
+               "change its handler. To add or override an app, drop its .desktop into "
+               AZ_DA_DIRS_LINE ". Options resolve automatically from what is installed.",
      .rows=ROWS_DEFAULTAPPS, .nrows=AZN(ROWS_DEFAULTAPPS)},
     /* Display: cinnamon-settings-display parity (xrandr) + the GLOBAL SCALE chooser. NO
      * .current here -- the top "Current: scale 1.35x" line was removed at the user's request;

@@ -32,6 +32,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -139,6 +140,37 @@ static int read_key(void)
         return key;
     }
     return c;
+}
+
+/* --- live auto-refresh (Default Applications) ------------------------------- */
+/* The Default Applications screens resolve their rows LIVE from the installed .desktop files
+ * (az_da_screen re-scans on every draw) and each row's "current handler" from mimeapps.list.
+ * But the input loop BLOCKS on read_key(), so a change made OUTSIDE the UI -- the user pacman
+ * -R's an app in another terminal -- would not show until the next keypress ("I deleted
+ * Firefox and it didn't update; I had to exit and re-enter"). So on these screens we wake the
+ * loop on a timer (poll below) and, on each idle tick, drop the status cache and redraw, which
+ * re-runs the live scan -- the list then updates on its own within ~1s. Only the defaultapps
+ * screens opt in (their id starts with "defaultapps"): every other screen keeps blocking, so
+ * there is zero idle work / no flicker anywhere else. */
+#define AZ_LIVE_REFRESH_MS 1000
+
+static int screen_is_live(const AzUI *ui)
+{
+    const char *id = ui->stack[ui->depth - 1];
+    return id && strncmp(id, "defaultapps", 11) == 0;
+}
+
+/* Wait for a keystroke. On a LIVE screen in BROWSE mode, cap the wait at AZ_LIVE_REFRESH_MS and
+ * return 1 on timeout (caller refreshes + redraws); otherwise block until input. Returns 0 when
+ * input is ready to be read (or on a signal/resize, so the caller loops and re-polls). */
+static int wait_for_input_or_refresh(const AzUI *ui)
+{
+    if (ui->mode != AZ_MODE_BROWSE || !screen_is_live(ui))
+        return 0;                       /* block in read_key() as before */
+    struct pollfd pfd = { .fd = STDIN_FILENO, .events = POLLIN };
+    int r = poll(&pfd, 1, AZ_LIVE_REFRESH_MS);
+    if (r == 0) return 1;               /* timed out -> tell the caller to refresh */
+    return 0;                           /* input ready (or EINTR): go read it */
 }
 
 /* --- run an apply command, entirely INSIDE the UI -------------------------- */
@@ -425,6 +457,15 @@ int main(void)
             int pr = ui.rows > 0 ? ui.rows : 1, pc = ui.cols > 0 ? ui.cols : 1;
             int m = snprintf(park, sizeof park, "\033[%d;%dH\033[?25l", pr, pc);
             if (m > 0) { ssize_t w = write(STDOUT_FILENO, park, (size_t)m); (void)w; }
+        }
+
+        /* On a live screen (Default Applications), don't block forever: wake on a timer so an
+         * app installed/removed outside the UI shows up on its own. On an idle tick, drop the
+         * status cache (so each row's "current handler" re-reads too) and redraw -- the redraw
+         * re-runs the live .desktop scan, so the list stays current without a keypress. */
+        if (wait_for_input_or_refresh(&ui)) {
+            az_status_invalidate();
+            continue;
         }
 
         int k = read_key();

@@ -147,6 +147,17 @@ CALAMARES_WM_CLASS = "calamares"  # res_class (applicationName, lowercase -- VER
 RESTORED_WINDOW_WIDTH = 1200
 RESTORED_WINDOW_HEIGHT = 750       # 1200x750 == 16:10, unmistakably wider than tall
 
+# --- Default session resolution (1920x1080) -----------------------------------------------
+# The DE-less OpenBox session has no display manager to pick a mode, so X comes up on the
+# output's PREFERRED mode. On the QEMU/virtio-gpu virtual display that preferred mode is a
+# quirky 1920x1031 (it reserves a sliver), NOT 1920x1080 -- so a fresh boot landed at 1920x1031
+# and the e2e resolution check failed (the reported regression). We therefore ASSERT the
+# intended default from the autostart: if the primary output offers 1920x1080 and is not
+# already there, switch to it. It is fully guarded (missing xrandr, missing mode, or already
+# 1080 => no-op), so real hardware that boots at its own correct mode is untouched, and it lives
+# in the SHARED autostart block so both the live and the installed session default to 1080.
+DEFAULT_RESOLUTION = "1920x1080"
+
 # The system-wide application-menu launcher for the installer. Present on the LIVE medium
 # so the installer can be reopened from the Az'arch menu; REMOVED from the installed system
 # by the Calamares cleanup step (calamares_shellprocess) so the installer does not appear in
@@ -1040,6 +1051,53 @@ KEYBOARD_TOGGLE = "grp:alt_shift_toggle"  # Alt+Shift cycles layouts
 # the live and installed autostarts cannot drift on the parts they share.
 def _openbox_autostart_common() -> str:
     return f"""\
+# 0. Default resolution: raise an UNDERSIZED primary to {DEFAULT_RESOLUTION}. A DE-less OpenBox
+#    session has no display manager to choose a mode, so X comes up on the output's PREFERRED
+#    mode -- which on the QEMU/virtio-gpu virtual display is a quirky 1920x1031, SMALLER than
+#    {DEFAULT_RESOLUTION} (the resolution regression). We switch to {DEFAULT_RESOLUTION} ONLY WHEN
+#    the currently-active mode is SMALLER (in pixel area) than {DEFAULT_RESOLUTION} AND that mode
+#    is offered -- so the sub-1080p VM boot is corrected, but a LARGER primary (1440p, 4K,
+#    1920x1200, ...) is NEVER downgraded: on those the active area is >= 1920x1080, so the guard
+#    is a no-op. Runs SYNCHRONOUSLY and BEFORE the wallpaper so the root is painted at the final
+#    geometry. Also a no-op when xrandr is missing, there is no primary, or 1920x1080 isn't listed.
+if command -v xrandr >/dev/null 2>&1; then
+    # ONE awk pass, SCOPED PER OUTPUT (a non-indented "... connected ..." line starts an output;
+    # the indented mode lines under it belong to THAT output until the next connector line). We
+    # must NOT parse the active '*' mode globally: on a multi-head layout xrandr lists outputs by
+    # connector id, so a small non-primary output can appear BEFORE the primary and its mode would
+    # be mistaken for the primary's -- downgrading a large primary. So we record, per output, its
+    # active-mode WxH (the '*'-marked indented line) and whether it offers 1920x1080, then at END
+    # emit ONLY the chosen output's values: "<name> <activeW> <activeH> <offers1080>". The chosen
+    # output is the one flagged `primary`, else the first `connected`.
+    set -- $(xrandr --query 2>/dev/null | awk '
+        /^[^[:space:]].* connected/ {{
+            out=$1; conn[out]=1; order[++n]=out;
+            if ($0 ~ / connected primary/) primary=out;
+            if (first=="") first=out;
+            next;
+        }}
+        /^[[:space:]]+[0-9]+x[0-9]+/ {{
+            if (out=="") next;
+            res=$1;
+            if ($1=="{DEFAULT_RESOLUTION}") offers[out]=1;
+            if ($0 ~ /\\*/) {{ split(res,wh,"x"); aw[out]=wh[1]; ah[out]=wh[2]; }}
+        }}
+        END {{
+            sel=(primary!=""?primary:first);
+            if (sel=="") exit 0;
+            printf "%s %s %s %s\\n", sel, (aw[sel]==""?0:aw[sel]), (ah[sel]==""?0:ah[sel]), (offers[sel]?1:0);
+        }}')
+    _az_out="$1"; _az_cw="$2"; _az_ch="$3"; _az_offers="$4"
+    # Upgrade ONLY when the PRIMARY's own active mode is a real WxH strictly SMALLER in area than
+    # 1920x1080 and the primary offers 1080 -- so a >=1080p primary is never touched, whatever the
+    # other heads are doing.
+    if [ -n "$_az_out" ] && [ "${{_az_offers:-0}}" = "1" ] \\
+        && [ "${{_az_cw:-0}}" -gt 0 ] && [ "${{_az_ch:-0}}" -gt 0 ] \\
+        && [ "$(( _az_cw * _az_ch ))" -lt "$(( 1920 * 1080 ))" ]; then
+        xrandr --output "$_az_out" --mode {DEFAULT_RESOLUTION} >/dev/null 2>&1 || true
+    fi
+fi
+
 # 1. Wallpaper: repaint the same image ~/.xinitrc pre-painted (no flash; also covers a
 #    re-login where the X root pixmap was reset). feh owns the root pixmap on OpenBox. The
 #    image honours the per-user `azarch wallpaper` pointer, falling back to the "years"

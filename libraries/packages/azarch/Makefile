@@ -25,10 +25,10 @@ endif
 
 # model.c holds the UI infrastructure (capture, probe cache, status probes, filter, row
 # helpers); model_tree.c holds the static screen TREE data (ROWS_* + SCREENS[] +
-# az_screens/find/count); model_defaultapps.c holds the RUNTIME Default Applications screens
+# az_screens/find/count); model_default_applications.c holds the RUNTIME Default Applications screens
 # (az_da_screen, resolved live from installed .desktop files) -- split so each stays under the
 # per-file size budget.
-OBJS = main.o render.o model.o model_tree.o model_defaultapps.o preview.o action.o
+OBJS = main.o render.o model.o model_tree.o model_default_applications.o preview.o action.o
 BIN  = azarch
 OSD_BIN = azarch-osd
 

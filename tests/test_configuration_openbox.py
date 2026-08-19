@@ -320,6 +320,82 @@ def test_spice_vdagent_started_in_both_autostarts():
         assert "command -v spice-vdagent" in au   # guarded, never breaks the session
 
 
+def test_autostart_defaults_resolution_to_1920x1080():
+    # REGRESSION: a DE-less OpenBox session has no display manager to choose a mode, so X came
+    # up on the virtio-gpu PREFERRED mode (a quirky 1920x1031), not 1920x1080 -- the e2e
+    # resolution check failed. The shared autostart block RAISES an undersized primary to
+    # 1920x1080, so BOTH the live and installed sessions default to 1080. It must run BEFORE the
+    # wallpaper (feh) line so the root is painted at the final geometry.
+    for au in (desktop.openbox_autostart(), desktop.openbox_autostart_installed()):
+        assert desktop.DEFAULT_RESOLUTION == "1920x1080"
+        assert f"--mode {desktop.DEFAULT_RESOLUTION}" in au
+        assert "command -v xrandr" in au          # guarded, never breaks the session
+        # ordering: the resolution block precedes the feh wallpaper repaint.
+        assert au.index("--mode 1920x1080") < au.index("feh")
+        # CRITICAL: it must NEVER downgrade a LARGER display. The switch is gated on the ACTIVE
+        # mode's pixel AREA being strictly smaller than 1920x1080 -- so a 1440p/4K/1920x1200
+        # primary (whose area is >= 1920*1080) is left alone. Assert that area guard is present.
+        assert "1920 * 1080" in au
+        assert "-lt" in au                          # active-area < 1080p is the switch condition
+
+
+def test_autostart_resolution_never_downgrades_larger_display(tmp_path):
+    # Drive the emitted resolution block through /bin/sh against a STUB xrandr for the display
+    # shapes that matter, proving the guard raises an undersized primary but never shrinks a
+    # larger one (the exact failure mode an area-blind "1080 offered && not active" guard has).
+    import subprocess, os, stat
+    au = desktop.openbox_autostart()
+    block = "#!/bin/sh\n" + au[au.index("# 0. Default resolution"):au.index("# 1. Wallpaper")]
+    blockfile = tmp_path / "resblock.sh"
+    blockfile.write_text(block)
+    stubdir = tmp_path / "stub"
+    stubdir.mkdir()
+    switchlog = tmp_path / "switch.log"
+
+    def run(xrandr_query: str) -> bool:
+        """Return True iff the block issued an `xrandr --output ... --mode` switch."""
+        (stubdir / "xrandr").write_text(
+            "#!/bin/sh\n"
+            'if [ "$1" = "--query" ]; then cat <<\'XR\'\n' + xrandr_query + "\nXR\n  exit 0\nfi\n"
+            f'echo "SWITCH: $*" >> "{switchlog}"\nexit 0\n')
+        (stubdir / "xrandr").chmod(0o755)
+        switchlog.write_text("")
+        env = dict(os.environ, PATH=f"{stubdir}:{os.environ['PATH']}")
+        subprocess.run(["sh", str(blockfile)], env=env, check=False,
+                       capture_output=True, timeout=20)
+        return switchlog.read_text().strip() != ""
+
+    # VM regression: active 1920x1031 (smaller area than 1080p), 1080 offered -> UPGRADE.
+    assert run("Virtual-1 connected primary 1920x1031+0+0\n"
+               "   1920x1031     75.00*+\n   1920x1080     60.00\n   1280x720      60.00") is True
+    # 4K primary active, 1080 merely offered -> MUST NOT downgrade.
+    assert run("DP-1 connected primary 3840x2160+0+0\n"
+               "   3840x2160     60.00*+\n   1920x1080     60.00") is False
+    # 1440p primary active -> MUST NOT downgrade.
+    assert run("DP-2 connected primary 2560x1440+0+0\n"
+               "   2560x1440     59.95*+\n   1920x1080     60.00") is False
+    # already at 1080 -> no-op.
+    assert run("Virtual-1 connected primary 1920x1080+0+0\n"
+               "   1920x1080     60.00*+\n   1280x720      60.00") is False
+    # undersized laptop panel (1600x900) with 1080 available -> UPGRADE.
+    assert run("eDP-1 connected primary 1600x900+0+0\n"
+               "   1600x900      60.00*+\n   1920x1080     60.00") is True
+    # MULTI-HEAD, the order-dependent trap: a SMALL non-primary output is listed BEFORE the large
+    # primary. The active-mode parse MUST be scoped to the primary, so the 1440p/4K primary is NOT
+    # downgraded just because a 1366x768/1600x900 secondary appears first in xrandr's enumeration.
+    assert run("HDMI-1 connected 1366x768+2560+0\n   1366x768      59.79*+\n   1920x1080     60.00\n"
+               "DP-1 connected primary 2560x1440+0+0\n   2560x1440     59.95*+\n   1920x1080     60.00") is False
+    assert run("HDMI-1 connected 1600x900+0+0\n   1600x900      60.00*+\n   1920x1080     60.00\n"
+               "DP-1 connected primary 3840x2160+0+0\n   3840x2160     60.00*+\n   1920x1080     60.00") is False
+    # MULTI-HEAD where the PRIMARY itself is the undersized one -> it (and only it) is upgraded.
+    assert run("Virtual-1 connected primary 1920x1031+0+0\n   1920x1031     75.00*+\n   1920x1080     60.00\n"
+               "HDMI-1 connected 2560x1440+1920+0\n   2560x1440     59.95*+") is True
+    # no `primary` flag: fall back to the first connected output (undersized) -> upgrade it.
+    assert run("eDP-1 connected 1600x900+0+0\n   1600x900      60.00*+\n   1920x1080     60.00") is True
+    # ultrawide primary (huge area) -> never downgraded.
+    assert run("DP-1 connected primary 3440x1440+0+0\n   3440x1440     59.97*+\n   1920x1080     60.00") is False
+
+
 def test_spice_vdagent_in_manifest():
     # The SPICE agent package must be shipped (the releng baseline has open-vm-tools /
     # qemu-guest-agent / virtualbox-guest-utils but NOT spice-vdagent).

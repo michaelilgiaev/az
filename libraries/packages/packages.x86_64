@@ -299,12 +299,6 @@ dotnet-host
 calamares
 mailcap
 librewolf
-# firefox: shipped ALONGSIDE LibreWolf so it is a real, always-present choice in
-# `azarch default-applications` (the user: "I have firefox installed, but i dont see it").
-# With firefox in the image, firefox.desktop always exists, so the Web/HTML/PDF quick-picks
-# that offer it (default_applications.CANDIDATES) always resolve. LibreWolf stays the shipped
-# DEFAULT; firefox is just available to switch to.
-firefox
 gedit
 gimp
 # --- Thunar file manager (GTK, replaces Dolphin) --------------------------

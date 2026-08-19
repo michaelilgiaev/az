@@ -62,11 +62,11 @@ def _src(name: str) -> str:
     text = (TERMINAL_USER_INTERFACE_SRC_DIR / name).read_text(encoding="utf-8")
     # model.c was split (it grew past the size budget): the UI infrastructure stays in model.c,
     # the static screen TREE (ROWS_* + SCREENS[]) moved to model_tree.c, and the RUNTIME Default
-    # Applications screens moved to model_defaultapps.c. The tests treat "the model" as one thing,
+    # Applications screens moved to model_default_applications.c. The tests treat "the model" as one thing,
     # so requesting model.c transparently returns ALL THREE concatenated -- a content check for a
     # row/screen/probe finds it wherever it now lives.
     if name == "model.c":
-        for extra in ("model_tree.c", "model_defaultapps.c"):
+        for extra in ("model_tree.c", "model_default_applications.c"):
             text += "\n" + (TERMINAL_USER_INTERFACE_SRC_DIR / extra).read_text(encoding="utf-8")
     return text
 
@@ -146,7 +146,7 @@ def test_build_tui_inputs_are_the_c_sources():
     assert "render.c" in names
     assert "model.c" in names
     assert "model_tree.c" in names           # the static screen tree (split from model.c)
-    assert "model_defaultapps.c" in names    # the runtime Default Applications screens
+    assert "model_default_applications.c" in names    # the runtime Default Applications screens
     assert "preview.c" in names
     assert "action.c" in names       # apply execution + in-UI sudo credential
     assert "Makefile" in names
@@ -341,6 +341,26 @@ def test_status_probes_are_cached_for_instant_navigation():
     assert "scr->current(sb" not in render
     # an apply invalidates the cache so the new state shows on the next frame
     assert "az_status_invalidate()" in main
+
+
+def test_default_applications_screens_auto_refresh_live():
+    """PROMPT (newest): the Default Applications list must update IN REAL TIME -- the user removed
+    Firefox in another terminal and the list did not change until they exited and re-entered. The
+    input loop blocks on read_key(), so these screens (whose rows resolve live from the installed
+    .desktop files) opt into a timed wakeup: on an idle tick the loop drops the status cache and
+    redraws, which re-runs the live scan -- so an install/removal shows on its own within ~1s. No
+    other screen polls (zero idle work / no flicker elsewhere)."""
+    main = _src("main.c")
+    # a live-screen predicate keyed on the defaultapps screen id, and a bounded (poll) wait.
+    assert "screen_is_live" in main
+    assert 'strncmp(id, "defaultapps", 11)' in main
+    assert "poll(" in main and "AZ_LIVE_REFRESH_MS" in main
+    # only BROWSE mode on a live screen polls; everything else blocks as before.
+    assert "ui->mode != AZ_MODE_BROWSE || !screen_is_live(ui)" in main
+    # on an idle tick the loop busts the cache and redraws (so current-handler re-reads too).
+    wait_block = main[main.index("wait_for_input_or_refresh(&ui)"):]
+    assert "az_status_invalidate();" in wait_block[:200]
+    assert "continue;" in wait_block[:200]
 
 
 def test_network_status_is_plain_online_offline():

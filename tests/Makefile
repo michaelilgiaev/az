@@ -35,8 +35,11 @@ ACT_TEST_BIN    = test_terminal_user_interface_action
 $(TEST_BIN): test_applications.c $(APP_DIR)/applications.c $(APP_DIR)/applications.h
 	$(CC) $(TEST_CFLAGS) test_applications.c $(APP_DIR)/applications.c -o $@ $(TEST_LIBS)
 
-$(TERMINAL_USER_INTERFACE_TEST_BIN): test_terminal_user_interface_model.c $(TERMINAL_USER_INTERFACE_DIR)/model.c $(TERMINAL_USER_INTERFACE_DIR)/model_tree.c $(TERMINAL_USER_INTERFACE_DIR)/terminal_user_interface.h
-	$(CC) $(TERMINAL_USER_INTERFACE_TEST_CFLAGS) test_terminal_user_interface_model.c $(TERMINAL_USER_INTERFACE_DIR)/model.c $(TERMINAL_USER_INTERFACE_DIR)/model_tree.c -o $@
+# model_tree.c's az_screen_find() delegates the "defaultapps." prefix to az_da_screen(), which
+# lives in model_default_applications.c -- so that TU MUST be linked in too or the test fails to
+# link (undefined reference to az_da_screen).
+$(TERMINAL_USER_INTERFACE_TEST_BIN): test_terminal_user_interface_model.c $(TERMINAL_USER_INTERFACE_DIR)/model.c $(TERMINAL_USER_INTERFACE_DIR)/model_tree.c $(TERMINAL_USER_INTERFACE_DIR)/model_default_applications.c $(TERMINAL_USER_INTERFACE_DIR)/terminal_user_interface.h
+	$(CC) $(TERMINAL_USER_INTERFACE_TEST_CFLAGS) test_terminal_user_interface_model.c $(TERMINAL_USER_INTERFACE_DIR)/model.c $(TERMINAL_USER_INTERFACE_DIR)/model_tree.c $(TERMINAL_USER_INTERFACE_DIR)/model_default_applications.c -o $@
 
 $(ACT_TEST_BIN): test_terminal_user_interface_action.c $(TERMINAL_USER_INTERFACE_DIR)/action.c $(TERMINAL_USER_INTERFACE_DIR)/action.h
 	$(CC) $(TERMINAL_USER_INTERFACE_TEST_CFLAGS) test_terminal_user_interface_action.c $(TERMINAL_USER_INTERFACE_DIR)/action.c -o $@

@@ -121,15 +121,19 @@ int az_screen_count(void);
 /* Find a screen by id, or NULL. */
 const AzScreen *az_screen_find(const char *id);
 
-/* The .desktop application directories as DISPLAYED on the Default Applications screens (the
- * disclosure line, like the Wallpaper screen's directory). Mirrors
- * default_applications.DESKTOP_DIRS_DISPLAY (a test pins it). Used by both the category-LIST
- * screen subtitle (model_tree.c) and the runtime per-category screens (model_defaultapps.c),
- * so it lives here. The LIVE candidate resolution honours $XDG_DATA_HOME / $XDG_DATA_DIRS. */
-#define AZ_DA_DIRS_LINE \
-    "~/.local/share/applications, /usr/local/share/applications, /usr/share/applications"
+/* The ONE .desktop directory DISCLOSED on the Default Applications screens: the single
+ * user-writable drop-in, ~/.local/share/applications. Earlier this listed all three XDG dirs
+ * (~/.local/share, /usr/local/share, /usr/share -- applications), which read as "copy your file
+ * into three places", the opposite of helpful. So we disclose only the ONE place a user ever
+ * needs to add or override an app; the two system dirs (under /usr, package-managed) are never
+ * a manual drop target. The LIVE candidate resolution STILL scans all XDG dirs (honouring
+ * $XDG_DATA_HOME / $XDG_DATA_DIRS), so an app installed to /usr/share still shows up as a choice
+ * -- only the disclosure text collapsed to one path. Mirrors default_applications.DESKTOP_DIR_DISPLAY
+ * (a test pins it). Used by the category-LIST screen subtitle (model_tree.c) and the runtime
+ * per-category screens (model_default_applications.c), so it lives here. */
+#define AZ_DA_DIRS_LINE "~/.local/share/applications"
 
-/* Build the RUNTIME "defaultapps.<key>" screen (model_defaultapps.c): its candidate rows resolve
+/* Build the RUNTIME "defaultapps.<key>" screen (model_default_applications.c): its candidate rows resolve
  * live from the installed .desktop files (curated seed first, then MIME-declaring installed apps),
  * labelled with the bare .desktop id, plus a disclosure subtitle. Returns a pointer to module-
  * static storage rebuilt on each call (safe: only one defaultapps.* screen is ever on the stack

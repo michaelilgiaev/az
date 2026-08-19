@@ -26,12 +26,12 @@ def _bundled():
 
 def _model_c() -> str:
     # The C model is split across three TUs for the per-file size budget: model.c (infra +
-    # probes), model_tree.c (static screen TREE: ROWS_* + SCREENS[]), and model_defaultapps.c
+    # probes), model_tree.c (static screen TREE: ROWS_* + SCREENS[]), and model_default_applications.c
     # (the runtime Default Applications screens + the AZ_DA_CATS descriptor table). Read all
     # three so a row/screen/table check finds it wherever it lives.
     d = paths.LIBDIR / "packages/azarch"
     return "\n".join((d / f).read_text(encoding="utf-8")
-                     for f in ("model.c", "model_tree.c", "model_defaultapps.c"))
+                     for f in ("model.c", "model_tree.c", "model_default_applications.c"))
 
 
 # --- single source of truth: the CLI mirror matches default_applications.py -----
@@ -183,17 +183,20 @@ def test_model_c_da_cats_table_mirrors_source():
             f"AZ_DA_CATS seed for {key}: C {c_seed!r} != source {seed_join!r}"
 
 
-def test_model_c_discloses_desktop_dirs_matching_source():
-    # Both the list screen and the runtime per-category screen disclose WHERE .desktop files live
-    # (like the Wallpaper screen discloses its directory). The disclosure dir list is the
-    # AZ_DA_DIRS_LINE macro, DEFINED in terminal_user_interface.h (shared by model_tree.c's list
-    # screen and model_defaultapps.c's per-category screens); its literal must name the same dirs
-    # as default_applications.DESKTOP_DIRS_DISPLAY, in order.
+def test_model_c_discloses_single_desktop_dir_matching_source():
+    # Both the list screen and the runtime per-category screen disclose the ONE place a user
+    # drops their own .desktop (like the Wallpaper screen discloses its directory). The user
+    # rejected the old three-path disclosure ("copy into three places"): it is now the SINGLE
+    # user-writable dir, the AZ_DA_DIRS_LINE macro DEFINED in terminal_user_interface.h (shared by
+    # model_tree.c's list screen and model_default_applications.c's per-category screens); its
+    # literal must equal default_applications.DESKTOP_DIR_DISPLAY exactly.
     header = (paths.LIBDIR / "packages/azarch/terminal_user_interface.h").read_text(encoding="utf-8")
-    line = ", ".join(da.DESKTOP_DIRS_DISPLAY)
-    assert line in header, f"AZ_DA_DIRS_LINE (in the header) must be {line!r}"
-    assert "#define AZ_DA_DIRS_LINE" in header
+    assert f'#define AZ_DA_DIRS_LINE "{da.DESKTOP_DIR_DISPLAY}"' in header, \
+        f"AZ_DA_DIRS_LINE (in the header) must be the single path {da.DESKTOP_DIR_DISPLAY!r}"
+    # exactly one path -> the system dirs must NOT appear in the disclosed macro line.
+    assert "/usr/share/applications" not in da.DESKTOP_DIR_DISPLAY
+    assert "," not in da.DESKTOP_DIR_DISPLAY
     # the model USES the macro (both the list screen subtitle and the per-category disclosure).
     model = _model_c()
     assert "AZ_DA_DIRS_LINE" in model
-    assert ".desktop files live in" in model
+    assert "drop its .desktop into" in model

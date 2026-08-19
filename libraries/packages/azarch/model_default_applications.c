@@ -279,8 +279,8 @@ const AzScreen *az_da_screen(const char *id)
      * Wallpaper screen). Doing it before any row guarantees the disclosure line is never the
      * string starved out if the arena ever filled (rows would drop before the subtitle). */
     const char *subtitle = az_da_intern(
-        ".desktop files live in: " AZ_DA_DIRS_LINE
-        "   (drop your own there; the list below resolves from what is installed)");
+        "To add or override an app, drop its .desktop into " AZ_DA_DIRS_LINE
+        "   (the list below resolves from what is installed)");
 
     AzDaDir dirs[8];
     int ndirs = az_da_dirs(dirs, 8);

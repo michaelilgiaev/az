@@ -307,12 +307,21 @@ def _da_desktops(key: str | None) -> int:
     a developer asked for ("WHERE IS THE .DESKTOP, HOW DO I MANUALLY PUT MY OWN STUFF"). With a
     category key, also shows that category's quick-picks + current handler and the exact
     `xdg-mime default` / `azarch default-applications set` commands to change it by hand."""
-    print("Application (.desktop) directories, in priority order (a file in an earlier dir wins):")
-    for d in _da_desktop_dirs():
-        exists = "" if os.path.isdir(d) else "   (absent)"
-        print(f"  {d}{exists}")
-    print("\nTo add or override an app: drop a <name>.desktop into the FIRST dir above (create it")
-    print("if needed), then set it as a default with either command below.")
+    dirs = _da_desktop_dirs()
+    # ONE place to drop your own: the user-writable dir (first in XDG order, so it wins over the
+    # system dirs). This is what the user is told -- NOT "copy the same file into three places".
+    drop = dirs[0] if dirs else os.path.join(os.path.expanduser("~"), ".local/share/applications")
+    print(f"To add or override an app, drop a <name>.desktop into:\n  {drop}")
+    print("(create the dir if needed). It wins over the system copies, then set it as a default")
+    print("with either command below.")
+    # The system dirs are package-managed -- shown only so a developer knows where installed apps
+    # come from, explicitly NOT a manual drop target.
+    system_dirs = dirs[1:]
+    if system_dirs:
+        print("\nAlso searched (package-managed -- do not edit by hand):")
+        for d in system_dirs:
+            exists = "" if os.path.isdir(d) else "   (absent)"
+            print(f"  {d}{exists}")
     if key is not None:
         row = _da_row(key)
         if row is None:

@@ -187,18 +187,19 @@ CANDIDATES: dict[str, tuple[str, ...]] = {
     "Terminal": ("kitty.desktop",),
 }
 
-# The freedesktop application directories, in the order xdg-mime / GIO consult them (the per-user
-# dir first, so a user override wins). This is WHERE THE .DESKTOP FILES LIVE -- disclosed on the
-# Default Applications screens exactly like the Wallpaper screen discloses its directory, and the
-# set the runtime candidate resolution scans. Kept here (the single source of truth) so the CLI
-# mirror, the C model's disclosure subtitle, and any test all name the same dirs. The literal
-# defaults match the XDG spec ($XDG_DATA_HOME or ~/.local/share, then $XDG_DATA_DIRS or
-# /usr/local/share:/usr/share); the live resolution honours the env vars.
-DESKTOP_DIRS_DISPLAY: tuple[str, ...] = (
-    "~/.local/share/applications",
-    "/usr/local/share/applications",
-    "/usr/share/applications",
-)
+# The ONE .desktop directory DISCLOSED to the user on the Default Applications screens: the
+# single user-writable drop-in, ~/.local/share/applications. The user pushed back HARD on the
+# old three-path disclosure ("~/.local/share, /usr/local/share, /usr/share -- applications") --
+# it read as "to add an app by hand, copy the same file into three places", which is nonsense.
+# There is exactly ONE place a user ever needs to drop or override a .desktop: their own
+# ~/.local/share/applications (it wins over the system dirs anyway, being first in XDG order).
+# The two SYSTEM dirs (/usr/local/share, /usr/share) are package-managed -- never a manual drop
+# target -- so they are not disclosed. IMPORTANT: this only collapses the DISPLAYED text; the
+# live candidate RESOLUTION (default_applications_cli._da_desktop_dirs / the C az_da_dirs) still
+# scans every XDG dir (honouring $XDG_DATA_HOME / $XDG_DATA_DIRS), so an app installed to
+# /usr/share still appears as a choice. Single source of truth: the CLI mirror, the C model's
+# disclosure subtitle (AZ_DA_DIRS_LINE), and the tests all name THIS one path.
+DESKTOP_DIR_DISPLAY = "~/.local/share/applications"
 
 
 def category_by_key(key: str) -> tuple[str, str, str, tuple[str, ...]] | None:
