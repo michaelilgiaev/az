@@ -199,4 +199,13 @@ def test_model_c_discloses_single_desktop_dir_matching_source():
     # the model USES the macro (both the list screen subtitle and the per-category disclosure).
     model = _model_c()
     assert "AZ_DA_DIRS_LINE" in model
-    assert "drop its .desktop into" in model
+    # the per-category runtime screen (model_default_applications.c) discloses the dir TERSELY --
+    # the user pushed back on the wordy "To add or override an app, drop its .desktop into ...
+    # (the list below resolves ...)" line: it is now just ".desktop directory: <dir>/" (trailing
+    # slash, nothing else). Guard the exact terse literal AND that the old prose is gone from it.
+    per_category = (paths.LIBDIR / "packages/azarch/model_default_applications.c").read_text(encoding="utf-8")
+    assert '".desktop directory: " AZ_DA_DIRS_LINE "/"' in per_category, \
+        "per-category screen must disclose the dir as terse '.desktop directory: <dir>/'"
+    assert "drop its .desktop into" not in per_category, \
+        "the wordy add/override prose must be gone from the per-category screen"
+    assert "list below resolves" not in per_category

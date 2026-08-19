@@ -277,10 +277,9 @@ const AzScreen *az_da_screen(const char *id)
 
     /* Intern the disclosure subtitle FIRST -- WHERE the .desktop files live (accented, like the
      * Wallpaper screen). Doing it before any row guarantees the disclosure line is never the
-     * string starved out if the arena ever filled (rows would drop before the subtitle). */
-    const char *subtitle = az_da_intern(
-        "To add or override an app, drop its .desktop into " AZ_DA_DIRS_LINE
-        "   (the list below resolves from what is installed)");
+     * string starved out if the arena ever filled (rows would drop before the subtitle). Terse
+     * on purpose (user request): just the ONE drop-in directory, trailing slash, nothing else. */
+    const char *subtitle = az_da_intern(".desktop directory: " AZ_DA_DIRS_LINE "/");
 
     AzDaDir dirs[8];
     int ndirs = az_da_dirs(dirs, 8);
@@ -342,7 +341,7 @@ const AzScreen *az_da_screen(const char *id)
 
     g_da_screen.id = g_da_id;
     g_da_screen.title = az_da_label(key);
-    g_da_screen.subtitle = subtitle ? subtitle : ".desktop dir: " AZ_DA_DIRS_LINE;
+    g_da_screen.subtitle = subtitle ? subtitle : ".desktop directory: " AZ_DA_DIRS_LINE "/";
     g_da_screen.subtitle_accent = 1;
     g_da_screen.current = az_da_probe(key);
     g_da_screen.rows = g_da_rows;

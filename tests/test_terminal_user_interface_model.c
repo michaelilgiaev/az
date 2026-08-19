@@ -233,6 +233,12 @@ static void test_default_applications_screens(void)
      * runs `azarch default-applications set ...` -- no sudo (writes the user's own config). */
     const AzScreen *web = az_screen_find("defaultapps.web");
     CHECK(web != NULL);
+    /* the per-category screen discloses the .desktop drop-in dir TERSELY (user request): just
+     * ".desktop directory: <dir>/" (trailing slash), rendered in the accent -- NOT the old wordy
+     * "To add or override an app, drop its .desktop into ... (the list below resolves ...)". */
+    CHECK(strstr(web->subtitle, ".desktop directory: ~/.local/share/applications/") != NULL);
+    CHECK(strstr(web->subtitle, "drop its .desktop into") == NULL);
+    CHECK(web->subtitle_accent == 1);
     CHECK(web->current == az_status_da_web);
     CHECK(web->nrows >= 1);
     CHECK(web->rows[0].kind == AZ_ACT_APPLY);
