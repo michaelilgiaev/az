@@ -23,7 +23,9 @@ SEARCH MODE  (default; cursor in the search box)
   type           filter entries by title, updates live
   arrows         move into the result list (switches to SELECT mode)
   enter          copy the highlighted entry's password, then close
-  n              new entry (works even with no results -- add the first entry)
+  n              new entry (works even with no results -- add the first entry);
+                 only a title is required, and a leading http(s):// / www. is
+                 stripped from it. ENTER on an empty title just goes back.
   esc            jump back to the start of the UI
   q              quit
 
@@ -33,7 +35,9 @@ SELECT MODE  (cursor on the result list)
   v                 show all elements of the highlighted entry
   e                 edit: change / rename / add / remove elements
   x                 delete the entry (must type "yes")
-  n                 new entry (title, password, more elements, notes)
+  n                 new entry: enter a title (only requirement), then pick
+                    columns from a numbered menu -- Email, Username, Password,
+                    Notes, or a custom-named column
   m                 multi-copy: clip each element in turn (notes excluded);
                     press enter for the next one, closes at the end
   /                 drop back to the search box

@@ -6,7 +6,7 @@ Streamlined: there is no separate setup step and nothing to source. Running
 
   * FIRST RUN (no store at ~/Vault/passwords.txt.gpg) -- prompts you to CREATE a
     master password and writes an empty encrypted store. You are dropped straight
-    into the UI; press Tab then 'n' to add the first entry.
+    into the UI; press 'n' to add the first entry.
   * AFTER THAT -- prompts for the master password (which is the GPG passphrase,
     never stored anywhere), decrypts the store to a session plaintext under
     ~/Vault for the search/select UI, then on quit re-encrypts ONLY if something
@@ -122,8 +122,7 @@ def _init_store(enc):
     except crypto.CryptoError as e:
         print('Could not create the store: %s' % e)
         return None
-    print('Created an empty encrypted store. Press Tab then "n" to add your first '
-          'entry.')
+    print('Created an empty encrypted store. Press "n" to add your first entry.')
     return pw
 
 

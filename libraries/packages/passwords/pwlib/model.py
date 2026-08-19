@@ -25,7 +25,24 @@ import re
 KEY_RE = re.compile(r'^([^)\n]+)\) ?(.*)$')
 DELIM = '####'
 NOTE_INDENT = '    '
-ESSENTIAL = ('title', 'password')
+# Only the title is required to save an entry now; password is just another
+# optional element. Kept as ('title',) so the editor still refuses to blank or
+# remove the title while letting the password be edited/removed freely.
+ESSENTIAL = ('title',)
+
+# Leading URI scheme (http/https/ftp/...) plus optional "www.", stripped from a
+# title so pasting "https://www.example.com" stores just "example.com". Matches a
+# scheme "<letters>://" and/or a leading "www." at the very start, case-insensitive.
+_SCHEME_RE = re.compile(r'^\s*(?:[a-zA-Z][a-zA-Z0-9+.-]*://)?(?:www\.)?', re.IGNORECASE)
+
+
+def strip_scheme(title):
+    """Strip a leading URI scheme and/or "www." from a title.
+
+    "https://www.example.com" -> "example.com", "http://foo.io/x" -> "foo.io/x",
+    "example.com" -> "example.com". Only the very start is touched; the rest of
+    the string (path, query) is left intact. Leading whitespace is dropped too."""
+    return _SCHEME_RE.sub('', title, count=1)
 
 
 def clean_key(name):

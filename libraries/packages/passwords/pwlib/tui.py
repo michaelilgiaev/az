@@ -38,27 +38,9 @@ _DOWN_KEYS = {curses.KEY_DOWN, ord('s'), ord('S'), ord('j'), ord('J'),
 _MOVE_KEYS = _UP_KEYS | _DOWN_KEYS
 
 
-def _nav(win, y, pairs):
-    """Draw a left-aligned "KEY label   KEY label ..." nav bar on row y.
-
-    Structured like azarch's draw_nav (packages/azarch/render.c): each verb is a
-    keycap, a space, then a dim label, verbs separated by a 3-space gap. NOT
-    centred and NOT coloured -- the keycap is drawn normal and the label A_DIM,
-    matching the plain look the spec asks for. `pairs` is a list of (key, label)."""
-    h, w = win.getmaxyx()
-    x = 0
-    gap = '   '
-    for i, (key, label) in enumerate(pairs):
-        if i:
-            forms.addstr(win, y, x, gap, curses.A_DIM)
-            x += len(gap)
-        forms.addstr(win, y, x, key)
-        x += len(key)
-        if label:
-            forms.addstr(win, y, x, ' ' + label, curses.A_DIM)
-            x += 1 + len(label)
-        if x >= w - 1:
-            break
+# The nav bar is drawn by forms.nav_bar (shared with the detail view so both
+# bottom bars look identical); _nav is kept as a thin local alias.
+_nav = forms.nav_bar
 
 
 # The SELECT-mode nav: the packed movement cluster (one "cell" whose key glyphs
@@ -253,10 +235,14 @@ class App:
         if entry is None:
             return True
         if c == 'v':
-            forms.show_detail(self.stdscr, entry)
+            if forms.show_detail(self.stdscr, entry) == 'quit':
+                return False   # q inside the detail view quits the whole app
         elif c == 'e':
-            if forms.edit_entry(self.stdscr, entry):
+            changed, quit_ = forms.edit_entry(self.stdscr, entry)
+            if changed:
                 self.dirty = True
+            if quit_:
+                return False   # q inside the editor quits the whole app
         elif c == 'x':
             if forms.confirm_delete(self.stdscr, entry):
                 self.store.entries.remove(entry)
@@ -291,6 +277,19 @@ class App:
         self.status = 'added: ' + entry.title
 
 
+def _run(scr, store):
+    # A single ESC must register at once. Without this curses waits ~1s after ESC
+    # to see if it starts an escape sequence, so a lone ESC seemed to need a second
+    # keypress to take effect -- 25ms is long enough for real sequences, short
+    # enough to feel instant. Set inside the wrapper (after initscr) so the
+    # terminal is initialised. Fall back silently on the rare build without it.
+    try:
+        curses.set_escdelay(25)
+    except (AttributeError, curses.error):
+        pass
+    return App(scr, store).run()
+
+
 def run(store):
     """Run the UI over store. Returns True if the store was modified."""
-    return curses.wrapper(lambda scr: App(scr, store).run())
+    return curses.wrapper(_run, store)
