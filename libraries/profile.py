@@ -82,6 +82,13 @@ FILE_PERMISSIONS = {
     # with status=203/EXEC (Permission denied) and the home page never listens, so a new
     # tab / the browser home page lands on a dead port. Verified on the built ISO.
     "/usr/local/bin/azarch-timedate": "0:0:755",
+    # The Az'arch `passwords` launcher (the encrypted terminal password manager the user
+    # runs by typing `passwords`). SAME archiso mode-normalization as azarch-install above:
+    # packages/passwords/packaging.PLAN emits it 0755, but the squashfs ships it 0644
+    # (non-executable) unless pinned here -- and then typing `passwords` fails with
+    # "Permission denied" (the shell needs the exec bit to run it) on BOTH the live ISO and
+    # the installed system. Root-owned on PATH, so every user gets the command.
+    "/usr/local/bin/passwords": "0:0:755",
     # The COMPILED application-menu daemon binary (built by application_menu.build_daemon
     # and started from the OpenBox autostart). Same archiso mode-normalization: it is
     # installed 0755, but the squashfs would ship it 0644 unless pinned -- and the

@@ -81,6 +81,20 @@ def test_timedate_launcher_stays_executable():
     assert f'["{launcher}"]="0:0:755"' in profile.profiledef_sh()
 
 
+def test_passwords_launcher_stays_executable():
+    # Regression guard for "typing `passwords` says Permission denied": the `passwords`
+    # command (the encrypted terminal password manager) is /usr/local/bin/passwords, but
+    # archiso's squashfs normalizes the overlay mode to 0644 unless the path is pinned
+    # here -- and a 0644 launcher cannot be exec'd by the shell, so the command fails on
+    # BOTH the live ISO and the installed system (the whole feature is dead). The path
+    # must match packaging.LAUNCHER_SYSTEM_PATH (the command the user types).
+    from packages.passwords import packaging as passwords
+    launcher = passwords.LAUNCHER_SYSTEM_PATH
+    assert launcher == "/usr/local/bin/passwords"
+    assert profile.FILE_PERMISSIONS[launcher] == "0:0:755"
+    assert f'["{launcher}"]="0:0:755"' in profile.profiledef_sh()
+
+
 def test_desktop_installer_launcher_stays_executable():
     # THE WARNING-BADGE FIX: KDE paints an "emblem-important" warning badge over a
     # Desktop .desktop launcher (and prompts on first launch) unless it is executable

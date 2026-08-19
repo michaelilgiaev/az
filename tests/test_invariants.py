@@ -51,6 +51,7 @@ from modifications.calamares import locale
 import pacman
 from packages import pkgbuild
 from packages.timedate import timedate
+from packages.passwords import packaging as passwords
 import profile
 import specification_classify
 import specification_content
@@ -93,6 +94,12 @@ _EMITTERS = [
     # emit_plan builders (app.py, page.py, the launcher, the systemd service) all return
     # real content that compiler.py writes into the airootfs.
     *[(f"timedate:{e['dest']}", e["builder"]) for e in timedate.emit_plan()],
+    # The Az'arch passwords manager (the `passwords` command): its 3 emit_plan builders
+    # (the entry script, the one-time setup script, and the /usr/local/bin/passwords
+    # launcher) all return real content that compiler.py writes into the airootfs. Its
+    # pwlib/ package tree is copied by emit.copy_tree (not a text builder), so it is not
+    # counted here.
+    *[(f"passwords:{e['dest']}", e["builder"]) for e in passwords.emit_plan()],
 ]
 
 
@@ -124,8 +131,10 @@ def test_emitter_family_covers_all_config_modules():
     # librewolf PKGBUILD tiers) + 1 librewolf emit_plan builder (the AutoConfig override,
     # now a home file at the profile path, not a packaged /opt file) + 5 timedate
     # emit_plan builders (app.py, page.py, assets.py, the launcher, the
-    # azarch-timedate.service unit).
-    assert len(_EMITTERS) == 19 + 19 + 6 + 1 + 1 + 4 + 4 + 1 + 5
+    # azarch-timedate.service unit) + 3 passwords emit_plan builders (the entry script, the
+    # one-time setup script, the /usr/local/bin/passwords launcher; the pwlib/ package tree
+    # is copied by emit.copy_tree, not a text builder, so it is not counted here).
+    assert len(_EMITTERS) == 19 + 19 + 6 + 1 + 1 + 4 + 4 + 1 + 5 + 3
 
 
 def test_recipe_dir_contents_are_nonempty_str_both_tiers():

@@ -43,6 +43,7 @@ from packages.application_menu import application_menu
 from packages.azarch import terminal_user_interface_build
 from packages.azarch import default_applications
 from packages.timedate import timedate
+from packages.passwords import packaging as passwords
 from modifications.calamares import calamares
 from modifications.calamares import locale
 from modifications import openbox
@@ -459,6 +460,24 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
             entry["builder"](),
             mode=entry["mode"],
         )
+    # Az'arch passwords (OUR encrypted GPG/AES256 terminal password manager -- the
+    # `passwords` command). A pure-Python app like timedate: emit_plan() writes the three
+    # top-level files (the entry script, the one-time setup script, and the
+    # /usr/local/bin/passwords launcher) to their fixed root-owned system paths, then the
+    # pwlib/ package tree is copied wholesale (the emit_plan builder/dest/mode contract is
+    # one-file-per-entry and cannot express a directory). No systemd service -- it is an
+    # interactive command, not a boot service. Its runtime deps (gnupg for gpg, xclip for
+    # the clipboard) are in the manifest. The OFFLINE Calamares install rsyncs all of it
+    # onto the installed system, so `passwords` works there too, unlocking a store at
+    # ~/Vault/passwords.txt.gpg. See packages/passwords/packaging.py.
+    for entry in passwords.emit_plan():
+        emit.write_text(
+            airootfs / entry["dest"].lstrip("/"),
+            entry["builder"](),
+            mode=entry["mode"],
+        )
+    emit.copy_tree(passwords.PWLIB_SRC_DIR,
+                   airootfs / passwords.PWLIB_SYSTEM_DIR.lstrip("/"))
     # re-assert ownership of the live user's tree (new files were added under it).
     subprocess.run(_sudo() + ["chown", "-R", "1000:998", str(home)], check=False)
 

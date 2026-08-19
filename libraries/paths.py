@@ -117,6 +117,13 @@ APPLICATION_MENU_DIR = PACKAGESDIR / "application_menu"
 # It is OUR package (a website we author), so it lives under libraries/packages/, not
 # modifications/. Served at localhost:49154; LibreWolf's default home/new-tab page.
 TIMEDATE_DIR = PACKAGESDIR / "timedate"
+# The Az'arch passwords package (encrypted GPG/AES256 terminal password manager): the
+# entry script (passwords.py), the one-time setup script, the pwlib/ package, and
+# packaging.py (the build wiring that copies them into the airootfs and installs the
+# /usr/local/bin/passwords launcher). A pure-Python app we author, so it lives under
+# libraries/packages/ like timedate. The `passwords` command unlocks a store at
+# ~/Vault/passwords.txt.gpg (see packages/passwords/pwlib/config.py).
+PASSWORDS_DIR = PACKAGESDIR / "passwords"
 # The `azarch` guest command line interface is a Python PACKAGE now (libraries/packages/azarch/): it grew a
 # `theme` subcommand (and more to come), so the single module was split into small modules
 # (common, country_table, resolver, theme, sshd, command_line_interface). The single /usr/local/bin/azarch
