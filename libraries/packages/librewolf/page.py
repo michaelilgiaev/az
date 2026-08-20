@@ -1,6 +1,6 @@
 """The timedate home page markup + styling (one self-contained HTML document).
 
-Split out of app.py so the Flask wiring stays small and the look lives on its own. This
+Split out of applications.py so the Flask wiring stays small and the look lives on its own. This
 is the site LibreWolf lands on: a calm, self-contained TIME + DATE page -- no todos, no
 task recording, just a really good clock and calendar for the end user.
 
@@ -75,7 +75,7 @@ _DEFAULT_LATITUDE = _ZONE_LATITUDE["Asia/Jerusalem"]
 def seed_latitude(zone_name: str) -> float:
     """A rough latitude for the seed sun-arc, by zone. Only affects the seed paint and the
     /api/now refinement (the client places the body from it); unknown zones use the distro
-    default so it is never wildly off. Public so app.py can send it on /api/now, keeping
+    default so it is never wildly off. Public so applications.py can send it on /api/now, keeping
     the zone->latitude table a single source of truth here in the page module."""
     return _ZONE_LATITUDE.get(zone_name, _DEFAULT_LATITUDE)
 

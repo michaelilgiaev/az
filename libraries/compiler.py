@@ -465,7 +465,7 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
     )
     # Az'arch timedate (OUR Flask Time + Calendar home page -- the site LibreWolf lands
     # on at localhost:49154). A pure-Python app: emit_plan() copies the app sources
-    # (app.py/page.py), the launcher, and the azarch-timedate.service unit to their fixed
+    # (applications.py/page.py), the launcher, and the azarch-timedate.service unit to their fixed
     # root-owned system paths. The service ENABLE-symlink is added in _link_services (like
     # the other azarch units); the OFFLINE Calamares install rsyncs all of it onto the
     # installed system so the home page also runs at boot there. Its runtime dep

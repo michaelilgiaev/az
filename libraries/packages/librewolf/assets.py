@@ -5,7 +5,7 @@ inlines into the ONE self-contained document it serves.
 Split out of page.py so that module stays a slim orchestrator (seed values + document
 assembly) and the bulky markup/styling/behaviour live on their own, keeping every file
 comfortably under the project's size guideline. This is still OUR package's source: it is
-installed beside app.py and page.py (see timedate.PLAN) and imported at runtime as
+installed beside applications.py and page.py (see timedate.PLAN) and imported at runtime as
 `import assets`.
 
 Nothing here holds state or touches the network; the builders are pure functions of their

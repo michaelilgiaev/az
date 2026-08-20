@@ -1,12 +1,12 @@
 """Az'arch timedate -- build wiring for the Flask Time + Calendar home page.
 
-This is the LibreWolf default home page: a small local Flask website (app.py + page.py,
+This is the LibreWolf default home page: a small local Flask website (applications.py + page.py,
 right beside this module) that shows the current time (hour/minute/seconds) and a
 calendar (day/month/year), served at localhost:49154. It runs in the BACKGROUND as a
 systemd service that starts at boot, and LibreWolf lands on it on startup / Home / new
 tab (see packages/librewolf). The timezone follows the SYSTEM live -- default
 Asia/Jerusalem (set by Calamares), updating itself if the user changes it by any means
-(app.py reads /etc/localtime on every request).
+(applications.py reads /etc/localtime on every request).
 
 Mirrors packages/application_menu/application_menu.py: our OWN package, so the sources
 live directly in this dir next to the build wiring, and compiler.py iterates emit_plan()
@@ -17,13 +17,13 @@ compile): emit_plan() just copies the .py sources + the launcher + the .service 
 
 Layers:
   * SOURCE tree -- libraries/packages/librewolf/ (paths.TIMEDATE_DIR):
-      app.py      the Flask app (routes: / , /api/now , /healthz); reads the system zone
+      applications.py      the Flask app (routes: / , /api/now , /healthz); reads the system zone
       page.py     assembles the self-contained page (seed values + document)
       assets.py   the bulky builders page.py inlines: analog-clock SVG, CSS, client script
       timedate.py THIS module -- the install paths, the systemd unit, and emit_plan()
   * INSTALLED layout (root-owned):
-      /usr/local/lib/azarch-timedate/{app,page,assets}.py   the app
-      /usr/local/bin/azarch-timedate                    a 3-line launcher (python app.py)
+      /usr/local/lib/azarch-timedate/{applications,page,assets}.py   the app
+      /usr/local/bin/azarch-timedate                    a 3-line launcher (python applications.py)
       /etc/systemd/system/azarch-timedate.service       the background service (boot)
     The service enable-symlink (multi-user.target.wants) is added by compiler._link_services.
 
@@ -38,7 +38,7 @@ import paths
 
 # --- Fixed contract: the port the whole system agrees on --------------------
 # The one port LibreWolf's home/new-tab URL and this service both use. Kept in lock-step
-# with packages/librewolf/app.PORT and packages/librewolf.TIMEDATE_URL (a test pins it).
+# with packages/librewolf/applications.PORT and packages/librewolf.TIMEDATE_URL (a test pins it).
 PORT = 49154
 URL = f"http://localhost:{PORT}"
 
@@ -46,10 +46,10 @@ URL = f"http://localhost:{PORT}"
 # Where the app lands in the live/installed rootfs. Under /usr/local (our stuff), so the
 # OFFLINE install's unpackfs rsync carries it to the target unchanged.
 LIB_DIR = "/usr/local/lib/azarch-timedate"
-APP_SYSTEM_PATH = f"{LIB_DIR}/app.py"
+APPLICATION_SYSTEM_PATH = f"{LIB_DIR}/applications.py"
 PAGE_SYSTEM_PATH = f"{LIB_DIR}/page.py"
 # page.py imports the bulky markup/style/script builders from assets.py; it must land beside
-# app.py/page.py in LIB_DIR or the app crashes at `import assets`.
+# applications.py/page.py in LIB_DIR or the app crashes at `import assets`.
 ASSETS_SYSTEM_PATH = f"{LIB_DIR}/assets.py"
 # The bin entry point the systemd unit runs: a tiny wrapper that execs the app with the
 # system python, from LIB_DIR (so `import page` / `import assets` resolves). Executable.
@@ -58,7 +58,7 @@ SERVICE_NAME = "azarch-timedate.service"
 SERVICE_SYSTEM_PATH = f"/etc/systemd/system/{SERVICE_NAME}"
 
 # --- Source files (in the repo) ---------------------------------------------
-_SRC_APP = "app.py"
+_SRC_APPLICATION = "applications.py"
 _SRC_PAGE = "page.py"
 _SRC_ASSETS = "assets.py"
 
@@ -68,15 +68,15 @@ def _read_source(name: str) -> str:
     return (paths.TIMEDATE_DIR / name).read_text(encoding="utf-8")
 
 
-def app_py() -> str:
-    """The Flask app (app.py), verbatim from the source tree. Installed to
-    APP_SYSTEM_PATH. Reads the system timezone live and serves the page + /api/now."""
-    return _read_source(_SRC_APP)
+def application_py() -> str:
+    """The Flask application (applications.py), verbatim from the source tree. Installed to
+    APPLICATION_SYSTEM_PATH. Reads the system timezone live and serves the page + /api/now."""
+    return _read_source(_SRC_APPLICATION)
 
 
 def page_py() -> str:
     """The page renderer (page.py), verbatim from the source tree. Installed to
-    PAGE_SYSTEM_PATH beside app.py (app.py does `from page import render`)."""
+    PAGE_SYSTEM_PATH beside applications.py (applications.py does `from page import render`)."""
     return _read_source(_SRC_PAGE)
 
 
@@ -90,16 +90,16 @@ def assets_py() -> str:
 def launcher_sh() -> str:
     """A tiny launcher installed as the bin entry point the systemd unit runs.
 
-    It cd's into LIB_DIR (so `import page` inside app.py resolves without packaging) and
-    execs the system python on app.py, which binds 0.0.0.0:PORT. `exec` so the python
-    process replaces the shell and systemd tracks it directly (clean stop/restart).
+    It cd's into LIB_DIR (so `import page` inside applications.py resolves without packaging)
+    and execs the system python on applications.py, which binds 0.0.0.0:PORT. `exec` so the
+    python process replaces the shell and systemd tracks it directly (clean stop/restart).
     `-u` (unbuffered) so logs reach the journal promptly."""
     return f"""\
 #!/bin/sh
 # azarch-timedate -- launch the Flask Time + Calendar home page (localhost:{PORT}).
 # Generated by packages/librewolf/timedate.py (edit the Python, not this file).
 cd '{LIB_DIR}' || exit 1
-exec python -u app.py
+exec python -u applications.py
 """
 
 
@@ -171,7 +171,7 @@ _EXEC = 0o755
 _CONF = 0o644
 
 PLAN = [
-    {"builder": app_py, "dest": APP_SYSTEM_PATH, "mode": _CONF},
+    {"builder": application_py, "dest": APPLICATION_SYSTEM_PATH, "mode": _CONF},
     {"builder": page_py, "dest": PAGE_SYSTEM_PATH, "mode": _CONF},
     {"builder": assets_py, "dest": ASSETS_SYSTEM_PATH, "mode": _CONF},
     {"builder": launcher_sh, "dest": LAUNCHER_SYSTEM_PATH, "mode": _EXEC},

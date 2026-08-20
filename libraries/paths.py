@@ -117,7 +117,7 @@ PACKAGES_FILE = PACKAGESDIR / "packages.x86_64"
 # pure-Python launcher (launcher.py), and generates the .desktop entry. The whole menu
 # is OURS, so it is a package here, not a patch.
 APPLICATION_MENU_DIR = PACKAGESDIR / "application_menu"
-# The Az'arch timedate site (Flask Time + Calendar home page): app.py/page.py/assets.py +
+# The Az'arch timedate site (Flask Time + Calendar home page): applications.py/page.py/assets.py +
 # timedate.py (the build wiring that copies them into the airootfs, installs the launcher, and
 # ships the systemd service). LibreWolf lands on this page (startup + Home), so the site was
 # FOLDED INTO the librewolf package as sibling submodules -- its sources live in

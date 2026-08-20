@@ -16,7 +16,7 @@ Python; it only shows up as a blank home page on the built ISO. These tests pin:
 
   * the emit_plan() dest/mode table + that it does not mutate module state,
   * the systemd unit (Type/ExecStart/Restart/WantedBy=multi-user.target + hardening),
-  * the launcher (execs `python app.py` from the install dir),
+  * the launcher (execs `python applications.py` from the install dir),
   * the PORT lock-step between the app, this package, and packages/librewolf.TIMEDATE_URL,
   * that packages/librewolf now makes the timedate URL the home + startup page,
   * page.render()'s self-contained HTML (seeds the time, embeds the system zone, ships
@@ -24,7 +24,7 @@ Python; it only shows up as a blank home page on the built ISO. These tests pin:
     including its four end-user features: the 12-hour AM/PM digital readout, the round
     analog clock (SVG hands), the navigable month calendar (page-through, display-only),
     and the sun/moon horizon arc (client-side solar-position, seeded per-zone latitude),
-  * the /etc/localtime -> IANA-zone resolution algorithm app.py uses to follow the
+  * the /etc/localtime -> IANA-zone resolution algorithm applications.py uses to follow the
     system timezone live.
 """
 
@@ -50,13 +50,13 @@ def test_port_is_49154_everywhere():
     assert td.URL == "http://localhost:49154"
     assert librewolf.TIMEDATE_URL == td.URL
     # The app source hard-codes the same port (it binds it); pin that too.
-    assert "PORT = 49154" in td.app_py()
-    assert 'app.run(host="0.0.0.0", port=PORT' in td.app_py()
+    assert "PORT = 49154" in td.application_py()
+    assert 'app.run(host="0.0.0.0", port=PORT' in td.application_py()
 
 
 # --- emit_plan() contract ---------------------------------------------------
 EXPECTED_PLAN = {
-    "/usr/local/lib/azarch-timedate/app.py": 0o644,
+    "/usr/local/lib/azarch-timedate/applications.py": 0o644,
     "/usr/local/lib/azarch-timedate/page.py": 0o644,
     "/usr/local/lib/azarch-timedate/assets.py": 0o644,
     "/usr/local/bin/azarch-timedate": 0o755,
@@ -143,11 +143,11 @@ def test_service_name_constants_agree():
 # --- launcher ---------------------------------------------------------------
 def test_launcher_execs_python_app_from_install_dir():
     """The launcher cd's into the install dir (so `import page` resolves) and execs the
-    system python on app.py. `exec` so systemd supervises the python process directly."""
+    system python on applications.py. `exec` so systemd supervises the python process directly."""
     sh = td.launcher_sh()
     assert sh.startswith("#!/bin/sh")
     assert f"cd '{td.LIB_DIR}'" in sh
-    assert "exec python -u app.py" in sh
+    assert "exec python -u applications.py" in sh
 
 
 # --- LibreWolf lands on the timedate page -----------------------------------
@@ -337,7 +337,7 @@ def test_page_escapes_the_zone_name():
 
 
 # --- the /etc/localtime -> IANA-zone algorithm (follows the system live) -----
-# app.py needs Flask to import, so we re-express its resolution algorithm here and pin
+# applications.py needs Flask to import, so we re-express its resolution algorithm here and pin
 # the behaviour the app source declares (constants + the realpath-strip contract). This
 # is the mechanism that makes the page track a timezone change made by ANY tool.
 def _zone_from_localtime(localtime: str, zoneinfo_dir: str) -> str | None:
@@ -372,7 +372,7 @@ def test_zone_resolution_follows_the_symlink(tmp_path):
 
 
 def test_zone_resolution_falls_back_when_missing(tmp_path):
-    """No /etc/localtime -> None (app.py then uses FALLBACK_ZONE); a target outside the
+    """No /etc/localtime -> None (applications.py then uses FALLBACK_ZONE); a target outside the
     zoneinfo tree -> None. The home page must never 500 over timezone plumbing."""
     zi = tmp_path / "zoneinfo"
     zi.mkdir()
@@ -390,7 +390,7 @@ def test_app_declares_the_localtime_source_and_fallback():
     """The app must read the real system-zone source (/etc/localtime under
     /usr/share/zoneinfo) and default to Asia/Jerusalem -- the distro default the spec
     names. Pinned against the app source so the contract cannot silently change."""
-    src = td.app_py()
+    src = td.application_py()
     assert 'LOCALTIME_PATH = "/etc/localtime"' in src
     assert 'ZONEINFO_DIR = "/usr/share/zoneinfo"' in src
     assert 'FALLBACK_ZONE = "Asia/Jerusalem"' in src

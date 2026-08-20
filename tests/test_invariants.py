@@ -91,7 +91,7 @@ _EMITTERS = [
     # path (not packaged under /opt) -- exercise its emit_plan builder too.
     *[(f"librewolf:{e['dest']}", e["builder"]) for e in librewolf.emit_plan()],
     # The Az'arch timedate home page (Flask Time + Calendar at localhost:49154): its 4
-    # emit_plan builders (app.py, page.py, the launcher, the systemd service) all return
+    # emit_plan builders (applications.py, page.py, the launcher, the systemd service) all return
     # real content that compiler.py writes into the airootfs.
     *[(f"timedate:{e['dest']}", e["builder"]) for e in timedate.emit_plan()],
     # The Az'arch passwords manager (the `passwords` command): the app is ONE flat directory
@@ -130,7 +130,7 @@ def test_emitter_family_covers_all_config_modules():
     # locale + profile + 4 pacman + 4 pkgbuild (calamares + librewolf.desktop + the two
     # librewolf PKGBUILD tiers) + 1 librewolf emit_plan builder (the AutoConfig override,
     # now a home file at the profile path, not a packaged /opt file) + 5 timedate
-    # emit_plan builders (app.py, page.py, assets.py, the launcher, the
+    # emit_plan builders (applications.py, page.py, assets.py, the launcher, the
     # azarch-timedate.service unit) + 14 passwords emit_plan builders (the app is one flat
     # directory now: the entry script, the optional plaintext importer, the 11 working modules
     # -- __init__, config, cryptography, model, clipboard, clipboard_owner, forms, new_entry,
