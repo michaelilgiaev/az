@@ -30,7 +30,7 @@ import types
 import pytest
 
 from packages.azarch.bundle import bundle_source, MODULE_ORDER
-from modifications import openbox as desktop
+from packages import openbox as desktop
 import paths
 import profile as profiledef
 

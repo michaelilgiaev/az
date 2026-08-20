@@ -2,7 +2,7 @@
 resulting *.pkg.tar.zst into the offline repo the rest of the build already uses.
 
 Everything not in the official Arch repos is built from recipes WE author in
-packages.pkgbuild -- never the AUR, never an AUR helper. This module is the
+pkgbuild -- never the AUR, never an AUR helper. This module is the
 runner: it emits those recipes into a scratch dir, ensures the host has the
 makedepends, runs `makepkg` as an UNPRIVILEGED user (makepkg refuses root), and
 copies the built packages into cache/pkgs/repo/ so the normal index-reconcile
@@ -17,7 +17,7 @@ and is now AUR-only). --full-compile only changes the RECIPE, not the set:
                  full = build from Firefox source.
   * calamares -> always compiled from the pinned-sha256 source tarball (there is
                  no Arch binary to install anymore).
-packages.pkgbuild.recipe_dirs(full_compile) picks the recipe set; produced_names()
+pkgbuild.recipe_dirs(full_compile) picks the recipe set; produced_names()
 below returns the (now tier-independent) set of names built HERE.
 
 Offline policy: makepkg needs to FETCH sources (the calamares/firefox/librewolf
@@ -41,7 +41,7 @@ from typing import Callable
 import emit
 import logstream
 import paths
-from packages import pkgbuild as pkgbuild_cfg
+import pkgbuild as pkgbuild_cfg
 
 ProgressCb = Callable[[int], None]
 
@@ -61,7 +61,7 @@ BUILDER_USER = "azarchbuilder"
 #
 # `thunar` is DIFFERENT from calamares/librewolf: it IS a real Arch package (in extra/ and in
 # the manifest packages.x86_64), which Az'arch REBUILDS from source with a symlink-resolve patch
-# (packages.pkgbuild.pkgbuild_thunar, pkgrel 2 so ours outranks extra/'s -1). Listing it here
+# (pkgbuild.pkgbuild_thunar, pkgrel 2 so ours outranks extra/'s -1). Listing it here
 # excludes it from the Arch `pacman -Sw` download -- so ONLY our patched thunar lands in the
 # offline repo (no redundant fetch of extra/'s, and no ambiguity about which is installed). The
 # manifest still lists `thunar` (it must be pacstrapped); it is simply satisfied from our repo.
@@ -234,7 +234,7 @@ def _repo_has_all(pkg_repo: Path, names: tuple[str, ...]) -> bool:
 
 
 def _emit_recipes(scratch: Path, full_compile: bool) -> list[Path]:
-    """Write each recipe dir (PKGBUILD + companions) from packages.pkgbuild into
+    """Write each recipe dir (PKGBUILD + companions) from pkgbuild into
     scratch/. Returns the list of recipe dirs to build, in order."""
     dirs: list[Path] = []
     for dirname, files in pkgbuild_cfg.recipe_dirs(full_compile):

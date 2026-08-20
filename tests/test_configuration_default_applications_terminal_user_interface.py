@@ -39,7 +39,7 @@ def _model_c() -> str:
 def test_cli_da_categories_mirror_the_single_source():
     cli = _bundled()
     # keys + labels + groups + mimes + candidates must match default_applications exactly.
-    src_rows = da.tui_categories()   # (group, label, key, default_id), in order (Mail included)
+    src_rows = da.terminal_user_interface_categories()   # (group, label, key, default_id), in order (Mail included)
     # the CLI table omits Mail? No -- it includes every CATEGORIES row EXCEPT Mail is present in
     # default_applications but the TUI list omits it. The CLI mirrors the FULL set incl. Mail
     # (so `get mail` works), so compare against CATEGORIES directly.
@@ -125,8 +125,8 @@ def test_model_c_defaultapps_list_screen_present():
     assert '.id="defaultapps"' in model
     # every TUI category (Mail excluded) is a row on the list screen that descends into its
     # per-category screen id, using the EXACT key from default_applications.CATEGORY_KEYS.
-    tui_labels = [label for _g, label, _d, _m in da.CATEGORIES if label != "Mail"]
-    for label in tui_labels:
+    terminal_user_interface_labels = [label for _g, label, _d, _m in da.CATEGORIES if label != "Mail"]
+    for label in terminal_user_interface_labels:
         key = da.CATEGORY_KEYS[label]
         assert f'.target="defaultapps.{key}"' in model, key
         # the category row label appears (as a ROWS_DEFAULTAPPS entry).

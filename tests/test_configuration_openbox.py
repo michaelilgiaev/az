@@ -1,4 +1,4 @@
-"""modifications.openbox -- the OpenBox live-session configuration-as-Python payloads.
+"""packages.openbox -- the OpenBox live-session configuration-as-Python payloads.
 
 Why these tests matter: compiler.py never inspects the CONTENT of these builders;
 it blindly iterates PLAN/emit_plan() and calls emit.write_text/write_exec with
@@ -29,7 +29,7 @@ import importlib.util
 
 import pytest
 
-from modifications import openbox as desktop
+from packages import openbox as desktop
 
 
 def _load_azarch_command_line_interface():
@@ -905,7 +905,7 @@ def test_install_wrapper_is_sh_script():
 
 
 # --- azarch --sshd-hypervisor guest command line interface (now pure Python) -------------------
-# The `azarch` guest command line interface is a single Python module (libraries/packages/azarch.py);
+# The `azarch` guest command line interface is a single Python module (libraries/packages/azarch);
 # desktop.azarch_command_line_interface() ships it to /usr/local/bin/azarch with the country table
 # re-injected from packages/calamares/locale. These tests assert on that emitted Python.
 

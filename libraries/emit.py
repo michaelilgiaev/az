@@ -1,6 +1,6 @@
 """Emit contract: write configuration-as-Python content out as real files in the ISO tree.
 
-The configuration modules (``modifications.*``) hold each artifact's content as a
+The package configuration modules (``packages.*``) hold each artifact's content as a
 Python string. These helpers place that content on disk with the right mode,
 and copy the few verbatim data files. This is the seam between "configuration as data"
 (the strings) and "build logic" (where they go).
@@ -40,7 +40,7 @@ def write_exec(path: Path, text: str) -> Path:
 def write_bytes(path: Path, data: bytes, mode: int = 0o644) -> Path:
     """Write generated BINARY content verbatim (no newline normalization), creating parent
     dirs. For artifacts whose bytes are meaningful and must not be touched -- e.g. a compiled
-    gettext .mo catalog (modifications/thunar/locale.mo_bytes)."""
+    gettext .mo catalog (packages/thunar/locale.mo_bytes)."""
     path = Path(path)
     _ensure_parent(path)
     path.write_bytes(data)
@@ -51,8 +51,10 @@ def write_bytes(path: Path, data: bytes, mode: int = 0o644) -> Path:
 def copy_data(rel: str, dest: Path, mode: int | None = None) -> Path:
     """Copy a verbatim file from libraries/packages/<rel> to dest.
 
-    (Historically libraries/data/; the tree was consolidated under
-    libraries/packages/. The function name is kept for call-site stability.)"""
+    Used for the few files a package ships byte-for-byte rather than generating from a Python
+    string -- e.g. the vendored ckbcomp script (packages/calamares/ckbcomp.py -> /usr/bin/ckbcomp).
+    (The function name predates the tree consolidation under libraries/packages/ and is kept for
+    call-site stability.)"""
     src = paths.PACKAGESDIR / rel
     dest = Path(dest)
     _ensure_parent(dest)
@@ -65,23 +67,6 @@ def copy_data(rel: str, dest: Path, mode: int | None = None) -> Path:
 def copy_asset(rel: str, dest: Path, mode: int | None = None) -> Path:
     """Copy a verbatim file from assets/<rel> to dest (binaries, scripts, images)."""
     src = paths.ASSETSDIR / rel
-    dest = Path(dest)
-    _ensure_parent(dest)
-    shutil.copy2(src, dest)
-    if mode is not None:
-        os.chmod(dest, mode)
-    return dest
-
-
-def copy_modification_file(rel: str, dest: Path, mode: int | None = None) -> Path:
-    """Copy a verbatim file from a modification package under libraries/modifications/<rel>.
-
-    Modifications are existing UPSTREAM tools modified to fit Az'arch -- currently the
-    vendored ckbcomp (a Python 3 port of the upstream Perl ckbcomp), shipped as the
-    directory module libraries/modifications/ckbcomp/ (its ckbcomp.py holds the script,
-    passed here as "ckbcomp/ckbcomp.py") and copied to /usr/bin/ckbcomp.
-    """
-    src = paths.MODIFICATIONSDIR / rel
     dest = Path(dest)
     _ensure_parent(dest)
     shutil.copy2(src, dest)

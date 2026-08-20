@@ -18,18 +18,18 @@ def test_repodir_is_repo_root():
 
 
 def test_static_dirs_are_under_repodir():
-    for d in (paths.LIBDIR, paths.PACKAGESDIR, paths.MODIFICATIONSDIR, paths.ASSETSDIR,
+    for d in (paths.LIBDIR, paths.PACKAGESDIR, paths.ASSETSDIR,
               paths.PKGDIR, paths.CACHEDIR, paths.BUILDDIR, paths.LOGDIR,
               paths.CKBCOMP_SRC):
         assert str(d).startswith(str(paths.REPODIR))
 
 
-def test_ckbcomp_src_is_a_modification_package():
-    # Every modification is a directory module now, so ckbcomp lives at
-    # modifications/ckbcomp/ with its vendored script at ckbcomp/ckbcomp.py (still emitted to
-    # /usr/bin/ckbcomp without the suffix).
-    assert paths.MODIFICATIONSDIR == paths.REPODIR / "libraries" / "modifications"
-    assert paths.CKBCOMP_SRC == paths.MODIFICATIONSDIR / "ckbcomp" / "ckbcomp.py"
+def test_ckbcomp_src_is_a_calamares_companion_file():
+    # ckbcomp is a companion file of the calamares package (Calamares is the only thing that
+    # shells out to it), so its vendored script lives at packages/calamares/ckbcomp.py (still
+    # emitted to /usr/bin/ckbcomp without the .py suffix).
+    assert paths.CKBCOMP_SRC == paths.PACKAGESDIR / "calamares" / "ckbcomp.py"
+    assert paths.CKBCOMP_SRC.is_file()
 
 
 def test_packagesdir_is_libraries_packages():

@@ -44,13 +44,13 @@ import downloader
 import paths
 
 from packages.calamares import calamares
-from modifications import openbox as desktop
-from modifications import librewolf
+from packages import openbox as desktop
+from packages import librewolf
 import installer
 from packages.calamares import locale
 import pacman
-from packages import pkgbuild
-from packages.timedate import timedate
+import pkgbuild
+from packages.librewolf import timedate
 from packages.passwords import packaging as passwords
 import profile
 import specification_classify

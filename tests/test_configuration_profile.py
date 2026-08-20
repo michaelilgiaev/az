@@ -1,4 +1,4 @@
-"""modifications.profile -- profiledef.sh (the archiso profile mkarchiso sources).
+"""profile.py -- profiledef.sh (the archiso profile mkarchiso sources).
 
 The file_permissions map is load-bearing: archiso NORMALIZES overlay file modes
 when it packs the squashfs, so any path that must stay executable in the live ISO
@@ -74,7 +74,7 @@ def test_timedate_launcher_stays_executable():
     # launcher makes systemd fail the unit with status=203/EXEC (Permission denied), so
     # nothing listens on 49154 and LibreWolf's home/new tab shows a dead page. The path
     # must match timedate.LAUNCHER_SYSTEM_PATH (the ExecStart target).
-    from packages.timedate import timedate
+    from packages.librewolf import timedate
     launcher = timedate.LAUNCHER_SYSTEM_PATH
     assert launcher == "/usr/local/bin/azarch-timedate"
     assert profile.FILE_PERMISSIONS[launcher] == "0:0:755"

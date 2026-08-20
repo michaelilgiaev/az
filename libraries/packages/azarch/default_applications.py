@@ -28,7 +28,7 @@ Thunar's "Open Terminal Here" uses (`exo-open --launch TerminalEmulator`). We sh
   * a kitty TerminalEmulator HELPER .desktop (/usr/share/xfce4/helpers/kitty.desktop, an
     X-XFCE-Helper in the TerminalEmulator category) so exo knows how to launch kitty.
 VERIFIED in the VM: with both in place, `exo-open --launch TerminalEmulator` (and with
---working-directory) opens kitty. (modifications/thunar's uca.xml ALSO runs kitty directly for
+--working-directory) opens kitty. (packages/thunar's uca.xml ALSO runs kitty directly for
 its Open Terminal Here action, so the terminal is kitty by both paths.)
 
 THE FILE MANAGER default is Thunar via inode/directory (in CATEGORIES below) AND exo's
@@ -222,7 +222,7 @@ def representative_mime(label: str) -> str:
     return ""
 
 
-def tui_categories() -> list[tuple[str, str, str, str]]:
+def terminal_user_interface_categories() -> list[tuple[str, str, str, str]]:
     """Return the ordered rows the TUI's Default Applications screen shows, as
     (group, label, key, default_desktop_id) -- derived from CATEGORIES (the single source of
     truth). The C model and the CLI are pinned to this order/labels by tests."""

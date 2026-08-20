@@ -1,4 +1,4 @@
-"""modifications.scale -- the SINGLE global-scale source of truth (PROMPT Display/scale task).
+"""packages.openbox.scale -- the SINGLE global-scale source of truth (PROMPT Display/scale task).
 
 Why these tests matter: the whole point is ONE scale that every app derives from. These pin:
   * the channel math (Xft.dpi / gtk-xft-dpi / Xcursor.size / GDK / Qt),
@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import types
 
-from modifications import scale
-from modifications import openbox
-from modifications import kitty
-from modifications import gedit
+from packages.openbox import scale
+from packages import openbox
+from packages import kitty
+from packages import gedit
 
 
 # --- the channel math -------------------------------------------------------
@@ -121,5 +121,5 @@ def test_only_one_scale_no_second_hardcoded_dpi():
     theme_py = (paths.LIBDIR / "packages/azarch/theme.py").read_text()
     assert "gtk-xft-dpi" not in theme_py
     # openbox default settings.ini must NOT carry gtk-xft-dpi either (same reason).
-    from modifications import openbox as ob
+    from packages import openbox as ob
     assert "gtk-xft-dpi" not in ob.gtk3_settings_ini_default()

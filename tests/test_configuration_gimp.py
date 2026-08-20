@@ -1,4 +1,4 @@
-"""modifications.gimp -- skip GIMP's first-run / introduction dialogs (config-only).
+"""packages.gimp -- skip GIMP's first-run / introduction dialogs (config-only).
 
 Why these tests matter: compiler._emit_apps blindly writes emit_plan() to
 ~/.config/GIMP/3.2/gimprc (+ /etc/skel). The suppression depends on the exact gimprc keys
@@ -10,7 +10,7 @@ no .desktop Exec override, no wrapper/helper, no preload).
 
 from __future__ import annotations
 
-from modifications import gimp
+from packages import gimp
 
 
 def test_emit_plan_is_single_home_gimprc():

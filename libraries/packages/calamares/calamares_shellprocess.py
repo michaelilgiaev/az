@@ -47,7 +47,7 @@ INSTALLER_SKEL_LAUNCHER = "/etc/skel/Desktop/azarch-install.desktop"
 #     region the user picked (so every install would come up US+Hebrew regardless).
 #   * the first-run Calamares launch -- wrong on an already-installed system.
 # The fix: OVERWRITE the target's autostart (home + skel) with the "installed" variant
-# staged on the ISO (modifications/openbox.openbox_autostart_installed, at
+# staged on the ISO (packages/openbox.openbox_autostart_installed, at
 # openbox.INSTALLED_AUTOSTART_STAGING_PATH), which keeps only the shared wallpaper/xcape/
 # menu-daemon block. `cp` (not an edit) so the result is deterministic and needs no `$`.
 INSTALLED_OPENBOX_AUTOSTART = f"/home/{LIVE_USER}/.config/openbox/autostart"
@@ -55,8 +55,8 @@ INSTALLED_SKEL_OPENBOX_AUTOSTART = "/etc/skel/.config/openbox/autostart"
 
 # The staged "installed" autostart on the target (unpackfs copied the whole live rootfs,
 # so this root-owned system file is present in the target chroot). Kept as a module
-# constant, imported from the modifications/openbox package, so the staging path and the copy agree.
-from modifications import openbox as _openbox  # noqa: E402  (single source of truth for the path)
+# constant, imported from the packages/openbox package, so the staging path and the copy agree.
+from packages import openbox as _openbox  # noqa: E402  (single source of truth for the path)
 
 INSTALLED_AUTOSTART_SRC = _openbox.INSTALLED_AUTOSTART_STAGING_PATH
 # The system-wide application-menu launcher for the installer, removed on the installed

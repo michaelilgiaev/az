@@ -3,7 +3,7 @@
 
 Az'arch ships TWO wallpapers on the medium, both under the standard system wallpaper dir
 /usr/share/wallpapers (each as .../<id>/contents/images/<W>x<H>.png -- the layout
-modifications/openbox emits and compiler.py fills). The OpenBox session paints one of them
+packages/openbox emits and compiler.py fills). The OpenBox session paints one of them
 onto the X root with feh (from ~/.xinitrc and the OpenBox autostart); "years" is the
 shipped default.
 
@@ -19,7 +19,7 @@ applies live:
 
   * PERSIST: the chosen image's absolute path is written to ~/.config/azarch/wallpaper (a
     one-line pointer file). The OpenBox session's wallpaper step (~/.xinitrc and
-    ~/.config/openbox/autostart, both from modifications/openbox) reads THIS file if it
+    ~/.config/openbox/autostart, both from packages/openbox) reads THIS file if it
     exists and paints that image, falling back to the shipped "years" default when it is
     absent -- so the choice survives a re-login, while a fresh user still gets "years".
   * LIVE: if a session is up (DISPLAY set) and feh is installed, repaint the root pixmap
@@ -29,7 +29,7 @@ applies live:
 Runs WITHOUT sudo: it only writes the user's own config pointer and repaints the user's
 own X root (exactly like `azarch theme`). Standard library only (this module is bundled
 into the single /usr/local/bin/azarch script; see common.py). The wallpaper paths here are
-kept in lock-step with modifications/openbox (a test pins them) so the command line interface and the shipped
+kept in lock-step with packages/openbox (a test pins them) so the command line interface and the shipped
 images can never disagree.
 """
 
@@ -38,7 +38,7 @@ from __future__ import annotations
 # BUNDLE_START
 
 # The two wallpapers shipped under the standard system wallpaper dir. Kept in lock-step
-# with modifications/openbox (WALLPAPERS_SYSTEM_DIR / WALLPAPER_IMAGE_RES / WALLPAPER_PACKAGES);
+# with packages/openbox (WALLPAPERS_SYSTEM_DIR / WALLPAPER_IMAGE_RES / WALLPAPER_PACKAGES);
 # a test (test_configuration_wallpaper) pins these against those constants so the command line interface and the
 # emitted images cannot drift. feh needs a real FILE (not a dir), so each id resolves to the
 # inner .../<id>/contents/images/<W>x<H>.png the compiler writes.

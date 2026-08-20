@@ -264,7 +264,7 @@ def test_launcher_is_a_binary_on_path_not_a_bashrc_command():
 
 
 # --- the reworked TUI navigation (azarch-style) -----------------------------
-def test_tui_nav_mirrors_azarch_and_drops_open_and_help():
+def test_terminal_user_interface_nav_mirrors_azarch_and_drops_open_and_help():
     """The PROMPT reworks the TUI: azarch-style nav (WASD/HJKL/arrows movement, '/' search,
     ESC back, Q quit) and the 'o open' + 'h help' verbs deleted. These are behavioural, but
     pin the shipped terminal_user_interface.py source so the keymap cannot silently regress on

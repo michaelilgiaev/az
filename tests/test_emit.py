@@ -89,18 +89,18 @@ def test_copy_asset_reads_from_assetsdir_and_applies_mode(tmp_path, monkeypatch)
     assert _mode(dest) == 0o755
 
 
-def test_copy_modification_file_reads_from_modificationsdir_and_applies_mode(tmp_path, monkeypatch):
-    # copy_modification_file resolves its source against paths.MODIFICATIONSDIR (upstream tools
-    # modified to fit Az'arch, like the vendored ckbcomp) and applies the exec bit. ckbcomp is a
-    # modification directory module now (modifications/ckbcomp/, script at ckbcomp/ckbcomp.py),
-    # copied to /usr/bin/ckbcomp -- so the rel path passed in carries the subdirectory.
-    src_root = tmp_path / "modifications"
-    (src_root / "ckbcomp").mkdir(parents=True)
-    (src_root / "ckbcomp" / "ckbcomp.py").write_text("#!/usr/bin/env python3\n")
-    monkeypatch.setattr(emit.paths, "MODIFICATIONSDIR", src_root)
+def test_copy_data_handles_a_subdirectory_relative_path(tmp_path, monkeypatch):
+    # The vendored ckbcomp is copied with copy_data from packages/calamares/ckbcomp.py to
+    # /usr/bin/ckbcomp (executable, no .py suffix) -- a rel path that carries a SUBDIRECTORY
+    # ("calamares/ckbcomp.py"). copy_data must resolve it against paths.PACKAGESDIR and apply the
+    # exec bit. (This is the path the old copy_modification_file helper used to serve.)
+    src_root = tmp_path / "packages"
+    (src_root / "calamares").mkdir(parents=True)
+    (src_root / "calamares" / "ckbcomp.py").write_text("#!/usr/bin/env python3\n")
+    monkeypatch.setattr(emit.paths, "PACKAGESDIR", src_root)
 
     dest = tmp_path / "out" / "usr/bin/ckbcomp"
-    emit.copy_modification_file("ckbcomp/ckbcomp.py", dest, mode=0o755)
+    emit.copy_data("calamares/ckbcomp.py", dest, mode=0o755)
     assert dest.read_text() == "#!/usr/bin/env python3\n"
     assert _mode(dest) == 0o755
 

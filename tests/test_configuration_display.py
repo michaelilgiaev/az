@@ -1,7 +1,7 @@
 """The `azarch display` command surface + the Display TUI screen (PROMPT Display/scale task).
 
 Guards: the CLI is wired into the dispatcher/usage; the GLOBAL SCALE options + DPI math mirror
-the single source (modifications/scale); scale set rewrites ~/.Xresources with the right Xft.dpi;
+the single source (packages/openbox/scale); scale set rewrites ~/.Xresources with the right Xft.dpi;
 and the C model.c Display screen (scale chooser + xrandr feature screens) is derived/pinned.
 """
 
@@ -12,7 +12,7 @@ import tempfile
 import types
 
 from packages.azarch.bundle import bundle_source
-from modifications import scale
+from packages.openbox import scale
 import paths
 
 
@@ -43,7 +43,7 @@ def test_cli_scale_options_mirror_the_single_source():
     cli = _bundled()
     assert cli.DISPLAY_SCALE_OPTIONS == scale.SCALE_OPTIONS
     assert cli.DISPLAY_SCALE_DEFAULT == scale.GLOBAL_SCALE
-    # the DPI math matches modifications/scale for every option.
+    # the DPI math matches packages/openbox/scale for every option.
     for s in scale.SCALE_OPTIONS:
         assert cli._disp_xft_dpi(s) == scale.xft_dpi(s)
         assert cli._disp_cursor(s) == scale.xcursor_size(s)

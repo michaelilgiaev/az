@@ -47,15 +47,15 @@ DEFAULT_HTML = os.path.join(REPO_ROOT, "documentation",
                             "SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html")
 DEFAULT_CACHE = os.path.join(REPO_ROOT, "cache", "specification-db")
 # These four modules are read as SOURCE TEXT for the regex extraction below (not
-# imported). After the libraries/ reclassification they no longer share one parent:
-# profile/pacman/installer are compiler config flat in libraries/, while locale is
-# the Calamares install-time locale block, which lives with the calamares modification. So
-# each path is built explicitly -- there is no single base dir any more.
+# imported). They no longer share one parent: profile/pacman/installer are compiler config
+# flat in libraries/, while locale is the Calamares install-time locale block, which lives with
+# the calamares package (libraries/packages/calamares/). So each path is built explicitly --
+# there is no single base dir any more.
 LIBRARIES_DIR = os.path.join(REPO_ROOT, "libraries")
 PROFILE_PY = os.path.join(LIBRARIES_DIR, "profile.py")
 PACMAN_PY = os.path.join(LIBRARIES_DIR, "pacman.py")
 INSTALLER_PY = os.path.join(LIBRARIES_DIR, "installer.py")
-LOCALE_PY = os.path.join(LIBRARIES_DIR, "modifications", "calamares", "locale.py")
+LOCALE_PY = os.path.join(LIBRARIES_DIR, "packages", "calamares", "locale.py")
 
 
 def _read(path):

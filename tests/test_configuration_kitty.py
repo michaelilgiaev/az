@@ -1,4 +1,4 @@
-"""modifications.kitty -- the kitty terminal-icon patch (clean "> _" glyph).
+"""packages.kitty -- the kitty terminal-icon patch (clean "> _" glyph).
 
 Why these tests matter: compiler._emit_apps never inspects builder CONTENT for kitty; it
 iterates emit_plan() and copies/renders/removes each dest by its keys (asset/render/remove)
@@ -18,7 +18,7 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 
 import paths
-from modifications import kitty
+from packages import kitty
 
 
 def _asset_svg_text() -> str:
@@ -86,7 +86,7 @@ def test_kitty_conf_sets_font_size_in_home():
     # to the STOCK baseline from the single scale source (matching gedit's editor font size).
     # kitty renders a pt font at the screen DPI, so the GLOBAL SCALE's Xft.dpi channel bumps it
     # (at 1.35 it renders ~= the old hardcoded 18pt). kitty.conf syntax is `<name> <value>`.
-    from modifications import scale
+    from packages.openbox import scale
     entry = next(e for e in kitty.emit_plan() if e["dest"] == kitty.KITTY_CONF_PATH)
     assert entry["dest"] == "/home/main/.config/kitty/kitty.conf"
     assert entry["dest"].startswith(kitty.HOME + "/")
@@ -104,7 +104,7 @@ def test_kitty_conf_sets_font_size_in_home():
 
 def test_kitty_conf_font_size_matches_gedit():
     # The whole point of pinning both: the terminal and the editor render at the same size.
-    from modifications import gedit
+    from packages import gedit
     assert kitty.KITTY_FONT_SIZE == gedit.GEDIT_FONT_SIZE
 
 

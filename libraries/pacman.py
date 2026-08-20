@@ -165,13 +165,13 @@ ISO_APP_OVERRIDES = [
     (None, "/usr/share/icons/hicolor/256x256/apps/kitty.png", True),
     (None, "/usr/share/pixmaps/kitty.png", True),
     ("org.gnome.gedit.desktop", "/usr/share/applications/org.gnome.gedit.desktop", False),
-    # Thunar + xviewer .desktop overrides (modifications/thunar, modifications/xviewer): the
+    # Thunar + xviewer .desktop overrides (packages/thunar, packages/xviewer): the
     # thunar.desktop rename+icon and the xviewer.desktop icon override are package-owned
     # (thunar / xviewer), so like gedit's .desktop they are NoExtract'd and the bodies (staged
     # by compiler._emit_apps from the module emit_plans) are planted post-pacstrap.
     ("thunar.desktop", "/usr/share/applications/thunar.desktop", False),
     ("xviewer.desktop", "/usr/share/applications/xviewer.desktop", False),
-    # Application-menu cleanup (modifications/thunar/menu_cleanup): NoDisplay=true overrides that
+    # Application-menu cleanup (packages/thunar/menu_cleanup): NoDisplay=true overrides that
     # hide the extra Thunar/Xfce launchers. Each is package-owned (thunar / thunar-volman /
     # libxfce4ui), so same NoExtract + post-pacstrap install. The staged basename is the
     # launcher's own .desktop name (matching the emit_plan dest via _override_basename).
@@ -180,7 +180,7 @@ ISO_APP_OVERRIDES = [
     ("thunar-volman-settings.desktop",
      "/usr/share/applications/thunar-volman-settings.desktop", False),
     ("xfce4-about.desktop", "/usr/share/applications/xfce4-about.desktop", False),
-    # Thunar gettext .mo override catalog (modifications/thunar/locale): relabels the
+    # Thunar gettext .mo override catalog (packages/thunar/locale): relabels the
     # hardcoded menu strings ("Places" -> "Home Directory", etc.). The `thunar` package
     # OWNS /usr/share/locale/en_GB/LC_MESSAGES/thunar.mo (one of 67 shipped locale
     # catalogs), so pre-placing our catalog in the overlay hit the file-conflict wall

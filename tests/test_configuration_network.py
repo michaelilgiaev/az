@@ -24,7 +24,7 @@ import types
 import pytest
 
 from packages.azarch.bundle import bundle_source
-from modifications import openbox as desktop
+from packages import openbox as desktop
 
 
 def _command_line_interface():

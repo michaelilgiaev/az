@@ -1,4 +1,4 @@
-"""modifications.system -- the security-sensitive user/group databases, sudoers,
+"""system -- the security-sensitive user/group databases, sudoers,
 OS branding, boot menus, and systemd units baked into the live ISO.
 
 These are pure Python string constants, but they are the ones where a silent
@@ -119,7 +119,7 @@ def test_customize_airootfs_brands_os_release():
 
 def test_customize_airootfs_has_no_plasma_leftovers():
     # KDE Plasma was removed and replaced with OpenBox; the desktop wallpaper is now
-    # painted by feh from the OpenBox session (modifications/openbox.py), NOT here.
+    # painted by feh from the OpenBox session (packages/openbox), NOT here.
     # Guard that no Plasma-specific chroot step (wallpaper rewrite, notifications
     # applet / krunner / kmenuedit removal, etc.) ever creeps back into this hook.
     s = system.CUSTOMIZE_AIROOTFS.lower()

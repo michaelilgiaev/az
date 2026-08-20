@@ -1,4 +1,4 @@
-"""modifications.libreoffice -- skip LibreOffice's first-run / introduction popups.
+"""packages.libreoffice -- skip LibreOffice's first-run / introduction popups.
 
 Why these tests matter: compiler._emit_apps blindly writes emit_plan() to
 ~/.config/libreoffice/4/user/registrymodifications.xcu (+ /etc/skel). The suppression
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
-from modifications import libreoffice as lo
+from packages import libreoffice as lo
 
 
 def test_emit_plan_is_single_home_registrymodifications():

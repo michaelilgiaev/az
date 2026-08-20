@@ -382,7 +382,7 @@ def test_shellprocess_removes_installer_menu_entry_post_install():
     # too (previously it was left in place). calamares itself is also try_removed by the
     # packages module, so keeping the entry would just leave a dead launcher in the menu.
     from packages.calamares import calamares_shellprocess as csp
-    from modifications import openbox as desktop
+    from packages import openbox as desktop
     d = yaml.safe_load(calamares.shellprocess_conf())
     cmd = _installer_cleanup_command(d["script"])
     assert f"rm -f {csp.INSTALLER_MENU_DESKTOP}" in cmd
@@ -400,7 +400,7 @@ def test_shellprocess_removes_installer_wrapper_post_install():
     # step must delete it (post-install requirement: no azarch-install wrapper on the installed
     # system). The LIVE ISO is unchanged -- the wrapper is still shipped there.
     from packages.calamares import calamares_shellprocess as csp
-    from modifications import openbox as desktop
+    from packages import openbox as desktop
     d = yaml.safe_load(calamares.shellprocess_conf())
     cmd = _installer_cleanup_command(d["script"])
     assert f"rm -f {csp.INSTALLER_WRAPPER}" in cmd
@@ -438,7 +438,7 @@ def test_shellprocess_overwrites_openbox_autostart_so_region_keyboard_and_no_ins
     # autostart (home + skel) with the "installed" variant staged on the ISO, which drops
     # exactly those two lines while keeping wallpaper/xcape/menu-daemon.
     from packages.calamares import calamares_shellprocess as csp
-    from modifications import openbox as desktop
+    from packages import openbox as desktop
     d = yaml.safe_load(calamares.shellprocess_conf())
     cmd = _installer_cleanup_command(d["script"])
     src = desktop.INSTALLED_AUTOSTART_STAGING_PATH
@@ -459,10 +459,10 @@ def test_shellprocess_overwrites_openbox_autostart_so_region_keyboard_and_no_ins
 
 def test_shellprocess_autostart_source_is_the_staged_shipped_file():
     # Guard against drift: the file the cleanup COPIES FROM must be the exact staging
-    # path modifications/openbox.py emits the installed autostart to. If openbox.py's
+    # path packages/openbox emits the installed autostart to. If openbox.py's
     # staging dest ever moves, this catches it so the copy keeps sourcing a real file.
     from packages.calamares import calamares_shellprocess as csp
-    from modifications import openbox as desktop
+    from packages import openbox as desktop
     assert csp.INSTALLED_AUTOSTART_SRC == desktop.INSTALLED_AUTOSTART_STAGING_PATH
     dests = {e["dest"] for e in desktop.emit_plan()}
     assert desktop.INSTALLED_AUTOSTART_STAGING_PATH in dests

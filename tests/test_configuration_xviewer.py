@@ -1,4 +1,4 @@
-"""modifications.xviewer -- replace xviewer's off-putting "eye" icon (PROMPT task 5).
+"""packages.xviewer -- replace xviewer's off-putting "eye" icon (PROMPT task 5).
 
 Why these tests matter: xviewer is the Photos default, so its icon is visible. The override
 must point the .desktop Icon= at our custom icon (a private name so a package upgrade cannot
@@ -9,7 +9,7 @@ pacman.ISO_APP_OVERRIDES (NoExtract + post-pacstrap) exactly like gedit's.
 from __future__ import annotations
 
 import paths
-from modifications import xviewer
+from packages import xviewer
 
 
 def test_desktop_points_icon_at_custom_private_name():

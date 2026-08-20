@@ -6,7 +6,7 @@ it installs Az'arch Linux to disk (OFFLINE -- the target root is unpacked from t
 SquashFS by unpackfs, not pacstrapped over the network). Because Az'arch ships a
 CRITICALLY MODIFIED calamares build (compiled from source in the makepkg stage; see
 libraries/makepkg.py and packages/pkgbuild.py), the whole configuration tree lives here
-under libraries/packages/ as one of OUR packages, not under modifications/.
+under libraries/packages/ as one of OUR packages, not under packages/.
 
 Modules:
     calamares               the settings.conf + branding + every modules/*.conf builder,

@@ -7,7 +7,7 @@ login. These tests pin:
 
   * the `azarch wallpaper` subcommand surface (--years.png / --decades.png / --help / bare
     status) as it is BUNDLED into the shipped /usr/local/bin/azarch script;
-  * the wallpaper image paths, which MUST stay in lock-step with modifications/openbox
+  * the wallpaper image paths, which MUST stay in lock-step with packages/openbox
     (WALLPAPERS_SYSTEM_DIR / WALLPAPER_IMAGE_RES / the ids) so the command line interface and the emitted images
     cannot drift;
   * that applying persists the chosen image to the pointer file AND (with a stubbed feh)
@@ -25,7 +25,7 @@ import os
 import types
 
 from packages.azarch.bundle import bundle_source
-from modifications import openbox as desktop
+from packages import openbox as desktop
 
 
 def _command_line_interface():
@@ -72,10 +72,10 @@ def test_wallpaper_options_map_to_the_two_ids():
     }
 
 
-# --- lock-step with the shipped images (modifications/openbox) ---------------
+# --- lock-step with the shipped images (packages/openbox) ---------------
 
 def test_wallpaper_paths_match_openbox_constants():
-    # The command line interface's wallpaper dir/res/ids MUST equal what modifications/openbox emits, or the
+    # The command line interface's wallpaper dir/res/ids MUST equal what packages/openbox emits, or the
     # command line interface would point feh at a non-existent file.
     command_line_interface = _command_line_interface()
     assert command_line_interface.WALLPAPERS_SYSTEM_DIR == desktop.WALLPAPERS_SYSTEM_DIR

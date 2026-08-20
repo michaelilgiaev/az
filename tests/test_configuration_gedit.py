@@ -1,4 +1,4 @@
-"""modifications.gedit -- notepad mode: one window per file, NO tabs, minimal headerbar, Ctrl+W exits.
+"""packages.gedit -- notepad mode: one window per file, NO tabs, minimal headerbar, Ctrl+W exits.
 
 Why these tests matter: gedit 50 (the gedit-technology fork) produces tabs and a full
 headerbar in several ways, and notepad mode defeats them with FOUR things -- the launcher
@@ -12,7 +12,7 @@ build_plugin() compiling the .so, so those are pinned too.
 
 from __future__ import annotations
 
-from modifications import gedit
+from packages import gedit
 
 
 def test_emit_plan_has_desktop_schema_and_plugin_metadata():
@@ -103,7 +103,7 @@ def test_schema_override_sets_editor_font_from_scale():
     # Az'arch pins a fixed editor font at the STOCK baseline from the single scale source (the
     # GLOBAL SCALE's DPI channel bumps it -- at 1.35 it renders ~= the old 18pt). use-default-font
     # MUST be false (else gedit ignores editor-font), and editor-font is 'Monospace <stock>'.
-    from modifications import scale
+    from packages.openbox import scale
     out = gedit.gschema_override()
     assert gedit.GEDIT_EDITOR_SCHEMA == "org.gnome.gedit.preferences.editor"
     assert f"[{gedit.GEDIT_EDITOR_SCHEMA}]" in out

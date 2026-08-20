@@ -1,4 +1,4 @@
-"""packages.pkgbuild -- the Az'arch-authored package recipes.
+"""pkgbuild -- the Az'arch-authored package recipes.
 
 These PKGBUILDs are Python f-strings emitted to disk and then fed verbatim to
 makepkg. Two failure modes here are silent and expensive:
@@ -39,7 +39,7 @@ from pathlib import Path
 
 import pytest
 
-from packages import pkgbuild
+import pkgbuild
 
 
 _HEX = re.compile(r"\A[0-9a-fA-F]+\Z")
@@ -618,14 +618,14 @@ def test_desktop_exec_path_matches_install():
 
 def test_overrides_first_line_is_comment():
     # AutoConfig files: the engine ignores line 1, so it MUST be a comment.
-    from modifications import librewolf as lw_patch
+    from packages import librewolf as lw_patch
 
     first = lw_patch.overrides_cfg().splitlines()[0]
     assert first.startswith("//")
 
 
 def test_overrides_disables_sanitize_on_shutdown():
-    from modifications import librewolf as lw_patch
+    from packages import librewolf as lw_patch
 
     cfg = lw_patch.overrides_cfg()
     assert (
@@ -641,8 +641,8 @@ def test_overrides_land_on_timedate_home_and_keep_logins():
     # Logins must still persist though, so browser.sessionstore.privacy_level stays 0
     # (LibreWolf defaults it to 2 = "save no session data", which would log sites out);
     # that + sanitizeOnShutdown=false is the cookie-persistence half.
-    from modifications import librewolf as lw_patch
-    from packages.timedate import timedate as td
+    from packages import librewolf as lw_patch
+    from packages.librewolf import timedate as td
 
     cfg = lw_patch.overrides_cfg()
     assert f'defaultPref("browser.startup.homepage", "{td.URL}");' in cfg
@@ -660,7 +660,7 @@ def test_overrides_hide_bookmarks_toolbar_by_default():
     # "For quick access" (the bookmarks toolbar, Ctrl+Shift+B) must be HIDDEN by
     # default. LibreWolf ships browser.toolbars.bookmarks.visibility="always"; our
     # override sets it to "never" (hides it on every window AND the new-tab page).
-    from modifications import librewolf as lw_patch
+    from packages import librewolf as lw_patch
 
     cfg = lw_patch.overrides_cfg()
     assert (
@@ -675,7 +675,7 @@ def test_overrides_follow_system_theme_and_report_prefers_color_scheme():
     # prefers-color-scheme=light, so we swap RFP for FPP with every target except the
     # colour-scheme spoof; only then do ui.systemUsesDarkTheme / content-override (and the
     # timedate page) actually follow the theme.
-    from modifications import librewolf as lw_patch
+    from packages import librewolf as lw_patch
 
     dark = lw_patch.overrides_cfg(dark=True)
     light = lw_patch.overrides_cfg(dark=False)
@@ -700,7 +700,7 @@ def test_overrides_delivered_to_profile_path_not_opt():
     # (~/.config/librewolf/librewolf/librewolf.overrides.cfg -- doubled "librewolf"),
     # NEVER from /opt. So the override must be delivered as a HOME file by the patch's
     # emit_plan(), and the PKGBUILD must NOT ship it into /opt (a dead file there).
-    from modifications import librewolf as lw_patch
+    from packages import librewolf as lw_patch
 
     plan = lw_patch.emit_plan()
     assert len(plan) == 1
@@ -714,7 +714,7 @@ def test_overrides_delivered_to_profile_path_not_opt():
     for pb in (pkgbuild.pkgbuild_librewolf(), pkgbuild.pkgbuild_librewolf_src()):
         assert "/opt/librewolf/librewolf.overrides.cfg" not in pb, (
             "the override must NOT be installed under /opt -- LibreWolf never reads it "
-            "there; it ships as a home file via modifications/librewolf.emit_plan()"
+            "there; it ships as a home file via packages/librewolf.emit_plan()"
         )
     # And it is no longer a recipe companion file in either tier.
     for full in (False, True):

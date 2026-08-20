@@ -7,7 +7,7 @@ session plaintext for the search/select curses UI, then re-encrypts on quit only
 something changed and always deletes the session plaintext. See __init__.py and the module
 docstrings for the app itself; THIS module is only the ISO build wiring.
 
-Mirrors packages/timedate/timedate.py: our OWN package, so the sources live directly in
+Mirrors packages/librewolf/timedate.py: our OWN package, so the sources live directly in
 this dir next to the build wiring, and compiler.py iterates emit_plan() to place the
 artifacts into the airootfs (root-owned system paths -- the OFFLINE Calamares install
 rsyncs the live rootfs, so they carry onto the installed system with no separate

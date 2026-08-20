@@ -1,4 +1,4 @@
-"""modifications.templates -- the ~/Templates "Create Document" set for Thunar (PROMPT batch 8).
+"""packages.templates -- the ~/Templates "Create Document" set for Thunar (PROMPT batch 8).
 
 Why these tests matter: Thunar populates its Create Document submenu from ~/Templates, and the
 LibreOffice templates must be VALID ODF packages (mimetype stored first + a manifest) or
@@ -12,8 +12,8 @@ from __future__ import annotations
 import io
 import zipfile
 
-from modifications import templates
-from modifications import home_directory
+from packages import templates
+from packages.thunar import home_directory
 
 
 def test_templates_dir_is_created_by_home_layout():

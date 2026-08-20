@@ -4,7 +4,7 @@
 This is the FIRST module of the `azarch` guest-CLI package (libraries/packages/azarch/).
 The package is split across several small modules for maintainability (common, resolver,
 theme, sshd, command_line_interface), but the thing that actually ships to the guest is a SINGLE
-self-contained script at /usr/local/bin/azarch: modifications.openbox.azarch_command_line_interface() BUNDLES these
+self-contained script at /usr/local/bin/azarch: packages.openbox.azarch_command_line_interface() BUNDLES these
 modules -- in the order packages.azarch.bundle.MODULE_ORDER -- into one file (this module's
 imports/header first, then each later module's body after its `# BUNDLE_START` sentinel).
 So everything below lands in ONE module namespace at runtime; that is why the later modules

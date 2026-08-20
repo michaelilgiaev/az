@@ -4,13 +4,19 @@ Mirrors the directory scheme the old compile.sh used, so the Docker bind mounts
 (cache/ output/ logs/) and the on-disk artifacts land in exactly the same places:
 
   REPODIR/                 repo root (where compile.sh lives)
-    libraries/             the COMPILER's own modules (flat) + build payload
-    libraries/packages/    Az'arch's OWN packages (things WE build/ship): the pacman
-                           manifest (packages.x86_64), application_menu/, pkgbuild.py,
-                           azarch/, passwords/, timedate/, and the critically-modified
-                           calamares/ -- all pure stdlib (no requirements.txt)
-    libraries/modifications/  ONLY upstream software we modify/configure (ckbcomp,
-                           fastfetch, librewolf, openbox, the per-app tweaks)
+    libraries/             the COMPILER's own modules (flat: compiler, paths, emit,
+                           makepkg, pacman, pkgbuild, package_discovery, ...) -- the
+                           general build machinery
+    libraries/packages/    EVERY package the build ships, each its OWN directory module
+                           (a dir with an __init__.py): the pacman manifest file
+                           (packages.x86_64) plus one directory per package. This holds
+                           BOTH the things WE author (application_menu/, azarch/,
+                           passwords/, and the critically-modified calamares/) AND the
+                           upstream software we merely tailor (openbox/, librewolf/,
+                           kitty/, gedit/, thunar/, fastfetch/, the per-app tweaks) --
+                           all pure stdlib (no requirements.txt). package_discovery
+                           imports each directory-with-__init__.py, so a package is added
+                           or removed just by creating/deleting its directory.
     cache/                 persistent download cache (git-ignored, survives builds)
       build/               WORKDIR on a NATIVE run: disposable mkarchiso scratch
       pkgs/                persistent package repo + synced DBs (the offline store)
@@ -37,30 +43,27 @@ LIBDIR = REPODIR / "libraries"
 # The compiler's own modules now live flat in libraries/ (there is no separate
 # `azarch` package anymore), so the compiler package dir IS libraries/ itself.
 PKGDIR = LIBDIR
-# Az'arch's OWN packages (the things WE build/ship, baked into the ISO): the package
-# manifest (packages.x86_64), the application-menu source tree + its build wiring
-# (application_menu/), our own package recipes (pkgbuild.py), and the `azarch` guest command line interface
-# (the azarch/ package). Our packages are pure Python standard library, so there is NO shared
-# requirements.txt here (the only one in the repo is the repo-root requirements.txt the
-# compiler itself uses for its test/dev deps). Formerly libraries/data/; consolidated here.
+# EVERY package the build ships (baked into the ISO), each its own directory module under here.
+# This is the single home for BOTH the things WE author -- the package manifest (packages.x86_64),
+# the application-menu source tree + build wiring (application_menu/), the `azarch` guest command
+# line interface (azarch/), the passwords manager (passwords/), the critically-modified calamares
+# install config (calamares/) -- AND the upstream software we merely tailor to Az'arch (openbox/,
+# librewolf/, kitty/, gedit/, thunar/, fastfetch/, the per-app tweaks). package_discovery imports
+# each directory-with-__init__.py from here. All pure Python standard library, so there is NO
+# shared requirements.txt here (the only one in the repo is the repo-root requirements.txt the
+# compiler itself uses for its test/dev deps). (Our OWN package recipes live in the flat
+# pkgbuild.py module one level up, in libraries/, next to the rest of the build machinery.)
 PACKAGESDIR = LIBDIR / "packages"
-# Existing UPSTREAM software that is NOT ours -- we merely modify/configure/patch it
-# to fit Az'arch (ckbcomp, fastfetch, librewolf, openbox, the per-app tweaks). Anything WE
-# author outright is NOT here: it is either a compiler module (flat in libraries/) or one of
-# our own packages (libraries/packages/). (The critically-modified calamares install config
-# is OUR package -- packages/calamares/ -- since we compile it from source and ship it.)
-MODIFICATIONSDIR = LIBDIR / "modifications"
 ASSETSDIR = REPODIR / "assets"
 
 # Vendored ckbcomp: a Python 3 port of the upstream Perl ckbcomp (byte-identical
 # output, no Perl in the tree). Arch does not package it (Debian/Manjaro-only), yet
 # Calamares' keyboard-preview page shells out to `ckbcomp`, so we ship it in the repo
-# and copy it to /usr/bin at build time. It is upstream software modified to fit the
-# distribution, so it lives under libraries/modifications/ as its own directory module
-# (libraries/modifications/ckbcomp/), whose ckbcomp.py holds the vendored script. It is
-# emitted to /usr/bin/ckbcomp (no .py suffix there -- it is an executable script the
+# and copy it to /usr/bin at build time. It is a companion file of the calamares package
+# (Calamares is the only thing that uses it), so it lives at packages/calamares/ckbcomp.py.
+# It is emitted to /usr/bin/ckbcomp (no .py suffix there -- it is an executable script the
 # keyboard page runs by name).
-CKBCOMP_SRC = MODIFICATIONSDIR / "ckbcomp" / "ckbcomp.py"
+CKBCOMP_SRC = PACKAGESDIR / "calamares" / "ckbcomp.py"
 
 CACHEDIR = REPODIR / "cache"
 BUILDDIR = REPODIR / "output"
@@ -114,12 +117,12 @@ PACKAGES_FILE = PACKAGESDIR / "packages.x86_64"
 # pure-Python launcher (launcher.py), and generates the .desktop entry. The whole menu
 # is OURS, so it is a package here, not a patch.
 APPLICATION_MENU_DIR = PACKAGESDIR / "application_menu"
-# The Az'arch timedate package (Flask Time + Calendar home page): the app sources
-# (app.py + page.py) live directly here alongside timedate.py, the build wiring that
-# copies them into the airootfs, installs the launcher, and ships the systemd service.
-# It is OUR package (a website we author), so it lives under libraries/packages/, not
-# modifications/. Served at localhost:49154; LibreWolf's default home/new-tab page.
-TIMEDATE_DIR = PACKAGESDIR / "timedate"
+# The Az'arch timedate site (Flask Time + Calendar home page): app.py/page.py/assets.py +
+# timedate.py (the build wiring that copies them into the airootfs, installs the launcher, and
+# ships the systemd service). LibreWolf lands on this page (startup + Home), so the site was
+# FOLDED INTO the librewolf package as sibling submodules -- its sources live in
+# packages/librewolf/. Served at localhost:49154. timedate.py reads its own sources from here.
+TIMEDATE_DIR = PACKAGESDIR / "librewolf"
 # The Az'arch passwords package (encrypted GPG/AES256 terminal password manager): ONE flat
 # directory holding the entry script (passwords.py), the one-time setup script, every working
 # module (config/cryptography/model/terminal_user_interface/...), and packaging.py (the build
@@ -134,7 +137,7 @@ PASSWORDS_DIR = PACKAGESDIR / "passwords"
 # script that ships to the guest is reassembled from those modules by the package's
 # bundle.bundle_source(); the compiler then injects the country->locale table from
 # packages/calamares/locale.py between the AZARCH_CC markers (which now live in
-# country_table.py). See modifications/openbox openbox.azarch_command_line_interface().
+# country_table.py). See packages/openbox openbox.azarch_command_line_interface().
 #
 # This dir ALSO holds the bare-`azarch` TERMINAL UI's C sources (main.c/render.c/model.c/
 # preview.c, terminal_user_interface.h + siblings, Makefile) -- there is only ONE program, `azarch`, and the UI

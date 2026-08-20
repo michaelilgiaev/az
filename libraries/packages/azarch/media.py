@@ -2,7 +2,7 @@
 """azarch guest command line interface -- `azarch volume` / `azarch brightness` (the FN media keys).
 
 The FN keys change two things, and the OpenBox session binds the X "XF86" media keysyms to
-these subcommands (see modifications/openbox rc.xml):
+these subcommands (see packages/openbox rc.xml):
 
     azarch volume up        raise the volume by one step (7.5%)
     azarch volume down       lower the volume by one step (7.5%)
@@ -67,7 +67,7 @@ _BACKLIGHT_DIR = "/sys/class/backlight"
 
 # The shipped OSD indicator (the compiled Xlib program azarch-osd, built from on_screen_display.c). Installed
 # next to the C terminal user interface binary in the azarch lib dir so the two travel together.
-# Kept in lock-step with modifications/openbox (AZARCH_OSD_SYSTEM_PATH) -- a test pins the two so
+# Kept in lock-step with packages/openbox (AZARCH_OSD_SYSTEM_PATH) -- a test pins the two so
 # they cannot drift.
 OSD_INDICATOR_BIN = "/usr/local/lib/azarch/azarch-osd"
 

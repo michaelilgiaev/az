@@ -1,4 +1,4 @@
-"""modifications.vlc -- suppress VLC's first-run "metadata network access" dialog.
+"""packages.vlc -- suppress VLC's first-run "metadata network access" dialog.
 
 Why these tests matter: compiler._emit_apps blindly writes emit_plan() to
 ~/.config/vlc/vlcrc (+ /etc/skel). The two prefs are what actually kill the dialog, and
@@ -8,7 +8,7 @@ drift in a key name/value or a section header silently brings the dialog back.
 
 from __future__ import annotations
 
-from modifications import vlc
+from packages import vlc
 
 
 def test_emit_plan_is_single_home_vlcrc():

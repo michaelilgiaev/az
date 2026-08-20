@@ -1,4 +1,4 @@
-"""modifications.thunar -- the Az'arch Thunar file-manager setup (PROMPT task 2/4/7).
+"""packages.thunar -- the Az'arch Thunar file-manager setup (PROMPT task 2/4/7).
 
 Why these tests matter: Thunar's config was authored against VERIFIED facts from the installed
 Thunar 4.20 (the thunarrc keys, the Xfconf channel property names + canonical values, the
@@ -22,9 +22,9 @@ from __future__ import annotations
 
 from xml.dom import minidom
 
-from modifications import thunar
-from modifications import home_directory
-from modifications.thunar import actions, launcher, locale, menu_cleanup, settings, sidebar
+from packages import thunar
+from packages.thunar import home_directory
+from packages.thunar import actions, launcher, locale, menu_cleanup, settings, sidebar
 
 
 # --- thunarrc + xfconf channel (settings.py) --------------------------------
@@ -205,7 +205,7 @@ def test_gtk_menu_images_enabled_for_open_with_icons():
     # openbox default (a plain module) and the BUNDLED CLI (theme.py is a bundle module that
     # needs common.py's imports, so it is exec'd from the bundle) both carry it.
     import types
-    from modifications import openbox
+    from packages import openbox
     from packages.azarch.bundle import bundle_source
     assert "gtk-menu-images=true" in openbox.gtk3_settings_ini_default()
     cli = types.ModuleType("azarch_cli")

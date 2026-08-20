@@ -1,26 +1,31 @@
-"""Lock in the libraries/ classification the reclassification established.
+"""Lock in the libraries/ classification.
 
-The three buckets have a precise, load-bearing meaning that a future edit could
-silently violate:
+After the consolidation there are just TWO buckets, with a precise, load-bearing meaning a
+future edit could silently violate:
 
-  libraries/            the COMPILER's own modules (flat) + the entry point
-  libraries/packages/   Az'arch's OWN packages (things WE build/ship)
-  libraries/modifications/    ONLY upstream software we modify/configure
+  libraries/            the general build machinery -- the compiler's own flat modules
+                        (compiler, paths, emit, makepkg, pacman, package_discovery, ...) PLUS
+                        our own package recipes (pkgbuild.py) and the entry point.
+  libraries/packages/   EVERY package the build ships, each its OWN directory module (a dir
+                        with an __init__.py). This holds BOTH the things WE author
+                        (application_menu/, azarch/, passwords/, and the critically-modified
+                        calamares/) AND the upstream software we merely tailor (openbox/,
+                        librewolf/, kitty/, gedit/, thunar/, fastfetch/, the per-app tweaks).
+                        There is NO separate modifications/ tree anymore.
 
-Two of these are also a genuine IMPORT hazard: the compiler's package-cache module
-is `downloader` (was `packages.py`) precisely so the payload `packages/` directory
-can be a real import package (`packages.pkgbuild`, `packages.application_menu`)
-without the module shadowing the directory (or vice versa). If someone renames
-`downloader.py` back to `packages.py`, both imports below break. These tests catch
-that, and the "modifications holds only upstream" invariant, at unit-test time.
+This is also a genuine IMPORT hazard: the compiler's package-cache module is `downloader`
+(was `packages.py`) precisely so the payload `packages/` directory can be a real import
+package (`packages.application_menu`, `packages.openbox`) without the module shadowing the
+directory (or vice versa). If someone renames `downloader.py` back to `packages.py`, the
+imports below break. These tests catch that -- and the "one flat home for everything a package
+ships" invariant -- at unit-test time.
 
-`packages/` carries no top-level `__init__.py` -- it is an implicit namespace package,
-resolved off PYTHONPATH (= libraries/). The flat module `packages/pkgbuild.py` imports
-as `packages.pkgbuild`. Every SUB-directory of packages/, however, is now a REGULAR
-package with its own `__init__.py` (application_menu/, azarch/, calamares/, passwords/,
-timedate/) -- they resolve under the namespace `packages`. `modifications/` DOES carry a
-top-level `__init__.py` (its discovery machinery), and every modification is likewise a
-regular package directory with an `__init__.py`.
+`packages/` carries no top-level `__init__.py` -- it is an implicit namespace package, resolved
+off PYTHONPATH (= libraries/). Every SUB-directory of packages/ is a REGULAR package with its
+own `__init__.py`, so it resolves under the namespace `packages` and package_discovery can find
+it. The four merges (home_directory->thunar, scale->openbox, ckbcomp->calamares,
+timedate->librewolf) live as files INSIDE their target package, so they no longer appear as
+top-level entries.
 """
 
 from __future__ import annotations
@@ -32,7 +37,6 @@ def test_downloader_and_packages_dir_coexist():
     # The package-cache module is `downloader` (a flat compiler module) so the
     # `packages/` payload dir can be a real import package. Both must resolve.
     import downloader  # the renamed package-cache module (was packages.py)
-    from packages import pkgbuild  # noqa: F401  (payload package, not the module)
 
     assert downloader.__file__.endswith("libraries/downloader.py")
     # `packages` here is the payload directory-package, NOT downloader. It carries
@@ -43,22 +47,29 @@ def test_downloader_and_packages_dir_coexist():
     assert any(p.endswith("libraries/packages") for p in payload_pkg.__path__)
 
 
+def test_pkgbuild_is_a_flat_library_module():
+    # pkgbuild.py holds OUR package recipes and is general build machinery, so it moved UP out
+    # of packages/ to sit flat in libraries/ next to makepkg/compiler/paths. It imports bare as
+    # `import pkgbuild` (NOT `packages.pkgbuild`).
+    import pkgbuild
+
+    assert pkgbuild.__file__.endswith("libraries/pkgbuild.py")
+    assert not pkgbuild.__file__.endswith("libraries/packages/pkgbuild.py")
+    assert callable(pkgbuild.recipe_dirs)
+
+
 def test_our_packages_import_from_packages_bucket():
-    # pkgbuild recipes and the application-menu build wiring are OUR packages, so
-    # they import from packages.* (not modifications.*). pkgbuild is now a flat module
-    # (packages/pkgbuild.py); application_menu stays a multi-module subpackage.
-    from packages import pkgbuild
+    # The application-menu build wiring is one of OUR packages, so it imports from packages.*.
     from packages.application_menu import application_menu
 
-    assert pkgbuild.__file__.endswith("libraries/packages/pkgbuild.py")
-    assert callable(pkgbuild.recipe_dirs)
     assert callable(application_menu.emit_plan)
 
 
 def test_every_packages_subdirectory_is_a_regular_package():
     # Every SUB-directory of libraries/packages/ must carry an __init__.py so it is a real,
-    # importable package (application_menu, azarch, calamares, passwords, timedate, ...). This
-    # is the packages-side counterpart of the modifications "each dir is a package" rule.
+    # importable package that package_discovery loads (application_menu, azarch, calamares,
+    # passwords, openbox, librewolf, kitty, gedit, thunar, ...). A directory without one would
+    # be silently skipped by discovery.
     packages_dir = paths.PACKAGESDIR
     for child in packages_dir.iterdir():
         if not child.is_dir() or child.name.startswith("__"):
@@ -67,59 +78,78 @@ def test_every_packages_subdirectory_is_a_regular_package():
             f"packages/{child.name}/ must have an __init__.py (every packages subdirectory "
             "is a regular package)"
         )
-    # The critically-modified calamares install config is one of OUR packages now.
+    # The critically-modified calamares install config is one of OUR packages.
     assert (packages_dir / "calamares" / "__init__.py").is_file()
 
 
-def test_modifications_bucket_holds_only_upstream():
-    # After the reclassification, libraries/modifications/ contains ONLY upstream software
-    # we modify/configure. Anything WE author outright must have left it.
-    #
-    # Each modification is now a DIRECTORY MODULE with an __init__.py: the modifications tree
-    # is a discoverable package where a dir with an __init__.py loads and a dir without one is
-    # skipped, so modifications can be added/removed freely. calamares is NOT here anymore --
-    # it is a critically-modified package we compile from source and ship, so it lives under
-    # packages/ (packages/calamares/), not modifications/.
-    modifications_dir = paths.MODIFICATIONSDIR
-    names = {p.name for p in modifications_dir.iterdir()}
-    dirs = {p.name for p in modifications_dir.iterdir() if p.is_dir()}
-    # calamares moved OUT of modifications/ into packages/.
-    assert "calamares" not in names, "calamares is now a package (packages/calamares/), not a modification"
-    # The per-app modifications are directory modules (each with an __init__.py):
-    for mod in ("ckbcomp", "fastfetch", "librewolf", "openbox", "kitty", "gedit", "thunar"):
-        assert mod in dirs, f"{mod} should be a modification directory module"
-        assert (paths.MODIFICATIONSDIR / mod / "__init__.py").is_file(), (
-            f"{mod}/__init__.py must exist so the modification loads"
+def test_modifications_tree_is_gone():
+    # There is no separate libraries/modifications/ tree anymore -- everything a package ships
+    # (ours AND the upstream software we tailor) lives under libraries/packages/. paths must not
+    # expose a MODIFICATIONSDIR either.
+    assert not (paths.LIBDIR / "modifications").exists(), (
+        "libraries/modifications/ must be gone -- all packages live under libraries/packages/"
+    )
+    assert not hasattr(paths, "MODIFICATIONSDIR")
+
+
+def test_the_upstream_tailoring_packages_live_under_packages():
+    # The packages that tailor upstream software are directory modules under packages/, each
+    # with an __init__.py, and import as `from packages import <name>`.
+    packages_dir = paths.PACKAGESDIR
+    for name in ("fastfetch", "librewolf", "openbox", "kitty", "gedit", "thunar",
+                 "vlc", "gimp", "xviewer", "libreoffice", "templates"):
+        assert (packages_dir / name / "__init__.py").is_file(), (
+            f"packages/{name}/__init__.py must exist so the package loads"
         )
-    # No stray flat modification .py modules at the top of modifications/ -- every modification
-    # is a directory now. The package's own __init__.py (the discovery machinery) is the only
-    # .py allowed directly here.
-    stray = {n for n in names if n.endswith(".py") and n != "__init__.py"}
-    assert not stray, f"modifications/ should hold only directory modules, found flat files: {stray}"
-    # our-own things that must NOT be under modifications/ anymore:
-    for ours in ("application_menu", "pkgbuild", "profile", "pacman", "installer",
-                 "system", "desktop", "locale", "calamares"):
-        assert ours not in names, f"{ours} is OURS -- it must not be a modification package"
+
+
+def test_the_four_merges_live_inside_their_target_package():
+    # The four merged modules are FILES inside their target package now, not their own
+    # top-level directories. Each is importable as a submodule of that package.
+    from packages.thunar import home_directory   # home_directory -> thunar
+    from packages.openbox import scale           # scale -> openbox
+    from packages.librewolf import timedate      # timedate -> librewolf
+    assert home_directory.__file__.endswith("libraries/packages/thunar/home_directory.py")
+    assert scale.__file__.endswith("libraries/packages/openbox/scale.py")
+    assert timedate.__file__.endswith("libraries/packages/librewolf/timedate.py")
+    # ckbcomp is a companion SCRIPT (copied verbatim, never imported), so it is just a file
+    # under the calamares package, not a submodule.
+    assert (paths.PACKAGESDIR / "calamares" / "ckbcomp.py").is_file()
+    # ...and their old top-level homes must be gone.
+    for gone in ("home_directory", "scale", "ckbcomp", "timedate"):
+        assert not (paths.PACKAGESDIR / gone).exists(), (
+            f"packages/{gone}/ must be gone -- it was merged into its target package"
+        )
+
+
+def test_our_own_modules_are_not_stray_packages():
+    # The general build machinery (pkgbuild, profile, pacman, installer, system, ...) stays FLAT
+    # in libraries/ -- it must NOT have leaked into packages/ as a directory or a stray file.
+    packages_dir = paths.PACKAGESDIR
+    names = {p.name for p in packages_dir.iterdir()}
+    for ours in ("pkgbuild", "profile", "pacman", "installer", "system", "compiler",
+                 "emit", "makepkg", "downloader", "package_discovery"):
+        assert ours not in names, f"{ours} is general machinery -- it must stay flat in libraries/"
+    # The only non-directory entry allowed directly under packages/ is the pacman manifest.
+    stray_files = {p.name for p in packages_dir.iterdir()
+                   if p.is_file() and p.name != "packages.x86_64"}
+    assert not stray_files, f"packages/ should hold only directory modules + packages.x86_64, found: {stray_files}"
 
 
 def test_locale_lives_with_the_calamares_package():
-    # locale.py is Calamares install-time config, so it lives with the calamares package
-    # (which moved out of modifications/ into packages/ -- calamares is a critically-modified
-    # package we compile from source and ship, not a plain upstream modification).
+    # locale.py is Calamares install-time config, so it lives with the calamares package.
     from packages.calamares import locale
 
     assert locale.__file__.endswith("libraries/packages/calamares/locale.py")
     assert callable(locale.resolver_country_table_py)
 
 
-def test_openbox_replaced_desktop():
-    # desktop.py was renamed openbox.py (it configures the upstream openbox WM) and stays under
-    # modifications/. Every modification is a DIRECTORY MODULE now, so openbox lives at
-    # modifications/openbox/__init__.py and still imports as `from modifications import openbox`.
-    # The old modifications.desktop must be gone.
-    from modifications import openbox
+def test_openbox_is_the_desktop_package():
+    # openbox/ configures the upstream OpenBox WM (the whole live desktop). It is a directory
+    # module under packages/ and imports as `from packages import openbox`.
+    from packages import openbox
 
-    assert openbox.__file__.endswith("libraries/modifications/openbox/__init__.py")
+    assert openbox.__file__.endswith("libraries/packages/openbox/__init__.py")
     assert callable(openbox.emit_plan)
 
 

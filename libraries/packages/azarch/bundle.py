@@ -21,7 +21,7 @@ and the country table by bare name (no intra-package imports), which is exactly 
 written. The order is chosen so every name is defined before it is used at IMPORT time
 (definitions only; nothing runs until main() is called at the very end via command_line_interface.py).
 
-modifications.openbox.azarch_command_line_interface() calls bundle_source() and then re-injects the country table
+packages.openbox.azarch_command_line_interface() calls bundle_source() and then re-injects the country table
 between the AZARCH_CC markers from the single source of truth (packages/calamares/locale).
 """
 
@@ -84,7 +84,7 @@ def _split(src: str, name: str) -> tuple[str, str]:
 
 def bundle_source() -> str:
     """Return the single self-contained /usr/local/bin/azarch script text (with the
-    on-disk country table; modifications.openbox.azarch_command_line_interface re-injects the canonical one)."""
+    on-disk country table; packages.openbox.azarch_command_line_interface re-injects the canonical one)."""
     parts: list[str] = []
     for i, mod in enumerate(MODULE_ORDER):
         src = (_PKG_DIR / mod).read_text(encoding="utf-8")

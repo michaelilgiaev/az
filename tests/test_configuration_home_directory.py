@@ -1,9 +1,9 @@
-"""modifications.home_directory -- the single source of truth for the home-directory layout
+"""packages.thunar.home_directory -- the single source of truth for the home-directory layout
 (top-level folders + convenience symlinks) that Thunar's sidebar also mirrors.
 
 Why these tests matter: compiler._emit_homedir walks this module's plain data
 (DIRECTORIES/LINKS/TRASH_DIRS) with emit.mkdir()/emit.link() into BOTH /home/main and
-/etc/skel, and modifications/thunar builds the GTK bookmarks Thunar reads from the SAME data.
+/etc/skel, and packages/thunar builds the GTK bookmarks Thunar reads from the SAME data.
 Two invariants are load-bearing and guarded here:
 
   * Symlink targets must be RELATIVE -- an absolute /home/main/... target would dangle
@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import posixpath
 
-from modifications import home_directory as hd
+from packages.thunar import home_directory as hd
 
 
 def test_directory_set_is_exactly_the_spec():

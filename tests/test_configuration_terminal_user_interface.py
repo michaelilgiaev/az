@@ -41,7 +41,7 @@ import pytest
 
 from packages.azarch.bundle import bundle_source, MODULE_ORDER
 from packages.azarch import terminal_user_interface_build
-from modifications import openbox as desktop
+from packages import openbox as desktop
 import paths
 import profile as profiledef
 
@@ -53,7 +53,7 @@ TERMINAL_USER_INTERFACE_SRC_DIR = paths.AZARCH_COMMAND_LINE_INTERFACE_DIR
 
 def _command_line_interface():
     """Exec the bundled azarch command line interface in a fresh module namespace (as shipped)."""
-    mod = types.ModuleType("azarch_cli_tui_test")
+    mod = types.ModuleType("azarch_cli_terminal_user_interface_test")
     exec(compile(bundle_source(), "azarch_command_line_interface", "exec"), mod.__dict__)
     return mod
 
@@ -73,7 +73,7 @@ def _src(name: str) -> str:
 
 # --- dispatch wiring: bare azarch -> run_terminal_user_interface -> exec the C binary ------------
 
-def test_bare_azarch_dispatches_to_the_tui():
+def test_bare_azarch_dispatches_to_the_terminal_user_interface():
     """No-argument azarch must route to run_terminal_user_interface, and the top-level usage must mention the UI."""
     src = desktop.azarch_command_line_interface()
     assert 'cmd == ""' in src
@@ -81,7 +81,7 @@ def test_bare_azarch_dispatches_to_the_tui():
     assert "full-screen UI" in src  # advertised in usage()
 
 
-def test_run_tui_execs_the_compiled_binary():
+def test_run_terminal_user_interface_execs_the_compiled_binary():
     """run_terminal_user_interface must EXEC the compiled C UI (the fast, instant path) -- not start curses."""
     src = bundle_source()
     assert "os.execv(TERMINAL_USER_INTERFACE_BIN" in src
@@ -96,7 +96,7 @@ def test_launcher_binary_path_matches_the_build():
     assert command_line_interface.TERMINAL_USER_INTERFACE_BIN == "/usr/local/lib/azarch/azarch"
 
 
-def test_bare_main_uses_run_tui(monkeypatch):
+def test_bare_main_uses_run_terminal_user_interface(monkeypatch):
     """command_line_interface.main([]) must call run_terminal_user_interface (bare azarch == the UI)."""
     command_line_interface = _command_line_interface()
     called = {}
@@ -105,7 +105,7 @@ def test_bare_main_uses_run_tui(monkeypatch):
     assert called.get("hit") is True
 
 
-def test_tui_is_bundled_before_cli():
+def test_terminal_user_interface_is_bundled_before_cli():
     """terminal_user_interface.py (the launcher) must be bundled before command_line_interface.py, whose main() dispatches to it."""
     assert "terminal_user_interface.py" in MODULE_ORDER
     assert MODULE_ORDER.index("terminal_user_interface.py") < MODULE_ORDER.index("command_line_interface.py")
@@ -113,7 +113,7 @@ def test_tui_is_bundled_before_cli():
 
 # --- graceful degradation with no terminal ----------------------------------
 
-def test_run_tui_without_tty_prints_pointer(monkeypatch, capsys):
+def test_run_terminal_user_interface_without_tty_prints_pointer(monkeypatch, capsys):
     """No usable terminal -> run_terminal_user_interface must NOT exec anything; it prints a pointer and rc 0."""
     command_line_interface = _command_line_interface()
     monkeypatch.setattr(command_line_interface, "_tty_ok", lambda: False)
@@ -127,7 +127,7 @@ def test_run_tui_without_tty_prints_pointer(monkeypatch, capsys):
         assert sub in out
 
 
-def test_run_tui_missing_binary_falls_back(monkeypatch, capsys):
+def test_run_terminal_user_interface_missing_binary_falls_back(monkeypatch, capsys):
     """A tty but a MISSING binary must fall back to the pointer, never crash."""
     command_line_interface = _command_line_interface()
     monkeypatch.setattr(command_line_interface, "_tty_ok", lambda: True)
@@ -138,7 +138,7 @@ def test_run_tui_missing_binary_falls_back(monkeypatch, capsys):
 
 # --- the build wiring: compile the C sources, no pollution, pinned exec ------
 
-def test_build_tui_inputs_are_the_c_sources():
+def test_build_terminal_user_interface_inputs_are_the_c_sources():
     """build_terminal_user_interface copies exactly the C sources/headers + the Makefile (no Python) into a
     scratch dir; the produced binary name matches the installed path's basename."""
     names = {p.name for p in terminal_user_interface_build._csrc_files()}
@@ -191,7 +191,7 @@ def _have_c_toolchain() -> bool:
             and shutil.which("make") is not None)
 
 
-def test_build_tui_compiles_and_does_not_pollute_the_repo_tree():
+def test_build_terminal_user_interface_compiles_and_does_not_pollute_the_repo_tree():
     """build_terminal_user_interface() must build in a TEMP dir, not the source tree -- no .o/binary left behind
     next to the sources (they would otherwise get tracked / shipped)."""
     def _artifacts():
@@ -210,7 +210,7 @@ def test_build_tui_compiles_and_does_not_pollute_the_repo_tree():
         shutil.rmtree(TERMINAL_USER_INTERFACE_SRC_DIR / "_test_build_out", ignore_errors=True)
 
 
-def test_tui_binary_is_pinned_executable_in_the_iso():
+def test_terminal_user_interface_binary_is_pinned_executable_in_the_iso():
     """archiso normalizes overlay modes, so the compiled binary must be pinned 0755 in the
     profile file_permissions or bare `azarch` would find it non-executable and fall back to
     the pointer instead of opening the UI."""
@@ -219,7 +219,7 @@ def test_tui_binary_is_pinned_executable_in_the_iso():
     assert perms[terminal_user_interface_build.TERMINAL_USER_INTERFACE_BIN_SYSTEM_PATH].endswith(":755")
 
 
-def test_tui_binary_is_pure_libc_no_ncurses_no_gtk():
+def test_terminal_user_interface_binary_is_pure_libc_no_ncurses_no_gtk():
     """The terminal UI BINARY (azarch) is pure libc + raw ANSI (previews shell out to kitty at
     runtime): its link recipe uses no ncurses and no GTK. (The media OSD, a SEPARATE binary, does
     link X -- see the next test -- but the terminal UI itself does not.)"""

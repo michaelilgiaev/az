@@ -42,34 +42,44 @@ from progress import ProgressBar
 from packages.application_menu import application_menu
 from packages.azarch import terminal_user_interface_build
 from packages.azarch import default_applications
-from packages.timedate import timedate
+# timedate (the Flask home page) was folded into the librewolf package (LibreWolf lands on it),
+# so its build wiring is imported from there now.
+from packages.librewolf import timedate
 from packages.passwords import packaging as passwords
 from packages.calamares import calamares
 from packages.calamares import locale
-# The modifications package is DISCOVERABLE: `modifications` is a namespace package (its
-# directory has NO __init__.py), each modification is a SUB-directory with an __init__.py, and
-# modification_discovery.with_emit_plan() finds every one exposing an emit_plan() (skipping any
-# directory without an __init__.py). The per-application tweaks below are collected that way in
-# _emit_apps -- so adding modifications/<newapp>/__init__.py with an emit_plan() ships it with
-# no edit here, and removing one never leaves a dangling import.
-import modification_discovery
-# The few modifications the compiler drives BY NAME (they expose more than emit_plan(), or
-# feed the desktop step, or hold vendored data/scripts), so they stay explicit imports:
+# The packages tree is DISCOVERABLE: `packages` is a namespace package (its directory has NO
+# __init__.py), each package is a SUB-directory with an __init__.py, and
+# package_discovery.with_emit_plan() finds every one exposing an emit_plan() (skipping any
+# directory without an __init__.py, and the packages.x86_64 manifest file). The per-application
+# tweaks below are collected that way in _emit_apps -- so adding packages/<newapp>/__init__.py
+# with an emit_plan() ships it with no edit here, and removing one never leaves a dangling import.
+import package_discovery
+# The packages the compiler drives BY NAME (they expose more than emit_plan(), feed the desktop
+# step, or hold vendored data/scripts), so they stay explicit imports:
 #   openbox      -- the whole live desktop: many constants + emit_plan (feeds _emit_desktop)
 #   librewolf    -- the browser-policy override (feeds _emit_desktop, not the app loop)
 #   gedit        -- notepad-mode: emit_plan (app loop) PLUS the compiled libpeas plugin build
 #   fastfetch    -- the branded logo/config (no emit_plan; config_jsonc()/logo_txt())
-#   home_directory -- the home layout DATA (dirs/links/trash; no emit_plan)
-from modifications import openbox
-from modifications import fastfetch
-from modifications import librewolf
-from modifications import gedit
-from modifications import home_directory
-# The per-application tweaks that expose ONLY emit_plan() (kitty, vlc, libreoffice, gimp,
-# thunar, xviewer, templates) are NOT imported by name -- _emit_apps discovers them. The
-# desktop-handled modifications (openbox, librewolf) are excluded from that discovery here so
-# they are not emitted twice.
+from packages import openbox
+from packages import fastfetch
+from packages import librewolf
+from packages import gedit
+# The home-directory LAYOUT data (dirs/links/trash; no emit_plan) was folded into the thunar
+# package (Thunar's sidebar is built from the same list), so _emit_homedir reads it from there.
+from packages.thunar import home_directory
+# The per-application tweaks that expose ONLY emit_plan() (kitty, vlc, libreoffice, gimp, thunar,
+# xviewer, templates) are NOT imported by name -- _emit_apps discovers them. The packages the
+# compiler already drives explicitly (the desktop pair openbox/librewolf, plus application_menu,
+# passwords, calamares, and the azarch guest command line interface) are excluded from that
+# discovery so they are not emitted twice. See _EXPLICIT_PACKAGES below.
 _DESKTOP_MODIFICATIONS = ("openbox", "librewolf")
+# Every package the compiler emits BY NAME (so package_discovery.with_emit_plan() must skip them
+# in the auto-discovered app loop). The desktop pair is emitted in _emit_desktop; application_menu
+# and passwords have their own emit_plan() driven directly; calamares and azarch are not app-loop
+# packages at all. Keeping this list here means a newly-dropped packages/<app>/ is auto-emitted
+# unless it is added here on purpose.
+_EXPLICIT_PACKAGES = ("openbox", "librewolf", "application_menu", "passwords", "calamares", "azarch")
 import installer
 import pacman
 import profile
@@ -233,12 +243,12 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # out to `ckbcomp`; without it the preview draws BLANK keys ("ckbcomp not found,
     # keyboard preview disabled"). `ckbcomp` is a self-contained Python 3 port of the
     # upstream (Debian/Manjaro) Perl ckbcomp -- byte-identical output, no Perl in the
-    # tree -- which Arch does NOT package, so we vendor it (as the modification directory
-    # module libraries/modifications/ckbcomp/, whose ckbcomp.py holds the script) into
+    # tree -- which Arch does NOT package, so we vendor it as a file in the calamares package
+    # (libraries/packages/calamares/ckbcomp.py holds the script) and copy it verbatim into
     # /usr/bin. It needs only python (in base) and the XKB data in /usr/share/X11/xkb (shipped
     # by xkeyboard-config), both present. It lands in the live ISO (as /usr/bin/ckbcomp, no .py
     # suffix) and is copied to the target by unpackfs.
-    emit.copy_modification_file("ckbcomp/ckbcomp.py", airootfs / "usr/bin/ckbcomp", mode=0o755)
+    emit.copy_data("calamares/ckbcomp.py", airootfs / "usr/bin/ckbcomp", mode=0o755)
 
     # 9 -- Stage installed-system pacman and pkgs service.
     # The package-management unit of the installed system: its /etc/pacman.conf, the
@@ -376,7 +386,7 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
     # rule, so they iterate through one loop. The LibreWolf entry drops
     # librewolf.overrides.cfg at the PROFILE path LibreWolf's AutoConfig loader actually
     # reads (~/.config/librewolf/librewolf/...); shipping it under /opt did nothing (the
-    # loader never looks there). See modifications/librewolf.emit_plan().
+    # loader never looks there). See packages/librewolf.emit_plan().
     for entry in openbox.emit_plan() + librewolf.emit_plan():
         content = entry["builder"]()
         dest_abs = entry["dest"]          # e.g. "/home/main/.xinitrc" or "/usr/local/bin/..."
@@ -459,7 +469,7 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
     # root-owned system paths. The service ENABLE-symlink is added in _link_services (like
     # the other azarch units); the OFFLINE Calamares install rsyncs all of it onto the
     # installed system so the home page also runs at boot there. Its runtime dep
-    # (python-flask) is in the manifest. See packages/timedate/timedate.py.
+    # (python-flask) is in the manifest. See packages/librewolf/timedate.py.
     for entry in timedate.emit_plan():
         emit.write_text(
             airootfs / entry["dest"].lstrip("/"),
@@ -488,7 +498,7 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
 
 def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
     """Overlay the per-application tweaks (kitty/vlc/gedit), each a self-contained
-    modification module exposing emit_plan() in the same builder/dest/mode/owner shape as
+    package module exposing emit_plan() in the same builder/dest/mode/owner shape as
     openbox/librewolf. Several extras beyond the plain write loop, all driven by keys on
     the plan entries so this stays declarative:
 
@@ -530,20 +540,19 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
             return skel / dest_abs[len(openbox.HOME) + 1:]
         return None
 
-    # The per-application tweaks are DISCOVERED, not hard-coded: every modification exposing an
+    # The per-application tweaks are DISCOVERED, not hard-coded: every package exposing an
     # emit_plan() (kitty icon | vlc vlcrc | gedit .desktop + gschema | libreoffice
     # registrymodifications.xcu | gimp gimprc | thunar thunarrc/xfconf/gtk.css/bookmarks/uca.xml
     # + icon | xviewer icon | templates ~/Templates set | ... plus any newly-added
-    # modifications/<app>/__init__.py) contributes its entries here, EXCEPT the two the desktop
-    # step already emits (openbox, librewolf). default_applications (a packages.azarch module,
-    # the XDG mimeapps + preferred terminal) is appended explicitly since it is not a
-    # modification. Each entry is handled the same declarative way below regardless of which
-    # modification produced it, so the set can grow/shrink freely.
-    app_mods = modification_discovery.with_emit_plan()
+    # packages/<app>/__init__.py) contributes its entries here, EXCEPT the ones the compiler
+    # drives by name (_EXPLICIT_PACKAGES: the desktop pair openbox/librewolf, application_menu,
+    # passwords, calamares, azarch). default_applications (a packages.azarch module, the XDG
+    # mimeapps + preferred terminal) is appended explicitly since it is not an app-loop package.
+    # Each entry is handled the same declarative way below regardless of which package produced
+    # it, so the set can grow/shrink freely.
+    app_mods = package_discovery.with_emit_plan(exclude=_EXPLICIT_PACKAGES)
     app_plan: list[dict] = []
     for name in sorted(app_mods):
-        if name in _DESKTOP_MODIFICATIONS:
-            continue
         app_plan += app_mods[name].emit_plan()
     app_plan += default_applications.emit_plan()
     for entry in app_plan:
@@ -621,10 +630,10 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
 
 def _emit_homedir(airootfs: Path, home: Path) -> None:
     """Create the home-directory LAYOUT -- the top-level folders and convenience symlinks
-    that modifications/home_directory defines as the single source of truth (and that Thunar's
-    sidebar mirrors). Unlike the emit_plan() modules this emits no file CONTENT: directories
-    and symlinks are not text, so it walks home_directory's plain data with emit.mkdir()/
-    emit.link() rather than a builder loop.
+    that packages.thunar.home_directory defines as the single source of truth (and that
+    Thunar's sidebar mirrors). Unlike the emit_plan() modules this emits no file CONTENT:
+    directories and symlinks are not text, so it walks home_directory's plain data with
+    emit.mkdir()/emit.link() rather than a builder loop.
 
     Everything is created in BOTH the live user's /home/main AND /etc/skel, so a
     Calamares-created user on the installed system inherits the identical layout. Symlink
@@ -656,7 +665,7 @@ def _emit_homedir(airootfs: Path, home: Path) -> None:
         for name, target in home_directory.LINKS:
             emit.link(target, root / name)
         # (No ".home-directory" symlink: the "Home Directory" sidebar bookmark it used to back
-        #  was deleted at the user's request -- see home_directory.py and thunar/sidebar.py.)
+        #  was deleted at the user's request -- see thunar/home_directory.py and thunar/sidebar.py.)
 
 
 def _emit_calamares(airootfs: Path) -> None:
@@ -671,7 +680,7 @@ def _emit_calamares(airootfs: Path) -> None:
     # the titlebar (rc.xml titleLayout's `N`). Calamares wants a real raster FILE here (a
     # PNG QIcon loads directly -- see calamares.py PRODUCT_ICON_FILE), so we rasterize the
     # SVG rather than shipping the vector. Same source asset as the .desktop launcher icon
-    # (modifications/openbox.INSTALLER_ICON_ASSET), so the topbar icon matches the launcher.
+    # (packages/openbox.INSTALLER_ICON_ASSET), so the topbar icon matches the launcher.
     emit.render_svg_png(
         openbox.INSTALLER_ICON_ASSET,
         base / "branding" / calamares.BRANDING / calamares.PRODUCT_ICON_FILE,
@@ -992,7 +1001,7 @@ def _link_services(airootfs: Path) -> None:
     # com.redhat.spice.0 virtio channel so the session spice-vdagent can sync the guest
     # pointer/clipboard/resolution with the SPICE client. Enabling it fixes the SPICE-guest
     # pointer regression (no hover / dropped clicks / stuck labels) -- see the spice-vdagent
-    # note in packages.x86_64 and the autostart line in modifications/openbox. Harmless on
+    # note in packages.x86_64 and the autostart line in packages/openbox. Harmless on
     # non-SPICE systems (the daemon idles with no channel). Auto-enabled on BOTH ISOs and,
     # via unpackfs, the installed system.
     for svc in ("NetworkManager.service", "org.cups.cupsd.service", "spice-vdagentd.service"):
