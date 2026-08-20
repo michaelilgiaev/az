@@ -16,8 +16,9 @@ installer step). Like timedate this is a PURE-PYTHON app (nothing to compile).
 The app is ONE FLAT directory (there is no pwlib/ sub-library anymore): the entry script
 and every module it imports sit side by side, so emit_plan() ships each of them as its own
 single-file entry into LIB_DIR (plus the /usr/local/bin/passwords launcher). The set of
-shipped modules is discovered from the source dir -- every .py except this build wiring and
-the unit tests -- so adding or removing a module needs no edit here.
+shipped modules is discovered from the source dir -- every .py except this build wiring
+(the unit tests live in the top-level tests/ dir, not here) -- so adding or removing a
+module needs no edit here.
 
 Layers:
   * SOURCE tree -- libraries/packages/passwords/ (paths.PASSWORDS_DIR):
@@ -65,18 +66,19 @@ SETUP_SYSTEM_PATH = f"{LIB_DIR}/encrypt_passwords_text_tile.py"
 LAUNCHER_SYSTEM_PATH = "/usr/local/bin/passwords"
 
 # --- Which source files ship (in the repo) ----------------------------------
-# The app is a flat directory, so we ship every .py in it EXCEPT this build wiring and the
-# unit tests. Discovering the set (rather than listing each module) means adding or removing
-# a module needs no edit here -- the new module ships automatically, matching the rest of
-# the tree's "add/remove a file freely" convention.
-_NON_SHIPPED = frozenset({"packaging.py", "test_passwords.py"})
+# The app is a flat directory, so we ship every .py in it EXCEPT this build wiring.
+# Discovering the set (rather than listing each module) means adding or removing a module
+# needs no edit here -- the new module ships automatically, matching the rest of the tree's
+# "add/remove a file freely" convention. (The unit tests live in the top-level tests/ dir,
+# not beside the sources, so nothing test-related is in this scan to exclude.)
+_NON_SHIPPED = frozenset({"packaging.py"})
 
 
 def _shipped_module_names() -> list[str]:
     """Every runtime .py file the app ships to LIB_DIR (sorted), i.e. the whole passwords
-    source dir minus the build wiring (packaging.py) and the unit tests (test_passwords.py).
-    The entry script, the optional importer, __init__.py and every working module are all
-    included -- they must travel together for the flat sibling imports to resolve."""
+    source dir minus the build wiring (packaging.py). The entry script, the optional importer,
+    __init__.py and every working module are all included -- they must travel together for the
+    flat sibling imports to resolve. (The unit tests are in tests/, not this dir.)"""
     return sorted(
         p.name
         for p in paths.PASSWORDS_DIR.iterdir()

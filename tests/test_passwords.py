@@ -21,8 +21,15 @@ import curses
 import os
 import sys
 import unittest
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# The app modules import each other by BARE top-level name (`import model`,
+# `from forms import addstr`, ...) because at runtime the launcher runs them with
+# the passwords package directory on sys.path. This test lives in tests/ (where the
+# tests belong), so it puts THAT directory -- libraries/packages/passwords/ -- on
+# sys.path first, exactly as the launcher does, and the bare imports resolve.
+_PASSWORDS_DIR = Path(__file__).resolve().parents[1] / "libraries" / "packages" / "passwords"
+sys.path.insert(0, str(_PASSWORDS_DIR))
 
 import clipboard
 import clipboard_owner

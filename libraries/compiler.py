@@ -46,12 +46,13 @@ from packages.timedate import timedate
 from packages.passwords import packaging as passwords
 from packages.calamares import calamares
 from packages.calamares import locale
-# The modifications package is DISCOVERABLE: each modification is a directory with an
-# __init__.py, and modifications.with_emit_plan() finds every one exposing an emit_plan()
-# (skipping any directory without an __init__.py). The per-application tweaks below are
-# collected that way in _emit_apps -- so adding modifications/<newapp>/__init__.py with an
-# emit_plan() ships it with no edit here, and removing one never leaves a dangling import.
-import modifications
+# The modifications package is DISCOVERABLE: `modifications` is a namespace package (its
+# directory has NO __init__.py), each modification is a SUB-directory with an __init__.py, and
+# modification_discovery.with_emit_plan() finds every one exposing an emit_plan() (skipping any
+# directory without an __init__.py). The per-application tweaks below are collected that way in
+# _emit_apps -- so adding modifications/<newapp>/__init__.py with an emit_plan() ships it with
+# no edit here, and removing one never leaves a dangling import.
+import modification_discovery
 # The few modifications the compiler drives BY NAME (they expose more than emit_plan(), or
 # feed the desktop step, or hold vendored data/scripts), so they stay explicit imports:
 #   openbox      -- the whole live desktop: many constants + emit_plan (feeds _emit_desktop)
@@ -538,7 +539,7 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
     # the XDG mimeapps + preferred terminal) is appended explicitly since it is not a
     # modification. Each entry is handled the same declarative way below regardless of which
     # modification produced it, so the set can grow/shrink freely.
-    app_mods = modifications.with_emit_plan()
+    app_mods = modification_discovery.with_emit_plan()
     app_plan: list[dict] = []
     for name in sorted(app_mods):
         if name in _DESKTOP_MODIFICATIONS:

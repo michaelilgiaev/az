@@ -20,7 +20,7 @@ sibling `import`s at runtime, and a store path that drifts from ~/Vault silently
   * the emit_plan() dest/mode entries + that it does not mutate module state,
   * the launcher (execs `python passwords.py "$@"` from the install dir, executable),
   * the flat-package ship contract (every runtime module installs into LIB_DIR beside the
-    entry script; the build wiring + unit tests do NOT ship),
+    entry script; the build wiring does NOT ship, and the unit tests are in tests/ anyway),
   * the ~/Vault retarget (the store and session plaintext live under ~/Vault, NOT the
     old ~/Archive, per the distribution PROMPT), and the config lives in the user's home
     (not beside the root-owned code) so the setup script can write it,
@@ -58,7 +58,7 @@ def test_emit_plan_dest_mode_table():
     executable (0o755) so typing `passwords` runs it; every module is plain data (0o644, run
     through the launcher's python, never executed directly). Pin the key entries + the two
     structural rules: every non-launcher entry is a 0o644 .py under LIB_DIR, and the build
-    wiring / unit tests never ship."""
+    wiring never ships (the unit tests are not beside the sources -- they live in tests/)."""
     got = {e["dest"]: e["mode"] for e in pw.emit_plan()}
     for dest, mode in EXPECTED_KEY_PLAN.items():
         assert got.get(dest) == mode, dest
@@ -68,9 +68,10 @@ def test_emit_plan_dest_mode_table():
         else:
             assert dest.startswith(pw.LIB_DIR + "/") and dest.endswith(".py"), dest
             assert mode == 0o644, dest
-    # The build wiring and the unit tests must never ship to the target.
+    # The build wiring must never ship to the target; the unit tests live in the top-level
+    # tests/ dir (not beside the sources), so nothing test-shaped is ever in the ship set.
     assert f"{pw.LIB_DIR}/packaging.py" not in got
-    assert f"{pw.LIB_DIR}/test_passwords.py" not in got
+    assert not any(d.rsplit("/", 1)[-1].startswith("test_") for d in got)
 
 
 def test_emit_plan_builders_are_callable_and_nonempty():
@@ -125,9 +126,10 @@ def test_flat_app_ships_every_module_beside_the_entry_script():
     sibling `import`s). Pin that emit_plan() ships each source module into LIB_DIR, and that
     the entry script's own install dir is LIB_DIR."""
     shipped = {e["dest"] for e in pw.emit_plan()}
-    # Every runtime .py in the source dir (minus build wiring + tests) must be shipped.
+    # Every runtime .py in the source dir (minus the build wiring) must be shipped. The unit
+    # tests are not in this dir anymore -- they live in the top-level tests/ dir.
     for p in paths.PASSWORDS_DIR.iterdir():
-        if p.is_file() and p.suffix == ".py" and p.name not in ("packaging.py", "test_passwords.py"):
+        if p.is_file() and p.suffix == ".py" and p.name != "packaging.py":
             assert f"{pw.LIB_DIR}/{p.name}" in shipped, p.name
     assert pw.ENTRY_SYSTEM_PATH.startswith(pw.LIB_DIR + "/")
 
