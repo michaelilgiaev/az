@@ -53,9 +53,10 @@ def test_python_menu_modules_are_deleted():
     ]
     for name in gone:
         assert not (CSRC_DIR / name).exists(), f"{name} should have been deleted"
-    # The only Python left is the launcher + the build wiring.
+    # The only Python left is the package __init__, the launcher, and the build wiring
+    # (the package now carries an __init__.py like every other packages/ subdirectory).
     pyfiles = sorted(p.name for p in CSRC_DIR.glob("*.py"))
-    assert pyfiles == ["application_menu.py", "launcher.py"], pyfiles
+    assert pyfiles == ["__init__.py", "application_menu.py", "launcher.py"], pyfiles
 
 
 def test_csrc_dir_is_flattened_up():
@@ -66,8 +67,8 @@ def test_csrc_dir_is_flattened_up():
     assert (CSRC_DIR / "Makefile").is_file()
     assert (CSRC_DIR / "theme.h").is_file()
     # A representative spread of the sibling translation units is present at top level.
-    for name in ("applist.c", "applications.c", "usage.c", "icons.c", "actions.c",
-                 "winwatch.c", "kscroll.c", "power.c", "theme.c"):
+    for name in ("application_list.c", "applications.c", "usage.c", "icons.c", "actions.c",
+                 "window_watch.c", "kickoff_scrollbar.c", "power.c", "theme.c"):
         assert (CSRC_DIR / name).is_file(), name
 
 

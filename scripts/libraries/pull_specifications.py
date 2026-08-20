@@ -79,7 +79,7 @@ def read_endpoints():
     specification stays honest if a mirror / service URL is changed.
 
     Everything here is read from the real configuration modules (pacman.py,
-    installer.py in libraries/; locale.py in libraries/modifications/calamares/) -- the
+    installer.py in libraries/; locale.py in libraries/packages/calamares/) -- the
     same strings baked into the ISO -- so this is not a hand-maintained list that
     can drift.
     """

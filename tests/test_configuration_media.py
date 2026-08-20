@@ -408,20 +408,21 @@ def test_autostart_shortens_the_fn_hold_autorepeat():
 
 
 # --- the OSD is a C/Xlib program: bottom-middle, cyan, iconed, no-flicker, draggable ---------
-# The OSD was REWRITTEN from the tkinter osd_indicator.py to a compiled Xlib program (osd.c),
-# per the follow-up spec: "written in C, not Python", "it should not flicker", "bottom middle",
-# "stay a tiny bit longer / fade", "hover with mouse to drag ... add some sort of highlighter".
-# These tests pin those contracts against the C SOURCE (osd.c) -- the artifact the ISO compiles.
+# The OSD was REWRITTEN from the tkinter osd_indicator.py to a compiled Xlib program
+# (on_screen_display.c), per the follow-up spec: "written in C, not Python", "it should not
+# flicker", "bottom middle", "stay a tiny bit longer / fade", "hover with mouse to drag ... add
+# some sort of highlighter". These tests pin those contracts against the C SOURCE
+# (on_screen_display.c) -- the artifact the ISO compiles.
 
 def _osd_src() -> str:
-    return (paths.AZARCH_COMMAND_LINE_INTERFACE_DIR / "osd.c").read_text(encoding="utf-8")
+    return (paths.AZARCH_COMMAND_LINE_INTERFACE_DIR / "on_screen_display.c").read_text(encoding="utf-8")
 
 
 def test_osd_is_written_in_c_not_python():
-    """The spec: this should be written in C, not Python. The OSD is osd.c (an Xlib program), and
-    the old tkinter osd_indicator.py is gone."""
+    """The spec: this should be written in C, not Python. The OSD is on_screen_display.c (an Xlib
+    program), and the old tkinter osd_indicator.py is gone."""
     d = paths.AZARCH_COMMAND_LINE_INTERFACE_DIR
-    assert (d / "osd.c").exists(), "osd.c (the C OSD) must exist"
+    assert (d / "on_screen_display.c").exists(), "on_screen_display.c (the C OSD) must exist"
     assert not (d / "osd_indicator.py").exists(), "the old tkinter OSD must be removed"
     src = _osd_src()
     assert "#include <X11/Xlib.h>" in src            # a real Xlib program
@@ -573,10 +574,10 @@ def test_osd_ships_executable_and_pinned():
 
 
 def test_osd_is_not_bundled_into_the_fast_cli():
-    """The OSD is a SEPARATE compiled program (osd.c); it must NOT be bundled into the `azarch`
-    script (the bundle is Python modules only), and the fast command line interface path must not
-    import tkinter (nothing does anymore -- the OSD is C)."""
-    assert "osd.c" not in MODULE_ORDER
+    """The OSD is a SEPARATE compiled program (on_screen_display.c); it must NOT be bundled into
+    the `azarch` script (the bundle is Python modules only), and the fast command line interface
+    path must not import tkinter (nothing does anymore -- the OSD is C)."""
+    assert "on_screen_display.c" not in MODULE_ORDER
     assert "osd_indicator.py" not in MODULE_ORDER
     assert "import tkinter" not in bundle_source()
 
@@ -584,7 +585,7 @@ def test_osd_is_not_bundled_into_the_fast_cli():
 def test_osd_never_lingers_and_hard_backstop_bounds_lifetime():
     """The OSD must self-terminate even when stdin closes with NO usable message (the launcher
     died before writing, or wrote only blanks/garbage). This is a SOURCE-CONTRACT test only -- it
-    reads osd.c and never compiles or RUNS it, so the suite stays pure (no X server touched, no
+    reads on_screen_display.c and never compiles or RUNS it, so the suite stays pure (no X server touched, no
     window ever mapped -- `tests.sh` never fires the UI).
 
     Contract: an absolute MAX_LIFE_MS backstop bounds EVERY path (checked at the top of the tick

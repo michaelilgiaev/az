@@ -1,6 +1,6 @@
 /* Az'arch application menu (C port) -- Kickoff-style scrollbar.
  * One-to-one port of widgets.py KickoffScrollBar, drawn with Cairo. */
-#include "kscroll.h"
+#include "kickoff_scrollbar.h"
 #include "theme.h"
 
 #include <math.h>

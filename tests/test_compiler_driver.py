@@ -20,13 +20,13 @@ import paths
 
 def test_ckbcomp_asset_is_vendored_python_script():
     # Calamares' keyboard preview shells out to `ckbcomp` to render key legends;
-    # Arch does not package it, so we vendor it as a flat modification module
-    # (libraries/modifications/ckbcomp.py) -- an upstream tool modified to fit Az'arch. It
-    # is a Python 3 port of the upstream Perl ckbcomp (byte-identical output, but no
-    # Perl in the tree). It must exist and be that Python script (not an empty
-    # placeholder).
+    # Arch does not package it, so we vendor it as a modification directory module
+    # (libraries/modifications/ckbcomp/, script at ckbcomp/ckbcomp.py) -- upstream software
+    # modified to fit Az'arch. It is a Python 3 port of the upstream Perl ckbcomp (byte-
+    # identical output, but no Perl in the tree). It must exist and be that Python script
+    # (not an empty placeholder).
     src = paths.CKBCOMP_SRC
-    assert src.is_file(), "libraries/modifications/ckbcomp.py is missing"
+    assert src.is_file(), "libraries/modifications/ckbcomp/ckbcomp.py is missing"
     head = src.read_text(errors="ignore")[:200]
     assert head.startswith("#!/usr/bin/env python3")
     assert "ckbcomp" in head  # the script's own banner names itself
@@ -36,7 +36,7 @@ def test_run_installs_ckbcomp_into_usr_bin():
     # run() must plant the vendored ckbcomp at /usr/bin/ckbcomp (executable) so the
     # keyboard preview finds it. Assert the copy_modification_file call is present in run().
     src = inspect.getsource(compiler.run)
-    assert 'copy_modification_file("ckbcomp.py"' in src
+    assert 'copy_modification_file("ckbcomp/ckbcomp.py"' in src
     assert 'usr/bin/ckbcomp' in src
 
 
@@ -45,7 +45,7 @@ def test_emit_calamares_ships_the_window_icon_into_branding():
     # branding productIcon: a real PNG copied INTO branding/azarch/. Assert _emit_calamares
     # copies the standardized installer icon asset to the branding productIcon file, so the
     # topbar icon exists and matches the launcher icon.
-    from modifications.calamares import calamares
+    from packages.calamares import calamares
     from modifications import openbox
 
     src = inspect.getsource(compiler._emit_calamares)

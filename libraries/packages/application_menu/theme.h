@@ -92,7 +92,7 @@ const char *az_color(AzColorRole role);
 #define AZ_SCROLL_THUMB_MIN    AZ_SCALED(24)   /* was 32 @1.35 */
 
 /* --- Fonts (POINTS) -- TWO scaling paths, because the menu draws text two different ways:
- *   * The app-row NAME/TYPE (applist.c) and the power labels (power.c) are drawn with
+ *   * The app-row NAME/TYPE (application_list.c) and the power labels (power.c) are drawn with
  *     pango_cairo_create_layout(cr), whose PangoContext defaults to 96 DPI and does NOT inherit
  *     gtk-xft-dpi -- so those do NOT scale via the DPI channel and MUST be scaled EXPLICITLY at
  *     build time with AZ_SCALED() (like the DPI-blind OpenBox titlebar). Stock = old/1.35, so

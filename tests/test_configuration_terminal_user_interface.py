@@ -246,7 +246,7 @@ def test_osd_build_deps_include_the_x_libraries():
     assert "$(OSD_BIN)" in recipe
     assert "x11" in recipe and "xrandr" in recipe and "xft" in recipe
     # the OSD source itself is a build input
-    assert "osd.c" in {p.name for p in terminal_user_interface_build._csrc_files()}
+    assert "on_screen_display.c" in {p.name for p in terminal_user_interface_build._csrc_files()}
 
 
 def test_osd_x_build_deps_are_provisioned_on_the_build_host():
@@ -254,7 +254,7 @@ def test_osd_x_build_deps_are_provisioned_on_the_build_host():
     (build_osd -> make) BEFORE the makepkg makedepends step, so its X dev deps must be baked into
     the build-host toolchain. This fails (not just skips) if the Dockerfile or _check_host_deps
     ever drops them -- the gap that would let a green dev-host suite hide a broken Docker build
-    (osd.c not compiling for want of X11/Xrandr/Xft headers)."""
+    (on_screen_display.c not compiling for want of X11/Xrandr/Xft headers)."""
     import re
     from pathlib import Path
 

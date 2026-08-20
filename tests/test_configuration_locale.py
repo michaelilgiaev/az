@@ -1,4 +1,4 @@
-"""modifications.calamares.locale -- the static (English-only, Asia/Jerusalem) locale
+"""packages.calamares.locale -- the static (English-only, Asia/Jerusalem) locale
 setup plus the country->locale map retained as data for the deferred resolver.
 
 As of the "no auto-resolve" change the emitted setup bash is STATIC: it must NOT
@@ -12,7 +12,7 @@ the single source of truth those future commands will consume.
 
 from __future__ import annotations
 
-from modifications.calamares import locale
+from packages.calamares import locale
 
 
 def test_language_map_has_no_duplicate_country_codes():

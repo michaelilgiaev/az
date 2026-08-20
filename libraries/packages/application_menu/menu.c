@@ -27,8 +27,8 @@
 #include "usage.h"
 #include "icons.h"
 #include "actions.h"
-#include "applist.h"
-#include "winwatch.h"
+#include "application_list.h"
+#include "window_watch.h"
 #include "power.h"
 
 /* Echo-swallow safety cap. A Super close-TAP makes xcape inject the Menu echo on
@@ -158,7 +158,7 @@ static void install_css(void) {
         "}"
         /* Kill GTK's edge-overshoot GLOW + undershoot shadow at the scroll limits
          * (item E): Tk's list had no bounce/glow. Belt-and-braces with the scrolled
-         * window's kinetic-scrolling=FALSE in applist.c. */
+         * window's kinetic-scrolling=FALSE in application_list.c. */
         "overshoot, undershoot { background: none; box-shadow: none; }",
         AZ_SURFACE_COLOR, AZ_DIVIDER_COLOR, AZ_BORDER_COLOR,
         AZ_SURFACE_COLOR, AZ_TEXT_COLOR, AZ_TEXT_COLOR,

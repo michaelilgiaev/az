@@ -36,14 +36,17 @@ import subprocess
 import sys
 
 # The interpreter and module we re-exec as the detached owner. Using the same
-# sys.executable keeps us on the interpreter the app is already running under.
-_OWNER_MODULE = 'pwlib.clipboard_owner'
+# sys.executable keeps us on the interpreter the app is already running under. The
+# owner is a sibling module (the app is one flat directory now), so it is run as the
+# top-level module `clipboard_owner` with this directory on the child's PYTHONPATH.
+_OWNER_MODULE = 'clipboard_owner'
 
 
-def _pkg_root():
-    """Directory that contains the `pwlib` package (so the child's PYTHONPATH can
-    import pwlib.clipboard_owner regardless of how `passwords` was launched)."""
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+def _module_dir():
+    """Directory that contains this module (and its sibling clipboard_owner), so the
+    child's PYTHONPATH can import clipboard_owner regardless of how `passwords` was
+    launched."""
+    return os.path.dirname(os.path.abspath(__file__))
 
 
 def _spawn_owner(values, timeout=None):
@@ -56,9 +59,9 @@ def _spawn_owner(values, timeout=None):
     if timeout is not None:
         args += ['--timeout', str(timeout)]
     env = dict(os.environ)
-    # Ensure the child can import the package even if launched from an installed
-    # console-script wrapper whose sys.path[0] is not the package root.
-    root = _pkg_root()
+    # Ensure the child can import the owner module even if launched from an installed
+    # console-script wrapper whose sys.path[0] is not this directory.
+    root = _module_dir()
     env['PYTHONPATH'] = root + (os.pathsep + env['PYTHONPATH']
                                if env.get('PYTHONPATH') else '')
     try:

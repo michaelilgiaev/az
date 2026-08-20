@@ -44,26 +44,31 @@ from packages.azarch import terminal_user_interface_build
 from packages.azarch import default_applications
 from packages.timedate import timedate
 from packages.passwords import packaging as passwords
-from modifications.calamares import calamares
-from modifications.calamares import locale
+from packages.calamares import calamares
+from packages.calamares import locale
+# The modifications package is DISCOVERABLE: each modification is a directory with an
+# __init__.py, and modifications.with_emit_plan() finds every one exposing an emit_plan()
+# (skipping any directory without an __init__.py). The per-application tweaks below are
+# collected that way in _emit_apps -- so adding modifications/<newapp>/__init__.py with an
+# emit_plan() ships it with no edit here, and removing one never leaves a dangling import.
+import modifications
+# The few modifications the compiler drives BY NAME (they expose more than emit_plan(), or
+# feed the desktop step, or hold vendored data/scripts), so they stay explicit imports:
+#   openbox      -- the whole live desktop: many constants + emit_plan (feeds _emit_desktop)
+#   librewolf    -- the browser-policy override (feeds _emit_desktop, not the app loop)
+#   gedit        -- notepad-mode: emit_plan (app loop) PLUS the compiled libpeas plugin build
+#   fastfetch    -- the branded logo/config (no emit_plan; config_jsonc()/logo_txt())
+#   home_directory -- the home layout DATA (dirs/links/trash; no emit_plan)
 from modifications import openbox
 from modifications import fastfetch
 from modifications import librewolf
-# Per-application tweaks (each a self-contained modification module with an emit_plan()):
-#   kitty       -- swap the cat-in-a-terminal icon for a plain terminal icon
-#   vlc         -- suppress the first-run "metadata network access" dialog + follow theme
-#   gedit       -- notepad mode: one window per file, no multi-tab feature (+ schema override)
-#   libreoffice -- skip the first-run / introduction popups (Tip of the Day, first-start ...)
-#   gimp        -- skip the first-run intro dialogs (Tip of the Day + fresh-profile Welcome)
-from modifications import kitty
-from modifications import vlc
 from modifications import gedit
-from modifications import libreoffice
-from modifications import gimp
 from modifications import home_directory
-from modifications import templates
-from modifications import thunar
-from modifications import xviewer
+# The per-application tweaks that expose ONLY emit_plan() (kitty, vlc, libreoffice, gimp,
+# thunar, xviewer, templates) are NOT imported by name -- _emit_apps discovers them. The
+# desktop-handled modifications (openbox, librewolf) are excluded from that discovery here so
+# they are not emitted twice.
+_DESKTOP_MODIFICATIONS = ("openbox", "librewolf")
 import installer
 import pacman
 import profile
@@ -227,12 +232,12 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # out to `ckbcomp`; without it the preview draws BLANK keys ("ckbcomp not found,
     # keyboard preview disabled"). `ckbcomp` is a self-contained Python 3 port of the
     # upstream (Debian/Manjaro) Perl ckbcomp -- byte-identical output, no Perl in the
-    # tree -- which Arch does NOT package, so we vendor it (as the flat modification module
-    # libraries/modifications/ckbcomp.py) into /usr/bin. It needs only python (in base) and the
-    # XKB data in /usr/share/X11/xkb (shipped by xkeyboard-config), both present. It
-    # lands in the live ISO (as /usr/bin/ckbcomp, no .py suffix) and is copied to the
-    # target by unpackfs.
-    emit.copy_modification_file("ckbcomp.py", airootfs / "usr/bin/ckbcomp", mode=0o755)
+    # tree -- which Arch does NOT package, so we vendor it (as the modification directory
+    # module libraries/modifications/ckbcomp/, whose ckbcomp.py holds the script) into
+    # /usr/bin. It needs only python (in base) and the XKB data in /usr/share/X11/xkb (shipped
+    # by xkeyboard-config), both present. It lands in the live ISO (as /usr/bin/ckbcomp, no .py
+    # suffix) and is copied to the target by unpackfs.
+    emit.copy_modification_file("ckbcomp/ckbcomp.py", airootfs / "usr/bin/ckbcomp", mode=0o755)
 
     # 9 -- Stage installed-system pacman and pkgs service.
     # The package-management unit of the installed system: its /etc/pacman.conf, the
@@ -440,7 +445,7 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
         airootfs / terminal_user_interface_build.TERMINAL_USER_INTERFACE_PREVIEW_SYSTEM_DIR.lstrip("/")
     )
     # The media OSD indicator (bottom-middle cyan volume/brightness bar). Like the terminal UI it
-    # is a COMPILED C program (osd.c -> azarch-osd), built from the SAME Makefile and installed
+    # is a COMPILED C program (on_screen_display.c -> azarch-osd), built from the SAME Makefile and installed
     # next to the UI binary. `azarch volume/brightness` launches it; it draws a single, no-flicker
     # Xlib window (so it links X11/Xrandr/Xft, on the build host per the UI build deps). Root-
     # owned; the OFFLINE Calamares install rsyncs it onto the installed system with no extra step.
@@ -461,12 +466,12 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
             mode=entry["mode"],
         )
     # Az'arch passwords (OUR encrypted GPG/AES256 terminal password manager -- the
-    # `passwords` command). A pure-Python app like timedate: emit_plan() writes the three
-    # top-level files (the entry script, the one-time setup script, and the
-    # /usr/local/bin/passwords launcher) to their fixed root-owned system paths, then the
-    # pwlib/ package tree is copied wholesale (the emit_plan builder/dest/mode contract is
-    # one-file-per-entry and cannot express a directory). No systemd service -- it is an
-    # interactive command, not a boot service. Its runtime deps (gnupg for gpg, xclip for
+    # `passwords` command). A pure-Python app like timedate, and now ONE FLAT directory (no
+    # pwlib/ sub-library): emit_plan() writes the entry script, the optional plaintext
+    # importer, every working module, and the /usr/local/bin/passwords launcher to their
+    # fixed root-owned system paths -- one single-file entry each, so the whole flat app is
+    # expressed by the plan alone (no separate directory copy). No systemd service -- it is
+    # an interactive command, not a boot service. Its runtime deps (gnupg for gpg, xclip for
     # the clipboard) are in the manifest. The OFFLINE Calamares install rsyncs all of it
     # onto the installed system, so `passwords` works there too, unlocking a store at
     # ~/Vault/passwords.txt.gpg. See packages/passwords/packaging.py.
@@ -476,8 +481,6 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
             entry["builder"](),
             mode=entry["mode"],
         )
-    emit.copy_tree(passwords.PWLIB_SRC_DIR,
-                   airootfs / passwords.PWLIB_SYSTEM_DIR.lstrip("/"))
     # re-assert ownership of the live user's tree (new files were added under it).
     subprocess.run(_sudo() + ["chown", "-R", "1000:998", str(home)], check=False)
 
@@ -526,16 +529,23 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
             return skel / dest_abs[len(openbox.HOME) + 1:]
         return None
 
-    # kitty (icon: SVG asset copy + PNG removals + titlebar PNG render) | vlc (home vlcrc) |
-    # gedit (system .desktop + gschema override) | libreoffice (home registrymodifications.xcu,
-    # skips the first-run popups) | gimp (home gimprc, skips the Tip-of-the-Day + fresh-profile
-    # Welcome intro dialogs; GIMP itself loads normally -- no preload) | thunar (home thunarrc +
-    # xfconf channel + gtk.css + bookmarks + uca.xml; system link script + custom icon +
-    # thunar.desktop override) | xviewer (custom icon + xviewer.desktop Icon override). One loop.
-    for entry in (kitty.emit_plan() + vlc.emit_plan()
-                  + gedit.emit_plan() + libreoffice.emit_plan() + gimp.emit_plan()
-                  + thunar.emit_plan() + xviewer.emit_plan()
-                  + default_applications.emit_plan() + templates.emit_plan()):
+    # The per-application tweaks are DISCOVERED, not hard-coded: every modification exposing an
+    # emit_plan() (kitty icon | vlc vlcrc | gedit .desktop + gschema | libreoffice
+    # registrymodifications.xcu | gimp gimprc | thunar thunarrc/xfconf/gtk.css/bookmarks/uca.xml
+    # + icon | xviewer icon | templates ~/Templates set | ... plus any newly-added
+    # modifications/<app>/__init__.py) contributes its entries here, EXCEPT the two the desktop
+    # step already emits (openbox, librewolf). default_applications (a packages.azarch module,
+    # the XDG mimeapps + preferred terminal) is appended explicitly since it is not a
+    # modification. Each entry is handled the same declarative way below regardless of which
+    # modification produced it, so the set can grow/shrink freely.
+    app_mods = modifications.with_emit_plan()
+    app_plan: list[dict] = []
+    for name in sorted(app_mods):
+        if name in _DESKTOP_MODIFICATIONS:
+            continue
+        app_plan += app_mods[name].emit_plan()
+    app_plan += default_applications.emit_plan()
+    for entry in app_plan:
         dest_abs = entry["dest"]                       # absolute path on the target
         # Package-owned override path? Redirect its body to the post-pacstrap staging dir
         # (or drop it if suppress-only) instead of writing into the conflicting overlay.

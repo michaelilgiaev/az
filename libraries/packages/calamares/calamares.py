@@ -342,7 +342,7 @@ unpack:
 
 # --- 3b. modules/shellprocess.conf -----------------------------------------
 # The shellprocess configuration (LIVE_USER, STOCK_LINUX_PRESET, _mkinitcpio_reset_command,
-# shellprocess_conf) is defined in modifications/calamares_shellprocess/calamares_shellprocess.py and imported at
+# shellprocess_conf) is defined in packages/calamares/calamares_shellprocess.py and imported at
 # the top of this module. It is emitted below via emit_map()'s shellprocess_conf().
 
 

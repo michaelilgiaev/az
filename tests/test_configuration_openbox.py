@@ -78,7 +78,7 @@ def test_plan_has_exactly_eighteen_entries():
     # (entries 3-9 are the system theme: dark is the default; `azarch theme` toggles it; entry
     # 10 is the GLOBAL SCALE, PROMPT Display/scale task.)
     # NOTE: the media OSD (/usr/local/lib/azarch/azarch-osd) is NO LONGER a PLAN entry -- it is a
-    # COMPILED C binary now (osd.c), built + installed by terminal_user_interface_build.build_osd()
+    # COMPILED C binary now (on_screen_display.c), built + installed by terminal_user_interface_build.build_osd()
     # like the terminal UI binary, so it is not emitted as a text file here.
     # The .bash_profile snippet is appended by emit_plan(), NOT part of PLAN.
     assert len(desktop.PLAN) == 18
@@ -907,7 +907,7 @@ def test_install_wrapper_is_sh_script():
 # --- azarch --sshd-hypervisor guest command line interface (now pure Python) -------------------
 # The `azarch` guest command line interface is a single Python module (libraries/packages/azarch.py);
 # desktop.azarch_command_line_interface() ships it to /usr/local/bin/azarch with the country table
-# re-injected from modifications/calamares/locale. These tests assert on that emitted Python.
+# re-injected from packages/calamares/locale. These tests assert on that emitted Python.
 
 def test_azarch_cli_is_a_python_program():
     # It is Python now (no shell), so it must carry the python shebang and NOT be a
@@ -1132,10 +1132,10 @@ def test_azarch_resolve_date_time_sets_timezone_only():
 
 
 def test_azarch_resolve_embeds_country_table_from_locale():
-    # The country->layout table is the single source of truth in modifications/calamares/locale;
+    # The country->layout table is the single source of truth in packages/calamares/locale;
     # the emitted command line interface's COUNTRY_TABLE must equal exactly that data. Build the emitted
     # module and compare its table to locale.RESOLVER_COUNTRY_TABLE.
-    from modifications.calamares import locale
+    from packages.calamares import locale
     azcli = _load_azarch_command_line_interface()
 
     expected = {cc: (loc, lay, km, 1 if en else 0)
@@ -1156,7 +1156,7 @@ def test_azarch_cli_is_valid_python_and_in_sync():
     # Python, and importing/executing it must reproduce the in-sync COUNTRY_TABLE.
     import ast
 
-    from modifications.calamares import locale
+    from packages.calamares import locale
 
     out = desktop.azarch_command_line_interface()
     # No f-string/template artefacts leaked from the injection.

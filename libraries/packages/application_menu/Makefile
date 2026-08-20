@@ -8,7 +8,7 @@ CFLAGS  += -O2 -Wall -Wextra -std=c11 -Wno-deprecated-declarations \
            $(shell pkg-config --cflags $(PKGS))
 LDFLAGS += $(shell pkg-config --libs $(PKGS)) -lm
 
-OBJS = menu.o applist.o applications.o usage.o icons.o actions.o winwatch.o kscroll.o power.o theme.o
+OBJS = menu.o application_list.o applications.o usage.o icons.o actions.o window_watch.o kickoff_scrollbar.o power.o theme.o
 BIN  = azarch-application-menu-daemon
 
 # The tests now live in the repo-root tests/ dir (their single home). The `test` target

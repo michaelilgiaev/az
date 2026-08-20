@@ -1,8 +1,8 @@
 /* Az'arch application menu (C port) -- the scrollable application list.
  * One-to-one port of applist.py CanvasAppList, drawn with Cairo/Pango. */
-#include "applist.h"
+#include "application_list.h"
 #include "theme.h"
-#include "kscroll.h"
+#include "kickoff_scrollbar.h"
 
 #include <string.h>
 #include <math.h>
@@ -378,7 +378,7 @@ static void on_size_alloc(GtkWidget *w, GdkRectangle *alloc, gpointer data) {
 /* Paint a widget's background the menu colour. Only the list GtkDrawingArea paints
  * itself; the scrolled window and its auto-created viewport have NO background, so a
  * bare relayout expose can show the X server's default BLACK. The primary cure for
- * the "goes black when I delete" flash is in kscroll.c (the scrollbar reserves its
+ * the "goes black when I delete" flash is in kickoff_scrollbar.c (the scrollbar reserves its
  * column by collapsing WIDTH, never by mapping/unmapping its window) -- these
  * backgrounds are defence-in-depth so any other transient expose stays on-theme. */
 static void widget_bg(GtkWidget *w, const char *hex) {

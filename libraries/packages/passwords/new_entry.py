@@ -7,16 +7,16 @@ that arranges the columns between the pinned title and pinned notes.
 
 It builds on forms.py's primitives (prompt_line / prompt_multiline / nav_bar /
 addstr, the _label vocabulary and the _COLUMN_CHOICES menu, the nav-hint sets) and
-the model helpers; forms.py does NOT import back from here (only tui.py calls
-new_entry), so there is no import cycle.
+the model helpers; forms.py does NOT import back from here (only
+terminal_user_interface.py calls new_entry), so there is no import cycle.
 """
 
 import curses
 
-from . import forms
-from .forms import (addstr, nav_bar, _label, _COLUMN_CHOICES, ENTER_KEYS, ESC,
+import forms
+from forms import (addstr, nav_bar, _label, _COLUMN_CHOICES, ENTER_KEYS, ESC,
                     _NAV_PICK, _NAV_VALUE, _NAV_NEW_TITLE, _NAV_REORDER)
-from .model import Entry, clean_key, move_element, notes_last, strip_scheme
+from model import Entry, clean_key, move_element, notes_last, strip_scheme
 
 # The two interactive prompts are reached through the `forms` module (as
 # forms.prompt_line / forms.prompt_multiline, not bound as bare names) so tests

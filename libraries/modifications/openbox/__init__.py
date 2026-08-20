@@ -174,7 +174,7 @@ INSTALL_MENU_DESKTOP_PATH = "/usr/share/applications/azarch-install.desktop"
 # application-menu entry (Icon=azarch-installer) resolve it regardless of which path/size
 # the icon loader consults. It is ALSO the Calamares window icon (branding.desc
 # productIcon, a rasterized PNG QIcon can load), so the OpenBox titlebar shows it -- see
-# modifications/calamares/calamares.py.
+# packages/calamares/calamares.py.
 INSTALLER_ICON_ASSET = "icons/azarch.svg"
 INSTALLER_ICON_NAME = "azarch-installer"
 INSTALLER_ICON_PIXMAP = f"/usr/share/pixmaps/{INSTALLER_ICON_NAME}.png"
@@ -1164,7 +1164,7 @@ def openbox_autostart() -> str:
 
     So the Calamares OFFLINE install OVERWRITES this file (home + skel) with
     openbox_autostart_installed() -- which drops exactly those two lines -- via the
-    modifications/calamares_shellprocess cleanup step. Each line is guarded
+    packages/calamares_shellprocess cleanup step. Each line is guarded
     (`command -v` / `[ -x ]`) so a missing tool never aborts the session. Shipped to the
     live home and /etc/skel."""
     layouts = ",".join(KEYBOARD_LAYOUTS)
@@ -1316,12 +1316,12 @@ Keywords=install;calamares;setup;
 # was split into small modules (common/country_table/resolver/theme/sshd/command_line_interface). This module
 # no longer AUTHORS the command line interface; it (a) asks the package to BUNDLE those modules into one
 # self-contained script (bundle.bundle_source()), then (b) injects the country->locale table
-# from modifications/calamares/locale (the single source of truth) between the AZARCH_CC markers,
+# from packages/calamares/locale (the single source of truth) between the AZARCH_CC markers,
 # and ships the result to /usr/local/bin/azarch. See paths.AZARCH_COMMAND_LINE_INTERFACE_DIR and packages/azarch/.
 AZARCH_BIN_PATH = "/usr/local/bin/azarch"
 
 # The media OSD indicator (the bottom-middle cyan volume/brightness bar) is a COMPILED Xlib
-# program now (osd.c -> azarch-osd), NOT a tkinter script -- it is a separate GUI process that
+# program now (on_screen_display.c -> azarch-osd), NOT a tkinter script -- it is a separate GUI process that
 # `azarch volume/brightness` launches and feeds one JSON line. It is a SINGLE resident window: a
 # second launch forwards to the one already up (no flicker) instead of spawning another. It ships
 # next to the C terminal user interface binary in the azarch lib dir (built by
@@ -1340,7 +1340,7 @@ def azarch_command_line_interface() -> str:
     """The `azarch` guest command line interface (Python), BUNDLED from the libraries/packages/azarch/ package
     into one self-contained script and shipped to /usr/local/bin/azarch. The COUNTRY_TABLE
     dict literal between the AZARCH_CC markers is REGENERATED from
-    modifications/calamares/locale.RESOLVER_COUNTRY_TABLE so the guest resolver's
+    packages/calamares/locale.RESOLVER_COUNTRY_TABLE so the guest resolver's
     country->locale/layout map stays in lock-step with that single source of truth. The
     package already carries a working copy of the table, so it is self-contained/runnable on
     its own; this re-injection just guarantees no drift.
@@ -1352,7 +1352,7 @@ def azarch_command_line_interface() -> str:
       --resolve-language  geolocate by IP and set English + the region language
       --resolve-region    do both
     """
-    from modifications.calamares.locale import resolver_country_table_py  # noqa: E402 (locale lives with the calamares modification)
+    from packages.calamares.locale import resolver_country_table_py  # noqa: E402 (locale lives with the calamares package)
     from packages.azarch.bundle import bundle_source  # noqa: E402 (the command line interface package's bundler)
 
     src = bundle_source()
@@ -1367,7 +1367,7 @@ def azarch_command_line_interface() -> str:
 
 
 # --- 8b. /usr/local/lib/azarch/azarch-osd (the media OSD indicator) ---------
-# The OSD is a COMPILED C program (osd.c) now, so there is no text builder here anymore: it is
+# The OSD is a COMPILED C program (on_screen_display.c) now, so there is no text builder here anymore: it is
 # built + installed by terminal_user_interface_build.build_osd() (invoked from compiler.py right
 # after the terminal UI binary), and pinned executable in profile.FILE_PERMISSIONS. The old
 # azarch_osd() text emitter (which shipped the tkinter osd_indicator.py verbatim) is gone.
@@ -1604,7 +1604,7 @@ PLAN = [
         "owner": "root",
     },
     # NOTE: the media OSD indicator (/usr/local/lib/azarch/azarch-osd) is NOT emitted here as a
-    # text file anymore -- it is a COMPILED C program (osd.c). compiler.py builds and installs it
+    # text file anymore -- it is a COMPILED C program (on_screen_display.c). compiler.py builds and installs it
     # via terminal_user_interface_build.build_osd(), exactly like the terminal UI binary. It is
     # still pinned 0755 in FILE_PERMISSIONS so archiso ships it executable.
 ]

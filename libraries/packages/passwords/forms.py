@@ -1,7 +1,7 @@
 """Curses sub-screens and primitives: line/multi-line prompts, the entry view,
 the element editor, the new-entry wizard, and the "type yes" confirmations (for
-deleting an entry and for removing a column). Kept apart from tui.py so each file
-stays small.
+deleting an entry and for removing a column). Kept apart from terminal_user_interface.py
+so each file stays small.
 
 The entry view answers to a single keypress -- a NUMBER clips that column, "c"
 clips every column in order, "e" edits, "s" toggles STAY OPEN -- and clipping
@@ -9,8 +9,8 @@ quits the whole app unless STAY OPEN is on for the session."""
 
 import curses
 
-from . import clipboard
-from .model import ESSENTIAL, clean_key, move_element, notes_last
+import clipboard
+from model import ESSENTIAL, clean_key, move_element, notes_last
 
 ENTER_KEYS = (curses.KEY_ENTER, 10, 13)
 BACKSPACE_KEYS = (curses.KEY_BACKSPACE, 127, 8)

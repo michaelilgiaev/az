@@ -28,7 +28,8 @@ UI (clears the query, highlight to the top) and is safe to spam. Only q / Q quit
 
 import curses
 
-from . import forms, newentry
+import forms
+import new_entry
 
 SEARCH, SELECT = 0, 1
 
@@ -268,7 +269,7 @@ class App:
     # ----- actions -----
 
     def action_new(self):
-        entry = newentry.new_entry(self.stdscr)
+        entry = new_entry.new_entry(self.stdscr)
         if entry is None:
             return
         self.store.entries.append(entry)

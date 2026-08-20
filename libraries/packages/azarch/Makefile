@@ -3,7 +3,7 @@
 #   azarch      -- the full-screen terminal user interface. Pure libc + raw ANSI/termios (no
 #                  ncurses, no GTK) so it is tiny and starts instantly. Image previews shell
 #                  out to `kitten icat` at runtime -- no compile-time dep on kitty.
-#   azarch-osd  -- the media OSD: the bottom-middle cyan volume/brightness bar (osd.c). It is
+#   azarch-osd  -- the media OSD: the bottom-middle cyan volume/brightness bar (on_screen_display.c). It is
 #                  an Xlib GUI (single window, no flicker), so it links X11 + Xrandr (primary
 #                  monitor) + Xft (anti-aliased percent text, matching the old tkinter look).
 #                  Kept a SEPARATE binary from `azarch`: it has its own main() and its own
@@ -45,8 +45,8 @@ $(BIN): $(OBJS)
 
 # The OSD is a single self-contained translation unit; compile+link it directly with the X
 # flags. It shares no headers with the terminal UI (it is a standalone Xlib program).
-$(OSD_BIN): osd.c
-	$(CC) $(CFLAGS) $(OSD_CFLAGS) osd.c -o $@ $(LDFLAGS) $(OSD_LIBS)
+$(OSD_BIN): on_screen_display.c
+	$(CC) $(CFLAGS) $(OSD_CFLAGS) on_screen_display.c -o $@ $(LDFLAGS) $(OSD_LIBS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@

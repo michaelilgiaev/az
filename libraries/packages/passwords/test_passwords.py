@@ -5,7 +5,7 @@ Most curses UI flows (prompt_line, new_entry, entry_view) need a live terminal;
 instead we test the pure pieces they lean on -- URL scheme stripping, the
 title-only save rule, element (de)serialization round-trips, alphabetical
 sorting, element reordering, notes-pinned-last, and the small display/label
-helpers in pwlib.forms.
+helpers in forms.
 
 Where a flow's control logic is worth pinning down we drive it headless: a no-op
 window (_FakeWin) plus a stubbed prompt_line cover confirm_delete, new_entry's
@@ -24,9 +24,14 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from pwlib import clipboard, clipboard_owner, forms, model, newentry, tui
-from pwlib.model import (Entry, Store, clean_key, move_element, notes_last,
-                         strip_scheme)
+import clipboard
+import clipboard_owner
+import forms
+import model
+import new_entry
+import terminal_user_interface
+from model import (Entry, Store, clean_key, move_element, notes_last,
+                   strip_scheme)
 
 
 class StripSchemeTests(unittest.TestCase):
@@ -130,12 +135,12 @@ class FormsHelperTests(unittest.TestCase):
         self.assertEqual(forms._label('API key'), 'API key')
 
     def test_header_strips_scheme(self):
-        self.assertEqual(newentry._header_for_title('https://www.x.com'),
+        self.assertEqual(new_entry._header_for_title('https://www.x.com'),
                          'NEW ENTRY x.com')
 
     def test_header_empty_title(self):
-        self.assertEqual(newentry._header_for_title(''), 'NEW ENTRY')
-        self.assertEqual(newentry._header_for_title('http://'), 'NEW ENTRY')
+        self.assertEqual(new_entry._header_for_title(''), 'NEW ENTRY')
+        self.assertEqual(new_entry._header_for_title('http://'), 'NEW ENTRY')
 
     def test_column_choices_present(self):
         keys = [k for _, k, _ in forms._COLUMN_CHOICES]
@@ -181,10 +186,10 @@ class SetColumnTests(unittest.TestCase):
         orig = forms.prompt_line
         forms.prompt_line = lambda *a, **k: next(seq)
         try:
-            newentry._set_column(win, elements, 'x', 'username', 'Username', False)
+            new_entry._set_column(win, elements, 'x', 'username', 'Username', False)
             self.assertEqual(elements[-1], ['username', 'some_user'])
             # Re-picking the same column edits in place -- no duplicate key.
-            newentry._set_column(win, elements, 'x', 'username', 'Username', False)
+            new_entry._set_column(win, elements, 'x', 'username', 'Username', False)
             self.assertEqual(elements[-1], ['username', 'edited_user'])
             self.assertEqual([k for k, _ in elements], ['title', 'username'])
         finally:
@@ -196,7 +201,7 @@ class SetColumnTests(unittest.TestCase):
         orig = forms.prompt_line
         forms.prompt_line = lambda *a, **k: None   # ESC on the value page
         try:
-            newentry._set_column(win, elements, 'x', 'email', 'Email', False)
+            new_entry._set_column(win, elements, 'x', 'email', 'Email', False)
             self.assertEqual(elements, [['title', 'x']])
         finally:
             forms.prompt_line = orig
@@ -213,7 +218,7 @@ class QuitVsBackTests(unittest.TestCase):
     def _app(self):
         store = Store([Entry([['title', 'example.com'],
                               ['username', 'u'], ['password', 'p']])])
-        app = tui.App(_FakeWin(), store)
+        app = terminal_user_interface.App(_FakeWin(), store)
         app.results = list(store.entries)
         app.sel = 0
         return app
@@ -225,7 +230,7 @@ class QuitVsBackTests(unittest.TestCase):
 
     def test_q_quits_from_select(self):
         app = self._app()
-        app.mode = tui.SELECT
+        app.mode = terminal_user_interface.SELECT
         self.assertFalse(app.handle_select(ord('q')))
         self.assertFalse(app.handle_select(ord('Q')))
 
@@ -233,15 +238,15 @@ class QuitVsBackTests(unittest.TestCase):
         app = self._app()
         # ESC returns True (stays in the app) and resets to the search box.
         self.assertTrue(app.handle_search(forms.ESC))
-        self.assertEqual(app.mode, tui.SEARCH)
-        app.mode = tui.SELECT
+        self.assertEqual(app.mode, terminal_user_interface.SEARCH)
+        app.mode = terminal_user_interface.SELECT
         self.assertTrue(app.handle_select(forms.ESC))
 
     def test_q_in_entry_view_quits_app(self):
         # entry_view (opened with ENTER) returns (changed, quit); q inside it must
         # propagate as a FULL quit (handle_select returns False).
         app = self._app()
-        app.mode = tui.SELECT
+        app.mode = terminal_user_interface.SELECT
         orig = forms.entry_view
         forms.entry_view = lambda *a, **k: (False, True)   # (changed, quit)
         try:
@@ -252,7 +257,7 @@ class QuitVsBackTests(unittest.TestCase):
 
     def test_back_from_entry_view_keeps_app(self):
         app = self._app()
-        app.mode = tui.SELECT
+        app.mode = terminal_user_interface.SELECT
         orig = forms.entry_view
         forms.entry_view = lambda *a, **k: (False, False)   # ESC/back inside view
         try:
@@ -264,7 +269,7 @@ class QuitVsBackTests(unittest.TestCase):
         # An edit inside the entry view reports changed=True; the app must mark the
         # store dirty and stay open.
         app = self._app()
-        app.mode = tui.SELECT
+        app.mode = terminal_user_interface.SELECT
         orig = forms.entry_view
         forms.entry_view = lambda *a, **k: (True, False)   # changed, no quit
         try:
@@ -277,7 +282,7 @@ class QuitVsBackTests(unittest.TestCase):
         # The app owns a STAY OPEN holder, off by default, and hands it to
         # entry_view so the toggle survives across re-opens within one run.
         app = self._app()
-        app.mode = tui.SELECT
+        app.mode = terminal_user_interface.SELECT
         self.assertEqual(app.stay_open, [False])
         seen = {}
         orig = forms.entry_view
@@ -323,20 +328,20 @@ class EnterInSearchTests(unittest.TestCase):
 
     def _app(self, titles=('example.com', 'other.com')):
         store = Store([Entry([['title', t], ['password', 'p']]) for t in titles])
-        app = tui.App(_FakeWin(), store)
+        app = terminal_user_interface.App(_FakeWin(), store)
         app.refilter()
         return app
 
     def test_enter_jumps_to_list_without_quitting(self):
         app = self._app()
         for enter in forms.ENTER_KEYS:
-            app.mode = tui.SEARCH
+            app.mode = terminal_user_interface.SEARCH
             app.sel = 5
             # True == stay in the app (does not quit); mode flips to SELECT and
             # the highlight lands on the first match. ENTER here never opens the
             # entry view or copies -- it only moves the cursor into the list.
             self.assertTrue(app.handle_search(enter))
-            self.assertEqual(app.mode, tui.SELECT)
+            self.assertEqual(app.mode, terminal_user_interface.SELECT)
             self.assertEqual(app.sel, 0)          # highlight on the first match
 
     def test_enter_with_no_matches_is_noop(self):
@@ -344,9 +349,9 @@ class EnterInSearchTests(unittest.TestCase):
         app.query = 'zzz-nothing-matches'
         app.refilter()
         self.assertEqual(app.results, [])
-        app.mode = tui.SEARCH
+        app.mode = terminal_user_interface.SEARCH
         self.assertTrue(app.handle_search(10))    # stays in the app
-        self.assertEqual(app.mode, tui.SEARCH)    # and stays in SEARCH (no jump)
+        self.assertEqual(app.mode, terminal_user_interface.SEARCH)    # and stays in SEARCH (no jump)
 
 
 class MoveElementTests(unittest.TestCase):
@@ -582,13 +587,13 @@ class NavLabelTests(unittest.TestCase):
 
     def test_select_nav_enter_is_continue(self):
         # ENTER in the search/select bar continues into the entry view now.
-        self.assertIn(('ENTER', 'continue'), tui._NAV_SELECT)
-        self.assertNotIn(('ENTER', 'copy'), tui._NAV_SELECT)
+        self.assertIn(('ENTER', 'continue'), terminal_user_interface._NAV_SELECT)
+        self.assertNotIn(('ENTER', 'copy'), terminal_user_interface._NAV_SELECT)
 
     def test_select_nav_dropped_show_edit_multi(self):
         # The reworked SELECT bar no longer advertises v/e/m -- those verbs moved
         # into the entry view.
-        keys = [k for k, _ in tui._NAV_SELECT]
+        keys = [k for k, _ in terminal_user_interface._NAV_SELECT]
         for gone in ('v', 'e', 'm'):
             self.assertNotIn(gone, keys)
 
@@ -645,15 +650,15 @@ class NewEntryEmptyTitleTests(unittest.TestCase):
     def _run_with_titles(self, titles, added=None):
         seq = iter(titles)
         orig_prompt = forms.prompt_line
-        orig_add = newentry._add_columns
+        orig_add = new_entry._add_columns
         forms.prompt_line = lambda *a, **k: next(seq)
-        newentry._add_columns = (added if added is not None
+        new_entry._add_columns = (added if added is not None
                               else (lambda win, els, title: None))
         try:
-            return newentry.new_entry(_FakeWin())
+            return new_entry.new_entry(_FakeWin())
         finally:
             forms.prompt_line = orig_prompt
-            newentry._add_columns = orig_add
+            new_entry._add_columns = orig_add
 
     def test_empty_then_empty_returns_none(self):
         self.assertIsNone(self._run_with_titles(['', '']))
@@ -692,7 +697,7 @@ class _KeyWin(_FakeWin):
 
 
 class ReorderColumnsTests(unittest.TestCase):
-    """newentry.reorder_columns driven by scripted keystrokes. The highlight starts
+    """new_entry.reorder_columns driven by scripted keystrokes. The highlight starts
     on the first non-title column; "[" / "]" move it; ESC finishes."""
 
     def _els(self):
@@ -702,7 +707,7 @@ class ReorderColumnsTests(unittest.TestCase):
     def test_move_selected_down_then_exit(self):
         els = self._els()
         # ] moves the first movable (email) down one, then ESC.
-        changed = newentry.reorder_columns(_KeyWin([ord(']'), forms.ESC]),
+        changed = new_entry.reorder_columns(_KeyWin([ord(']'), forms.ESC]),
                                         els, 'HDR')
         self.assertTrue(changed)
         self.assertEqual([k for k, _ in els],
@@ -711,7 +716,7 @@ class ReorderColumnsTests(unittest.TestCase):
     def test_arrow_then_move_up(self):
         els = self._els()
         # Down-arrow moves the highlight to username, "[" moves it up above email.
-        changed = newentry.reorder_columns(
+        changed = new_entry.reorder_columns(
             _KeyWin([curses.KEY_DOWN, ord('['), forms.ESC]), els, 'HDR')
         self.assertTrue(changed)
         self.assertEqual([k for k, _ in els],
@@ -719,7 +724,7 @@ class ReorderColumnsTests(unittest.TestCase):
 
     def test_esc_without_moving_reports_no_change(self):
         els = self._els()
-        changed = newentry.reorder_columns(_KeyWin([forms.ESC]), els, 'HDR')
+        changed = new_entry.reorder_columns(_KeyWin([forms.ESC]), els, 'HDR')
         self.assertFalse(changed)
         self.assertEqual([k for k, _ in els],
                          ['title', 'email', 'username', 'password'])
@@ -727,7 +732,7 @@ class ReorderColumnsTests(unittest.TestCase):
     def test_title_stays_pinned_when_moving_top_column_up(self):
         els = self._els()
         # "[" on the top movable column (email) can't cross the title; no change.
-        changed = newentry.reorder_columns(_KeyWin([ord('['), forms.ESC]),
+        changed = new_entry.reorder_columns(_KeyWin([ord('['), forms.ESC]),
                                         els, 'HDR')
         self.assertFalse(changed)
         self.assertEqual(els[0][0], 'title')
@@ -735,7 +740,7 @@ class ReorderColumnsTests(unittest.TestCase):
     def test_fewer_than_two_movable_returns_false(self):
         # Only a title + one column -> nothing to reorder; any key returns.
         els = [['title', 't'], ['email', 'e']]
-        changed = newentry.reorder_columns(_KeyWin([ord('q')]), els, 'HDR')
+        changed = new_entry.reorder_columns(_KeyWin([ord('q')]), els, 'HDR')
         self.assertFalse(changed)
 
     def test_notes_normalized_last_and_pinned(self):
@@ -743,7 +748,7 @@ class ReorderColumnsTests(unittest.TestCase):
         # movable columns are only those between title and notes.
         els = [['title', 't'], ['notes', 'n'], ['email', 'e'], ['username', 'u']]
         # ] moves the first movable (email) down past username; notes stays last.
-        changed = newentry.reorder_columns(_KeyWin([ord(']'), forms.ESC]),
+        changed = new_entry.reorder_columns(_KeyWin([ord(']'), forms.ESC]),
                                         els, 'HDR')
         self.assertTrue(changed)
         self.assertEqual([k for k, _ in els],
@@ -752,7 +757,7 @@ class ReorderColumnsTests(unittest.TestCase):
     def test_only_notes_besides_columns_pinned(self):
         # title + one column + notes -> fewer than two MOVABLE columns -> no-op.
         els = [['title', 't'], ['email', 'e'], ['notes', 'n']]
-        changed = newentry.reorder_columns(_KeyWin([ord('q')]), els, 'HDR')
+        changed = new_entry.reorder_columns(_KeyWin([ord('q')]), els, 'HDR')
         self.assertFalse(changed)
 
 
@@ -1017,8 +1022,8 @@ class DeleteNoStatusTests(unittest.TestCase):
     def _app(self):
         store = Store([Entry([['title', 'gone.com'], ['password', 'p']]),
                        Entry([['title', 'keep.com'], ['password', 'p']])])
-        app = tui.App(_FakeWin(), store)
-        app.mode = tui.SELECT
+        app = terminal_user_interface.App(_FakeWin(), store)
+        app.mode = terminal_user_interface.SELECT
         app.refilter()
         return app, store
 

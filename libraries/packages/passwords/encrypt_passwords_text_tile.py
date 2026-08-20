@@ -19,8 +19,9 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from pwlib import config, crypto
-from pwlib.keyboard import keyboard_status_line
+import config
+import cryptography
+from keyboard import keyboard_status_line
 
 
 def ask(prompt, default):
@@ -34,10 +35,10 @@ def _verify_roundtrip(enc_path, src_path, passphrase):
     fd, tmp = tempfile.mkstemp(prefix='.pwverify-')
     os.close(fd)
     try:
-        crypto.decrypt_to_file(enc_path, tmp, passphrase)
+        cryptography.decrypt_to_file(enc_path, tmp, passphrase)
         with open(tmp, 'rb') as a, open(src_path, 'rb') as b:
             return a.read() == b.read()
-    except crypto.CryptoError:
+    except cryptography.CryptoError:
         return False
     finally:
         try:
@@ -68,8 +69,8 @@ def main():
         return 1
 
     try:
-        crypto.encrypt(src, out, pw)
-    except crypto.CryptoError as e:
+        cryptography.encrypt(src, out, pw)
+    except cryptography.CryptoError as e:
         print('Encryption failed: %s' % e)
         return 1
 

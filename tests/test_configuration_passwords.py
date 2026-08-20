@@ -4,22 +4,23 @@
 passphrase (never stored), the store is a single .gpg file at ~/Vault/passwords.txt.gpg,
 and running the command unlocks it, decrypts it to a session plaintext for a curses
 search/select UI, then re-encrypts on quit only if something changed and always deletes
-the session plaintext. pwlib/ holds the app; packages/passwords/packaging.py is the ISO
-build wiring.
+the session plaintext. The app is ONE FLAT directory now (no pwlib/ sub-library): the
+entry script and every module it imports sit side by side; packages/passwords/packaging.py
+is the ISO build wiring.
 
 Why these tests matter: like the timedate/application-menu payloads, compiler.py never
 inspects the CONTENT of these builders -- it blindly iterates emit_plan() and calls
-emit.write_text with the (dest, mode) each entry declares, then copies the pwlib/ tree
-with emit.copy_tree. So the declarative PLAN table + the launcher text + the pwlib
-copy-contract ARE the contract. A wrong mode makes the launcher non-executable (typing
-`passwords` then fails), a launcher that does not cd into LIB_DIR breaks `from pwlib
-import ...` at runtime, and a store path that drifts from ~/Vault silently writes the
+emit.write_text with the (dest, mode) each entry declares. So the declarative plan + the
+launcher text ARE the contract. A wrong mode makes the launcher non-executable (typing
+`passwords` then fails), a launcher that does not cd into LIB_DIR breaks the entry script's
+sibling `import`s at runtime, and a store path that drifts from ~/Vault silently writes the
 .gpg to the wrong place. None of that raises in Python; it only shows up as a broken
 `passwords` command on the built ISO. These tests pin:
 
-  * the emit_plan() dest/mode table + that it does not mutate module state,
+  * the emit_plan() dest/mode entries + that it does not mutate module state,
   * the launcher (execs `python passwords.py "$@"` from the install dir, executable),
-  * the pwlib package copy contract (source dir exists, installs to LIB_DIR/pwlib),
+  * the flat-package ship contract (every runtime module installs into LIB_DIR beside the
+    entry script; the build wiring + unit tests do NOT ship),
   * the ~/Vault retarget (the store and session plaintext live under ~/Vault, NOT the
     old ~/Archive, per the distribution PROMPT), and the config lives in the user's home
     (not beside the root-owned code) so the setup script can write it,
@@ -34,23 +35,42 @@ import inspect
 import compiler
 import paths
 from packages.passwords import packaging as pw
-from packages.passwords.pwlib import config as pwconfig
+from packages.passwords import config as pwconfig
 
 
 # --- emit_plan() contract ---------------------------------------------------
-EXPECTED_PLAN = {
+# The flat app ships every runtime module (0o644) into LIB_DIR plus the launcher (0o755) on
+# PATH. These KEY entries must always be present with these modes; the module set as a whole
+# is discovered from the source dir, so it is pinned structurally (below) rather than as a
+# frozen list.
+EXPECTED_KEY_PLAN = {
     "/usr/local/lib/azarch-passwords/passwords.py": 0o644,
     "/usr/local/lib/azarch-passwords/encrypt_passwords_text_tile.py": 0o644,
+    "/usr/local/lib/azarch-passwords/cryptography.py": 0o644,
+    "/usr/local/lib/azarch-passwords/terminal_user_interface.py": 0o644,
+    "/usr/local/lib/azarch-passwords/new_entry.py": 0o644,
     "/usr/local/bin/passwords": 0o755,
 }
 
 
 def test_emit_plan_dest_mode_table():
-    """The declarative (dest -> mode) table compiler.py iterates. The launcher MUST be
-    executable (0o755) so typing `passwords` runs it; the scripts are plain data (0o644,
-    they are run through the launcher's python, never executed directly)."""
+    """The declarative (dest -> mode) entries compiler.py iterates. The launcher MUST be
+    executable (0o755) so typing `passwords` runs it; every module is plain data (0o644, run
+    through the launcher's python, never executed directly). Pin the key entries + the two
+    structural rules: every non-launcher entry is a 0o644 .py under LIB_DIR, and the build
+    wiring / unit tests never ship."""
     got = {e["dest"]: e["mode"] for e in pw.emit_plan()}
-    assert got == EXPECTED_PLAN
+    for dest, mode in EXPECTED_KEY_PLAN.items():
+        assert got.get(dest) == mode, dest
+    for dest, mode in got.items():
+        if dest == pw.LAUNCHER_SYSTEM_PATH:
+            assert mode == 0o755
+        else:
+            assert dest.startswith(pw.LIB_DIR + "/") and dest.endswith(".py"), dest
+            assert mode == 0o644, dest
+    # The build wiring and the unit tests must never ship to the target.
+    assert f"{pw.LIB_DIR}/packaging.py" not in got
+    assert f"{pw.LIB_DIR}/test_passwords.py" not in got
 
 
 def test_emit_plan_builders_are_callable_and_nonempty():
@@ -88,8 +108,8 @@ def test_launcher_name_is_the_passwords_command():
 
 # --- launcher ---------------------------------------------------------------
 def test_launcher_execs_python_entry_from_install_dir():
-    """The launcher cd's into the install dir (so the entry script's `from pwlib import
-    ...` resolves) and execs the system python on passwords.py, forwarding arguments so
+    """The launcher cd's into the install dir (so the entry script's sibling `import`s
+    resolve) and execs the system python on passwords.py, forwarding arguments so
     `passwords -h` reaches the script. `exec` so the python process replaces the shell and
     receives the signals the app traps to shred the session plaintext."""
     sh = pw.launcher_sh()
@@ -98,39 +118,38 @@ def test_launcher_execs_python_entry_from_install_dir():
     assert 'exec python -u passwords.py "$@"' in sh
 
 
-# --- the pwlib package copy contract ----------------------------------------
-def test_pwlib_source_tree_exists_and_installs_beside_the_entry_script():
-    """The entry + setup scripts do `from pwlib import ...`, so pwlib/ MUST install into
-    LIB_DIR/pwlib (compiler.py copies it there with emit.copy_tree, since emit_plan is
-    one-file-per-entry and cannot express a directory). Pin the source dir exists and the
-    install target is the sibling of the entry script."""
-    assert pw.PWLIB_SRC_DIR.is_dir(), pw.PWLIB_SRC_DIR
-    assert pw.PWLIB_SYSTEM_DIR == f"{pw.LIB_DIR}/pwlib"
-    # The install dir is a sibling of the entry script (same LIB_DIR), so the runtime
-    # sys.path insert in passwords.py finds it.
+# --- the flat-package ship contract -----------------------------------------
+def test_flat_app_ships_every_module_beside_the_entry_script():
+    """The app is one flat directory: the entry script and every module it imports install
+    side by side in LIB_DIR (so the runtime sys.path insert in passwords.py resolves the bare
+    sibling `import`s). Pin that emit_plan() ships each source module into LIB_DIR, and that
+    the entry script's own install dir is LIB_DIR."""
+    shipped = {e["dest"] for e in pw.emit_plan()}
+    # Every runtime .py in the source dir (minus build wiring + tests) must be shipped.
+    for p in paths.PASSWORDS_DIR.iterdir():
+        if p.is_file() and p.suffix == ".py" and p.name not in ("packaging.py", "test_passwords.py"):
+            assert f"{pw.LIB_DIR}/{p.name}" in shipped, p.name
     assert pw.ENTRY_SYSTEM_PATH.startswith(pw.LIB_DIR + "/")
 
 
-def test_pwlib_ships_the_modules_the_app_imports():
-    """pwlib is imported at runtime on the target; its modules must actually be present in
-    the source tree that gets copied, or the command crashes at import on the built ISO."""
-    names = {p.name for p in pw.PWLIB_SRC_DIR.iterdir() if p.suffix == ".py"}
-    # passwords.py: `from pwlib import config, crypto, tui`, `from pwlib.help import HELP`,
-    # `from pwlib.keyboard import ...`, `from pwlib.model import Store`. tui pulls forms +
-    # clipboard. All must be present.
-    assert {"__init__.py", "config.py", "crypto.py", "model.py", "tui.py",
-            "forms.py", "help.py", "keyboard.py", "clipboard.py"} <= names
+def test_flat_app_ships_the_modules_the_entry_imports():
+    """The entry script does `import config`, `import cryptography`,
+    `import terminal_user_interface`, `from help import HELP`, `from keyboard import ...`,
+    `from model import Store`; terminal_user_interface pulls forms + new_entry; forms pulls
+    clipboard. All must ship or the command crashes at import on the built ISO."""
+    shipped = {e["dest"] for e in pw.emit_plan()}
+    for name in ("config.py", "cryptography.py", "model.py", "terminal_user_interface.py",
+                 "forms.py", "new_entry.py", "help.py", "keyboard.py", "clipboard.py",
+                 "clipboard_owner.py"):
+        assert f"{pw.LIB_DIR}/{name}" in shipped, name
 
 
-def test_pwlib_modules_parse_as_python():
-    """Defense-in-depth: every shipped pwlib module is syntactically valid Python (they are
-    copied verbatim and run on the target, so a syntax error would only surface there)."""
-    for mod in pw.PWLIB_SRC_DIR.glob("*.py"):
-        ast.parse(mod.read_text(encoding="utf-8"), filename=str(mod))
-    # The two top-level scripts too.
-    for name in ("passwords.py", "encrypt_passwords_text_tile.py"):
-        src = (paths.PASSWORDS_DIR / name).read_text(encoding="utf-8")
-        ast.parse(src, filename=name)
+def test_shipped_modules_parse_as_python():
+    """Defense-in-depth: every shipped module is syntactically valid Python (they are copied
+    verbatim and run on the target, so a syntax error would only surface there)."""
+    for e in pw.emit_plan():
+        if e["dest"].endswith(".py"):
+            ast.parse(e["builder"](), filename=e["dest"])
 
 
 # --- the ~/Vault retarget (the PROMPT's explicit requirement) ---------------
@@ -167,16 +186,13 @@ def test_config_lives_in_user_home_not_beside_root_owned_code():
 # --- the compiler actually WIRES the package in (seam coverage) -------------
 def test_compiler_emit_desktop_wires_passwords_in():
     """Guard the compiler-to-package SEAM: the package module's contract can be perfect
-    while compiler.py forgets to invoke it, shipping an ISO where `passwords` crashes with
-    ModuleNotFoundError (pwlib never copied) or is missing entirely. The package tests
-    above call emit_plan()/copy_tree themselves and would NOT catch that. Assert the real
-    _emit_desktop source both emits the passwords plan AND copies the pwlib tree."""
+    while compiler.py forgets to invoke it, shipping an ISO where `passwords` is missing
+    entirely. The package tests above call emit_plan() themselves and would NOT catch that.
+    Assert the real _emit_desktop source emits the passwords plan (which, for the now-flat
+    app, ships every module -- there is no separate directory copy anymore)."""
     src = inspect.getsource(compiler._emit_desktop)
-    # The emit_plan loop for passwords (writes the entry/setup/launcher files).
+    # The emit_plan loop for passwords (writes every module + the launcher).
     assert "passwords.emit_plan()" in src
-    # The pwlib package-tree copy (emit_plan is one-file-per-entry; the dir needs this).
-    assert "passwords.PWLIB_SRC_DIR" in src and "copy_tree" in src
-    assert "passwords.PWLIB_SYSTEM_DIR" in src
     # And the module is imported under the name the wiring uses.
     assert "from packages.passwords import packaging as passwords" in \
         inspect.getsource(compiler)
@@ -249,8 +265,9 @@ def test_launcher_is_a_binary_on_path_not_a_bashrc_command():
 def test_tui_nav_mirrors_azarch_and_drops_open_and_help():
     """The PROMPT reworks the TUI: azarch-style nav (WASD/HJKL/arrows movement, '/' search,
     ESC back, Q quit) and the 'o open' + 'h help' verbs deleted. These are behavioural, but
-    pin the shipped tui.py source so the keymap cannot silently regress on the ISO."""
-    src = (pw.PWLIB_SRC_DIR / "tui.py").read_text(encoding="utf-8")
+    pin the shipped terminal_user_interface.py source so the keymap cannot silently regress on
+    the ISO."""
+    src = (paths.PASSWORDS_DIR / "terminal_user_interface.py").read_text(encoding="utf-8")
     # Movement keys (WASD + HJKL + arrows) are wired.
     assert "_UP_KEYS" in src and "_DOWN_KEYS" in src
     for key in ("ord('w')", "ord('k')", "ord('j')", "curses.KEY_LEFT",

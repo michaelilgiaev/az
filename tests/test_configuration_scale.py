@@ -100,7 +100,7 @@ def test_app_menu_theme_h_uses_scaled_geometry_and_correct_font_paths():
     assert "AZ_SCALED(431)" in theme_h   # window width stock
     assert "AZ_SCALED(33)" in theme_h    # app icon stock
     assert '#include "az_scale.h"' in theme_h
-    # The cairo-drawn fonts (app name/type via pango_cairo_create_layout in applist.c, and the
+    # The cairo-drawn fonts (app name/type via pango_cairo_create_layout in application_list.c, and the
     # power labels in power.c) do NOT inherit gtk-xft-dpi, so they are EXPLICITLY scaled with
     # AZ_SCALED(stock) -- NOT left plain (which would render at 96 DPI, too small).
     assert "#define AZ_FONT_APP_NAME AZ_SCALED(10)" in theme_h

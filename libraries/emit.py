@@ -74,11 +74,12 @@ def copy_asset(rel: str, dest: Path, mode: int | None = None) -> Path:
 
 
 def copy_modification_file(rel: str, dest: Path, mode: int | None = None) -> Path:
-    """Copy a verbatim file from a modification-package under libraries/modifications/<rel>.
+    """Copy a verbatim file from a modification package under libraries/modifications/<rel>.
 
     Modifications are existing UPSTREAM tools modified to fit Az'arch -- currently the
     vendored ckbcomp (a Python 3 port of the upstream Perl ckbcomp), shipped as the
-    flat module libraries/modifications/ckbcomp.py and copied to /usr/bin/ckbcomp.
+    directory module libraries/modifications/ckbcomp/ (its ckbcomp.py holds the script,
+    passed here as "ckbcomp/ckbcomp.py") and copied to /usr/bin/ckbcomp.
     """
     src = paths.MODIFICATIONSDIR / rel
     dest = Path(dest)

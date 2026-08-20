@@ -22,7 +22,7 @@ written. The order is chosen so every name is defined before it is used at IMPOR
 (definitions only; nothing runs until main() is called at the very end via command_line_interface.py).
 
 modifications.openbox.azarch_command_line_interface() calls bundle_source() and then re-injects the country table
-between the AZARCH_CC markers from the single source of truth (modifications/calamares/locale).
+between the AZARCH_CC markers from the single source of truth (packages/calamares/locale).
 """
 
 from __future__ import annotations
@@ -48,9 +48,10 @@ MODULE_ORDER = [
     # by bare name, and this keeps every module under the per-file size budget.
     "firewall.py",
     "network.py",
-    # default_applications_cli.py: the `azarch default-applications` surface behind the TUI's
-    # Default Applications screen. Standalone (bundled), before command_line_interface.py.
-    "default_applications_cli.py",
+    # default_applications_command_line_interface.py: the `azarch default-applications` surface
+    # behind the TUI's Default Applications screen. Standalone (bundled), before
+    # command_line_interface.py.
+    "default_applications_command_line_interface.py",
     # display.py: the `azarch display` surface (xrandr + the GLOBAL SCALE) behind the TUI's
     # Display screen. Standalone (bundled), before command_line_interface.py.
     "display.py",

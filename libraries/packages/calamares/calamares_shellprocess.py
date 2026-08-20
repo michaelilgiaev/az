@@ -1,7 +1,7 @@
 """Calamares `shellprocess` module configuration -- the post-unpackfs target fixups the
 OFFLINE (copy-the-live-rootfs) install needs.
 
-Split out of modifications/calamares/calamares.py because it is the most intricate part of the
+Split out of packages/calamares/calamares.py because it is the most intricate part of the
 install: it undoes two archiso-only artifacts the live SquashFS carries so the
 target boots. calamares.py imports shellprocess_conf() (and re-exports the
 constants tests pin) so the public surface stays `calamares.shellprocess_conf`,
@@ -55,7 +55,7 @@ INSTALLED_SKEL_OPENBOX_AUTOSTART = "/etc/skel/.config/openbox/autostart"
 
 # The staged "installed" autostart on the target (unpackfs copied the whole live rootfs,
 # so this root-owned system file is present in the target chroot). Kept as a module
-# constant, imported from the flat modifications/openbox.py, so the staging path and the copy agree.
+# constant, imported from the modifications/openbox package, so the staging path and the copy agree.
 from modifications import openbox as _openbox  # noqa: E402  (single source of truth for the path)
 
 INSTALLED_AUTOSTART_SRC = _openbox.INSTALLED_AUTOSTART_STAGING_PATH
@@ -252,7 +252,7 @@ def _boot_desparsify_command() -> str:
 
     ROOT CAUSE (the REAL one -- an earlier revision MISdiagnosed this as a trailing
     sparse hole and its `cp --sparse=never` "fix" did NOT work): the target btrfs
-    root is mounted `compress=zstd:1` (modifications/calamares.mount_conf ->
+    root is mounted `compress=zstd:1` (packages/calamares.mount_conf ->
     mountOptions), so `unpackfs` writes /boot/vmlinuz-linux as ZSTD-COMPRESSED btrfs
     extents (a bzImage is highly compressible, so btrfs really does compress it --
     verified: every extent is flagged `encoded` in `filefrag -v`). GRUB 2.14's btrfs

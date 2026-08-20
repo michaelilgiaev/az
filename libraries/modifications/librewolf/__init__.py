@@ -2,9 +2,9 @@
 
 LibreWolf is an UPSTREAM privacy-hardened Firefox fork we ship (built by the
 recipe in packages/pkgbuild.py). We do not fork it; we only OVERRIDE a handful of
-its defaults to fit Az'arch. That override policy lives HERE (a flat modification
-module -- modifications/librewolf.py, like the single-file ckbcomp/fastfetch/openbox
-patches beside it) so it is the single source of truth for both the CONTENT and
+its defaults to fit Az'arch. That override policy lives HERE (a modification directory
+module -- modifications/librewolf/, like the ckbcomp/fastfetch/openbox modification
+packages beside it) so it is the single source of truth for both the CONTENT and
 its DELIVERY location.
 
 WHERE THE OVERRIDE FILE MUST GO (this bit is load-bearing and was gotten WRONG

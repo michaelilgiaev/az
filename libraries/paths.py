@@ -7,9 +7,10 @@ Mirrors the directory scheme the old compile.sh used, so the Docker bind mounts
     libraries/             the COMPILER's own modules (flat) + build payload
     libraries/packages/    Az'arch's OWN packages (things WE build/ship): the pacman
                            manifest (packages.x86_64), application_menu/, pkgbuild.py,
-                           azarch.py -- all pure stdlib (no requirements.txt)
-    libraries/modifications/  ONLY upstream software we modify/configure (calamares,
-                           ckbcomp, fastfetch, librewolf, openbox)
+                           azarch/, passwords/, timedate/, and the critically-modified
+                           calamares/ -- all pure stdlib (no requirements.txt)
+    libraries/modifications/  ONLY upstream software we modify/configure (ckbcomp,
+                           fastfetch, librewolf, openbox, the per-app tweaks)
     cache/                 persistent download cache (git-ignored, survives builds)
       build/               WORKDIR on a NATIVE run: disposable mkarchiso scratch
       pkgs/                persistent package repo + synced DBs (the offline store)
@@ -43,21 +44,23 @@ PKGDIR = LIBDIR
 # requirements.txt here (the only one in the repo is the repo-root requirements.txt the
 # compiler itself uses for its test/dev deps). Formerly libraries/data/; consolidated here.
 PACKAGESDIR = LIBDIR / "packages"
-# Existing UPSTREAM packages that are NOT ours -- we merely modify/configure/patch them
-# to fit Az'arch (calamares, ckbcomp, fastfetch, librewolf, openbox). Anything WE author outright
-# is NOT here: it is either a compiler module (flat in libraries/) or one of our own
-# packages (libraries/packages/).
+# Existing UPSTREAM software that is NOT ours -- we merely modify/configure/patch it
+# to fit Az'arch (ckbcomp, fastfetch, librewolf, openbox, the per-app tweaks). Anything WE
+# author outright is NOT here: it is either a compiler module (flat in libraries/) or one of
+# our own packages (libraries/packages/). (The critically-modified calamares install config
+# is OUR package -- packages/calamares/ -- since we compile it from source and ship it.)
 MODIFICATIONSDIR = LIBDIR / "modifications"
 ASSETSDIR = REPODIR / "assets"
 
 # Vendored ckbcomp: a Python 3 port of the upstream Perl ckbcomp (byte-identical
 # output, no Perl in the tree). Arch does not package it (Debian/Manjaro-only), yet
 # Calamares' keyboard-preview page shells out to `ckbcomp`, so we ship it in the repo
-# and copy it to /usr/bin at build time. It is an upstream tool modified to fit the
-# distribution, so it lives under libraries/modifications/ as a flat modification module
-# (libraries/modifications/ckbcomp.py). It is emitted to /usr/bin/ckbcomp (no .py suffix
-# there -- it is an executable script the keyboard page runs by name).
-CKBCOMP_SRC = MODIFICATIONSDIR / "ckbcomp.py"
+# and copy it to /usr/bin at build time. It is upstream software modified to fit the
+# distribution, so it lives under libraries/modifications/ as its own directory module
+# (libraries/modifications/ckbcomp/), whose ckbcomp.py holds the vendored script. It is
+# emitted to /usr/bin/ckbcomp (no .py suffix there -- it is an executable script the
+# keyboard page runs by name).
+CKBCOMP_SRC = MODIFICATIONSDIR / "ckbcomp" / "ckbcomp.py"
 
 CACHEDIR = REPODIR / "cache"
 BUILDDIR = REPODIR / "output"
@@ -117,19 +120,20 @@ APPLICATION_MENU_DIR = PACKAGESDIR / "application_menu"
 # It is OUR package (a website we author), so it lives under libraries/packages/, not
 # modifications/. Served at localhost:49154; LibreWolf's default home/new-tab page.
 TIMEDATE_DIR = PACKAGESDIR / "timedate"
-# The Az'arch passwords package (encrypted GPG/AES256 terminal password manager): the
-# entry script (passwords.py), the one-time setup script, the pwlib/ package, and
-# packaging.py (the build wiring that copies them into the airootfs and installs the
-# /usr/local/bin/passwords launcher). A pure-Python app we author, so it lives under
-# libraries/packages/ like timedate. The `passwords` command unlocks a store at
-# ~/Vault/passwords.txt.gpg (see packages/passwords/pwlib/config.py).
+# The Az'arch passwords package (encrypted GPG/AES256 terminal password manager): ONE flat
+# directory holding the entry script (passwords.py), the one-time setup script, every working
+# module (config/cryptography/model/terminal_user_interface/...), and packaging.py (the build
+# wiring that copies them into the airootfs and installs the /usr/local/bin/passwords
+# launcher). A pure-Python app we author, so it lives under libraries/packages/ like timedate.
+# The `passwords` command unlocks a store at ~/Vault/passwords.txt.gpg (see
+# packages/passwords/config.py).
 PASSWORDS_DIR = PACKAGESDIR / "passwords"
 # The `azarch` guest command line interface is a Python PACKAGE now (libraries/packages/azarch/): it grew a
 # `theme` subcommand (and more to come), so the single module was split into small modules
 # (common, country_table, resolver, theme, sshd, command_line_interface). The single /usr/local/bin/azarch
 # script that ships to the guest is reassembled from those modules by the package's
 # bundle.bundle_source(); the compiler then injects the country->locale table from
-# modifications/calamares/locale.py between the AZARCH_CC markers (which now live in
+# packages/calamares/locale.py between the AZARCH_CC markers (which now live in
 # country_table.py). See modifications/openbox openbox.azarch_command_line_interface().
 #
 # This dir ALSO holds the bare-`azarch` TERMINAL UI's C sources (main.c/render.c/model.c/

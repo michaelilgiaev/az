@@ -1,6 +1,6 @@
 /* Az'arch application menu (C port) -- system-wide "app opened" detection.
- * One-to-one port of winwatch.py. See winwatch.h. */
-#include "winwatch.h"
+ * One-to-one port of winwatch.py. See window_watch.h. */
+#include "window_watch.h"
 
 #include <string.h>
 #include <stdlib.h>

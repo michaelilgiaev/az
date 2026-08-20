@@ -103,7 +103,7 @@ FILE_PERMISSIONS = {
     # bare `azarch` silently falls back to the pointer message instead of opening the UI.
     "/usr/local/lib/azarch/azarch": "0:0:755",
     # The media OSD indicator (/usr/local/lib/azarch/azarch-osd), the bottom-middle cyan
-    # volume/brightness bar `azarch volume/brightness` launches. A COMPILED C binary now (osd.c),
+    # volume/brightness bar `azarch volume/brightness` launches. A COMPILED C binary now (on_screen_display.c),
     # built + installed by terminal_user_interface_build.build_osd() like the terminal UI binary.
     # Same archiso mode-normalization as that binary: the build installs it 0755, but the squashfs
     # would ship it 0644 unless pinned -- and then media.py's os.access(..., X_OK) guard fails and

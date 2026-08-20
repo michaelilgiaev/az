@@ -168,7 +168,8 @@ CATEGORY_KEYS: dict[str, str] = {
 # ships only LibreWolf; Firefox surfaces purely via the installed+MIME resolution when present.
 # The curated seed guarantees the shipped choices are always offered (and, for the non-MIME
 # categories Calculator/Terminal that have no MIME to resolve against, it is the whole list). The
-# `set` verb still accepts ANY installed .desktop (see default_applications_cli._da_set). A test
+# `set` verb still accepts ANY installed .desktop (see
+# default_applications_command_line_interface._da_set). A test
 # asserts the first curated candidate of each category equals that category's CATEGORIES default.
 CANDIDATES: dict[str, tuple[str, ...]] = {
     "Web": ("librewolf.desktop",),
@@ -195,7 +196,7 @@ CANDIDATES: dict[str, tuple[str, ...]] = {
 # ~/.local/share/applications (it wins over the system dirs anyway, being first in XDG order).
 # The two SYSTEM dirs (/usr/local/share, /usr/share) are package-managed -- never a manual drop
 # target -- so they are not disclosed. IMPORTANT: this only collapses the DISPLAYED text; the
-# live candidate RESOLUTION (default_applications_cli._da_desktop_dirs / the C az_da_dirs) still
+# live candidate RESOLUTION (default_applications_command_line_interface._da_desktop_dirs / the C az_da_dirs) still
 # scans every XDG dir (honouring $XDG_DATA_HOME / $XDG_DATA_DIRS), so an app installed to
 # /usr/share still appears as a choice. Single source of truth: the CLI mirror, the C model's
 # disclosure subtitle (AZ_DA_DIRS_LINE), and the tests all name THIS one path.

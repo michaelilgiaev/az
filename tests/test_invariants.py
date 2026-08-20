@@ -43,11 +43,11 @@ import makepkg
 import downloader
 import paths
 
-from modifications.calamares import calamares
+from packages.calamares import calamares
 from modifications import openbox as desktop
 from modifications import librewolf
 import installer
-from modifications.calamares import locale
+from packages.calamares import locale
 import pacman
 from packages import pkgbuild
 from packages.timedate import timedate
@@ -94,11 +94,11 @@ _EMITTERS = [
     # emit_plan builders (app.py, page.py, the launcher, the systemd service) all return
     # real content that compiler.py writes into the airootfs.
     *[(f"timedate:{e['dest']}", e["builder"]) for e in timedate.emit_plan()],
-    # The Az'arch passwords manager (the `passwords` command): its 3 emit_plan builders
-    # (the entry script, the one-time setup script, and the /usr/local/bin/passwords
-    # launcher) all return real content that compiler.py writes into the airootfs. Its
-    # pwlib/ package tree is copied by emit.copy_tree (not a text builder), so it is not
-    # counted here.
+    # The Az'arch passwords manager (the `passwords` command): the app is ONE flat directory
+    # now, so its emit_plan builders are the entry script, the optional plaintext importer,
+    # every working module (config/cryptography/model/terminal_user_interface/...) and the
+    # /usr/local/bin/passwords launcher -- all returning real content compiler.py writes into
+    # the airootfs. (No separate pwlib/ directory copy anymore.)
     *[(f"passwords:{e['dest']}", e["builder"]) for e in passwords.emit_plan()],
 ]
 
@@ -123,7 +123,7 @@ def test_emitter_family_covers_all_config_modules():
     # + profile, the "installed" autostart staged for the Calamares overwrite, the
     # application-menu usage.json seed, the system + Desktop installer launchers, the
     # install wrapper, the azarch command line interface -- plus the appended bash_profile. The
-    # media OSD is NO LONGER here: it is a compiled binary now (osd.c), installed by build_osd,
+    # media OSD is NO LONGER here: it is a compiled binary now (on_screen_display.c), installed by build_osd,
     # not a text emitter. NOW 19: the 18 PLAN entries -- the +1 over the old 17 is the new
     # ~/.Xresources GLOBAL SCALE entry, PROMPT Display/scale task -- plus the appended
     # bash_profile) + 6 installer +
@@ -131,10 +131,12 @@ def test_emitter_family_covers_all_config_modules():
     # librewolf PKGBUILD tiers) + 1 librewolf emit_plan builder (the AutoConfig override,
     # now a home file at the profile path, not a packaged /opt file) + 5 timedate
     # emit_plan builders (app.py, page.py, assets.py, the launcher, the
-    # azarch-timedate.service unit) + 3 passwords emit_plan builders (the entry script, the
-    # one-time setup script, the /usr/local/bin/passwords launcher; the pwlib/ package tree
-    # is copied by emit.copy_tree, not a text builder, so it is not counted here).
-    assert len(_EMITTERS) == 19 + 19 + 6 + 1 + 1 + 4 + 4 + 1 + 5 + 3
+    # azarch-timedate.service unit) + 14 passwords emit_plan builders (the app is one flat
+    # directory now: the entry script, the optional plaintext importer, the 11 working modules
+    # -- __init__, config, cryptography, model, clipboard, clipboard_owner, forms, new_entry,
+    # terminal_user_interface, keyboard, help -- and the /usr/local/bin/passwords launcher; no
+    # separate pwlib/ directory copy anymore).
+    assert len(_EMITTERS) == 19 + 19 + 6 + 1 + 1 + 4 + 4 + 1 + 5 + 14
 
 
 def test_recipe_dir_contents_are_nonempty_str_both_tiers():

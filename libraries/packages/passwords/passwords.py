@@ -32,10 +32,12 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from pwlib import config, crypto, tui
-from pwlib.help import HELP
-from pwlib.keyboard import keyboard_status_line
-from pwlib.model import Store
+import config
+import cryptography
+import terminal_user_interface
+from help import HELP
+from keyboard import keyboard_status_line
+from model import Store
 
 
 def _make_cleanup(path):
@@ -70,13 +72,13 @@ def _prompt_new_master():
 
 def _encrypt_text(text, enc, passphrase):
     """Encrypt the given plaintext string into the store at `enc` (via a 0600
-    temp file that is always removed). Raises crypto.CryptoError on failure."""
+    temp file that is always removed). Raises cryptography.CryptoError on failure."""
     fd, tmp = tempfile.mkstemp(prefix='.pwinit-')
     try:
         os.chmod(tmp, 0o600)
         with os.fdopen(fd, 'w') as f:
             f.write(text)
-        crypto.encrypt(tmp, enc, passphrase)
+        cryptography.encrypt(tmp, enc, passphrase)
     finally:
         try:
             os.remove(tmp)
@@ -93,10 +95,10 @@ def _verify_store(enc, expected_text, passphrase):
     fd, tmp = tempfile.mkstemp(prefix='.pwverify-')
     os.close(fd)
     try:
-        crypto.decrypt_to_file(enc, tmp, passphrase)
+        cryptography.decrypt_to_file(enc, tmp, passphrase)
         with open(tmp) as f:
             return f.read() == expected_text
-    except crypto.CryptoError:
+    except cryptography.CryptoError:
         return False
     finally:
         try:
@@ -119,7 +121,7 @@ def _init_store(enc):
     os.makedirs(os.path.dirname(enc), exist_ok=True)
     try:
         _encrypt_text(Store([]).serialize(), enc, pw)
-    except crypto.CryptoError as e:
+    except cryptography.CryptoError as e:
         print('Could not create the store: %s' % e)
         return None
     print('Created an empty encrypted store. Press "n" to add your first entry.')
@@ -171,7 +173,7 @@ def _recover_stale_plaintext(enc, plain):
             with open(plain) as f:
                 text = f.read()
             _encrypt_text(text, enc, pw)
-        except (OSError, crypto.CryptoError) as e:
+        except (OSError, cryptography.CryptoError) as e:
             print('Re-encrypt failed: %s' % e)
             return 'abort'
         if not _verify_store(enc, text, pw):
@@ -228,17 +230,17 @@ def main(argv):
         # Just created the store; decrypt the empty store we wrote so the rest of
         # the flow is identical (and confirms the passphrase round-trips).
         pw = fresh_pw
-        crypto.decrypt_to_file(enc, plain, pw)
+        cryptography.decrypt_to_file(enc, plain, pw)
     else:
         pw = None
         for _ in range(3):
             print(keyboard_status_line())
             attempt = getpass.getpass('Master password: ')
             try:
-                crypto.decrypt_to_file(enc, plain, attempt)
+                cryptography.decrypt_to_file(enc, plain, attempt)
                 pw = attempt
                 break
-            except crypto.CryptoError:
+            except cryptography.CryptoError:
                 print('Wrong master password.')
         if pw is None:
             return 1
@@ -246,12 +248,12 @@ def main(argv):
     try:
         with open(plain) as f:
             store = Store.parse(f.read())
-        dirty = tui.run(store)
+        dirty = terminal_user_interface.run(store)
         if dirty:
             with open(plain, 'w') as f:
                 f.write(store.serialize())
             os.chmod(plain, 0o600)
-            crypto.encrypt(plain, enc, pw)
+            cryptography.encrypt(plain, enc, pw)
             print('changes saved and re-encrypted -> %s' % enc)
         else:
             print('no changes.')

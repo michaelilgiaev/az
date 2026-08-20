@@ -1,4 +1,4 @@
-"""modifications.calamares -- the Calamares 3.4.2 installer configuration tree.
+"""packages.calamares -- the Calamares 3.4.2 installer configuration tree.
 
 Every builder here returns the verbatim YAML text of one file Calamares reads at
 runtime. Python never parses these strings, so a wrong filename, a clobbered exec
@@ -17,7 +17,7 @@ import re
 
 import yaml
 
-from modifications.calamares import calamares
+from packages.calamares import calamares
 
 
 # The files Calamares reads, relative to /etc/calamares. Any drift here means
@@ -353,7 +353,7 @@ def test_shellprocess_deletes_the_live_user_non_fatally():
 def _installer_cleanup_command(script: list) -> str:
     """The single script command that removes the installer launchers (Desktop + menu) and
     overwrites the autostart on the installed target. Identified by the Desktop launcher."""
-    from modifications.calamares import calamares_shellprocess as csp
+    from packages.calamares import calamares_shellprocess as csp
     matches = [c for c in script if csp.INSTALLER_DESKTOP_LAUNCHER in c]
     assert len(matches) == 1, matches
     return matches[0]
@@ -367,7 +367,7 @@ def test_shellprocess_removes_installer_from_installed_desktop():
     # be on the Desktop after install" fix. The command must delete the Desktop launcher
     # from BOTH the reused /home/main and /etc/skel; the auto-launch is removed by
     # overwriting the OpenBox autostart (see the autostart test below).
-    from modifications.calamares import calamares_shellprocess as csp
+    from packages.calamares import calamares_shellprocess as csp
     d = yaml.safe_load(calamares.shellprocess_conf())
     cmd = _installer_cleanup_command(d["script"])
     assert f"rm -f {csp.INSTALLER_DESKTOP_LAUNCHER}" in cmd
@@ -381,7 +381,7 @@ def test_shellprocess_removes_installer_menu_entry_post_install():
     # application-menu launcher (/usr/share/applications/azarch-install.desktop) is removed
     # too (previously it was left in place). calamares itself is also try_removed by the
     # packages module, so keeping the entry would just leave a dead launcher in the menu.
-    from modifications.calamares import calamares_shellprocess as csp
+    from packages.calamares import calamares_shellprocess as csp
     from modifications import openbox as desktop
     d = yaml.safe_load(calamares.shellprocess_conf())
     cmd = _installer_cleanup_command(d["script"])
@@ -399,7 +399,7 @@ def test_shellprocess_removes_installer_wrapper_post_install():
     # copies the whole live rootfs, so this root-owned file lands on the target and the cleanup
     # step must delete it (post-install requirement: no azarch-install wrapper on the installed
     # system). The LIVE ISO is unchanged -- the wrapper is still shipped there.
-    from modifications.calamares import calamares_shellprocess as csp
+    from packages.calamares import calamares_shellprocess as csp
     from modifications import openbox as desktop
     d = yaml.safe_load(calamares.shellprocess_conf())
     cmd = _installer_cleanup_command(d["script"])
@@ -416,7 +416,7 @@ def test_shellprocess_removes_installer_wrapper_post_install():
 def test_installer_cleanup_command_uses_no_shell_variables():
     # Same no-`$` rule as the other shellprocess commands (Calamares macro-expansion).
     # rm -f / cp -f so an absent path is a no-op and a shipped-file copy never prompts.
-    from modifications.calamares import calamares_shellprocess as csp
+    from packages.calamares import calamares_shellprocess as csp
     cmd = csp._installer_cleanup_command()
     assert "$" not in cmd
     assert cmd.startswith("set -e")
@@ -437,7 +437,7 @@ def test_shellprocess_overwrites_openbox_autostart_so_region_keyboard_and_no_ins
     # (wrong on an installed system). The cleanup step must OVERWRITE the target's
     # autostart (home + skel) with the "installed" variant staged on the ISO, which drops
     # exactly those two lines while keeping wallpaper/xcape/menu-daemon.
-    from modifications.calamares import calamares_shellprocess as csp
+    from packages.calamares import calamares_shellprocess as csp
     from modifications import openbox as desktop
     d = yaml.safe_load(calamares.shellprocess_conf())
     cmd = _installer_cleanup_command(d["script"])
@@ -461,7 +461,7 @@ def test_shellprocess_autostart_source_is_the_staged_shipped_file():
     # Guard against drift: the file the cleanup COPIES FROM must be the exact staging
     # path modifications/openbox.py emits the installed autostart to. If openbox.py's
     # staging dest ever moves, this catches it so the copy keeps sourcing a real file.
-    from modifications.calamares import calamares_shellprocess as csp
+    from packages.calamares import calamares_shellprocess as csp
     from modifications import openbox as desktop
     assert csp.INSTALLED_AUTOSTART_SRC == desktop.INSTALLED_AUTOSTART_STAGING_PATH
     dests = {e["dest"] for e in desktop.emit_plan()}
