@@ -211,6 +211,19 @@ ISO_APP_OVERRIDES = [
     # longer APPEAR in the pane (they stay reachable as normal paths; on-demand `gio mount` /
     # `udisksctl` still work), and Trash is unaffected (gvfsd-trash is a separate daemon).
     (None, "/usr/share/gvfs/remote-volume-monitors/udisks2.monitor", True),
+    # RECLAIM the `backup` command name for OUR home-directory backup (packages/backup).
+    # GNU `tar` ships a legacy incremental-backup helper at /usr/bin/backup (a symlink to
+    # /usr/lib/tar/backup.sh) and its companion /usr/bin/restore. /usr/bin precedes
+    # /usr/local/bin on PATH, so typing `backup` runs tar's script instead of ours (last
+    # build's bug #2). We are KEEPING the name `backup` for ourselves, so tar's copies must
+    # go -- we do NOT reorder PATH. Both are owned by the `tar` package, so they take the
+    # same NoExtract + post-pacstrap `rm -f` route as the suppress-only kitty PNGs (basename
+    # None, remove True): NoExtract keeps pacstrap from ever laying them down, and
+    # app_override_cp_sh() rm -f's them after pacstrap for good measure. `restore` is tar's
+    # companion to `backup`; it is removed too. (The symlink target /usr/lib/tar/backup.sh is
+    # left alone -- with the /usr/bin/backup symlink gone nothing on PATH references it.)
+    (None, "/usr/bin/backup", True),
+    (None, "/usr/bin/restore", True),
 ]
 
 # Files the ISO overrides / suppresses. pacstrap must NOT extract the owning

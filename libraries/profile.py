@@ -89,6 +89,14 @@ FILE_PERMISSIONS = {
     # "Permission denied" (the shell needs the exec bit to run it) on BOTH the live ISO and
     # the installed system. Root-owned on PATH, so every user gets the command.
     "/usr/local/bin/passwords": "0:0:755",
+    # The Az'arch `backup`/`unpack` launchers (the home-directory backup the user runs by
+    # typing `backup`, and the restore command `unpack`). SAME archiso mode-normalization as
+    # azarch-install/passwords above: packages/backup/packaging.emit_plan() emits both 0755,
+    # but the squashfs ships them 0644 (non-executable) unless pinned here -- and then typing
+    # `backup` (or `unpack`) fails with "command not found"/"Permission denied" even by full
+    # path (this was the last build's bug #1). Root-owned on PATH, so every user gets them.
+    "/usr/local/bin/backup": "0:0:755",
+    "/usr/local/bin/unpack": "0:0:755",
     # The COMPILED application-menu daemon binary (built by application_menu.build_daemon
     # and started from the OpenBox autostart). Same archiso mode-normalization: it is
     # installed 0755, but the squashfs would ship it 0644 unless pinned -- and the

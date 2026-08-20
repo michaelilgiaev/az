@@ -1,0 +1,227 @@
+"""packages.backup -- the `unpack` command (restore side of the backup system).
+
+`unpack` reverses a `backup`-made ``.tar.gz.gpg`` archive, putting its contents BACK
+where they belong: the home archive restores into ~/, and the password store restores
+into ~/Vault/ (re-encrypted so the `passwords` manager can unlock it). These tests pin
+the RESTORE contract the distribution PROMPT (step two) specifies:
+
+  * `unpack backup.tar.gz.gpg`    -> home dirs land directly in ~/, symlinks recreated
+                                     AS links pointing where they used to;
+  * `unpack passwords.tar.gz.gpg` -> the store lands at ~/Vault/passwords.txt.gpg and
+                                     decrypts back to the original plaintext;
+  * a non-``.tar.gz.gpg`` argument, or a missing file, is REJECTED with a clear error;
+  * an UNKNOWN ``*.tar.gz.gpg`` is restored into ~/ (home-relative) -- documented choice;
+  * an existing file at a restored path is OVERWRITTEN (least-surprising restore policy);
+  * a member whose path would escape the destination (``../``) is refused (traversal guard).
+
+They build REAL gpg archives (gpg is the app's declared dep and is on the test host), so
+the actual encrypt/decrypt/extract path is exercised, not just the source text.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+
+import pytest
+
+import paths
+from packages.backup import backup as backup_app
+from packages.backup import unpack as up
+from packages.backup import archive as arch
+
+
+_PASS = "correct horse battery staple"
+
+
+def _has_gpg():
+    return shutil.which("gpg") is not None
+
+
+requires_gpg = pytest.mark.skipif(not _has_gpg(), reason="gpg not installed on the test host")
+
+
+# --- fixtures: a fake home with the two real archives -----------------------
+def _make_source_home(tmp_path, vault_secret="gmail\thunter2\n"):
+    """A fake HOME with dirs, a symlink, and a real gpg vault store."""
+    home = tmp_path / "src"
+    home.mkdir()
+    (home / "Documents").mkdir()
+    (home / "Documents" / "note.txt").write_text("hello world")
+    (home / "Pictures").mkdir()
+    (home / "Pictures" / "pic.txt").write_text("img")
+    (home / "Link").symlink_to(home / "Documents")
+    vault = home / "Vault"
+    vault.mkdir()
+    plain = vault / "passwords.txt"
+    plain.write_text(vault_secret)
+    assert arch.gpg_encrypt_file(str(plain), str(vault / "passwords.txt.gpg"), _PASS)
+    plain.unlink()
+    return home
+
+
+def _build_archives(tmp_path):
+    """Build the real backup.tar.gz.gpg + passwords.tar.gz.gpg for a fresh source home;
+    return (home_archive_path, passwords_archive_path, vault_secret)."""
+    secret = "gmail\thunter2\nbank\tswordfish\n"
+    home = _make_source_home(tmp_path, vault_secret=secret)
+    entries = backup_app.select_entries(str(home))
+    home_arc = str(home / backup_app.HOME_ARCHIVE_NAME)
+    assert backup_app.build_home_archive(str(home), entries, home_arc, _PASS)
+    pw_arc = str(home / backup_app.PASSWORDS_ARCHIVE_NAME)
+    assert backup_app.build_passwords_archive(str(home), _PASS, pw_arc) == "ok"
+    return home_arc, pw_arc, secret
+
+
+def _fresh_home(tmp_path, name="dst"):
+    home = tmp_path / name
+    home.mkdir()
+    return home
+
+
+def _run_unpack(argv, home, passphrase):
+    """Invoke up.main(argv) with HOME set and the prompt fed `passphrase` (unpack asks
+    once, no confirm). Returns the exit code.
+
+    We patch ``up.archive.prompt_passphrase`` -- ``up.archive`` is the very module object
+    the entry script calls into (the flat app imports its sibling as a top-level
+    ``archive`` module via sys.path, which is NOT the same object as
+    ``packages.backup.archive``), so this reaches the real call site."""
+    responses = [passphrase] if passphrase is not None else []
+
+    def fake_prompt(confirm=True):
+        return responses.pop(0)
+
+    old_home = os.environ.get("HOME")
+    old_prompt = up.archive.prompt_passphrase
+    os.environ["HOME"] = str(home)
+    up.archive.prompt_passphrase = fake_prompt
+    try:
+        return up.main(argv)
+    finally:
+        up.archive.prompt_passphrase = old_prompt
+        if old_home is not None:
+            os.environ["HOME"] = old_home
+        else:  # pragma: no cover - HOME is always set in CI
+            del os.environ["HOME"]
+
+
+# --- classify() / validate_arg(): the name + argument contract --------------
+def test_classify_maps_the_two_known_archives_and_defaults_unknown():
+    """The two deliverables are recognised by exact name; anything else is "unknown"
+    (restored home-relative). Pin the mapping so the destinations cannot silently drift."""
+    assert up.classify("backup.tar.gz.gpg") == "home"
+    assert up.classify("passwords.tar.gz.gpg") == "passwords"
+    assert up.classify("something-else.tar.gz.gpg") == "unknown"
+
+
+def test_validate_arg_rejects_non_archive_and_missing(tmp_path):
+    """A non-``.tar.gz.gpg`` argument and a missing file are both rejected (with a message);
+    a real ``*.tar.gz.gpg`` file validates."""
+    assert up.validate_arg("/tmp/foo.zip") is not None            # wrong extension
+    assert up.validate_arg(str(tmp_path / "gone.tar.gz.gpg")) is not None  # missing
+    good = tmp_path / "x.tar.gz.gpg"
+    good.write_text("not really gpg, but exists")
+    assert up.validate_arg(str(good)) is None
+
+
+def test_main_rejects_bad_extension_and_missing_file(tmp_path):
+    """End-to-end: `unpack` exits non-zero on a non-archive arg and on a missing file,
+    without prompting for a passphrase."""
+    home = _fresh_home(tmp_path)
+    assert _run_unpack(["/tmp/not_an_archive.zip"], home, None) == 1
+    assert _run_unpack([str(tmp_path / "missing.tar.gz.gpg")], home, None) == 1
+
+
+def test_main_with_no_args_is_usage_error():
+    """No argument prints usage and exits non-zero (the archive is required)."""
+    assert up.main([]) == 1
+
+
+# --- the RESTORE destinations (the heart of step two) -----------------------
+@requires_gpg
+def test_unpack_home_archive_restores_into_home_with_symlink(tmp_path):
+    """`unpack backup.tar.gz.gpg` drops the top-level folders straight back into ~/ and
+    recreates the symlink AS a link pointing where it used to."""
+    home_arc, _pw, _secret = _build_archives(tmp_path)
+    dst = _fresh_home(tmp_path)
+    assert _run_unpack([home_arc], dst, _PASS) == 0
+    assert (dst / "Documents" / "note.txt").read_text() == "hello world"
+    assert (dst / "Pictures").is_dir()
+    link = dst / "Link"
+    assert link.is_symlink(), "the symlink must be restored AS a link"
+    assert os.readlink(str(link)).endswith("Documents")
+
+
+@requires_gpg
+def test_unpack_passwords_archive_restores_store_to_vault(tmp_path):
+    """`unpack passwords.tar.gz.gpg` restores the store to ~/Vault/passwords.txt.gpg (where
+    the `passwords` manager expects it) and it decrypts back to the ORIGINAL plaintext with
+    the same passphrase."""
+    _home, pw_arc, secret = _build_archives(tmp_path)
+    dst = _fresh_home(tmp_path)
+    assert _run_unpack([pw_arc], dst, _PASS) == 0
+    store = dst / "Vault" / "passwords.txt.gpg"
+    assert store.exists(), "store must be restored under ~/Vault/"
+    # It must decrypt back to the original plaintext (i.e. the user can reach passwords).
+    out = tmp_path / "roundtrip.txt"
+    assert arch.gpg_decrypt_to_file(str(store), str(out), _PASS)
+    assert out.read_text() == secret
+
+
+@requires_gpg
+def test_unpack_unknown_archive_restores_home_relative(tmp_path):
+    """An UNKNOWN ``*.tar.gz.gpg`` (not one of our two) is restored into ~/ home-relative --
+    the documented default. Rename the home archive to an unknown name and confirm its
+    contents still land in ~/."""
+    home_arc, _pw, _secret = _build_archives(tmp_path)
+    unknown = os.path.join(os.path.dirname(home_arc), "mystery.tar.gz.gpg")
+    os.rename(home_arc, unknown)
+    dst = _fresh_home(tmp_path)
+    assert _run_unpack([unknown], dst, _PASS) == 0
+    assert (dst / "Documents" / "note.txt").read_text() == "hello world"
+
+
+@requires_gpg
+def test_restore_overwrites_existing_files(tmp_path):
+    """OVERWRITE POLICY: a restore makes the target match the backup, so an existing file at
+    a restored path is overwritten (the least-surprising behaviour for "put my files
+    back")."""
+    home_arc, _pw, _secret = _build_archives(tmp_path)
+    dst = _fresh_home(tmp_path)
+    # Pre-seed a stale version of a file the archive will restore.
+    (dst / "Documents").mkdir()
+    (dst / "Documents" / "note.txt").write_text("STALE CONTENT")
+    assert _run_unpack([home_arc], dst, _PASS) == 0
+    assert (dst / "Documents" / "note.txt").read_text() == "hello world"
+
+
+@requires_gpg
+def test_unpack_rejects_wrong_passphrase(tmp_path):
+    """A wrong passphrase makes gpg fail; `unpack` exits non-zero and restores nothing."""
+    home_arc, _pw, _secret = _build_archives(tmp_path)
+    dst = _fresh_home(tmp_path)
+    assert _run_unpack([home_arc], dst, "the WRONG passphrase") == 1
+    assert not (dst / "Documents").exists()
+
+
+# --- the traversal guard ----------------------------------------------------
+def test_is_within_blocks_paths_that_escape_the_destination(tmp_path):
+    """The extractor only writes members that stay inside the destination; a ``../`` name
+    resolving outside it is refused (defence against a malicious/corrupt archive)."""
+    base = tmp_path / "home"
+    base.mkdir()
+    assert up._is_within(str(base), str(base / "Documents" / "x"))
+    assert up._is_within(str(base), str(base))
+    assert not up._is_within(str(base), str(tmp_path / "outside"))
+    assert not up._is_within(str(base), str(base / ".." / "escape"))
+
+
+# --- shipping: the entry lives in the package and is discovered -------------
+def test_unpack_source_ships_and_parses():
+    """unpack.py is a real source in the package (so packaging.py's module discovery ships
+    it) and is valid Python."""
+    import ast
+    src = (paths.BACKUP_DIR / "unpack.py").read_text(encoding="utf-8")
+    ast.parse(src)
+    assert "def main(" in src

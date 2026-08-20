@@ -1,23 +1,28 @@
-"""backup -- Az'arch's home-directory backup (the `backup` command).
+"""packages.backup -- Az'arch's backup + restore (the `backup` and `unpack` commands).
 
-Step one of the backup system (it will grow step by step). `backup` gathers the
-top-level folders in the current user's HOME -- skipping the ``Ignore`` directory
-and hidden dot files, keeping symlinks AS links (and recording where they point) --
-and writes them into one timestamped, GPG-encrypted archive back in the home dir:
-``~/backup_YYYY-MM-DD_HH-MM.tar.gz.gpg``.
+`backup` prompts once for a passphrase and writes TWO GPG-encrypted archives to the
+home dir: ``~/backup.tar.gz.gpg`` (the top-level home folders -- skipping the ``Ignore``
+directory and hidden dot files, keeping symlinks AS links) and ``~/passwords.tar.gz.gpg``
+(the password store ~/Vault/passwords.txt.gpg, included from its DECRYPTED contents when
+the same passphrase unlocks it). `unpack` reverses either archive, restoring the home
+dirs back into ``~/`` and the password store back to ``~/Vault/``.
 
-This package holds the whole thing in one flat directory (like packages/passwords):
+This package is one flat directory (like packages/passwords):
 
-Entry point:
-    backup                          the `backup` command (the archiver)
+Entry points:
+    backup                          the `backup` command (creates the two archives)
+    unpack                          the `unpack` command (restores an archive)
+
+Shared:
+    archive                         tar+gpg pipeline + passphrase helpers (imported by both)
 
 Also here (not part of the runtime import graph):
-    packaging                       ISO build wiring (install paths, launcher, emit_plan)
+    packaging                       ISO build wiring (install paths, launchers, emit_plan)
 
-The app is a SINGLE self-contained module (backup.py, Python standard library only:
-tarfile + gpg via subprocess); packaging.py ships it to /usr/local/lib/azarch-backup/
-and installs the /usr/local/bin/backup launcher. This ``__init__.py`` makes the same
-directory importable as the ``packages.backup`` package for the test suite.
+The apps are Python standard library only (tarfile + gpg via subprocess); packaging.py
+ships every module flat to /usr/local/lib/azarch-backup/ and installs the
+/usr/local/bin/backup and /usr/local/bin/unpack launchers. This ``__init__.py`` makes the
+same directory importable as the ``packages.backup`` package for the test suite.
 """
 
 from __future__ import annotations

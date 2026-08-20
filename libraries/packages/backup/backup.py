@@ -1,59 +1,94 @@
 #!/usr/bin/env python3
-"""The `backup` command -- Az'arch's home-directory backup.
+"""The `backup` command -- Az'arch's home-directory + password-store backup.
 
-This is step one of the backup system (it will grow, step by step). Running
-`backup`:
+Running `backup` prompts ONCE for a passphrase and then produces TWO encrypted
+archives in your home directory:
 
-  * Scans your HOME directory (``~`` -- whatever the current user's home is; it is
-    resolved live, never a hard-coded path) and gathers every TOP-LEVEL directory in it.
-  * SKIPS the ``Ignore`` directory (a home-dir dumping ground for things you never
-    want backed up) and SKIPS every dot file / dot directory (``.bashrc``,
-    ``.config``, ``.ssh`` ...): those are hidden config, out of scope for now.
-  * Preserves SYMLINKS as links -- it never follows them into their target -- and
-    records where each one points, so a restore can recreate the exact same link.
-  * Rolls the whole selection into ONE timestamped, GPG-encrypted archive written
-    back into your home directory:  ``~/backup_YYYY-MM-DD_HH-MM.tar.gz.gpg``.
+  ~/backup.tar.gz.gpg      the HOME archive. It gathers every TOP-LEVEL directory in
+                           ``~`` (resolved live, never a hard-coded path), SKIPPING the
+                           ``Ignore`` directory and every dot file / dot directory
+                           (hidden config, out of scope), and it keeps SYMLINKS as
+                           links (recording where they point) so a restore recreates
+                           the exact same link. Home-relative arcnames ("Documents/...",
+                           not "/home/<user>/...") so ``unpack`` drops each folder
+                           straight back into home.
 
-WHY tar + gpg (no rar). The archive is a gzip-compressed tar piped straight into
-``gpg --symmetric`` (AES256). tar stores symlinks AS links by default (never
-dereferenced), which is exactly the "save the symlink and where it points"
-requirement, and both ``tar`` and ``gpg`` (gnupg) are in the Az'arch manifest --
-no proprietary ``rar`` dependency. The passphrase you enter is the archive's only
-key; it is never written anywhere.
+  ~/passwords.tar.gz.gpg   the PASSWORD-STORE archive. The store is the single file
+                           ~/Vault/passwords.txt.gpg (see packages/passwords/config.py,
+                           DEFAULT_ENCRYPTED). The passphrase you type is ALSO tried
+                           against that store (it is itself gpg-encrypted with your
+                           passwords master password):
+                             * if it DECRYPTS the store, the passwords archive is built
+                               from the DECRYPTED contents, so after a restore you can
+                               actually reach your passwords again;
+                             * if it does NOT (wrong master password), the run does NOT
+                               fail -- ~/backup.tar.gz.gpg is still made and a warning
+                               notes the store could not be included;
+                             * if the store does not exist at all, the passwords archive
+                               is skipped gracefully (a note is printed).
 
-This is intentionally small and self-contained (Python standard library only). The
-cloud upload / rotation / GitHub / QEMU machinery from the original prototype in
-``data/backup.py`` is deliberately NOT here yet -- we are building this up one step
-at a time, and step one is just "make the encrypted archive of the right files".
+Both archives are encrypted with the SAME passphrase you typed (one prompt).
+
+WHY tar + gpg (no rar), and how the passphrase is kept off the process list, live in
+the shared archive.py helper this script imports. This stays Python standard library
+only; the only external binary is ``gpg`` (gnupg), already in the Az'arch manifest.
+The cloud upload / rotation / GitHub / QEMU machinery from the original prototype in
+``data/backup.py`` is deliberately NOT here -- we build this up one focused step at a
+time.
 """
 
 import os
-import subprocess
 import sys
-import tarfile
-import threading
+import tempfile
 import time
-from datetime import datetime
-from getpass import getpass
+
+# The app is a flat directory installed to LIB_DIR; make the sibling ``archive`` module
+# importable whether run via the launcher (which cd's into LIB_DIR) or imported by the
+# test suite as packages.backup.backup. Mirrors packages/passwords/passwords.py.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import archive  # noqa: E402  (deliberately after the sys.path bootstrap above)
 
 
-# The one directory in HOME we never back up (a deliberate dumping ground). Matched
-# by exact top-level name, case-sensitively -- only ``~/Ignore`` is skipped, not a
-# nested ``Foo/Ignore``.
+# The one directory in HOME we never back up (a deliberate dumping ground). Matched by
+# exact top-level name, case-sensitively -- only ``~/Ignore`` is skipped, not a nested
+# ``Foo/Ignore``.
 IGNORE_DIR_NAME = "Ignore"
 
+# The encrypted password store `backup` also archives, relative to HOME. Kept in sync
+# with packages/passwords/config.py (DEFAULT_ENCRYPTED = ~/Vault/passwords.txt.gpg): the
+# passwords manager reads/writes its store there, and `unpack passwords.tar.gz.gpg`
+# restores it back to exactly this path.
+VAULT_REL = "Vault/passwords.txt.gpg"
+
+# The top-level home directory that holds the password store (``Vault``). It is EXCLUDED
+# from the home archive because the store is handled by its OWN archive
+# (~/passwords.tar.gz.gpg): archiving ~/Vault here too would bundle the encrypted store a
+# second time and let `unpack backup.tar.gz.gpg` scatter it back separately from the
+# dedicated passwords restore. Keeping the two archives' responsibilities disjoint (home
+# files vs. the password store) is the least-surprising split. Derived from VAULT_REL so
+# it cannot drift.
+VAULT_DIR_NAME = VAULT_REL.split("/", 1)[0]
+
+# The two deliverables (in HOME). Names are FIXED -- no date stamp -- so `unpack` can
+# recognise them by name and restore each to the right place. They are also EXCLUDED from
+# the home selection (see select_entries): both live at the top level of HOME, so without
+# this a SECOND `backup` run would bundle the previous run's archives into the new one,
+# growing it every time.
+HOME_ARCHIVE_NAME = "backup.tar.gz.gpg"
+PASSWORDS_ARCHIVE_NAME = "passwords.tar.gz.gpg"
+_OWN_ARCHIVES = frozenset({HOME_ARCHIVE_NAME, PASSWORDS_ARCHIVE_NAME})
+
 # __pycache__ / compiled Python are never worth archiving; dropped everywhere in the
-# tree (the top-level dot-file rule already hides most clutter, but these can sit
-# inside a backed-up project dir).
+# tree (the top-level dot-file rule already hides most clutter, but these can sit inside
+# a backed-up project dir).
 _ALWAYS_SKIP_NAMES = {"__pycache__"}
 _ALWAYS_SKIP_SUFFIXES = (".pyc", ".pyo")
 
 
 def home_dir():
-    """The current user's home directory -- ``~`` expanded. Never a hard-coded path:
-    a user may have named their account anything, so we resolve it live (``$HOME``,
-    falling back to the password database) every run."""
-    return os.path.expanduser("~")
+    """The current user's home directory -- ``~`` expanded (delegates to archive)."""
+    return archive.home_dir()
 
 
 def _is_hidden(name):
@@ -68,13 +103,19 @@ def select_entries(home):
       * every top-level entry in HOME is a candidate,
       * EXCEPT the ``Ignore`` directory,
       * EXCEPT dot files / dot directories (hidden config),
+      * EXCEPT the ``Vault`` directory (the password store has its OWN archive -- see
+        VAULT_DIR_NAME -- so it is not bundled into the home archive too),
+      * EXCEPT our own two deliverables (``backup.tar.gz.gpg`` / ``passwords.tar.gz.gpg``)
+        left in HOME by a previous run, so re-running never archives the last run's output,
       * and symlinks ARE included (kept as links; tar records their target).
 
-    Returns bare NAMES (relative to ``home``); the archiver adds them with
-    ``arcname`` so the archive is rooted at the home dir, not at ``/``."""
+    Returns bare NAMES (relative to ``home``); the archiver adds them with ``arcname``
+    so the archive is rooted at the home dir, not at ``/``."""
     entries = []
     for name in os.listdir(home):
-        if name == IGNORE_DIR_NAME:
+        if name in (IGNORE_DIR_NAME, VAULT_DIR_NAME):
+            continue
+        if name in _OWN_ARCHIVES:
             continue
         if _is_hidden(name):
             continue
@@ -85,11 +126,11 @@ def select_entries(home):
 def _tar_filter(tarinfo):
     """Per-entry filter for ``tarfile.add(recursive=True)``.
 
-    Drops __pycache__ dirs and ``.pyc``/``.pyo`` files anywhere in the tree.
-    Everything else is kept verbatim -- crucially, tarfile does NOT dereference
-    symlinks here (``TarInfo`` for a link has ``type == SYMTYPE`` and carries its
-    ``linkname``), so a symlink is stored AS a link together with where it points.
-    Returning ``None`` excludes the entry."""
+    Drops __pycache__ dirs and ``.pyc``/``.pyo`` files anywhere in the tree. Everything
+    else is kept verbatim -- crucially, tarfile does NOT dereference symlinks here
+    (``TarInfo`` for a link has ``type == SYMTYPE`` and carries its ``linkname``), so a
+    symlink is stored AS a link together with where it points. Returning ``None``
+    excludes the entry."""
     base = os.path.basename(tarinfo.name)
     if base in _ALWAYS_SKIP_NAMES:
         return None
@@ -116,147 +157,129 @@ def _count_symlinks(home, entries):
 
 
 def prompt_passphrase():
-    """Ask for the archive passphrase twice and return it once the two match.
-
-    The passphrase is the archive's only key and is never stored. An empty
-    passphrase is rejected (gpg would refuse it and it defeats the encryption)."""
-    while True:
-        first = getpass("Encryption passphrase: ")
-        if not first:
-            print("Passphrase cannot be empty.")
-            continue
-        second = getpass("Confirm passphrase: ")
-        if first == second:
-            return first
-        print("Passphrases do not match. Try again.")
+    """Ask for the archive passphrase twice and return it once the two match (the
+    write path -- a typo in a write-once key is unrecoverable)."""
+    return archive.prompt_passphrase(confirm=True)
 
 
-def build_archive(home, entries, out_path, passphrase):
-    """Write the gzip-tar of ``entries`` (under ``home``) through gpg to ``out_path``.
+def build_home_archive(home, entries, out_path, passphrase):
+    """Write ~/backup.tar.gz.gpg: the gzip-tar of ``entries`` (under ``home``), rooted
+    at the home dir (home-relative arcnames), piped through gpg. Prints one line per
+    top-level item added. Returns True on success."""
+    members = ((os.path.join(home, name), name) for name in entries)
+    return archive.build_encrypted_tar(
+        members, out_path, passphrase, tar_filter=_tar_filter,
+        on_add=lambda arcname: print(f"  added {arcname}"),
+    )
 
-    The tar stream is produced in-process and piped to ``gpg --symmetric`` so the
-    plaintext archive never touches disk -- only the encrypted ``.tar.gz.gpg`` is
-    written. The passphrase is handed to gpg on a private pipe (``--passphrase-fd``),
-    never on the command line (where it would show up in the process list).
 
-    Returns True on success. On failure the partial output is removed and False is
-    returned."""
-    # gpg reads the passphrase from a dedicated fd (passphrase-fd), so it is never
-    # visible in `ps` -- unlike handing it as a command-line argument. --batch/--yes
-    # keep it non-interactive and overwrite a stale archive from the same minute.
-    read_fd, write_fd = os.pipe()
-    gpg_cmd = [
-        "gpg", "--symmetric", "--cipher-algo", "AES256",
-        "--batch", "--yes", "--passphrase-fd", str(read_fd),
-        "-o", out_path,
-    ]
-    # Spawn gpg FIRST (so it is already draining the read end), THEN write the
-    # passphrase from a short-lived thread and close the write end. Writing before
-    # the child existed could block if the passphrase ever exceeded the pipe buffer
-    # (nothing would be reading yet); doing it from a thread after Popen can never
-    # deadlock the archiving below.
-    proc = subprocess.Popen(gpg_cmd, stdin=subprocess.PIPE, pass_fds=(read_fd,))
-    os.close(read_fd)  # the child owns the read end now
+def build_passwords_archive(home, passphrase, out_path):
+    """Write ~/passwords.tar.gz.gpg from the vault store, if the passphrase unlocks it.
 
-    def _feed_passphrase():
-        try:
-            os.write(write_fd, (passphrase + "\n").encode("utf-8"))
-        finally:
-            os.close(write_fd)
+    The store ~/Vault/passwords.txt.gpg is itself gpg-encrypted (with the user's
+    passwords master password). We try the SAME passphrase the user gave `backup`
+    against it:
+      * store missing            -> return "missing" (caller prints a skip note),
+      * passphrase does not match -> return "mismatch" (caller warns, run still ok),
+      * passphrase matches        -> decrypt to a private temp plaintext, archive THAT
+                                     (as ``Vault/passwords.txt`` inside the archive), and
+                                     return "ok". `unpack` re-encrypts on restore, so the
+                                     recovered data ends up back at ~/Vault/.
 
-    pass_thread = threading.Thread(target=_feed_passphrase, daemon=True)
-    pass_thread.start()
+    The decrypted plaintext is written under a 0700 temp dir and shredded in a finally,
+    so the cleartext password list never lingers on disk."""
+    store_path = os.path.join(home, VAULT_REL)
+    if not os.path.exists(store_path):
+        return "missing"
 
+    # Decrypt into a private (0700) temp dir; gpg writes the plaintext 0600. If the
+    # passphrase is wrong, gpg_decrypt_to_file removes the partial output and returns
+    # False -- we treat that as "mismatch" (do not fail the whole run).
+    tmp_dir = tempfile.mkdtemp(prefix="azarch-backup-")
+    plain_path = os.path.join(tmp_dir, "passwords.txt")
     try:
-        with tarfile.open(fileobj=proc.stdin, mode="w:gz") as tar:
-            for name in entries:
-                path = os.path.join(home, name)
-                # arcname=name roots the archive at the home dir (paths are
-                # "Documents/...", not "/home/<user>/Documents/..."). recursive=True
-                # walks dirs; the filter drops pycache and keeps symlinks as links.
-                tar.add(path, arcname=name, recursive=True, filter=_tar_filter)
-                print(f"  added {name}")
-    except (OSError, tarfile.TarError) as error:
-        proc.stdin.close()
-        proc.wait()
-        pass_thread.join()
-        _cleanup_partial(out_path)
-        print(f"Archive failed: {error}")
-        return False
-
-    proc.stdin.close()
-    returncode = proc.wait()
-    pass_thread.join()
-    if returncode != 0:
-        _cleanup_partial(out_path)
-        print(f"gpg failed (exit {returncode}).")
-        return False
-    return True
-
-
-def _cleanup_partial(out_path):
-    """Remove a half-written archive so a failed run never leaves a corrupt file."""
-    try:
-        os.remove(out_path)
-    except OSError:
-        pass
-
-
-def _fmt_size(num_bytes):
-    for unit, scale in (("GB", 1e9), ("MB", 1e6), ("KB", 1e3)):
-        if num_bytes >= scale:
-            return f"{num_bytes / scale:.2f} {unit}"
-    return f"{num_bytes} B"
+        if not archive.gpg_decrypt_to_file(store_path, plain_path, passphrase):
+            return "mismatch"
+        # Archive the DECRYPTED store as Vault/passwords.txt so `unpack` can re-encrypt
+        # it back to ~/Vault/passwords.txt.gpg. One member, no pycache filter needed.
+        members = [(plain_path, "Vault/passwords.txt")]
+        ok = archive.build_encrypted_tar(members, out_path, passphrase)
+        return "ok" if ok else "failed"
+    finally:
+        archive.shred_dir(tmp_dir)
 
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] in ("-h", "--help"):
         print("Usage: backup\n\n"
-              "Create an encrypted archive of your home directory's top-level\n"
-              "folders (skipping the 'Ignore' folder and hidden dot files, keeping\n"
-              "symlinks as links) at ~/backup_<date>.tar.gz.gpg.")
+              "Create TWO encrypted archives in your home directory from one\n"
+              "passphrase prompt:\n"
+              "  ~/backup.tar.gz.gpg     your home dir's top-level folders (skipping\n"
+              "                          'Ignore' and hidden dot files, symlinks kept\n"
+              "                          as links).\n"
+              "  ~/passwords.tar.gz.gpg  your password store (~/Vault/passwords.txt.gpg),\n"
+              "                          included only if the passphrase unlocks it.\n\n"
+              "Restore either with:  unpack <archive>")
         return 0
 
-    if not _which("gpg"):
-        print("Error: 'gpg' not found. Install it with: sudo pacman -S gnupg")
-        return 1
+    rc = archive.require_gpg_or_exit()
+    if rc is not None:
+        return rc
 
     home = home_dir()
     entries = select_entries(home)
-    if not entries:
+    have_vault = os.path.exists(os.path.join(home, VAULT_REL))
+    # Only bail out entirely when there is genuinely nothing to do -- no home dirs to
+    # archive AND no password store to include. If the home selection is empty but a vault
+    # exists, we still go on and attempt the passwords archive (a user whose only backable
+    # thing is their password store must still get passwords.tar.gz.gpg).
+    if not entries and not have_vault:
         print(f"Nothing to back up in {home} "
-              f"(everything is hidden or in '{IGNORE_DIR_NAME}').")
+              f"(everything is hidden or in '{IGNORE_DIR_NAME}', and no password store).")
         return 0
 
-    symlinks = _count_symlinks(home, entries)
-    print(f"Backing up {len(entries)} item(s) from {home}"
-          + (f" ({symlinks} symlink(s), kept as links)" if symlinks else "")
-          + f", skipping '{IGNORE_DIR_NAME}' and dot files.\n")
+    if entries:
+        symlinks = _count_symlinks(home, entries)
+        print(f"Backing up {len(entries)} item(s) from {home}"
+              + (f" ({symlinks} symlink(s), kept as links)" if symlinks else "")
+              + f", skipping '{IGNORE_DIR_NAME}' and dot files.\n")
+    else:
+        print(f"No top-level home folders to archive in {home}; "
+              "backing up the password store only.\n")
 
     passphrase = prompt_passphrase()
     print()
 
-    stamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
-    out_path = os.path.join(home, f"backup_{stamp}.tar.gz.gpg")
-
     start = time.time()
-    ok = build_archive(home, entries, out_path, passphrase)
-    if not ok:
-        return 1
 
-    size = os.path.getsize(out_path) if os.path.exists(out_path) else 0
-    print(f"\nDone in {int(time.time() - start)}s -> {out_path} ({_fmt_size(size)})")
+    # 1) The home archive -- the primary deliverable. Built only when there is something to
+    #    put in it; if it is attempted and FAILS, the whole run fails.
+    if entries:
+        home_out = os.path.join(home, HOME_ARCHIVE_NAME)
+        if not build_home_archive(home, entries, home_out, passphrase):
+            return 1
+        home_size = os.path.getsize(home_out) if os.path.exists(home_out) else 0
+        print(f"  -> {home_out} ({archive.fmt_size(home_size)})")
+
+    # 2) The passwords archive -- best-effort. A missing store or a non-matching
+    #    passphrase warns but never fails the run.
+    pw_out = os.path.join(home, PASSWORDS_ARCHIVE_NAME)
+    status = build_passwords_archive(home, passphrase, pw_out)
+    if status == "ok":
+        pw_size = os.path.getsize(pw_out) if os.path.exists(pw_out) else 0
+        print(f"  -> {pw_out} ({archive.fmt_size(pw_size)})")
+    elif status == "missing":
+        print(f"  note: no password store at ~/{VAULT_REL}; "
+              "skipping passwords archive.")
+    elif status == "mismatch":
+        print("  warning: the passphrase did not unlock ~/{}; ".format(VAULT_REL)
+              + "passwords store NOT included.")
+    else:  # "failed" -- gpg/tar error building the passwords archive
+        print("  warning: could not build the passwords archive.")
+
+    print(f"\nDone in {int(time.time() - start)}s.")
     return 0
-
-
-def _which(name):
-    """Tiny shutil.which shim (kept dependency-light)."""
-    for directory in os.environ.get("PATH", "").split(os.pathsep):
-        candidate = os.path.join(directory, name)
-        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-            return candidate
-    return None
 
 
 if __name__ == "__main__":

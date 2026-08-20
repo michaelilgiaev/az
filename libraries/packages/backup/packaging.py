@@ -1,9 +1,11 @@
-"""Az'arch backup -- build wiring for the `backup` command.
+"""Az'arch backup -- build wiring for the `backup` and `unpack` commands.
 
-`backup` is a home-directory backup: it rolls the current user's top-level home
-folders (skipping ``Ignore`` and hidden dot files, keeping symlinks as links) into
-one timestamped GPG-encrypted archive at ~/backup_<date>.tar.gz.gpg. See __init__.py
-and backup.py for the app itself; THIS module is only the ISO build wiring.
+`backup` rolls the current user's top-level home folders (skipping ``Ignore`` and
+hidden dot files, keeping symlinks as links) into ~/backup.tar.gz.gpg AND archives the
+password store into ~/passwords.tar.gz.gpg, both GPG-encrypted with one passphrase.
+`unpack` reverses either archive, restoring the home dirs into ~/ and the password
+store into ~/Vault/. See __init__.py, backup.py, unpack.py and the shared archive.py
+for the apps themselves; THIS module is only the ISO build wiring.
 
 Mirrors packages/passwords/packaging.py: our OWN package, so the sources live
 directly in this dir next to the build wiring, and compiler.py iterates emit_plan()
@@ -21,12 +23,17 @@ module needs no edit here.
 Layers:
   * SOURCE tree -- libraries/packages/backup/ (paths.BACKUP_DIR):
       __init__.py                     the package init (makes the dir importable in tests)
-      backup.py                       the `backup` entry script (the archiver)
-      packaging.py                    THIS module -- install paths, launcher, emit_plan()
+      backup.py                       the `backup` entry script (creates the two archives)
+      unpack.py                       the `unpack` entry script (restores an archive)
+      archive.py                      shared tar+gpg helper (imported by both entries)
+      packaging.py                    THIS module -- install paths, launchers, emit_plan()
   * INSTALLED layout (root-owned), all flat in LIB_DIR:
-      /usr/local/lib/azarch-backup/backup.py    the entry script
+      /usr/local/lib/azarch-backup/backup.py    the `backup` entry script
+      /usr/local/lib/azarch-backup/unpack.py    the `unpack` entry script
+      /usr/local/lib/azarch-backup/archive.py   the shared helper
       /usr/local/lib/azarch-backup/<module>.py  any future working module
-      /usr/local/bin/backup                      the launcher (execs backup.py)
+      /usr/local/bin/backup                      the `backup` launcher (execs backup.py)
+      /usr/local/bin/unpack                      the `unpack` launcher (execs unpack.py)
 
 Runtime dependencies (system binaries the app shells out to): `gpg` (gnupg) to
 encrypt the archive -- already named in the manifest (it is also the passwords
@@ -46,12 +53,18 @@ import paths
 # it grows) sit side by side here, and the entry does `sys.path.insert(0, <its own
 # dir>)` so future bare `import <module>` calls resolve.
 LIB_DIR = "/usr/local/lib/azarch-backup"
-# The entry script the launcher execs. It inserts its own dir on sys.path then
-# imports any sibling modules, so it must land in LIB_DIR beside them.
+# The entry script the `backup` launcher execs. It runs from LIB_DIR so its sibling
+# `import archive` resolves, so it must land in LIB_DIR beside the other modules.
 ENTRY_SYSTEM_PATH = f"{LIB_DIR}/backup.py"
-# The bin entry point on PATH -- the actual `backup` command. A tiny wrapper that
-# execs the system python on the entry script from LIB_DIR (so sibling imports resolve).
+# The entry script the `unpack` launcher execs (the restore command). Same flat dir,
+# same sibling `import archive`.
+UNPACK_ENTRY_SYSTEM_PATH = f"{LIB_DIR}/unpack.py"
+# The bin entry points on PATH -- the actual `backup` and `unpack` commands. Each is a
+# tiny wrapper that execs the system python on its entry script from LIB_DIR (so the
+# sibling imports resolve). Both ship 0o755 (see the profile.py file_permissions map --
+# archiso would otherwise normalise them to 0644 on the squashfs; that was bug #1).
 LAUNCHER_SYSTEM_PATH = "/usr/local/bin/backup"
+UNPACK_LAUNCHER_SYSTEM_PATH = "/usr/local/bin/unpack"
 
 # --- Which source files ship (in the repo) ----------------------------------
 # The app is a flat directory, so we ship every .py in it EXCEPT this build wiring.
@@ -97,21 +110,33 @@ class _ModuleBuilder:
         return hash(self.name)
 
 
-def launcher_sh() -> str:
-    """A tiny launcher installed on PATH as the `backup` command.
+def _launcher_sh(command: str, entry: str, summary: str) -> str:
+    """A tiny launcher installed on PATH as ``command``.
 
-    It cd's into LIB_DIR (so the entry script's sibling `import`s resolve without
-    installing anything as a site package) and execs the system python on backup.py,
-    forwarding any arguments (so `backup --help` reaches the script). `exec` so the
-    python process replaces the shell (clean signals). `"$@"` is quoted so arguments
-    with spaces survive."""
+    It cd's into LIB_DIR (so the entry script's sibling `import`s -- both scripts do
+    `import archive` -- resolve without installing anything as a site package) and execs
+    the system python on ``entry``, forwarding any arguments (so ``command --help`` /
+    ``unpack <file>`` reach the script). `exec` so the python process replaces the shell
+    (clean signals). `"$@"` is quoted so arguments with spaces survive."""
     return f"""\
 #!/bin/sh
-# backup -- launch the Az'arch home-directory backup.
+# {command} -- {summary}
 # Generated by packages/backup/packaging.py (edit the Python, not this file).
 cd '{LIB_DIR}' || exit 1
-exec python -u backup.py "$@"
+exec python -u {entry} "$@"
 """
+
+
+def launcher_sh() -> str:
+    """The `backup` launcher (execs backup.py -- creates the two encrypted archives)."""
+    return _launcher_sh("backup", "backup.py",
+                        "launch the Az'arch home-directory + password backup.")
+
+
+def unpack_launcher_sh() -> str:
+    """The `unpack` launcher (execs unpack.py -- restores a .tar.gz.gpg archive)."""
+    return _launcher_sh("unpack", "unpack.py",
+                        "restore an Az'arch backup archive.")
 
 
 # --- Emit plan --------------------------------------------------------------
@@ -138,4 +163,6 @@ def emit_plan() -> list[dict]:
         for name in _shipped_module_names()
     ]
     plan.append({"builder": launcher_sh, "dest": LAUNCHER_SYSTEM_PATH, "mode": _EXEC})
+    plan.append({"builder": unpack_launcher_sh,
+                 "dest": UNPACK_LAUNCHER_SYSTEM_PATH, "mode": _EXEC})
     return plan
