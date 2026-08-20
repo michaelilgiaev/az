@@ -424,8 +424,8 @@ def test_rc_xml_binds_super_and_menu_to_the_launcher():
 
 def _root_context_block(rc_xml: str) -> str:
     # Return just the <context name="Root">...</context> block from rc.xml, so a test can
-    # assert on the desktop-click bindings without matching the window-icon context
-    # (which legitimately still opens the built-in client-menu).
+    # assert on the desktop-click bindings in isolation (the window-icon context is
+    # neutered separately -- see test_rc_xml_window_icon_opens_no_menu).
     start = rc_xml.index('<context name="Root">')
     end = rc_xml.index("</context>", start)
     return rc_xml[start:end]
@@ -436,8 +436,9 @@ def test_rc_xml_root_menu_is_disabled():
     # disable that menu completely". rc.xml must STILL declare a "Root" context (so the
     # element tree is explicit) but that context must open NO menu -- no ShowMenu action
     # and no root-menu reference inside it -- and rc.xml must NOT point OpenBox at any
-    # menu.xml (there is none). Right/middle-clicking the desktop then does nothing. The
-    # window-icon client-menu (a separate, standard OpenBox feature) is unaffected.
+    # menu.xml (there is none). Right/middle-clicking the desktop then does nothing. (The
+    # titlebar window-icon popup is disabled too, but by a separate change -- see
+    # test_rc_xml_window_icon_opens_no_menu.)
     out = desktop.openbox_rc_xml()
     root_block = _root_context_block(out)
     assert 'name="ShowMenu"' not in root_block
@@ -548,13 +549,65 @@ def test_rc_xml_binds_titlebar_button_contexts():
     assert '<action name="Close"/>' in out
 
 
-def test_rc_xml_binds_window_icon_client_menu():
-    # The window-icon context opens the built-in client-menu (min/max/close/move/... for
-    # that window) -- a standard OpenBox feature, distinct from the removed desktop root
-    # menu. It uses OpenBox's built-in "client-menu" (no menu.xml needed).
+def _icon_context_block(rc_xml: str) -> str:
+    # Return just the <context name="Icon">...</context> block from rc.xml, so a test can
+    # assert on the titlebar-icon click bindings in isolation.
+    start = rc_xml.index('<context name="Icon">')
+    end = rc_xml.index("</context>", start)
+    return rc_xml[start:end]
+
+
+def test_rc_xml_window_icon_opens_no_menu():
+    # THE regression this fixes: pressing the application ICON on the left of the OpenBox
+    # titlebar used to pop up the built-in client-menu ("Send to desktop"/minimise/maximise/
+    # close). The user asked that it "didn't do that in the first place, delete that, make
+    # sure it doesn't happen". So the Icon mouse context must STILL exist (the icon is kept
+    # to show the window's branding tile) but bind NO ShowMenu -- clicking it does nothing.
+    # The icon (`N`) stays in titleLayout so the branding tile still renders; only the click
+    # menu is removed.
     out = desktop.openbox_rc_xml()
-    assert '<context name="Icon">' in out
-    assert "<menu>client-menu</menu>" in out
+    assert '<context name="Icon">' in out          # the icon context is still declared
+    assert "NLIMC" in out                          # the icon (`N`) still shows in the bar
+    icon_block = _icon_context_block(out)
+    # No menu opens from the icon: no ShowMenu action and no client-menu reference inside it.
+    assert 'name="ShowMenu"' not in icon_block
+    assert "client-menu" not in icon_block
+    # Belt: NO context or keybind anywhere opens the client-menu, so the popup has no trigger
+    # path at all (the titlebar/keyboard never bind ShowMenu client-menu either).
+    assert "<menu>client-menu</menu>" not in out
+    assert 'name="ShowMenu"' not in out
+
+
+# --- Exactly one desktop: no multiple workspaces -----------------------------
+
+def test_rc_xml_declares_exactly_one_desktop():
+    # THE regression this fixes: OpenBox shipped with <number>2</number>, so there were TWO
+    # live desktops (the client-menu even offered "Send to desktop" between them). The user
+    # asked that there not be multiple desktops "to begin with -- there is simply one desktop
+    # and that's that". rc.xml must declare EXACTLY ONE desktop: <number>1</number> and a
+    # single <name>. Parsed via ElementTree so the assertion is on the real element values.
+    import xml.etree.ElementTree as ET
+
+    root = ET.fromstring(desktop.openbox_rc_xml())
+    ns = {"ob": "http://openbox.org/3.4/rc"}
+    number = root.find(".//ob:desktops/ob:number", ns)
+    assert number is not None and number.text == "1", "OpenBox must expose a single desktop"
+    names = root.findall(".//ob:desktops/ob:names/ob:name", ns)
+    assert len(names) == 1, f"exactly one desktop name expected, got {[n.text for n in names]}"
+    # The old two-desktop config must be gone (no stray second workspace name).
+    assert "<number>2</number>" not in desktop.openbox_rc_xml()
+    assert "<name>two</name>" not in desktop.openbox_rc_xml()
+
+
+def test_rc_xml_has_no_go_to_desktop_keybinds():
+    # With a SINGLE desktop there is nowhere to switch, so the workspace-switch keybinds
+    # (the old C-A-Left/Right GoToDesktop binds, and any SendToDesktop) must be removed --
+    # leaving them would bind keys to no-ops and imply multiple desktops still exist.
+    out = desktop.openbox_rc_xml()
+    assert 'name="GoToDesktop"' not in out
+    assert 'name="SendToDesktop"' not in out
+    assert 'key="C-A-Left"' not in out
+    assert 'key="C-A-Right"' not in out
 
 
 # --- Window resize: edge + corner mouse contexts actually bound --------------

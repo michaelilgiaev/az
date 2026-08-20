@@ -810,7 +810,12 @@ def openbox_rc_xml() -> str:
          ~/.themes/{OPENBOX_THEME_NAME} and ~/.themes/{OPENBOX_THEME_NAME_DARK}). DARK is
          the default; `azarch theme` (white / dark) rewrites this name element to
          "{OPENBOX_THEME_NAME}" or "{OPENBOX_THEME_NAME_DARK}". titleLayout NLIMC = icon,
-         label, iconify, maximize, close. -->
+         label, iconify, maximize, close. The leading `N` (icon) is kept ONLY to show the
+         window's branding icon (e.g. the Calamares "Az'" tile, productIcon) on the left of
+         the bar; it is DELIBERATELY INERT. The Icon mouse context below binds no ShowMenu,
+         so clicking it does NOTHING (the user asked that the application-icon popup menu not
+         appear at all). Same "the icon must not open a menu" intent as the empty Root
+         context. -->
     <name>{OPENBOX_THEME_DEFAULT}</name>
     <titleLayout>NLIMC</titleLayout>
     <keepBorder>yes</keepBorder>
@@ -830,12 +835,17 @@ def openbox_rc_xml() -> str:
       <slant>normal</slant>
     </font>
   </theme>
+  <!-- EXACTLY ONE desktop. Az'arch has a single desktop and no workspace switching: the
+       user asked that there not be multiple desktops "to begin with" (they had noticed the
+       client-menu's "Send to desktop" listing two live desktops). <number>1</number> means
+       OpenBox exposes a single workspace, so the client-menu shows no "Send to desktop"
+       submenu and nothing can move a window to a second desktop. The GoToDesktop keybinds
+       were removed too (there is nowhere to go). -->
   <desktops>
-    <number>2</number>
+    <number>1</number>
     <firstdesk>1</firstdesk>
     <names>
       <name>one</name>
-      <name>two</name>
     </names>
     <popupTime>0</popupTime>
   </desktops>
@@ -875,12 +885,9 @@ def openbox_rc_xml() -> str:
     <keybind key="W-d">
       <action name="ToggleShowDesktop"/>
     </keybind>
-    <keybind key="C-A-Left">
-      <action name="GoToDesktop"><to>left</to><wrap>no</wrap></action>
-    </keybind>
-    <keybind key="C-A-Right">
-      <action name="GoToDesktop"><to>right</to><wrap>no</wrap></action>
-    </keybind>
+    <!-- No C-A-Left/Right GoToDesktop binds: Az'arch has a SINGLE desktop (see <desktops>
+         above), so there is no second workspace to switch to. -->
+    <!-- W-d ToggleShowDesktop still minimises/restores everything on the one desktop. -->
     <!-- FN media keys -> the `azarch` volume/brightness controls (7.5% steps, a centered
          cyan on-screen bar). We bind the X "XF86" media KEYSYMS the keyboard emits, NOT a
          fixed FN+F2/F3, because that physical mapping DIFFERS per machine: on the user's PC
@@ -938,9 +945,18 @@ def openbox_rc_xml() -> str:
       <mousebind button="Left" action="Press"><action name="Focus"/><action name="Raise"/><action name="Unshade"/></mousebind>
       <mousebind button="Left" action="Click"><action name="Close"/></mousebind>
     </context>
+    <!-- The window ICON (leftmost titlebar element, the `N` in titleLayout). Its click
+         binding is INTENTIONALLY neutered: the user asked that pressing the application icon
+         NOT pop up a menu ("i'd prefer it didn't do that in the first place, delete that,
+         make sure it doesn't happen"). Stock OpenBox binds this context to ShowMenu
+         client-menu (the popup with "Send to desktop"/minimise/maximise/close); we bind ONLY
+         Focus+Raise, with NO ShowMenu, so the icon still shows the branding tile but pressing
+         it does nothing; the popup can never appear. (Same "the surface exists but opens no
+         menu" shape as the empty Root context below.) The min/max/close BUTTONS still work
+         (their own contexts, above), so nothing is lost. -->
     <context name="Icon">
-      <mousebind button="Left" action="Press"><action name="Focus"/><action name="Raise"/><action name="Unshade"/><action name="ShowMenu"><menu>client-menu</menu></action></mousebind>
-      <mousebind button="Right" action="Press"><action name="Focus"/><action name="Raise"/><action name="ShowMenu"><menu>client-menu</menu></action></mousebind>
+      <mousebind button="Left" action="Press"><action name="Focus"/><action name="Raise"/><action name="Unshade"/></mousebind>
+      <mousebind button="Right" action="Press"><action name="Focus"/><action name="Raise"/></mousebind>
     </context>
     <!-- Window EDGE + CORNER resize contexts. Same shape of bug as the dead buttons above:
          OpenBox draws a resize border/handle around every decorated window, but dragging an
