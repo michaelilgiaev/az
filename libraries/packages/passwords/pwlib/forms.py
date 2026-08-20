@@ -1,6 +1,11 @@
-"""Curses sub-screens and primitives: line/multi-line prompts, the detail view,
-the element editor, the new-entry wizard, delete confirmation, and the sequential
-('m') copy flow. Kept apart from tui.py so each file stays small."""
+"""Curses sub-screens and primitives: line/multi-line prompts, the entry view,
+the element editor, the new-entry wizard, and the "type yes" confirmations (for
+deleting an entry and for removing a column). Kept apart from tui.py so each file
+stays small.
+
+The entry view answers to a single keypress -- a NUMBER clips that column, "c"
+clips every column in order, "e" edits, "s" toggles STAY OPEN -- and clipping
+quits the whole app unless STAY OPEN is on for the session."""
 
 import curses
 
@@ -54,16 +59,30 @@ def nav_bar(win, y, pairs):
 # here is a dead key on its page.
 #
 # The entry view (opened with ENTER on a result) is the hub that replaced the old
-# "v show" / "e edit" / "m multi" verbs: it shows every column, and its own input
-# picks an action -- a NUMBER copies that one column, "c" clips every column in
-# order, "e" edits the entry. Copies are paste-once (see clipboard.py).
+# "v show" / "e edit" / "m multi" verbs: it shows every column and answers to a
+# SINGLE keypress (no typed input, no ENTER) -- a NUMBER clips that one column,
+# "c" clips every column in order, "e" edits, "s" toggles STAY OPEN. Copies are
+# paste-once (see clipboard.py). Clipping (a number or "c") QUITS the whole app
+# right after, unless STAY OPEN has been toggled on for this session. The "s"
+# label is rendered live to show the current state, so this list carries a
+# placeholder that _nav_entry() replaces with the real "STAY OPEN: off/on".
 _NAV_ENTRY = [
-    ('number', 'copy column'),
-    ('c', 'clip in order'),
+    ('1-9', 'clip column'),
+    ('c', 'clip each column in order'),
     ('e', 'edit'),
+    ('s', 'STAY OPEN'),
     ('ESC', 'back'),
     ('Q', 'quit'),
 ]
+
+
+def _nav_entry(stay_open):
+    """The entry-view nav bar pairs with the "s" cell reflecting the live STAY OPEN
+    state ("STAY OPEN: on" when set, else "STAY OPEN: off"). Everything else is the
+    static _NAV_ENTRY."""
+    state = 'on' if stay_open else 'off'
+    return [(k, ('STAY OPEN: ' + state) if k == 's' else lbl)
+            for k, lbl in _NAV_ENTRY]
 # New-entry: typing the title (the header updates live as you type). Every ENTER
 # hint in the app reads "ENTER continue" (the sole exception is the SELECT-mode
 # "ENTER copy") so the key does one consistent thing everywhere.
@@ -247,67 +266,85 @@ def _render_entry(win, entry, note=None):
     return columns, min(row + 1, h - 2)
 
 
-def entry_view(win, entry, do_copy=None, do_sequence=None):
-    """The entry hub: show every column and act on this entry.
+def entry_view(win, entry, stay_open=None, do_copy=None, do_sequence=None):
+    """The entry hub: show every column and act on this entry with ONE keypress.
 
     Replaces the old "v show" (this is that display), "e edit" (now the "e" action
-    here), and "m multi" (now the "c" action). Its input takes:
-      * a NUMBER  -> copy that one column to the clipboard (paste once, then it
-                     clears); notes is copyable too;
+    here), and "m multi" (now the "c" action). There is no typed input and no
+    ENTER -- the user just presses a key:
+      * a NUMBER  -> clip that one column (paste once, then it clears); notes is
+                     clippable too;
       * "c"       -> clip every column in order (email, username, password, ...)
                      so the user pastes them one after another, then it clears;
       * "e"       -> edit this entry (change / rename / add / remove / reorder);
-      * ESC       -> back to the list; Q -> quit the whole app.
+      * "s"       -> toggle STAY OPEN (see below);
+      * ESC       -> back to the list; q/Q -> quit the whole app.
+
+    Clipping (a number or "c") QUITS the whole app immediately afterward, so the
+    user copies and is dropped straight back to the shell -- UNLESS STAY OPEN is
+    on. STAY OPEN is a per-session toggle: off by default, "s" turns it on for the
+    lifetime of this run (so clipping then keeps the manager open), and it is NOT
+    persisted -- a fresh launch starts off again. Its state lives in the caller's
+    `stay_open` holder (a one-element list) so it survives leaving and re-opening
+    this view within the same run; if none is passed a local one is used.
 
     do_copy(value) and do_sequence(values) perform the actual clipboard work; they
     default to clipboard.copy / clipboard.copy_sequence and are injectable for
     tests. Returns (changed, quit): `changed` True if an edit modified the entry,
-    `quit` True only if the user pressed q."""
+    `quit` True when the user pressed q OR clipped while STAY OPEN was off."""
     if do_copy is None:
         do_copy = clipboard.copy
     if do_sequence is None:
         do_sequence = clipboard.copy_sequence
+    if stay_open is None:
+        stay_open = [False]
     changed = False
     note = None
     while True:
-        columns, input_row = _render_entry(win, entry, note)
+        columns, _row = _render_entry(win, entry, note)
         note = None
         h, _ = win.getmaxyx()
-        nav_bar(win, h - 1, _NAV_ENTRY)
-        choice = prompt_line(win, '> ', y=input_row, nav=_NAV_ENTRY)
-        if choice is None:
+        nav_bar(win, h - 1, _nav_entry(stay_open[0]))
+        ch = win.getch()
+        if ch == ESC:
             return changed, False            # ESC -> back to the list
-        choice = choice.strip()
-        if choice == '':
-            continue
-        low = choice.lower()
-        if low in ('q',):
+        if ch in (ord('q'), ord('Q')):
             return changed, True             # q -> full quit
-        if low == 'e':
+        if ch in (ord('s'), ord('S')):
+            stay_open[0] = not stay_open[0]  # toggle for the rest of the session
+            continue
+        if ch in (ord('e'), ord('E')):
             ch_edit, quit_ = edit_entry(win, entry)
             changed = changed or ch_edit
             if quit_:
                 return changed, True
             continue
-        if low == 'c':
+        if ch in (ord('c'), ord('C')):
             seq = [v for _k, v in entry.copy_sequence()]
             if not seq:
                 note = '(no columns to clip in order -- add some first)'
                 continue
             do_sequence(seq)
+            # Clipped -> quit unless the user asked us to STAY OPEN this session.
+            if not stay_open[0]:
+                return changed, True
             names = ', '.join(_label(k) for k, _v in entry.copy_sequence())
             note = 'clipping in order: %s -- paste each, then it clears' % names
             continue
-        if choice.isdigit():
-            n = int(choice)
+        if ord('1') <= ch <= ord('9'):
+            n = ch - ord('0')
             if 1 <= n <= len(columns):
                 key, value = columns[n - 1]
                 do_copy(value)
+                if not stay_open[0]:
+                    return changed, True     # clipped -> quit unless STAY OPEN
                 note = 'clipped %s -- paste once, then it clears' % _label(key)
             else:
-                note = '(no column %s -- pick 1-%d)' % (choice, len(columns))
+                note = '(no column %d -- press 1-%d)' % (n, len(columns))
             continue
-        note = '(type a column number, "c" to clip in order, "e" to edit)'
+        # Any other key: remind the user of the single-press controls.
+        note = ('(press a column number to clip, "c" to clip in order, "e" to '
+                'edit, "s" for STAY OPEN)')
 
 
 # Delete confirmation: same shape as the new-entry title screen. Type "yes" then
@@ -319,28 +356,38 @@ _NAV_DELETE = [
 ]
 
 
-def confirm_delete(win, entry):
-    """Confirm deleting an entry. Works like the new-entry title screen: you type
-    "yes" and press ENTER to continue (delete). If "yes" was NOT written (empty or
-    anything else), it does not silently cancel -- it echoes that "yes" was not
+def confirm_yes(win, header, message, verb='delete'):
+    """Shared "type yes to confirm" screen. Draws `header` (bold) on row 0 and
+    `message` on row 2, then asks the user to type "yes". You type "yes" and press
+    ENTER to continue (the destructive action). If "yes" was NOT written (empty or
+    anything else) it does not silently cancel -- it echoes that "yes" was not
     written and that pressing ENTER again exits; a second such ENTER cancels. ESC
-    cancels at any time. Returns True only when "yes" was confirmed."""
+    cancels at any time. `verb` only tweaks the warning wording. Returns True only
+    when "yes" was confirmed. Backs both entry deletion and element removal."""
     win.erase()
-    addstr(win, 0, 0, 'DELETE: ' + entry.title, curses.A_BOLD)
-    addstr(win, 2, 0, 'This permanently removes the entry from the store.')
+    addstr(win, 0, 0, header, curses.A_BOLD)
+    addstr(win, 2, 0, message)
     warned = False
     while True:
         note = ('"yes" was not written -- press ENTER again to exit, or type '
-                '"yes" to delete') if warned else None
+                '"yes" to %s' % verb) if warned else None
         ans = prompt_line(win, 'Type "yes" to confirm: ', y=4, nav=_NAV_DELETE,
                           note=note)
         if ans is None:
             return False                     # ESC -> cancel
         if ans.strip() == 'yes':
-            return True                      # confirmed -> delete
+            return True                      # confirmed
         if warned:
             return False                     # second non-"yes" ENTER -> exit
         warned = True                        # first non-"yes" ENTER -> warn, stay
+
+
+def confirm_delete(win, entry):
+    """Confirm deleting an entry (the "type yes" screen). Returns True only when
+    "yes" was confirmed. See confirm_yes for the exact keystroke behavior."""
+    return confirm_yes(
+        win, 'DELETE: ' + entry.title,
+        'This permanently removes the entry from the store.', verb='delete')
 
 
 # The offered columns after a title is entered. Order is the menu order; the key
@@ -445,8 +492,15 @@ def edit_entry(win, entry):
                 changed = True
                 sel = idx
         elif ch in (ord('r'), ord('x'), curses.KEY_DC):
-            if entry.elements[sel][0] in ESSENTIAL:
+            key = entry.elements[sel][0]
+            if key in ESSENTIAL:
                 continue  # title/password are essential, cannot be removed
+            # Removing a column is destructive, so require a typed "yes" first --
+            # a stray "r" must not silently drop data.
+            if not confirm_yes(win, 'REMOVE COLUMN: ' + _label(key),
+                               'This permanently removes this column from the '
+                               'entry.', verb='remove'):
+                continue
             del entry.elements[sel]
             changed = True
             sel = min(sel, len(entry.elements) - 1)

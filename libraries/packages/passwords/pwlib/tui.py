@@ -18,11 +18,12 @@ verbs (a keycap, a space, a dim label, a gap) -- NOT centred and NOT coloured,
 just structured the same.
 
 Because W/A/S/D and H/J/K/L are movement, the single-letter ACTIONS deliberately
-avoid every movement key: n new, x delete. ENTER opens the entry view (where a
-number copies a column, "c" clips every column in order, and "e" edits) -- the
-old "v show", "e edit" and "m multi" verbs are folded into that view. There is no
-Tab. ESC never quits -- it jumps back to the START of the UI (clears the query,
-highlight to the top) and is safe to spam. Only q / Q quit.
+avoid every movement key: n new, x delete. ENTER opens the entry view (which
+answers to a single keypress: a number clips a column, "c" clips every column in
+order, "e" edits, "s" toggles STAY OPEN) -- the old "v show", "e edit" and "m
+multi" verbs are folded into that view. Clipping there quits the app unless STAY
+OPEN is on. There is no Tab. ESC never quits -- it jumps back to the START of the
+UI (clears the query, highlight to the top) and is safe to spam. Only q / Q quit.
 """
 
 import curses
@@ -77,6 +78,11 @@ class App:
         self.sel = 0
         self.status = ''
         self.results = []
+        # STAY OPEN toggle for the entry view, owned here so its state lives for
+        # this whole run (App is built once per launch) and survives opening and
+        # re-opening entries -- yet resets on the next launch (not persisted). A
+        # one-element list so entry_view can flip it in place. Off by default.
+        self.stay_open = [False]
         self.refilter()
 
     # ----- data -----
@@ -229,14 +235,17 @@ class App:
             self.refilter()
             return True
         if ch in forms.ENTER_KEYS:
-            # ENTER "continue"s INTO the entry view (columns + copy/clip/edit),
-            # rather than copying the password and closing. The view handles the
-            # clipboard work itself; here we only propagate a full quit (q) and
-            # mark the store dirty if an edit inside it changed the entry.
+            # ENTER "continue"s INTO the entry view (columns + clip/edit), rather
+            # than copying the password and closing. The view handles the clipboard
+            # work itself and answers to single keypresses; here we only propagate
+            # a full quit -- which now fires either on q OR on a clip while STAY
+            # OPEN is off -- and mark the store dirty if an edit changed the entry.
+            # self.stay_open is threaded in so the toggle persists across re-opens
+            # for this run.
             entry = self.selected_entry()
             if entry is None:
                 return True
-            changed, quit_ = forms.entry_view(self.stdscr, entry)
+            changed, quit_ = forms.entry_view(self.stdscr, entry, self.stay_open)
             if changed:
                 self.dirty = True
             if quit_:

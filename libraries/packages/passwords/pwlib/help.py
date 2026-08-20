@@ -45,16 +45,25 @@ SELECT MODE  (cursor on the result list)
   q                 quit
 
 ENTRY VIEW  (open with ENTER on a result)
-  shows every column (title first, notes always last under a blank line), then an
-  input to act on it:
-  a number       copy that one column to the clipboard
+  shows every column (title first, notes always last under a blank line) and acts
+  on a SINGLE keypress -- there is no typed input and no ENTER:
+  a number       clip that one column to the clipboard, then QUIT (see STAY OPEN)
   c              clip every column IN ORDER (e.g. email, then username, then
-                 password -- notes excluded) so you paste them one after another
+                 password -- notes excluded) so you paste them one after another,
+                 then QUIT (see STAY OPEN)
+  s              toggle STAY OPEN (see below)
   e              edit: change / rename / add / remove / reorder elements
                  ([ moves the highlighted column up, ] moves it down; the title
-                 stays pinned first and notes pinned last)
+                 stays pinned first and notes pinned last). removing a column
+                 asks you to type "yes" first
   esc            back to the result list
   q              quit
+
+STAY OPEN  (toggle inside the entry view; off by default, not saved)
+  clipping normally drops you straight back to the shell -- clip and you are out.
+  press "s" to turn STAY OPEN on and the manager keeps running after you clip, so
+  you can grab several things in a row. it lasts only for this run: relaunching
+  starts with STAY OPEN off again.
 
 CLIPBOARD  (paste once, then it clears)
   a copied column is held for a SINGLE paste; after you paste it once the

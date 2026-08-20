@@ -273,6 +273,26 @@ class QuitVsBackTests(unittest.TestCase):
         finally:
             forms.entry_view = orig
 
+    def test_stay_open_starts_off_and_is_threaded_through(self):
+        # The app owns a STAY OPEN holder, off by default, and hands it to
+        # entry_view so the toggle survives across re-opens within one run.
+        app = self._app()
+        app.mode = tui.SELECT
+        self.assertEqual(app.stay_open, [False])
+        seen = {}
+        orig = forms.entry_view
+
+        def fake(win, entry, stay_open=None, *a, **k):
+            seen['holder'] = stay_open
+            return (False, False)
+
+        forms.entry_view = fake
+        try:
+            app.handle_select(10)
+        finally:
+            forms.entry_view = orig
+        self.assertIs(seen['holder'], app.stay_open)   # same object, not a copy
+
 
 class SortTests(unittest.TestCase):
     """The first page (Store.filter) is alphabetical by title, case-insensitive,
@@ -501,9 +521,11 @@ class FilePreservationTests(unittest.TestCase):
         # its on-disk form is rebuilt (not the stale original).
         entry = Entry([['title', 'x'], ['notes', 'n'], ['password', 'old']],
                       original_body='title) x\nnotes)\n    n\npassword) old')
-        # Script: highlight is on title(0); move down twice to password(2), edit it,
-        # then ESC. KEY_DOWN moves; 'e' edits; prompt_line returns the new value.
-        keys = iter([curses.KEY_DOWN, curses.KEY_DOWN, ord('e'), forms.ESC])
+        # edit_entry normalizes notes-last on entry, so the list is
+        # [title(0), password(1), notes(2)]. Script: highlight starts on title(0);
+        # one KEY_DOWN lands on password(1); 'e' edits it (a single-line prompt, so
+        # the stub value is stored directly, NOT the multiline notes path); ESC out.
+        keys = iter([curses.KEY_DOWN, ord('e'), forms.ESC])
         win = _KeyWin([])
         win._keys = list(keys)
         orig = forms.prompt_line
@@ -515,6 +537,31 @@ class FilePreservationTests(unittest.TestCase):
         self.assertTrue(changed)
         self.assertIsNone(entry._original_body)          # dirtied
         self.assertEqual(entry.get('password'), 'newpw')
+
+    def _remove_run(self, confirm):
+        # Highlight moves to the email column (idx 1) and presses "r"; confirm_yes
+        # is stubbed to `confirm`. Returns (changed, remaining keys after email).
+        entry = Entry([['title', 'x'], ['email', 'a@b.c'], ['password', 'p']])
+        win = _KeyWin([curses.KEY_DOWN, ord('r'), forms.ESC])
+        orig = forms.confirm_yes
+        forms.confirm_yes = lambda *a, **k: confirm
+        try:
+            changed, _quit = forms.edit_entry(win, entry)
+        finally:
+            forms.confirm_yes = orig
+        return changed, [k for k, _ in entry.elements]
+
+    def test_remove_requires_yes_confirmation(self):
+        # "r" on a non-essential column must ask confirm_yes; only "yes" deletes.
+        changed, keys = self._remove_run(confirm=True)
+        self.assertTrue(changed)
+        self.assertEqual(keys, ['title', 'password'])    # email removed
+
+    def test_remove_cancelled_keeps_column(self):
+        # Declining the confirmation leaves the column intact and reports no change.
+        changed, keys = self._remove_run(confirm=False)
+        self.assertFalse(changed)
+        self.assertEqual(keys, ['title', 'email', 'password'])
 
 
 class NavLabelTests(unittest.TestCase):
@@ -710,61 +757,98 @@ class ReorderColumnsTests(unittest.TestCase):
 
 
 class EntryViewTests(unittest.TestCase):
-    """forms.entry_view is the hub opened with ENTER. A NUMBER copies that column
-    (paste-once), "c" clips every column in order, "e" edits, ESC backs out, q
-    quits. Driven headless: prompt_line is stubbed to replay the action input and
-    the clipboard calls are captured instead of touching X."""
+    """forms.entry_view is the hub opened with ENTER. It answers to a SINGLE
+    keypress (no typed input, no ENTER): a NUMBER clips that column (paste-once),
+    "c" clips every column in order, "e" edits, "s" toggles STAY OPEN, ESC backs
+    out, q quits. Clipping (a number or "c") quits the whole app unless STAY OPEN
+    is on. Driven headless with _KeyWin replaying getch() keystrokes; the clipboard
+    calls are captured instead of touching X."""
 
     def _entry(self):
         return Entry([['title', 'site.com'], ['email', 'a@b.c'],
                       ['username', 'user'], ['password', 'pw'],
                       ['notes', 'note text']])
 
-    def _run(self, inputs, entry=None):
+    def _run(self, keys, entry=None, stay_open=None):
         entry = entry or self._entry()
-        seq = iter(inputs)
         copied = []
         seqd = []
-        orig = forms.prompt_line
-        forms.prompt_line = lambda *a, **k: next(seq)
-        try:
-            result = forms.entry_view(
-                _FakeWin(), entry,
-                do_copy=lambda v: copied.append(v),
-                do_sequence=lambda vs: seqd.append(list(vs)))
-        finally:
-            forms.prompt_line = orig
+        win = _KeyWin([(ord(k) if isinstance(k, str) else k) for k in keys])
+        result = forms.entry_view(
+            win, entry, stay_open=stay_open,
+            do_copy=lambda v: copied.append(v),
+            do_sequence=lambda vs: seqd.append(list(vs)))
         return result, copied, seqd, entry
 
     def test_esc_backs_out(self):
-        # prompt_line returns None on ESC -> (changed False, quit False).
-        (changed, quit_), copied, seqd, _ = self._run([None])
+        # ESC -> (changed False, quit False), nothing clipped.
+        (changed, quit_), copied, seqd, _ = self._run([forms.ESC])
         self.assertFalse(changed)
         self.assertFalse(quit_)
         self.assertEqual(copied, [])
 
-    def test_number_copies_that_column(self):
-        # Columns are numbered top-to-bottom (notes last): 1 email, 2 username,
-        # 3 password, 4 notes. Pick 3 -> copies the password value, then ESC.
-        (_c, _q), copied, seqd, _ = self._run(['3', None])
+    def test_number_clips_that_column_and_quits(self):
+        # Columns numbered top-to-bottom (notes last): 1 email, 2 username, 3
+        # password, 4 notes. Press 3 -> clips the password, then QUITS (STAY OFF).
+        (changed, quit_), copied, seqd, _ = self._run(['3'])
         self.assertEqual(copied, ['pw'])
         self.assertEqual(seqd, [])
+        self.assertTrue(quit_)
+        self.assertFalse(changed)
 
-    def test_number_can_copy_notes(self):
-        # Notes is a copyable single column (the last number).
-        (_c, _q), copied, _s, _e = self._run(['4', None])
+    def test_number_can_clip_notes(self):
+        # Notes is a clippable single column (the last number); clipping quits.
+        (_c, quit_), copied, _s, _e = self._run(['4'])
         self.assertEqual(copied, ['note text'])
+        self.assertTrue(quit_)
 
-    def test_c_clips_in_order_excluding_notes(self):
+    def test_c_clips_in_order_excluding_notes_and_quits(self):
         # "c" clips every column in order: email, username, password -- NOT notes.
-        (_c, _q), copied, seqd, _ = self._run(['c', None])
+        (_c, quit_), copied, seqd, _ = self._run(['c'])
         self.assertEqual(seqd, [['a@b.c', 'user', 'pw']])
         self.assertEqual(copied, [])
+        self.assertTrue(quit_)
 
-    def test_bad_number_is_noop(self):
-        (_c, _q), copied, seqd, _ = self._run(['9', None])
+    def test_bad_number_is_noop_and_stays(self):
+        # A number past the last column clips nothing and does NOT quit; ESC out.
+        (_c, quit_), copied, seqd, _ = self._run(['9', forms.ESC])
         self.assertEqual(copied, [])
         self.assertEqual(seqd, [])
+        self.assertFalse(quit_)
+
+    def test_unmapped_key_stays(self):
+        # A key with no action (e.g. "z") just redraws with a hint; ESC then exits.
+        (_c, quit_), copied, _s, _e = self._run(['z', forms.ESC])
+        self.assertEqual(copied, [])
+        self.assertFalse(quit_)
+
+    def test_stay_open_keeps_view_after_number_clip(self):
+        # Toggle STAY OPEN on with "s", then clip column 1: it clips but does NOT
+        # quit; a following ESC leaves normally.
+        (_c, quit_), copied, _s, _e = self._run(['s', '1', forms.ESC])
+        self.assertEqual(copied, ['a@b.c'])
+        self.assertFalse(quit_)
+
+    def test_stay_open_keeps_view_after_c_clip(self):
+        (_c, quit_), _copied, seqd, _ = self._run(['s', 'c', forms.ESC])
+        self.assertEqual(seqd, [['a@b.c', 'user', 'pw']])
+        self.assertFalse(quit_)
+
+    def test_stay_open_toggle_reflected_in_holder(self):
+        # The holder is flipped in place so the caller (App) keeps the state for
+        # the session; toggling twice returns to off.
+        holder = [False]
+        self._run(['s', forms.ESC], stay_open=holder)
+        self.assertTrue(holder[0])
+        holder2 = [False]
+        self._run(['s', 's', forms.ESC], stay_open=holder2)
+        self.assertFalse(holder2[0])
+
+    def test_stay_open_persists_from_caller_holder(self):
+        # If the caller already has STAY OPEN on, clipping does not quit.
+        (_c, quit_), copied, _s, _e = self._run(['1', forms.ESC], stay_open=[True])
+        self.assertEqual(copied, ['a@b.c'])
+        self.assertFalse(quit_)
 
     def test_e_edits_and_propagates_change(self):
         # "e" calls edit_entry; a change there marks entry_view's changed True.
@@ -772,15 +856,10 @@ class EntryViewTests(unittest.TestCase):
         orig_edit = forms.edit_entry
         forms.edit_entry = lambda win, e: (True, False)
         try:
-            seq = iter(['e', None])
-            f_orig = forms.prompt_line
-            forms.prompt_line = lambda *a, **k: next(seq)
-            try:
-                changed, quit_ = forms.entry_view(
-                    _FakeWin(), entry, do_copy=lambda v: None,
-                    do_sequence=lambda vs: None)
-            finally:
-                forms.prompt_line = f_orig
+            win = _KeyWin([ord('e'), forms.ESC])
+            changed, quit_ = forms.entry_view(
+                win, entry, do_copy=lambda v: None,
+                do_sequence=lambda vs: None)
         finally:
             forms.edit_entry = orig_edit
         self.assertTrue(changed)
@@ -791,10 +870,11 @@ class EntryViewTests(unittest.TestCase):
         self.assertTrue(quit_)
 
     def test_clip_in_order_with_no_columns_is_noop(self):
-        # Title + notes only -> nothing to clip in order.
+        # Title + notes only -> nothing to clip in order; stays (does not quit).
         entry = Entry([['title', 'x'], ['notes', 'just a note']])
-        (_c, _q), copied, seqd, _ = self._run(['c', None], entry=entry)
+        (_c, quit_), copied, seqd, _ = self._run(['c', forms.ESC], entry=entry)
         self.assertEqual(seqd, [])
+        self.assertFalse(quit_)
 
 
 class ClipboardSpawnTests(unittest.TestCase):
