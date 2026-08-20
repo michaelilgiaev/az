@@ -131,6 +131,13 @@ TIMEDATE_DIR = PACKAGESDIR / "librewolf"
 # The `passwords` command unlocks a store at ~/Vault/passwords.txt.gpg (see
 # packages/passwords/config.py).
 PASSWORDS_DIR = PACKAGESDIR / "passwords"
+# The Az'arch backup package (home-directory backup -- the `backup` command): a flat
+# directory holding the entry script (backup.py) and packaging.py (the build wiring
+# that copies it into the airootfs and installs the /usr/local/bin/backup launcher).
+# A pure-Python app we author, so it lives under libraries/packages/ like passwords.
+# `backup` rolls the user's top-level home folders (skipping ~/Ignore and dot files,
+# keeping symlinks as links) into ~/backup_<date>.tar.gz.gpg (GPG/AES256).
+BACKUP_DIR = PACKAGESDIR / "backup"
 # The `azarch` guest command line interface is a Python PACKAGE now (libraries/packages/azarch/): it grew a
 # `theme` subcommand (and more to come), so the single module was split into small modules
 # (common, country_table, resolver, theme, sshd, command_line_interface). The single /usr/local/bin/azarch

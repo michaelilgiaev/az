@@ -46,6 +46,7 @@ from packages.azarch import default_applications
 # so its build wiring is imported from there now.
 from packages.librewolf import timedate
 from packages.passwords import packaging as passwords
+from packages.backup import packaging as backup
 from packages.calamares import calamares
 from packages.calamares import locale
 # The packages tree is DISCOVERABLE: `packages` is a namespace package (its directory has NO
@@ -79,7 +80,7 @@ _DESKTOP_MODIFICATIONS = ("openbox", "librewolf")
 # and passwords have their own emit_plan() driven directly; calamares and azarch are not app-loop
 # packages at all. Keeping this list here means a newly-dropped packages/<app>/ is auto-emitted
 # unless it is added here on purpose.
-_EXPLICIT_PACKAGES = ("openbox", "librewolf", "application_menu", "passwords", "calamares", "azarch")
+_EXPLICIT_PACKAGES = ("openbox", "librewolf", "application_menu", "passwords", "backup", "calamares", "azarch")
 import installer
 import pacman
 import profile
@@ -487,6 +488,21 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
     # onto the installed system, so `passwords` works there too, unlocking a store at
     # ~/Vault/passwords.txt.gpg. See packages/passwords/packaging.py.
     for entry in passwords.emit_plan():
+        emit.write_text(
+            airootfs / entry["dest"].lstrip("/"),
+            entry["builder"](),
+            mode=entry["mode"],
+        )
+    # Az'arch backup (OUR home-directory backup -- the `backup` command). A pure-Python
+    # app like passwords and a single flat directory: emit_plan() writes the entry
+    # script (and any future module) plus the /usr/local/bin/backup launcher to their
+    # fixed root-owned system paths -- one single-file entry each, so the whole flat app
+    # is expressed by the plan alone (no separate directory copy). No systemd service --
+    # it is an interactive command. Its runtime dep (gnupg for gpg) is already in the
+    # manifest. The OFFLINE Calamares install rsyncs it onto the installed system, so
+    # `backup` works there too, writing ~/backup_<date>.tar.gz.gpg. See
+    # packages/backup/packaging.py.
+    for entry in backup.emit_plan():
         emit.write_text(
             airootfs / entry["dest"].lstrip("/"),
             entry["builder"](),

@@ -163,13 +163,14 @@ bluez
 bluez-utils
 cups
 webp-pixbuf-loader
-# gnupg + xclip: the two system binaries the `passwords` command (OUR encrypted terminal
-# password manager -- packages/passwords/) shells out to. gnupg provides `gpg`, which
-# encrypts/decrypts the store at ~/Vault/passwords.txt.gpg (AES256, the master password
-# is the passphrase); xclip copies a selected password to the X11 clipboard. gnupg is
-# normally present only transitively (pacman/base-devel pull it in), so it is named
-# EXPLICITLY here since a shipped app hard-depends on it. xclip is also generally useful
-# on the desktop (the user's own clip-it workflow).
+# gnupg + xclip: the system binaries OUR shipped apps shell out to. gnupg provides `gpg`,
+# used by BOTH the `passwords` command (packages/passwords/ -- encrypts/decrypts the store
+# at ~/Vault/passwords.txt.gpg, AES256, the master password is the passphrase) AND the
+# `backup` command (packages/backup/ -- encrypts the home-directory archive
+# ~/backup_<date>.tar.gz.gpg, AES256). xclip copies a selected password to the X11
+# clipboard (passwords). gnupg is normally present only transitively (pacman/base-devel
+# pull it in), so it is named EXPLICITLY here since shipped apps hard-depend on it. xclip
+# is also generally useful on the desktop (the user's own clip-it workflow).
 gnupg
 xclip
 # xdotool: X11 automation CLI (simulate keys/clicks, find/activate/move windows by name or

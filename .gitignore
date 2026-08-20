@@ -9,6 +9,4 @@ libraries/packages/application_menu/*.o
 libraries/packages/application_menu/azarch-application-menu-daemon
 libraries/packages/azarch/*.o
 libraries/packages/azarch/azarch
-tests/test_applications
-tests/test_terminal_user_interface_model
-tests/test_terminal_user_interface_action
+data/
