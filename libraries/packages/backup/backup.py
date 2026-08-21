@@ -50,7 +50,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import archive  # noqa: E402  (deliberately after the sys.path bootstrap above)
 import config   # noqa: E402  (opt-in cloud/USB target config; default: all disabled)
 import targets  # noqa: E402  (the optional cloud/USB copy step)
-import ui       # noqa: E402  (shared CLI presentation helpers)
+import user_interface  # noqa: E402  (shared CLI presentation helpers)
 
 
 # The one directory in HOME we never back up (a deliberate dumping ground). Matched by
@@ -142,23 +142,6 @@ def _tar_filter(tarinfo):
     return tarinfo
 
 
-def _count_symlinks(home, entries):
-    """How many symlinks are in the selection (for the summary line). Walks without
-    following links so it counts the links themselves, not their targets."""
-    count = 0
-    for name in entries:
-        path = os.path.join(home, name)
-        if os.path.islink(path):
-            count += 1
-            continue
-        for root, dirs, files in os.walk(path, followlinks=False):
-            dirs[:] = [d for d in dirs if d not in _ALWAYS_SKIP_NAMES]
-            for entry in dirs + files:
-                if os.path.islink(os.path.join(root, entry)):
-                    count += 1
-    return count
-
-
 def prompt_passphrase():
     """Ask for the archive passphrase twice and return it once the two match (the
     write path -- a typo in a write-once key is unrecoverable)."""
@@ -173,7 +156,7 @@ def build_home_archive(home, entries, out_path, passphrase):
     members = ((os.path.join(home, name), name) for name in entries)
     return archive.build_encrypted_tar(
         members, out_path, passphrase, tar_filter=_tar_filter,
-        on_add=ui.bullet,
+        on_add=user_interface.bullet,
     )
 
 
@@ -222,25 +205,6 @@ def _tilde(home, path):
     return "~/" + path[len(prefix):] if path.startswith(prefix) else path
 
 
-def _print_plan(home, entries, symlinks, have_vault):
-    """The header block: title + rule, then aligned Home/Items/Store/Skip rows describing
-    exactly what this run will do, before the passphrase is asked."""
-    ui.header("Az'arch backup")
-    ui.field("Home", home)
-    if entries:
-        link_note = ""
-        if symlinks:
-            link_note = (f" ({symlinks} symlink kept as a link)" if symlinks == 1
-                         else f" ({symlinks} symlinks kept as links)")
-        ui.field("Items", f"{len(entries)} to archive{link_note}")
-    else:
-        ui.field("Items", "none (no top-level home folders to archive)")
-    ui.field("Store", "included if the passphrase unlocks it" if have_vault
-             else f"none at ~/{VAULT_REL}")
-    ui.field("Skip", f"'{IGNORE_DIR_NAME}', '{VAULT_DIR_NAME}', dot files")
-    print()
-
-
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] in ("-h", "--help"):
@@ -267,21 +231,20 @@ def main(argv=None):
     # exists, we still go on and attempt the passwords archive (a user whose only backable
     # thing is their password store must still get passwords.tar.gz.gpg).
     if not entries and not have_vault:
-        ui.header("Az'arch backup")
         print(f"Nothing to back up in {home} "
               f"(everything is hidden or in '{IGNORE_DIR_NAME}', and no password store).")
         return 0
 
-    symlinks = _count_symlinks(home, entries) if entries else 0
-    _print_plan(home, entries, symlinks, have_vault)
-
-    # The keyboard/Caps-Lock line is printed inside prompt_passphrase(), immediately
-    # before each getpass -- exactly where the user is about to type.
+    # NO header / plan block: the output is deliberately STRIPPED DOWN (step five item 3).
+    # There is no "Az'arch backup" banner, no rule, and no Home/Items/Store/Skip rows -- and
+    # crucially no "Skip: ... 'Vault' ..." line, which was factually WRONG (the password store
+    # IS backed up, into ~/passwords.tar.gz.gpg). We go straight to the passphrase prompt (its
+    # live keyboard line is printed inside prompt_passphrase, right where the user types) and
+    # then compact per-archive result lines + one final summary. No empty spacer lines.
     passphrase = prompt_passphrase()
-    print()
 
     start = time.time()
-    written = []   # (label, dest, size_text) rows for the summary
+    written = []   # the local archive paths written, for the summary count + optional copy
 
     # 1) The home archive -- the primary deliverable. Built only when there is something to
     #    put in it; if it is attempted and FAILS, the whole run fails.
@@ -291,10 +254,9 @@ def main(argv=None):
         if not build_home_archive(home, entries, home_out, passphrase):
             return 1
         home_size = os.path.getsize(home_out) if os.path.exists(home_out) else 0
-        ui.result_line("home archive", _tilde(home, home_out),
-                       archive.fmt_size(home_size))
+        user_interface.result_line("home archive", _tilde(home, home_out),
+                                   archive.fmt_size(home_size))
         written.append(home_out)
-        print()
 
     # 2) The passwords archive -- best-effort. A missing store or a non-matching
     #    passphrase warns but never fails the run.
@@ -303,29 +265,30 @@ def main(argv=None):
     status = build_passwords_archive(home, passphrase, pw_out)
     if status == "ok":
         pw_size = os.path.getsize(pw_out) if os.path.exists(pw_out) else 0
-        ui.result_line("password store", _tilde(home, pw_out),
-                       archive.fmt_size(pw_size))
+        user_interface.result_line("password store", _tilde(home, pw_out),
+                                   archive.fmt_size(pw_size))
         written.append(pw_out)
     elif status == "missing":
-        ui.note(f"no password store at ~/{VAULT_REL}; skipping it.")
+        # NB: this fires ONLY when the store file genuinely does not exist -- it is not the
+        # old (wrong) "Vault is skipped" claim. Worded to avoid implying ~/Vault is excluded
+        # from the backup (the store IS backed up whenever it is present).
+        user_interface.note(f"no password store to archive "
+                            f"(~/{VAULT_REL} not found).")
     elif status == "mismatch":
-        ui.warn(f"the passphrase did not unlock ~/{VAULT_REL}; "
-                "password store NOT included.")
+        user_interface.warn(f"the passphrase did not unlock ~/{VAULT_REL}; "
+                            "password store NOT included.")
     else:  # "failed" -- gpg/tar error building the passwords archive
-        ui.warn("could not build the password-store archive.")
+        user_interface.warn("could not build the password-store archive.")
 
-    # 3) Optional cloud / USB copy -- ONLY when the user opted in via `azarch backup-setup`
-    #    (config default is all-disabled -> this whole block is skipped and behaviour is
-    #    exactly the local-only backup). The copy is best-effort: a failed/absent target
-    #    warns but never fails the run, since the local archives are the primary
-    #    deliverable and always remain.
+    # 3) Optional cloud / USB copy -- ONLY when the user opted in via `azarch backup
+    #    --configure` (config default is all-disabled -> this whole block is skipped and
+    #    behaviour is exactly the local-only backup). The copy is best-effort: a
+    #    failed/absent target warns but never fails the run, since the local archives are the
+    #    primary deliverable and always remain.
     cfg = config.load()
     if written and config.any_target_enabled(cfg):
-        print()
         targets.copy_archives_to_targets(written, cfg)
 
-    print()
-    print(ui.rule())
     count = len(written)
     print(f"Done in {int(time.time() - start)}s. "
           f"{count} archive{'' if count == 1 else 's'} written to {home}.")

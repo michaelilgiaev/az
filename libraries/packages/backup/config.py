@@ -3,7 +3,7 @@
 
 By DEFAULT `backup` writes its two encrypted archives into HOME and stops there -- USB
 and Google Drive upload are DISABLED. This module is the small, user-owned config that
-lets the user OPT IN: once ``azarch backup-setup`` (packages/azarch/backup_targets.py)
+lets the user OPT IN: once ``azarch backup --configure`` (packages/azarch/backup_targets.py)
 has registered a USB mount and/or a Google Drive rclone remote, it writes this config,
 and `backup` reads it and ALSO copies the freshly built archives to whatever targets are
 enabled. Targets absent / disabled -> `backup` behaves exactly as before (local only).
@@ -62,7 +62,7 @@ def load():
 
 def save(data):
     """Persist ``data`` (only the known keys) to CONFIG_PATH, 0600, creating the dir.
-    Returns the path written. Used by the `azarch backup-setup` command."""
+    Returns the path written. Used by the `azarch backup --configure` command."""
     os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
     payload = {k: data.get(k, _DEFAULTS[k]) for k in _DEFAULTS}
     with open(CONFIG_PATH, "w") as handle:

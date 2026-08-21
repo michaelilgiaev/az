@@ -38,6 +38,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # (mirroring passwords.py) so a wrong layout or a stuck Caps Lock is visible before the
 # user types a (hidden) passphrase. Degrades to "Keyboard: unknown" off X.
 import keyboard  # noqa: E402  (after the sys.path bootstrap above)
+# live_keyboard_line.py makes that one status line LIVE: it repaints it in place while the
+# getpass is blocking, so toggling Caps Lock or switching layout at the prompt updates it
+# immediately (mirrors data/backup.py's update_layout_line thread). Degrades to a single
+# static print off-tty / off-X.
+import live_keyboard_line  # noqa: E402  (after the sys.path bootstrap above)
 
 
 # gpg flags shared by every invocation here. ``--batch --yes`` keep it non-interactive
@@ -87,23 +92,32 @@ def prompt_passphrase(confirm=True):
     passphrase simply makes gpg fail, with nothing lost. An empty passphrase is always
     rejected (gpg refuses it and it defeats the encryption).
 
-    The live keyboard layout / Caps-Lock line (keyboard.keyboard_status_line()) is
-    printed immediately before EACH getpass, exactly as the passwords manager does at its
-    master-password prompt, so a wrong layout or a stuck Caps Lock is visible before the
-    (hidden) passphrase is typed. It degrades to a plain "Keyboard: unknown" off X."""
+    The live keyboard layout / Caps-Lock line (keyboard.keyboard_status_line()) is shown
+    immediately before EACH getpass and REPAINTS ITSELF IN PLACE while the prompt waits, so
+    toggling Caps Lock or switching layout at the prompt updates the line immediately (see
+    live_keyboard_line -- the same daemon-thread ANSI redraw as data/backup.py). Off a tty /
+    off X it degrades to a single static "Keyboard: ..." print (the prior behaviour)."""
     while True:
-        print(keyboard.keyboard_status_line())
-        first = getpass("Encryption passphrase: " if confirm else "Passphrase: ")
+        first = _prompt_with_keyboard_line(
+            "Encryption passphrase: " if confirm else "Passphrase: ")
         if not first:
             print("Passphrase cannot be empty.")
             continue
         if not confirm:
             return first
-        print(keyboard.keyboard_status_line())
-        second = getpass("Confirm passphrase: ")
+        second = _prompt_with_keyboard_line("Confirm passphrase: ")
         if first == second:
             return first
         print("Passphrases do not match. Try again.")
+
+
+def _prompt_with_keyboard_line(prompt):
+    """getpass(``prompt``) with the LIVE keyboard/Caps-Lock line refreshing above it while it
+    blocks. A thin adapter around live_keyboard_line.prompt_with_live_keyboard_line that binds
+    the status source (keyboard.keyboard_status_line) and the input (getpass). Kept tiny and
+    separate so the live-redraw plumbing lives in its own module and this stays readable."""
+    return live_keyboard_line.prompt_with_live_keyboard_line(
+        lambda: getpass(prompt), keyboard.keyboard_status_line)
 
 
 def _feed_thread(write_fd, passphrase):

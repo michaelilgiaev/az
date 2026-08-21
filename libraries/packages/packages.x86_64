@@ -179,7 +179,7 @@ xclip
 xdotool
 # rclone: the ONE extra system binary the OPTIONAL cloud backup uses. `backup`
 # (packages/backup/) copies its encrypted archives to Google Drive ONLY when the user has
-# opted in via `azarch backup-setup` (packages/azarch/backup_targets.py); with the default
+# opted in via `azarch backup --configure` (packages/azarch/backup_targets.py); with the default
 # (disabled) config rclone is never invoked. Shipped so the opt-in works out of the box
 # (rclone stores its own OAuth token under ~/.config/rclone). NOT from the AUR.
 rclone

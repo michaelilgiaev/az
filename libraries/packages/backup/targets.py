@@ -3,7 +3,7 @@
 
 After `backup` has built its two local archives it calls copy_archives_to_targets():
 for each ENABLED target (see config.py) the freshly built ``*.tar.gz.gpg`` files are
-ALSO placed there. Nothing here runs unless the user opted in via ``azarch backup-setup``
+ALSO placed there. Nothing here runs unless the user opted in via ``azarch backup --configure``
 -- with the default (all-disabled) config this module is never even reached.
 
 This is a deliberately SMALL, standard-library-only distillation of the cloud/USB
@@ -37,12 +37,12 @@ import subprocess
 import sys
 
 # Flat-package bootstrap: make this module's own dir importable before the sibling
-# ``import ui`` below, so it resolves whether targets.py is reached via an entry script
-# (backup.py, which already does this) or imported directly by the test suite. Mirrors the
-# bootstrap in archive.py; a no-op when the dir is already on sys.path.
+# ``import user_interface`` below, so it resolves whether targets.py is reached via an entry
+# script (backup.py, which already does this) or imported directly by the test suite. Mirrors
+# the bootstrap in archive.py; a no-op when the dir is already on sys.path.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import ui  # noqa: E402  (after the sys.path bootstrap above)
+import user_interface  # noqa: E402  (after the sys.path bootstrap above)
 
 # The two archive basenames rotation recognises at a target root (kept in sync with
 # backup.HOME_ARCHIVE_NAME / PASSWORDS_ARCHIVE_NAME). Only these fixed names are rotated,
@@ -108,7 +108,7 @@ def _rotate_local(dest_root):
             try:
                 shutil.move(src, os.path.join(previous, name))
             except OSError as error:
-                ui.warn(f"USB: could not rotate {name} into {_PREVIOUS_DIRNAME}/ ({error})")
+                user_interface.warn(f"USB: could not rotate {name} into {_PREVIOUS_DIRNAME}/ ({error})")
 
 
 def copy_to_usb(archives, usb_root):
@@ -117,7 +117,7 @@ def copy_to_usb(archives, usb_root):
     a skipped WARNING (returns False but never raises), because a missing stick must not
     fail the whole backup."""
     if not usb_target_ready(usb_root):
-        ui.warn(f"USB target not mounted/writable at {usb_root or '(unset)'}; skipping USB copy.")
+        user_interface.warn(f"USB target not mounted/writable at {usb_root or '(unset)'}; skipping USB copy.")
         return False
     _rotate_local(usb_root)
     ok = True
@@ -126,10 +126,10 @@ def copy_to_usb(archives, usb_root):
         dest = os.path.join(usb_root, base)
         try:
             shutil.copy2(archive, dest)
-            ui.result_line(f"USB: {base}", dest, None)
+            user_interface.result_line(f"USB: {base}", dest, None)
         except OSError as error:
             ok = False
-            ui.warn(f"USB: copy of {base} failed ({error}).")
+            user_interface.warn(f"USB: copy of {base} failed ({error}).")
     return ok
 
 
@@ -174,10 +174,10 @@ def copy_to_gdrive(archives, remote):
     by size. Returns True on full success. rclone missing / unreachable / an unconfirmed
     upload is a WARNING (returns False), never a raise -- the local archives remain."""
     if not remote:
-        ui.warn("Google Drive remote is not set; skipping Drive upload.")
+        user_interface.warn("Google Drive remote is not set; skipping Drive upload.")
         return False
     if not _have_rclone():
-        ui.warn("'rclone' not found; skipping Drive upload. Install it with: "
+        user_interface.warn("'rclone' not found; skipping Drive upload. Install it with: "
                 "sudo pacman -S rclone")
         return False
     remote = _normalise_remote(remote)
@@ -189,12 +189,12 @@ def copy_to_gdrive(archives, remote):
         size = os.path.getsize(archive) if os.path.exists(archive) else 0
         result = _rclone(["copy", archive, remote, *GDRIVE_RCLONE_FLAGS])
         if result.returncode == 0 and _gdrive_remote_has(remote, base, size):
-            ui.result_line(f"GDrive: {base}", f"{remote}{base}", "verified")
+            user_interface.result_line(f"GDrive: {base}", f"{remote}{base}", "verified")
         else:
             ok = False
             detail = (f"rclone exit {result.returncode}" if result.returncode != 0
                       else "not confirmed on Drive")
-            ui.warn(f"GDrive: upload of {base} failed ({detail}); kept the local copy.")
+            user_interface.warn(f"GDrive: upload of {base} failed ({detail}); kept the local copy.")
     return ok
 
 

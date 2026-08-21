@@ -6,7 +6,13 @@ user adds shows up" needs a runtime helper. These pin: the required ORDER (dirs 
 symlinks -> Trash last), that symlink bookmarks resolve to their targets, that the helper is
 wired into session startup (both live + installed autostart), and -- by actually RUNNING the
 generated shell script against a fixture home -- that its enumeration/ordering is correct and it
-tracks additions.
+tracks additions AND removals.
+
+They also pin the step-five item-6 LIVE-UPDATE fix: the helper installs the regenerated
+bookmarks by rewriting the EXISTING inode IN PLACE (same inode across regenerations), not via an
+atomic rename. That is what lets a running Thunar's per-file GFileMonitor fire and refresh the
+Places pane live; an atomic `mv` would leave the monitor watching a stale, unlinked inode. And
+it does NOT rewrite when nothing changed (no needless CHANGED events / flicker).
 """
 
 from __future__ import annotations
@@ -165,3 +171,137 @@ def test_functional_addition_is_tracked_by_watch(tmp_path):
     finally:
         proc.terminate()
         proc.wait(timeout=5)
+
+
+# --- step five item 6: LIVE Places update (in-place inode rewrite) -----------
+
+def _bookmarks_path(tmp_home):
+    return tmp_home / ".config/gtk-3.0/bookmarks"
+
+
+def test_regen_rewrites_bookmarks_in_place_same_inode(tmp_path):
+    """THE live-update fix: on a change the helper rewrites the EXISTING bookmarks inode IN
+    PLACE (so Thunar's per-file GFileMonitor fires and Places refreshes live) instead of
+    renaming a fresh temp file over it (which would leave the monitor on a stale inode and keep
+    Places stale until restart). Pin that the inode is UNCHANGED across a regen that adds a
+    folder, while the CONTENT did update."""
+    (tmp_path / "Downloads").mkdir()
+    _run_sync(tmp_path)                                   # seed
+    bm = _bookmarks_path(tmp_path)
+    assert bm.exists()
+    inode_before = bm.stat().st_ino
+    before = bm.read_text()
+
+    (tmp_path / "NewProject").mkdir()                     # user adds a folder
+    _run_sync(tmp_path)                                   # regenerate
+
+    assert bm.stat().st_ino == inode_before, (
+        "bookmarks inode changed -> an atomic rename was used; Thunar's monitor would miss it")
+    after = bm.read_text()
+    assert after != before and "NewProject" in after     # content really did update in place
+
+
+def test_regen_tracks_removal_of_a_directory(tmp_path):
+    """Places must update when a directory is REMOVED too (not just added). After deleting a
+    folder and regenerating, its bookmark is gone -- still in the same inode (live-safe)."""
+    (tmp_path / "Downloads").mkdir()
+    (tmp_path / "Scratch").mkdir()
+    _run_sync(tmp_path)
+    bm = _bookmarks_path(tmp_path)
+    inode_before = bm.stat().st_ino
+    assert "Scratch" in bm.read_text()
+
+    (tmp_path / "Scratch").rmdir()                        # user removes the folder
+    _run_sync(tmp_path)
+
+    text = bm.read_text()
+    assert "Scratch" not in text                          # the removed folder's bookmark is gone
+    assert "Downloads" in text                            # the survivor stays
+    assert bm.stat().st_ino == inode_before               # still in place (live-safe)
+
+
+def test_regen_does_not_rewrite_when_nothing_changed(tmp_path):
+    """The install is gated on a real content change: re-running with an UNCHANGED home does
+    NOT rewrite the file (no needless CHANGED event -> no Places flicker). Pin via the mtime
+    (an in-place `cat >` would bump it) and the inode."""
+    import time
+    (tmp_path / "Downloads").mkdir()
+    _run_sync(tmp_path)
+    bm = _bookmarks_path(tmp_path)
+    stat_before = bm.stat()
+    time.sleep(1.1)                                       # ensure a rewrite would move mtime (1s granular)
+    _run_sync(tmp_path)                                   # nothing changed in the home
+    stat_after = bm.stat()
+    assert stat_after.st_ino == stat_before.st_ino
+    assert stat_after.st_mtime == stat_before.st_mtime, (
+        "bookmarks were rewritten despite no change (would flicker Places every poll)")
+
+
+def test_install_uses_in_place_write_not_atomic_rename(tmp_path):
+    """Source-level guard: the generated script installs the bookmarks by rewriting the file in
+    place (`cat "$tmp" > "$BM"`), NOT by `mv`-ing the temp over it. A future refactor that
+    reintroduces an atomic rename (which breaks Thunar's live monitor) trips this."""
+    script = live_sidebar.sync_script()
+    assert 'cat "$tmp" > "$BM"' in script                # in-place rewrite of the watched inode
+    assert 'mv -f "$tmp" "$BM"' not in script            # NOT an atomic rename over the path
+    # And the change is gated on a real content difference (cmp), so it does not flicker.
+    assert "cmp -s" in script
+
+
+def test_entries_with_spaces_are_tracked_not_dropped_or_corrupted(tmp_path):
+    """A home entry whose NAME contains spaces (e.g. "My Documents") must appear as ONE correct
+    bookmark -- not be dropped, and not corrupt sibling lines. (The enumeration iterates with a
+    glob, not `for x in $(ls)`, which would word-split "My Documents" into two bogus tokens.)
+    This is exactly "anything the user adds shows up" for the ordinary spaced-name case."""
+    # Spaced dir, a spaced symlink, and a collision set that would MERGE under word-splitting
+    # ("My Docs" alongside real "My" and "Docs").
+    for d in ("Downloads", "My Documents", "My", "Docs", "My Docs",
+              ".local/share/Trash/files"):
+        (tmp_path / d).mkdir(parents=True, exist_ok=True)
+    os.symlink("Downloads", tmp_path / "My Link")
+    os.symlink(".local/share/Trash/files", tmp_path / "Trash")
+
+    lines = _run_sync(tmp_path)
+    # Each line is "<URI> <label>": the URI is the token up to the FIRST space (GTK format), so
+    # a spaced path is percent-encoded in the URI and the label is the rest.
+    labels = [ln.split(" ", 1)[1] for ln in lines]
+    # Every spaced/colliding entry is present exactly once, as its own bookmark.
+    for expected in ("My Documents", "My Docs", "My", "Docs", "Downloads", "My Link"):
+        assert labels.count(expected) == 1, (expected, labels)
+    # The URI is percent-encoded (no LITERAL space in the URI token), so the line parses as one
+    # bookmark; the label keeps the human-readable spaced name.
+    my_docs = next(ln for ln in lines if ln.endswith(" My Documents"))
+    uri, label = my_docs.split(" ", 1)
+    assert label == "My Documents"
+    assert " " not in uri and uri == f"file://{tmp_path}/My%20Documents"
+    # The spaced symlink resolves to its target (location bar shows the real path).
+    my_link = next(ln for ln in lines if ln.endswith(" My Link"))
+    assert my_link.split(" ", 1)[0] == f"file://{tmp_path}/Downloads"
+    # No line is malformed (each is a single "file://<uri> <label>" bookmark, URI space-free).
+    for ln in lines:
+        assert ln.startswith("file://"), ln
+        assert " " not in ln.split(" ", 1)[0], f"URI token has a literal space: {ln!r}"
+    # Trash still last even amid the spaced names.
+    assert labels[-1] == "Trash"
+
+
+def test_signature_detects_a_spaced_name_addition(tmp_path):
+    """home_sig() must also be space-safe: adding "New Folder" changes the signature (so
+    --watch fires a regen). A word-splitting home_sig would miss/misattribute it."""
+    (tmp_path / "Downloads").mkdir()
+    script = tmp_path / "azarch-sidebar-sync"
+    script.write_text(live_sidebar.sync_script())
+    env = dict(os.environ, HOME=str(tmp_path))
+
+    def sig():
+        # Source the script and print home_sig for the current HOME (no --watch loop).
+        r = subprocess.run(
+            ["sh", "-c", f'. "{script}" >/dev/null 2>&1; home_sig'],
+            env=env, capture_output=True, text=True, timeout=15)
+        return r.stdout
+
+    before = sig()
+    (tmp_path / "New Folder").mkdir()
+    after = sig()
+    assert before != after, "signature did not change when a spaced-name folder was added"
+    assert "New Folder" in after

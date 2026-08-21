@@ -1,11 +1,20 @@
 """Live Thunar sidebar -- keep ~/.config/gtk-3.0/bookmarks in sync with the ACTUAL home
-directory contents at runtime (PROMPT: "whatever the user ADDS to the home directory later ...
-must AUTOMATICALLY appear on the sidebar").
+directory contents at runtime, AND make a running Thunar's "Places" pane reflect the change
+LIVE (PROMPT step five item 6: Places must POPULATE and UPDATE as directories are added/removed,
+with no manual refresh).
 
-THE PROBLEM. GTK bookmarks are a STATIC file. packages/thunar/sidebar builds it once at
-BUILD time from home_directory's curated set, so a folder/file/symlink the user creates in
-$HOME AFTER install never shows up in the shortcuts pane on its own. Making "anything added to
-home shows up" needs a RUNTIME mechanism.
+THE PROBLEM (two layers).
+  1. GTK bookmarks are a STATIC file. packages/thunar/sidebar builds it once at BUILD time from
+     home_directory's curated set, so a folder/file/symlink the user creates in $HOME AFTER
+     install never shows up in the shortcuts pane on its own. "Anything added to home shows up"
+     needs a RUNTIME regenerator.
+  2. Even once the file IS regenerated, a running Thunar only refreshes its Places pane if it
+     NOTICES the file changed. Thunar's ThunarShortcutsModel watches the bookmarks file with a
+     per-file GFileMonitor (inotify). If the regenerator installs the new file with an atomic
+     `mv` (a fresh inode renamed over the path), inotify keeps watching the OLD, now-unlinked
+     inode and NEVER sees the new content -- so Places stays stale until Thunar restarts (the
+     reported bug). The regenerator must therefore rewrite the SAME inode IN PLACE so an
+     IN_MODIFY/IN_CLOSE_WRITE fires and Thunar reloads.
 
 THE MECHANISM. A tiny POSIX-sh helper (azarch-sidebar-sync) that regenerates the bookmarks file
 from the CURRENT top-level home contents, in the SAME required order as the static seed
@@ -23,6 +32,9 @@ two modes:
                                       manifest; the PROMPT explicitly allows "a lightweight
                                       periodic" watcher) and matches the repo's other
                                       autostart-launched helpers.
+  In BOTH modes the install is an IN-PLACE rewrite of the existing bookmarks inode (only when the
+  content actually changed), NOT an atomic rename -- so Thunar's file monitor fires and Places
+  refreshes live (see regen()'s install block for the full rationale).
 
 WIRING. The OpenBox session autostart (packages/openbox) launches
 `azarch-sidebar-sync --watch &` -- both the LIVE and the INSTALLED autostart (via the shared
@@ -78,10 +90,14 @@ def sync_script() -> str:
     symlinks resolved. `--watch` polls a cheap signature of the home listing and regenerates on
     change (an add/remove/retarget, caught even within the same clock second).
 
-    Pure POSIX sh + coreutils (ls/readlink/realpath/stat/printf/sort) -- all in `base`/coreutils
-    on the ISO, no inotify-tools. The bookmark URI for a symlink is `realpath -m` of the link
-    (so the location bar shows the real target); for a dir/file it is the entry path. Every
-    non-blank line is a bookmark (the GTK format has no comments), so the file carries none."""
+    Pure POSIX sh + coreutils/sed (readlink/realpath/printf/sort/cmp/cat/sed; entries are
+    enumerated with a shell GLOB, not `ls`, so spaced names are safe) -- all in `base`/coreutils
+    on the ISO, no inotify-tools. The bookmark URI for a symlink is `realpath -m` of the link (so
+    the location bar shows the real target); for a dir/file it is the entry path, percent-encoded
+    so a spaced path is a valid single-token URI. Every non-blank line is a bookmark (the GTK
+    format has no comments), so the file carries none. The bookmarks are installed by an IN-PLACE rewrite of the existing inode
+    (only when the content changed) so a running Thunar's per-file monitor fires and Places
+    refreshes live -- NOT an atomic rename, which would leave the monitor on a stale inode."""
     skip_case = "|".join(SKIP_NAMES)          # e.g. "Desktop"
     trash = TRASH_NAME
     interval = WATCH_INTERVAL_SECS
@@ -91,24 +107,40 @@ def sync_script() -> str:
 # contents so anything the user adds to $HOME shows up in Thunar's sidebar (PROMPT). Generated
 # by packages/thunar/live_sidebar (edit the Python, not this file). Order: real dirs ->
 # files -> symlinks -> "Trash" last; symlink bookmarks point at their resolved target. Runs as
-# the invoking user on their own $HOME (no privilege). `--watch` polls the home dir mtime.
+# the invoking user on their own $HOME (no privilege). `--watch` polls a signature of the home
+# listing and rewrites the bookmarks IN PLACE on change so Thunar's Places pane refreshes live.
 set -u
 
 BM="$HOME/.config/gtk-3.0/bookmarks"
 
-# file:// URI for an absolute path (paths here are plain home paths: no spaces/URL-encoding).
-uri() {{ printf 'file://%s' "$1"; }}
+# file:// URI for an absolute path. The GTK bookmarks format parses each line as
+# "<URI-up-to-first-space> <label>", so a path containing a SPACE must be percent-encoded in
+# the URI (a literal space would truncate the URI token and mangle the line). We encode the
+# characters that would break the URI/format: '%' FIRST (so we never double-encode an escape we
+# just wrote), then space, '#', '?'. The curated Az'arch names have none of these, so for them
+# this is a no-op; it only matters for a user-added folder like "My Documents"
+# (-> file:///home/main/My%20Documents). Label stays the raw name (labels MAY contain spaces).
+uri() {{
+    printf 'file://%s' "$(printf '%s' "$1" \\
+        | sed -e 's/%/%25/g' -e 's/ /%20/g' -e 's/#/%23/g' -e 's/?/%3F/g')"
+}}
 
 regen() {{
     dirs=""; files=""; links=""; trash=""
     # Enumerate NON-hidden top-level entries of $HOME (the convenience symlinks are non-hidden).
-    # `ls -1` on the plain names; guard the empty-dir case.
-    for name in $(cd "$HOME" 2>/dev/null && ls -1 2>/dev/null); do
+    # Iterate with a PATHNAME GLOB ("$HOME"/*), NOT `for name in $(ls)`: an unquoted command
+    # substitution word-splits on IFS, so an entry named "My Documents" would be seen as two
+    # bogus tokens (dropped or corrupting the list) -- a glob yields ONE word per real entry, so
+    # spaces (and other odd characters) in a folder name are handled correctly. `*` skips
+    # dotfiles by default (which we want). If the dir is empty the glob stays the literal
+    # "$HOME/*" -- the `[ -e ]`/`[ -L ]` tests below fail for it, so it is skipped.
+    for path in "$HOME"/*; do
+        [ -e "$path" ] || [ -L "$path" ] || continue   # skip the literal glob on an empty dir
+        name=${{path##*/}}                                 # basename (space-safe)
         # Skip entries Thunar's built-in places already provide (Desktop).
         case "$name" in
             {skip_case}) continue ;;
         esac
-        path="$HOME/$name"
         if [ -L "$path" ]; then
             # A symlink -> bookmark its RESOLVED target so the location bar shows the real path.
             target=$(realpath -m -- "$path" 2>/dev/null || printf '%s' "$path")
@@ -129,7 +161,8 @@ regen() {{
     done
     # Sort each group alphabetically by label (field 2). Emit: dirs, files, links, then Trash
     # last (NO "Home Directory" -- the user deleted it from the sidebar). `sort` on empty input
-    # is a no-op. Write atomically via a temp file.
+    # is a no-op. Assemble into a TEMP file first (so a `sort` hiccup never leaves a half-built
+    # bookmarks file), then install it -- see the in-place write below.
     tmp="$BM.azarch.$$"
     mkdir -p "$(dirname "$BM")"
     if {{
@@ -139,10 +172,24 @@ regen() {{
         [ -n "$trash" ] && printf '%s\\n' "$trash"
         # Force a success exit for the group: the last `[ -n ... ] && printf` above is FALSE
         # (returns 1) whenever that group is empty (e.g. no Trash symlink), which would
-        # otherwise make the whole block "fail" and skip the mv below, leaving no bookmarks.
+        # otherwise make the whole block "fail" and skip the install below, leaving no bookmarks.
         true
     }} > "$tmp" 2>/dev/null; then
-        mv -f "$tmp" "$BM" 2>/dev/null || rm -f "$tmp" 2>/dev/null
+        # LIVE-UPDATE FIX (PROMPT step five item 6). Only install when the content actually
+        # CHANGED, and install by REWRITING $BM's EXISTING INODE IN PLACE -- NOT by `mv`.
+        #
+        # WHY IN PLACE. A running Thunar (its ThunarShortcutsModel) watches the bookmarks file
+        # with a per-file GFileMonitor (inotify). An atomic `mv tmp $BM` REPLACES the inode:
+        # inotify keeps its watch on the OLD (now-unlinked) inode and NEVER sees the new file,
+        # so Places would not refresh until Thunar restarts (the reported bug). Truncating and
+        # rewriting the SAME inode (`cat > "$BM"`) fires IN_MODIFY/IN_CLOSE_WRITE on the watched
+        # path, which GFileMonitor reports as CHANGED -> Thunar reloads Places live. The file is
+        # tiny (a dozen lines) so the rewrite is effectively atomic, and Thunar reloads on the
+        # post-write CLOSE event, not mid-write.
+        if [ ! -e "$BM" ] || ! cmp -s "$tmp" "$BM"; then
+            cat "$tmp" > "$BM" 2>/dev/null || cp -f "$tmp" "$BM" 2>/dev/null
+        fi
+        rm -f "$tmp" 2>/dev/null
     else
         rm -f "$tmp" 2>/dev/null
     fi
@@ -152,15 +199,17 @@ regen() {{
 # symlink / other), sorted. Detecting change via this (not the dir mtime) reliably catches an
 # add/remove/retarget even WITHIN the same clock second (mtime has 1s granularity on many
 # filesystems, so an mtime compare can miss a fast change) -- and it also skips a needless
-# rewrite when nothing changed (so the sidebar does not flicker every poll). `ls -1` is guarded
-# for the empty-dir case; the per-entry test picks L/d/f.
+# rewrite when nothing changed (so the sidebar does not flicker every poll). Iterates with a
+# GLOB (space-safe, like regen()); the per-entry test picks L/d/f. `*` skips dotfiles and stays
+# literal on an empty dir (the `[ -e ]`/`[ -L ]` guard drops that case).
 home_sig() {{
-    cd "$HOME" 2>/dev/null || {{ echo ""; return; }}
-    for name in $(ls -1 2>/dev/null); do
-        if [ -L "$name" ]; then t=L; elif [ -d "$name" ]; then t=d; else t=f; fi
+    for path in "$HOME"/*; do
+        [ -e "$path" ] || [ -L "$path" ] || continue   # skip the literal glob on an empty dir
+        name=${{path##*/}}
+        if [ -L "$path" ]; then t=L; elif [ -d "$path" ]; then t=d; else t=f; fi
         # also fold in a symlink's target so a re-pointed link triggers a refresh.
         if [ "$t" = L ]; then
-            printf '%s:%s>%s\\n' "$t" "$name" "$(readlink -- "$name" 2>/dev/null)"
+            printf '%s:%s>%s\\n' "$t" "$name" "$(readlink -- "$path" 2>/dev/null)"
         else
             printf '%s:%s\\n' "$t" "$name"
         fi

@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""azarch guest command line interface -- `azarch backup-setup` (opt in to cloud / USB backup targets).
+"""azarch guest command line interface -- `azarch backup --configure` (opt in to cloud / USB
+backup targets).
 
 By DEFAULT the `backup` command (packages/backup/) writes its two encrypted archives into
-HOME and stops -- USB and Google Drive upload are DISABLED. This subcommand is how the user
-OPTS IN: it registers a mounted USB device and/or a Google Drive rclone remote and writes a
-small, user-owned config that `backup` then reads and, when a target is enabled, ALSO copies
-the freshly built archives there. Turn a target off again (or never run this) and `backup`
-behaves exactly as before -- local archives only.
+HOME and stops -- USB and Google Drive upload are DISABLED. `azarch backup --configure` (short
+`-c`) is how the user OPTS IN: it registers a mounted USB device and/or a Google Drive rclone
+remote and writes a small, user-owned config that `backup` then reads and, when a target is
+enabled, ALSO copies the freshly built archives there. Turn a target off again (or never run
+this) and `backup` behaves exactly as before -- local archives only.
+
+NOTE: the actual backup RUN is the SEPARATE top-level `backup` command (/usr/local/bin/backup,
+from packages/backup/). `azarch backup` is ONLY the opt-in configurator: a bare `azarch backup`
+points the user at the real `backup` command rather than running one.
 
 WHERE THE CONFIG LIVES. ~/.config/azarch-backup/backup.cfg (XDG, 0600). This is the SAME
 file packages/backup/config.py reads; that module is the source of truth for the path and
@@ -231,21 +236,25 @@ def _backup_setup_status(cfg: dict) -> None:
 
 
 def cmd_backup_setup(argv: list[str]) -> int:
-    """`azarch backup-setup` -- opt in to / manage `backup`'s cloud + USB targets.
+    """The opt-in flow behind `azarch backup --configure` / `-c` -- enable / manage
+    `backup`'s cloud + USB targets. ``argv`` is what FOLLOWS --configure/-c, so:
 
-    Sub-forms:
-      azarch backup-setup            interactively configure USB and Google Drive
-      azarch backup-setup --status   just print the current opt-in state (no prompts)
-      azarch backup-setup --disable  turn BOTH targets off (back to local-only)
-    """
+      (empty)     interactively configure USB and Google Drive
+      --status    just print the current opt-in state (no prompts)
+      --disable   turn BOTH targets off (back to local-only)
+
+    (Dispatched by cmd_backup(), which strips the --configure/-c flag first. Kept as its own
+    function so the config path/keys stay lock-step with packages/backup/config.py and the
+    exec-based unit test can drive it directly.)"""
     if argv and argv[0] in ("-h", "--help", "help"):
-        print("Usage: azarch backup-setup [--status|--disable]\n\n"
+        print("Usage: azarch backup --configure|-c [--status|--disable]\n\n"
               "Opt in to optional backup targets for the `backup` command. By default\n"
               "`backup` writes local encrypted archives only; enabling a target here makes\n"
               "it ALSO copy those archives to a USB drive and/or Google Drive (rclone).\n\n"
               "  (no option)  interactively enable/disable USB and Google Drive\n"
               "  --status     print the current target state and exit\n"
               "  --disable    turn both targets off (local-only again)\n\n"
+              "The actual backup RUN is the separate `backup` command (not `azarch backup`).\n\n"
               f"Config: {_BACKUP_CFG_PATH} (no secrets; rclone stores its own token).")
         return 0
 
@@ -263,7 +272,7 @@ def cmd_backup_setup(argv: list[str]) -> int:
         return 0
 
     if argv:
-        _err(f"azarch backup-setup: unknown option: {argv[0]}")
+        _err(f"azarch backup --configure: unknown option: {argv[0]}")
         return 2
 
     print("Configure optional backup targets for the `backup` command.")
@@ -276,3 +285,43 @@ def cmd_backup_setup(argv: list[str]) -> int:
     _backup_setup_status(cfg)
     print(f"\nSaved {path}")
     return 0
+
+
+def _backup_usage() -> None:
+    """The short `azarch backup` usage: it is the opt-in CONFIGURATOR, not the backup run.
+    Printed for a bare `azarch backup` (which does NOT run a backup) and for `--help`."""
+    print("Usage: azarch backup --configure|-c [--status|--disable]\n\n"
+          "`azarch backup` opts in to / manages the OPTIONAL copy targets (USB / Google\n"
+          "Drive) for the `backup` command -- it does NOT run a backup itself.\n\n"
+          "  --configure, -c            interactively enable/disable USB and Google Drive\n"
+          "  --configure --status       print the current target state and exit\n"
+          "  --configure --disable      turn both targets off (local-only again)\n\n"
+          "To actually CREATE a backup, run the `backup` command (/usr/local/bin/backup).")
+
+
+def cmd_backup(argv: list[str]) -> int:
+    """`azarch backup` -- dispatch the opt-in target configurator.
+
+    This is ONLY the configurator surface; the real backup RUN is the separate top-level
+    `backup` command (/usr/local/bin/backup). So:
+
+      azarch backup --configure           (or -c)  -> interactive opt-in (cmd_backup_setup)
+      azarch backup --configure --status  (or -c ...) -> print target state
+      azarch backup --configure --disable (or -c ...) -> disable both targets
+      azarch backup -h|--help                       -> the usage above
+      azarch backup            (bare)               -> usage + pointer to `backup`, exit 2
+      azarch backup <anything else>                 -> unknown-flag error, exit 2
+    """
+    if not argv:
+        # A bare `azarch backup` does NOT run a backup -- point the user at the real command.
+        _backup_usage()
+        return 2
+    if argv[0] in ("-h", "--help", "help"):
+        _backup_usage()
+        return 0
+    if argv[0] in ("--configure", "-c"):
+        # Everything AFTER the flag is the sub-form (--status / --disable / nothing).
+        return cmd_backup_setup(argv[1:])
+    _err(f"azarch backup: unknown option: {argv[0]} "
+         f"(did you mean `azarch backup --configure`?)")
+    return 2

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Small presentation helpers shared by the `backup` and `unpack` commands.
+"""Small presentation helpers shared by the `backup` and `unpack` commands (fully-named
+module ``user_interface.py`` -- matching the repo convention of spelled-out module names
+like command_line_interface.py / terminal_user_interface.py).
 
 Both commands are interactive CLIs; keeping their headers, field rows, bullet lists,
 rules, and status lines in ONE place means the two read the same and cannot drift in

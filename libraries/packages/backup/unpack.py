@@ -47,7 +47,7 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import archive  # noqa: E402  (deliberately after the sys.path bootstrap above)
-import ui       # noqa: E402  (shared CLI presentation helpers)
+import user_interface  # noqa: E402  (shared CLI presentation helpers)
 
 
 # The two archives `backup` produces, by exact name (see backup.py). `unpack` recognises
@@ -92,7 +92,7 @@ def _safe_members(tar, dest_dir):
     for member in tar:
         member_path = os.path.join(dest_dir, member.name)
         if not _is_within(dest_dir, member_path):
-            ui.warn(f"skipping unsafe path in archive: {member.name}")
+            user_interface.warn(f"skipping unsafe path in archive: {member.name}")
             continue
         yield member
 
@@ -134,7 +134,7 @@ def _extract_home_relative(tar, dest_dir):
             except OSError:
                 pass
         _extract_one(tar, member, dest_dir)
-        ui.bullet(member.name)
+        user_interface.bullet(member.name)
 
 
 def restore_home(enc_path, home):
@@ -143,11 +143,9 @@ def restore_home(enc_path, home):
     top-level folder back into home, recreating symlinks as links. Returns True on
     success."""
     passphrase = archive.prompt_passphrase(confirm=False)
-    print("\nRestoring ...")
+    print("Restoring ...")
     ok = archive.gpg_decrypt_stream(enc_path, passphrase, home, _extract_home_relative)
     if ok:
-        print()
-        print(ui.rule())
         print(f"Restored into {home}")
     return ok
 
@@ -162,7 +160,7 @@ def restore_passwords(enc_path, home):
     afterwards. An existing store is OVERWRITTEN (restore policy). Returns True on
     success."""
     passphrase = archive.prompt_passphrase(confirm=False)
-    print("\nRestoring ...")
+    print("Restoring ...")
 
     tmp_dir = tempfile.mkdtemp(prefix="azarch-unpack-")
     try:
@@ -186,9 +184,7 @@ def restore_passwords(enc_path, home):
         if not archive.gpg_encrypt_file(plain_path, store_path, passphrase):
             print("Error: could not re-encrypt the password store.", file=sys.stderr)
             return False
-        ui.bullet(VAULT_ENCRYPTED_REL)
-        print()
-        print(ui.rule())
+        user_interface.bullet(VAULT_ENCRYPTED_REL)
         print(f"Restored the password store to {store_path}")
         return True
     finally:
@@ -250,17 +246,11 @@ def main(argv=None):
     home = home_dir()
     kind = classify(os.path.basename(arg))
 
-    ui.header("Az'arch unpack")
-    ui.field("Archive", arg)
-    if kind == "passwords":
-        ui.field("Restore", f"password store -> {os.path.join(home, VAULT_DIR_REL)}/")
-    elif kind == "unknown":
-        ui.field("Restore", f"unknown archive (home-relative) -> {home}")
-    else:
-        ui.field("Restore", f"home directories -> {home}")
-    print()
-
-    # The keyboard/Caps-Lock line prints inside prompt_passphrase(), right at the prompt.
+    # MINIMAL output (step five item 4): NO "Az'arch unpack" header, NO rule, and NO
+    # Archive:/Restore: rows. The prompt shows just the LIVE keyboard/Caps-Lock line and
+    # "Passphrase:" -- both printed inside prompt_passphrase(), right where the user types
+    # (the keyboard line repaints itself while the prompt waits; see archive.prompt_passphrase
+    # / live_keyboard_line). Then a compact "Restoring ..." + the final "Restored ..." line.
     if kind == "passwords":
         ok = restore_passwords(arg, home)
     else:

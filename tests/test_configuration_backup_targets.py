@@ -1,8 +1,8 @@
 """packages.backup + packages.azarch -- the OPTIONAL cloud / USB backup targets (step 4).
 
 By default `backup` writes its two local archives and nothing else -- USB and Google Drive
-upload are DISABLED. Step four adds an OPT-IN: `azarch backup-setup` registers a USB mount
-and/or a Google Drive rclone remote into a small user-owned config, and `backup` then ALSO
+upload are DISABLED. The OPT-IN is `azarch backup --configure` (short `-c`): it registers a USB
+mount and/or a Google Drive rclone remote into a small user-owned config, and `backup` then ALSO
 copies the freshly built archives to whatever is enabled. These tests pin that contract:
 
   * config default is all-disabled (a missing/corrupt config -> local-only behaviour);
@@ -14,7 +14,7 @@ copies the freshly built archives to whatever is enabled. These tests pin that c
   * copy_to_usb rotates the previous generation aside and copies the archives;
   * the rclone flags carry the resumable tuning (--retries 1 + --low-level-retries);
   * `rclone` is in the package manifest;
-  * `azarch backup-setup` bundles into the guest CLI and is dispatched + has usage.
+  * `azarch backup --configure`/`-c` bundles into the guest CLI and is dispatched + has usage.
 
 stdlib-only; the transfer itself is mocked so no real rclone/USB is needed.
 """
@@ -282,29 +282,60 @@ def test_config_and_targets_modules_ship():
     assert f"{bk.LIB_DIR}/targets.py" in shipped
 
 
-# --- azarch backup-setup bundles + dispatches -------------------------------
+# --- azarch backup --configure bundles + dispatches -------------------------
 def _azarch_bundle():
     from packages.azarch.bundle import bundle_source
     return bundle_source()
 
 
-def test_azarch_backup_setup_is_bundled_and_dispatched():
-    """`azarch backup-setup` is the opt-in entry point: its module bundles into the single
-    guest CLI script, main() dispatches the `backup-setup` subcommand to cmd_backup_setup,
-    and usage advertises it. Pin all three so the surface cannot silently disappear."""
+def test_azarch_backup_configure_is_bundled_and_dispatched():
+    """Step five item 5: the opt-in is now `azarch backup --configure` / `-c`. The module
+    bundles into the single guest CLI script, main() dispatches the `backup` subcommand to
+    cmd_backup (which routes --configure/-c to cmd_backup_setup), usage advertises it, and the
+    OLD `backup-setup` surface is GONE from the bundle + usage. Pin all of that."""
     src = _azarch_bundle()
     ast.parse(src)  # the whole bundle stays valid Python with the new module in it
     assert "bundled from backup_targets.py" in src
+    # The opt-in flow function survives (driven behind the new flag) ...
     assert "def cmd_backup_setup(" in src
-    assert 'cmd == "backup-setup"' in src
-    assert "backup-setup" in src  # advertised in usage()
+    # ... and the new dispatcher + `backup` case wire it to --configure/-c.
+    assert "def cmd_backup(" in src
+    assert 'cmd == "backup"' in src
+    assert '("--configure", "-c")' in src
+    # The new surface is advertised in usage().
+    assert "backup --configure" in src
+    # The OLD name is GONE from the bundle entirely (no `backup-setup` command, no usage line).
+    assert "backup-setup" not in src
+    assert 'cmd == "backup-setup"' not in src
 
 
-def test_azarch_backup_setup_writes_the_same_config_backup_reads(tmp_path, monkeypatch):
-    """The `azarch backup-setup` module and packages/backup/config.py MUST agree on the
+def test_azarch_backup_bare_and_unknown_flag_do_not_run_a_backup():
+    """A bare `azarch backup` must NOT run a backup -- it points the user at the real `backup`
+    command (usage + exit 2). An unknown flag also errors (exit 2). `--configure`/`-c` (and its
+    sub-forms) route into cmd_backup_setup. Driven through the exec'd bundle so the real
+    dispatch wiring is exercised (no interactive prompts hit -- only --status/--disable/errors)."""
+    src = _azarch_bundle()
+    ns = {"__name__": "azarch_bundle_backup_dispatch"}
+    exec(compile(src, "azarch", "exec"), ns)
+    main = ns["main"]
+
+    # bare `azarch backup` -> usage + exit 2 (does NOT run a backup).
+    assert main(["backup"]) == 2
+    # unknown flag -> exit 2.
+    assert main(["backup", "--bogus"]) == 2
+    # -h/--help -> exit 0 (informational).
+    assert main(["backup", "--help"]) == 0
+    # `--configure --status` and `-c --status` both reach the status path (exit 0, no prompt).
+    assert main(["backup", "--configure", "--status"]) == 0
+    assert main(["backup", "-c", "--status"]) == 0
+
+
+def test_azarch_backup_configure_writes_the_same_config_backup_reads(tmp_path, monkeypatch):
+    """The `azarch backup --configure` module and packages/backup/config.py MUST agree on the
     config path + keys (they live in different install dirs and cannot import each other).
     Exec the bundled module in isolation, point it and config.py at the same temp path, run
-    `--disable`, and confirm backup.config.load() reads exactly what it wrote."""
+    `--configure --disable` THROUGH the real dispatch (main -> cmd_backup -> cmd_backup_setup),
+    and confirm backup.config.load() reads exactly what it wrote."""
     src = _azarch_bundle()
     ns = {"__name__": "azarch_bundle_test"}
     exec(compile(src, "azarch", "exec"), ns)
@@ -314,10 +345,11 @@ def test_azarch_backup_setup_writes_the_same_config_backup_reads(tmp_path, monke
     ns["_BACKUP_CFG_PATH"] = path
     monkeypatch.setattr(cfgmod, "CONFIG_PATH", path)
 
-    # Seed an enabled config via backup.config.save, then have azarch --disable clear it.
+    # Seed an enabled config via backup.config.save, then have the REAL dispatch clear it:
+    # main -> cmd_backup (`backup` case) -> --configure -> cmd_backup_setup(["--disable"]).
     cfgmod.save({"usb_enabled": True, "usb_root": "/run/media/main/x",
                  "gdrive_enabled": True, "gdrive_remote": "gdrive:"})
-    assert ns["cmd_backup_setup"](["--disable"]) == 0
+    assert ns["main"](["backup", "--configure", "--disable"]) == 0
 
     # backup.config (the reader) must see both targets disabled now.
     cfg = cfgmod.load()

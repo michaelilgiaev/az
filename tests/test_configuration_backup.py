@@ -497,11 +497,12 @@ def test_backup_still_makes_passwords_archive_when_home_has_no_backable_dirs(tmp
     assert not os.path.exists(os.path.join(str(home), app.HOME_ARCHIVE_NAME))
 
 
-def test_backup_output_has_a_clean_header_and_aligned_rows(tmp_path, capsys):
-    """Step three (polish): a `backup` run opens with the "Az'arch backup" header + rule,
-    an aligned Home/Items/Store/Skip plan block, and closes with a summary line. Pin the
-    key presentation markers so the clean output cannot silently regress (behaviour stays
-    pinned by the other tests). Uses the real gpg path via _run_backup_main."""
+def test_backup_output_is_stripped_no_header_no_plan_no_vault_skip(tmp_path, capsys):
+    """Step five item 3: the `backup` output is STRIPPED DOWN. There is NO "Az'arch backup"
+    banner, NO rule, and NO Home/Items/Store/Skip plan block -- and crucially NO "skipping ...
+    Vault" claim anywhere (the store IS backed up, so the old Skip line was factually wrong).
+    The compact per-archive result lines + the final summary remain, and there are NO empty
+    spacer lines. Uses the real gpg path via _run_backup_main."""
     if not _has_gpg():
         import pytest
         pytest.skip("gpg not installed on the test host")
@@ -510,11 +511,19 @@ def test_backup_output_has_a_clean_header_and_aligned_rows(tmp_path, capsys):
     rc = _run_backup_main(home, _PASS)
     assert rc == 0
     out = capsys.readouterr().out
-    assert "Az'arch backup" in out
-    assert "─" in out or "-" in out                     # the header rule
-    assert "Home:" in out and "Items:" in out and "Skip:" in out
+    # The whole header/plan block is gone.
+    assert "Az'arch backup" not in out
+    assert "Home:" not in out and "Items:" not in out and "Store:" not in out
+    assert "Skip:" not in out
+    # The FALSE "Vault is skipped" claim is gone (both the plan wording and any reprint).
+    lowered = out.lower()
+    assert "skipping" not in lowered or "vault" not in lowered, out
+    assert "'vault'" not in lowered                      # no "'Vault'" skip token anywhere
+    # The compact deliverable + summary lines are still there.
     assert "home archive" in out and "password store" in out
     assert "written to" in out                          # the summary line
+    # Compact: no blank spacer lines in the output (the user: "remove the damn empty lines").
+    assert not any(line == "" for line in out.splitlines()), repr(out)
 
 
 def test_backup_bails_out_only_when_nothing_at_all_to_do(tmp_path):

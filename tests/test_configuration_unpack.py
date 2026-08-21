@@ -217,21 +217,33 @@ def test_is_within_blocks_paths_that_escape_the_destination(tmp_path):
     assert not up._is_within(str(base), str(base / ".." / "escape"))
 
 
-# --- step three (polish): the clean unpack header + summary -----------------
+# --- step five item 4: the unpack output is MINIMAL -------------------------
 @requires_gpg
-def test_unpack_output_has_a_clean_header_and_summary(tmp_path, capsys):
-    """A `unpack` run opens with the "Az'arch unpack" header + rule and an aligned
-    Archive/Restore block, then closes with a "Restored into ..." summary. Pin the key
-    presentation markers so the polished output cannot regress (the restore behaviour is
-    pinned by the other tests)."""
+def test_unpack_output_is_minimal_no_header_no_rows(tmp_path, capsys):
+    """Step five item 4: `unpack` output is MINIMAL. There is NO "Az'arch unpack" header,
+    NO rule, and NO Archive:/Restore: rows -- the prompt is just the (live) keyboard line +
+    "Passphrase:" (printed inside prompt_passphrase, covered by the live-keyboard tests). Only
+    the compact "Restoring ..." progress + the final "Restored into ..." line remain, with no
+    empty spacer lines. (Here prompt_passphrase is stubbed by _run_unpack, so we pin the
+    surrounding output: the header/rows are gone and the summary stays.)"""
     home_arc, _pw, _secret = _build_archives(tmp_path)
     dst = _fresh_home(tmp_path)
     assert _run_unpack([home_arc], dst, _PASS) == 0
     out = capsys.readouterr().out
-    assert "Az'arch unpack" in out
-    assert "Archive:" in out and "Restore:" in out
-    assert "─" in out or "-" in out                     # the header/summary rule
+    # The header/rows are gone.
+    assert "Az'arch unpack" not in out
+    assert "Archive:" not in out and "Restore:" not in out
+    # No horizontal RULE line (a whole line that is a run of the rule glyph or ASCII dashes).
+    # We check for a rule LINE, not a bare '-', so a hyphen inside a path (e.g. the pytest
+    # tmp dir) does not trip it.
+    assert "─" not in out                                # no box-drawing rule anywhere
+    for line in out.splitlines():
+        assert not (len(line) >= 8 and set(line) == {"-"}), f"stray rule line: {line!r}"
+    # The compact progress + summary remain.
+    assert "Restoring ..." in out
     assert f"Restored into {dst}" in out
+    # No blank spacer lines (matches the stripped `backup` output).
+    assert not any(line == "" for line in out.splitlines()), repr(out)
 
 
 # --- regression: a RELATIVE archive path resolves against the caller's cwd ---
