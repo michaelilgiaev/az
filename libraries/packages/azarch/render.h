@@ -15,15 +15,18 @@
 #include "terminal_user_interface.h"
 
 /* What has keyboard focus / what the UI is doing right now. Browsing is the normal menu;
- * SEARCH is the top box; PORT/PASSWORD are the two in-UI text prompts an apply can raise;
- * OUTPUT is the results overlay shown after an apply (esp. a "list ports"). All of these are
- * drawn INSIDE the alt screen -- there is no dropping to the real terminal anymore. */
+ * SEARCH is the top box; PORT/PROMPT/PASSWORD are the in-UI text prompts an apply can raise
+ * (PORT = a port number; PROMPT = free text like a path/remote for an AZ_ACT_PROMPT row;
+ * PASSWORD = the masked sudo password); OUTPUT is the results overlay shown after an apply
+ * (esp. a "list ports"). All of these are drawn INSIDE the alt screen -- there is no dropping
+ * to the real terminal anymore. */
 typedef enum {
     AZ_MODE_BROWSE = 0,
     AZ_MODE_SEARCH,
-    AZ_MODE_PORT,       /* typing a port number for an AZ_ACT_PORT row       */
-    AZ_MODE_PASSWORD,   /* typing the sudo password (masked) before an apply  */
-    AZ_MODE_OUTPUT,     /* showing an apply's captured output in the overlay  */
+    AZ_MODE_PORT,       /* typing a port number for an AZ_ACT_PORT row              */
+    AZ_MODE_PROMPT,     /* typing free text (path / remote) for an AZ_ACT_PROMPT row */
+    AZ_MODE_PASSWORD,   /* typing the sudo password (masked) before an apply         */
+    AZ_MODE_OUTPUT,     /* showing an apply's captured output in the overlay         */
 } AzMode;
 
 /* The interactive UI state the renderer draws (owned by main.c). */

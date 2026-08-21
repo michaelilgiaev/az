@@ -8,11 +8,25 @@ wired into session startup (both live + installed autostart), and -- by actually
 generated shell script against a fixture home -- that its enumeration/ordering is correct and it
 tracks additions AND removals.
 
-They also pin the step-five item-6 LIVE-UPDATE fix: the helper installs the regenerated
-bookmarks by rewriting the EXISTING inode IN PLACE (same inode across regenerations), not via an
-atomic rename. That is what lets a running Thunar's per-file GFileMonitor fire and refresh the
-Places pane live; an atomic `mv` would leave the monitor watching a stale, unlinked inode. And
-it does NOT rewrite when nothing changed (no needless CHANGED events / flicker).
+They also pin the LIVE-UPDATE fix. Two things must both hold for Places to refresh live:
+
+  1. The helper rewrites the regenerated bookmarks IN PLACE (same inode across regenerations),
+     not via an atomic rename, so the file monitor watching it fires a CHANGED event. (On
+     Thunar 4.20 / GTK 3.24 the monitor is a GFileMonitor on the bookmarks FILE, which the GLib
+     inotify backend implements by watching the PARENT DIRECTORY and filtering for the
+     `bookmarks` basename -- verified on the live hypervisor: thunar's inotify fd watches the
+     ~/.config/gtk-3.0 dir inode, not the file inode. An in-place `cat > "$BM"` fires
+     IN_MODIFY/IN_CLOSE_WRITE for that basename -> GLib CHANGED -> GtkBookmarksManager reloads.)
+     And it does NOT rewrite when nothing changed (no needless CHANGED events / flicker).
+
+  2. The watcher must actually BE RUNNING. It is launched from the OpenBox autostart behind a
+     `[ -x '/usr/local/lib/azarch/azarch-sidebar-sync' ]` guard -- so it only starts if the
+     installed script is EXECUTABLE. archiso's squashfs normalizes overlay file modes to 0644
+     unless a path is pinned in profile.FILE_PERMISSIONS; the script was NOT pinned, so it
+     shipped 0644, the `[ -x ]` guard failed, the --watch daemon never launched, and Places
+     never updated -- the reported bug (confirmed on the live box: the installed script was
+     -rw-r--r-- and no sidebar-sync process was running). The pin (0:0:755) is the real fix; the
+     in-place-inode logic was already correct but had nothing running to exercise it.
 """
 
 from __future__ import annotations
@@ -74,6 +88,28 @@ def test_sync_helper_emitted_root_owned_executable():
     # the whole thunar plan includes it too.
     from packages import thunar
     assert live_sidebar.SYNC_SCRIPT_DEST in {x["dest"] for x in thunar.emit_plan()}
+
+
+def test_sync_helper_is_pinned_executable_in_the_iso():
+    """THE real live-update fix. emit_plan() installs the helper 0755, but archiso's squashfs
+    normalizes overlay modes to 0644 unless the path is pinned in profile.FILE_PERMISSIONS -- and
+    then the OpenBox autostart's `[ -x '<script>' ]` guard FAILS, the --watch daemon never
+    launches, and Places never updates when a folder is added/removed (the reported bug, confirmed
+    on the live box where the installed script was -rw-r--r-- and no watcher ran). SAME normalization
+    as the compiled azarch/osd/menu-daemon binaries, which are all pinned 0755 for the same reason.
+    Pin the sidebar helper 0755 both in the map and in the rendered profiledef.sh."""
+    import profile
+    assert profile.FILE_PERMISSIONS[live_sidebar.SYNC_SCRIPT_DEST] == "0:0:755"
+    assert f'["{live_sidebar.SYNC_SCRIPT_DEST}"]="0:0:755"' in profile.profiledef_sh()
+
+
+def test_autostart_launch_is_guarded_on_the_exec_bit():
+    """The autostart only starts the watcher if the script is EXECUTABLE (`[ -x ... ]`), which is
+    exactly why the ISO pin above matters -- a 0644 script silently skips the watcher. Pin that the
+    guard is the exec test (so the pin and the guard stay coupled: drop the pin and the watcher
+    stops launching)."""
+    for au in (openbox.openbox_autostart(), openbox.openbox_autostart_installed()):
+        assert f"[ -x '{live_sidebar.SYNC_SCRIPT_DEST}' ]" in au
 
 
 def test_sync_script_is_valid_posix_sh():
@@ -180,10 +216,12 @@ def _bookmarks_path(tmp_home):
 
 
 def test_regen_rewrites_bookmarks_in_place_same_inode(tmp_path):
-    """THE live-update fix: on a change the helper rewrites the EXISTING bookmarks inode IN
-    PLACE (so Thunar's per-file GFileMonitor fires and Places refreshes live) instead of
-    renaming a fresh temp file over it (which would leave the monitor on a stale inode and keep
-    Places stale until restart). Pin that the inode is UNCHANGED across a regen that adds a
+    """Part of the live-update fix: on a change the helper rewrites the EXISTING bookmarks inode
+    IN PLACE (so Thunar's GFileMonitor -- which GLib's inotify backend runs by watching the PARENT
+    DIR and filtering for the `bookmarks` basename, verified on the box -- fires a CHANGED event
+    and Places refreshes live) instead of renaming a fresh temp over it. (The OTHER half of the
+    fix, the ISO exec-bit pin that lets the watcher actually run, is pinned above.) Pin that the
+    inode is UNCHANGED across a regen that adds a
     folder, while the CONTENT did update."""
     (tmp_path / "Downloads").mkdir()
     _run_sync(tmp_path)                                   # seed

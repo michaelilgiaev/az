@@ -186,6 +186,7 @@ static int wait_for_input_or_refresh(const AzUI *ui)
  * prompt on a blanked terminal. */
 static char g_pending_cmd[768];      /* command awaiting a password before it can run */
 static int  g_pending_show;          /* its show_output flag                          */
+static int  g_pending_root;          /* whether the pending PROMPT apply needs sudo   */
 
 static void set_output(AzUI *ui, const char *title, char *captured)
 {
@@ -257,7 +258,8 @@ static void run_pending_apply(AzUI *ui)
  * clears a live search, else pops one screen off the stack. */
 static void go_back(AzUI *ui)
 {
-    if (ui->mode == AZ_MODE_OUTPUT || ui->mode == AZ_MODE_PORT || ui->mode == AZ_MODE_PASSWORD) {
+    if (ui->mode == AZ_MODE_OUTPUT || ui->mode == AZ_MODE_PORT ||
+        ui->mode == AZ_MODE_PROMPT || ui->mode == AZ_MODE_PASSWORD) {
         ui->mode = AZ_MODE_BROWSE;
         ui->input[0] = '\0';
         g_pending_cmd[0] = '\0';
@@ -286,6 +288,17 @@ static void activate(AzUI *ui)
         g_pending_show = row->show_output;
         ui->mode = AZ_MODE_PORT;
         ui->prompt = "Port number:";
+        ui->input[0] = '\0';
+    } else if (row->kind == AZ_ACT_PROMPT) {
+        /* Prompt for FREE TEXT (a path / remote name), then run "<target> <value>". Like PORT but
+         * the field accepts any printable text (not just digits) and the apply honours the row's
+         * needs_root (PORT always sudo's; a PROMPT row -- e.g. the Backup enable rows -- may not).
+         * The row carries its own prompt label so each PROMPT row asks for the right thing. */
+        snprintf(g_pending_cmd, sizeof g_pending_cmd, "%s", row->target);
+        g_pending_show = row->show_output;
+        g_pending_root = row->needs_root;
+        ui->mode = AZ_MODE_PROMPT;
+        ui->prompt = row->prompt ? row->prompt : "Value:";
         ui->input[0] = '\0';
     } else { /* AZ_ACT_APPLY */
         start_apply(ui, row->target, row->needs_root, row->show_output);
@@ -362,6 +375,28 @@ static void port_key(AzUI *ui, int k)
         return;
     }
     input_edit(ui, k, /*digits_only=*/1);
+}
+
+/* PROMPT prompt (free text): Enter runs "<base cmd> <typed text>"; ESC cancels back to the menu.
+ * Unlike PORT it accepts any printable text (a path / remote name) and honours the pending row's
+ * needs_root (g_pending_root) rather than always sudo-ing -- the Backup enable rows write the
+ * user's own config, so they do not need root. */
+static void prompt_key(AzUI *ui, int k)
+{
+    if (k == K_ESC) { go_back(ui); return; }
+    if (k == K_ENTER) {
+        if (!ui->input[0]) { go_back(ui); return; }   /* empty -> cancel */
+        char cmd[768];
+        snprintf(cmd, sizeof cmd, "%s %s", g_pending_cmd, ui->input);
+        g_pending_cmd[0] = '\0';
+        int show = g_pending_show;
+        int root = g_pending_root;
+        g_pending_root = 0;
+        ui->input[0] = '\0';
+        start_apply(ui, cmd, root, show);
+        return;
+    }
+    input_edit(ui, k, /*digits_only=*/0);            /* free text: any printable char */
 }
 
 /* PASSWORD prompt: Enter validates the typed password with sudo; on success run the pending
@@ -480,6 +515,7 @@ int main(void)
          * (not a pile of flags) means each key has exactly one meaning per screen. */
         if (ui.mode == AZ_MODE_SEARCH) { ui.searching = 1; search_key(&ui, k); continue; }
         if (ui.mode == AZ_MODE_PORT)     { port_key(&ui, k);     continue; }
+        if (ui.mode == AZ_MODE_PROMPT)   { prompt_key(&ui, k);   continue; }
         if (ui.mode == AZ_MODE_PASSWORD) { password_key(&ui, k); continue; }
         if (ui.mode == AZ_MODE_OUTPUT) {
             /* Enter / ESC / q / left-back all CLOSE the overlay and return to the menu

@@ -86,8 +86,9 @@ int az_capture(const char *const argv[], char *buf, size_t n)
 
 /* Like az_capture but keeps the WHOLE output (up to n-1 bytes), newlines and all, so a
  * multi-line report can be scanned with strstr. Same fork/exec/no-shell contract. Needed by
- * the rfkill/bluetooth probes, whose telltale "... blocked: yes" lines are NOT on line 1. */
-static int az_capture_all(const char *const argv[], char *buf, size_t n)
+ * the rfkill/bluetooth probes, whose telltale "... blocked: yes" lines are NOT on line 1.
+ * Exported (declared in the .h) so the split-out Display probes (model_display.c) share it. */
+int az_capture_all(const char *const argv[], char *buf, size_t n)
 {
     if (n == 0) return -1;
     buf[0] = '\0';
@@ -175,8 +176,9 @@ void az_status_invalidate(void)
     for (int i = 0; i < AZ_CACHE_SLOTS; i++) { g_cache[i].fn = NULL; g_cache[i].stamp_ms = 0; }
 }
 
-/* True if `prog` is somewhere on PATH (mirrors _have()). */
-static int have(const char *prog)
+/* True if `prog` is somewhere on PATH (mirrors _have()). Exported (declared in the .h) so the
+ * split-out Display probes (model_display.c) share the one implementation. */
+int az_have(const char *prog)
 {
     const char *path = getenv("PATH");
     if (!path) return 0;
@@ -207,7 +209,7 @@ const char *az_status_theme(char *buf, size_t n)
     const char *argv[] = {"gsettings", "get", "org.gnome.desktop.interface",
                           "color-scheme", NULL};
     char raw[128] = {0};
-    if (have("gsettings") && az_capture(argv, raw, sizeof raw) == 0) {
+    if (az_have("gsettings") && az_capture(argv, raw, sizeof raw) == 0) {
         if (strstr(raw, "prefer-dark")) { snprintf(buf, n, "Dark"); return buf; }
         if (strstr(raw, "prefer-light")) { snprintf(buf, n, "White"); return buf; }
     }
@@ -272,7 +274,7 @@ static struct AzNet az_net_scan(void)
  * otherwise the radio state ("on"/"off"). */
 const char *az_status_wifi(char *buf, size_t n)
 {
-    if (!have("nmcli")) { snprintf(buf, n, "unavailable"); return buf; }
+    if (!az_have("nmcli")) { snprintf(buf, n, "unavailable"); return buf; }
     struct AzNet s = az_net_scan();
     if (s.eth_conn) { snprintf(buf, n, "off"); return buf; }   /* wired wins -> wifi off */
     if (s.wifi_conn) { snprintf(buf, n, "connected"); return buf; }
@@ -292,7 +294,7 @@ const char *az_status_wifi(char *buf, size_t n)
  * device is simply down; "no device" when there is no ethernet at all. */
 const char *az_status_wired(char *buf, size_t n)
 {
-    if (!have("nmcli")) { snprintf(buf, n, "unavailable"); return buf; }
+    if (!az_have("nmcli")) { snprintf(buf, n, "unavailable"); return buf; }
     struct AzNet s = az_net_scan();
     if (!s.eth_present) { snprintf(buf, n, "no device"); return buf; }
     snprintf(buf, n, s.eth_conn ? "connected" : "disconnected");
@@ -306,13 +308,13 @@ const char *az_status_bluetooth(char *buf, size_t n)
      * ON only when the service is active AND rfkill has not blocked the radio; anything else
      * (blocked, inactive, or unreadable) reads as OFF. */
     int active = 0;
-    if (have("systemctl")) {
+    if (az_have("systemctl")) {
         const char *argv[] = {"systemctl", "is-active", "bluetooth", NULL};
         char raw[32] = {0};
         az_capture(argv, raw, sizeof raw);        /* "active" only when running */
         active = strcmp(raw, "active") == 0;
     }
-    if (have("rfkill")) {
+    if (az_have("rfkill")) {
         const char *argv[] = {"rfkill", "list", "bluetooth", NULL};
         char raw[512] = {0};
         if (az_capture_all(argv, raw, sizeof raw) == 0 &&
@@ -331,7 +333,7 @@ const char *az_status_airplane(char *buf, size_t n)
      * -- so it is driven by NetworkManager's master switch, not just the radios (a wired VM
      * has no radio to kill). `nmcli networking` prints "enabled"/"disabled"; airplane is ON
      * when it is "disabled". Mirrors network.py _airplane_is_on. rfkill is the fallback. */
-    if (have("nmcli")) {
+    if (az_have("nmcli")) {
         const char *argv[] = {"nmcli", "networking", NULL};
         char raw[64] = {0};
         if (az_capture(argv, raw, sizeof raw) == 0 && raw[0]) {
@@ -339,7 +341,7 @@ const char *az_status_airplane(char *buf, size_t n)
             return buf;
         }
     }
-    if (have("rfkill")) {
+    if (az_have("rfkill")) {
         const char *argv[] = {"rfkill", "list", NULL};
         char raw[2048] = {0};
         if (az_capture_all(argv, raw, sizeof raw) == 0 && strstr(raw, "blocked")) {
@@ -354,7 +356,7 @@ const char *az_status_airplane(char *buf, size_t n)
 
 const char *az_status_firewall(char *buf, size_t n)
 {
-    if (!have("ufw")) { snprintf(buf, n, "ufw not found"); return buf; }
+    if (!az_have("ufw")) { snprintf(buf, n, "ufw not found"); return buf; }
     /* `sudo -n ufw status` -> "Status: active" (no password: report "needs sudo"). */
     const char *argv[] = {"sudo", "-n", "ufw", "status", NULL};
     char raw[128] = {0};
@@ -378,7 +380,7 @@ const char *az_status_network(char *buf, size_t n)
      * internet -- NOT a pile of radio/firewall jargon. "Online - Connected to Internet" when
      * NetworkManager reports full connectivity, "Offline - No Internet" otherwise. This is the
      * one thing a developer actually cares about at a glance. */
-    if (have("nmcli")) {
+    if (az_have("nmcli")) {
         const char *argv[] = {"nmcli", "networking", "connectivity", NULL};
         char raw[32] = {0};
         if (az_capture(argv, raw, sizeof raw) == 0 && strcmp(raw, "full") == 0) {
@@ -399,7 +401,7 @@ const char *az_status_machine(char *buf, size_t n)
      * or the line is malformed, so the cell is never blank. */
     const char *argv[] = {"azarch", "machine", NULL};
     char raw[128] = {0};
-    if (have("azarch") && az_capture(argv, raw, sizeof raw) == 0) {
+    if (az_have("azarch") && az_capture(argv, raw, sizeof raw) == 0) {
         const char *colon = strchr(raw, ':');
         if (colon) {
             colon++;
@@ -418,7 +420,7 @@ const char *az_status_volume(char *buf, size_t n)
      * azarch is missing or the read fails, so the cell is never blank. */
     const char *argv[] = {"azarch", "volume", "get", NULL};
     char raw[64] = {0};
-    if (have("azarch") && az_capture(argv, raw, sizeof raw) == 0 && raw[0]) {
+    if (az_have("azarch") && az_capture(argv, raw, sizeof raw) == 0 && raw[0]) {
         int pct = atoi(raw);
         if (strstr(raw, "muted")) snprintf(buf, n, "%d%% (muted)", pct);
         else snprintf(buf, n, "%d%%", pct);
@@ -437,7 +439,7 @@ const char *az_status_brightness(char *buf, size_t n)
     char mt[32] = {0};
     const char *margv[] = {"azarch", "machine", NULL};
     int is_laptop = 0;
-    if (have("azarch") && az_capture(margv, mt, sizeof mt) == 0) {
+    if (az_have("azarch") && az_capture(margv, mt, sizeof mt) == 0) {
         /* first line: "Machine type: Laptop" / "Machine type: PC" */
         if (strstr(mt, "Laptop")) is_laptop = 1;
     }
@@ -453,312 +455,55 @@ const char *az_status_brightness(char *buf, size_t n)
     return buf;
 }
 
-/* --- Default Applications probes --------------------------------------------
- * Each category's "Current:" line shows the handler it currently resolves to. SNAPPINESS: this
- * used to fork `azarch default-applications get <key>` per category per keystroke, and THAT
- * forked `xdg-mime query` -- 13 nested subprocess pairs on every Default Applications frame,
- * which is exactly the lag the user reported. Instead we read the handler DIRECTLY, in-process,
- * from the two small config files xdg-mime/exo write:
- *   * MIME categories -> the `<mime>=<id>` line under [Default Applications] in
- *     ~/.config/mimeapps.list (XDG_CONFIG_HOME honoured). This is the SAME file `xdg-mime
- *     query default` reads, so the value is identical -- just with no forks.
- *   * Terminal        -> the TerminalEmulator= line in ~/.config/xfce4/helpers.rc.
- * No subprocess at all, so the screen is instant. The key->representative-MIME table below is
- * pinned to default_applications.py by a test (the representative MIME is that category's FIRST
- * mime), so C and Python cannot drift. */
-
-/* ~/.config (honours XDG_CONFIG_HOME), the dir mimeapps.list + helpers.rc live in. */
-static void az_config_home(char *out, size_t n)
+const char *az_status_backup(char *buf, size_t n)
 {
-    const char *xdg = getenv("XDG_CONFIG_HOME");
-    if (xdg && xdg[0]) { snprintf(out, n, "%s", xdg); return; }
-    const char *home = getenv("HOME");
-    snprintf(out, n, "%s/.config", home ? home : "");
-}
-
-/* Read a `key=value` (or `key value`) line's value from a small keyfile-ish config, matching the
- * first line whose start equals `key` followed by `sep`. Trims trailing whitespace. Returns 1 on
- * a hit (value copied into out), 0 otherwise. Used for both mimeapps.list and helpers.rc. */
-static int az_read_kv(const char *path, const char *key, char sep, char *out, size_t n)
-{
-    FILE *f = fopen(path, "r");
-    if (!f) return 0;
-    char line[1024];
-    size_t klen = strlen(key);
-    int found = 0;
-    while (fgets(line, sizeof line, f)) {
-        if (strncmp(line, key, klen) == 0 && line[klen] == sep) {
-            const char *v = line + klen + 1;
-            while (*v == ' ' || *v == '\t') v++;
-            snprintf(out, n, "%s", v);
-            size_t l = strlen(out);
-            while (l > 0 && (out[l-1] == '\n' || out[l-1] == '\r' ||
-                             out[l-1] == ' ' || out[l-1] == '\t')) out[--l] = '\0';
-            found = out[0] ? 1 : 0;
-            break;
+    /* The opt-in backup COPY targets (`azarch backup --configure` manages them). Both are OFF by
+     * default -- `backup` writes its two local archives and nothing else -- so the common case
+     * reads "off (local only)". We ask the configurator's own non-interactive status
+     * (`azarch backup --configure --status`), which prints (see backup_targets.py):
+     *     Backup targets:
+     *       USB          off | ON -> <path>
+     *       Google Drive off | ON -> <remote>
+     * and report which are ON. Reading through the CLI (not the config file directly) keeps this
+     * probe agreeing with what `--status` shows on the box. az_capture_all never blocks on stdin. */
+    const char *argv[] = {"azarch", "backup", "--configure", "--status", NULL};
+    char raw[512] = {0};
+    if (az_have("azarch") && az_capture_all(argv, raw, sizeof raw) == 0 && raw[0]) {
+        /* An enabled line is "  USB          ON -> ..." / "  Google Drive ON -> ...". Match the
+         * label followed by "ON" (the disabled form is the word "off"), scanning each line so a
+         * path/remote containing "on" can't cause a false positive. */
+        int usb = 0, gdrive = 0;
+        char *save = NULL;
+        for (char *l = strtok_r(raw, "\n", &save); l; l = strtok_r(NULL, "\n", &save)) {
+            char *p = l;
+            while (*p == ' ' || *p == '\t') p++;
+            if (strncmp(p, "USB", 3) == 0 && strstr(p, "ON")) usb = 1;
+            else if (strncmp(p, "Google Drive", 12) == 0 && strstr(p, "ON")) gdrive = 1;
         }
-    }
-    fclose(f);
-    return found;
-}
-
-/* The representative MIME per MIME-backed category key (its FIRST mime in
- * default_applications.CATEGORIES -- pinned by a test). Empty categories (mail/calculator) and
- * terminal are handled separately in az_da_get. */
-static const char *az_da_mime_for(const char *key)
-{
-    if (strcmp(key, "web") == 0)          return "x-scheme-handler/http";
-    if (strcmp(key, "html") == 0)         return "text/html";
-    if (strcmp(key, "music") == 0)        return "audio/mpeg";
-    if (strcmp(key, "video") == 0)        return "video/mp4";
-    if (strcmp(key, "photos") == 0)       return "image/jpeg";
-    if (strcmp(key, "word") == 0)
-        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-    if (strcmp(key, "spreadsheet") == 0)
-        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    if (strcmp(key, "pdf") == 0)          return "application/pdf";
-    if (strcmp(key, "source-code") == 0)  return "text/x-csrc";
-    if (strcmp(key, "file-manager") == 0) return "inode/directory";
-    if (strcmp(key, "plain-text") == 0)   return "text/plain";
-    return "";   /* mail / calculator / terminal: no representative MIME */
-}
-
-static const char *az_da_get(const char *key, char *buf, size_t n)
-{
-    char cfg[512], path[768], val[256];
-    az_config_home(cfg, sizeof cfg);
-    if (strcmp(key, "terminal") == 0) {
-        /* exo TerminalEmulator selection from helpers.rc (value is the bin name, e.g. "kitty"). */
-        snprintf(path, sizeof path, "%s/xfce4/helpers.rc", cfg);
-        if (az_read_kv(path, "TerminalEmulator", '=', val, sizeof val)) {
-            /* present as "<name>.desktop" for a uniform display unless it already is one. */
-            size_t l = strlen(val);
-            int has_suffix = l >= 8 && strcmp(val + l - 8, ".desktop") == 0;
-            snprintf(buf, n, has_suffix ? "%s" : "%s.desktop", val);
-            return buf;
-        }
-        snprintf(buf, n, "(none)");
+        if (usb && gdrive) { snprintf(buf, n, "USB + Google Drive"); return buf; }
+        if (usb)           { snprintf(buf, n, "USB"); return buf; }
+        if (gdrive)        { snprintf(buf, n, "Google Drive"); return buf; }
+        snprintf(buf, n, "off (local only)");
         return buf;
     }
-    const char *mime = az_da_mime_for(key);
-    if (!mime[0]) { snprintf(buf, n, "(none)"); return buf; }  /* mail / calculator */
-    snprintf(path, sizeof path, "%s/mimeapps.list", cfg);
-    if (az_read_kv(path, mime, '=', val, sizeof val)) {
-        snprintf(buf, n, "%s", val);
-        return buf;
-    }
-    snprintf(buf, n, "(none)");
+    /* azarch missing or the read failed: report the DEFAULT (both off), never a blank cell. */
+    snprintf(buf, n, "off (local only)");
     return buf;
 }
 
-/* One probe per category key. DA_PROBE(fn, "key") expands to a status function that reports the
- * live handler for that category. Keys MUST match default_applications.CATEGORY_KEYS (pinned). */
-#define DA_PROBE(fn, key) \
-    const char *fn(char *buf, size_t n) { return az_da_get(key, buf, n); }
-DA_PROBE(az_status_da_web,          "web")
-DA_PROBE(az_status_da_mail,         "mail")
-DA_PROBE(az_status_da_html,         "html")
-DA_PROBE(az_status_da_music,        "music")
-DA_PROBE(az_status_da_video,        "video")
-DA_PROBE(az_status_da_photos,       "photos")
-DA_PROBE(az_status_da_word,         "word")
-DA_PROBE(az_status_da_spreadsheet,  "spreadsheet")
-DA_PROBE(az_status_da_pdf,          "pdf")
-DA_PROBE(az_status_da_source_code,  "source-code")
-DA_PROBE(az_status_da_file_manager, "file-manager")
-DA_PROBE(az_status_da_plain_text,   "plain-text")
-DA_PROBE(az_status_da_calculator,   "calculator")
-DA_PROBE(az_status_da_terminal,     "terminal")
-#undef DA_PROBE
+/* --- Default Applications probes ---------------------------------------------
+ * The az_status_da_* probes (each category's live current-handler line) MOVED to
+ * model_default_applications.c -- they sit next to az_da_screen() (the runtime candidate
+ * resolution) they belong with, and moving them keeps model.c under the per-file size budget.
+ * They are declared in terminal_user_interface.h, so model_tree.c's SCREENS[] still references
+ * them by name; nothing else here needs them. */
 
 /* --- Display probes ---------------------------------------------------------
- * The Display screen and its scale chooser show live state read from `azarch display`. The
- * summary probe reports the current resolution + scale at a glance; the scale probe reports the
- * global UI scale. Both degrade to a readable word so a cell is never blank. */
-const char *az_status_display_scale(char *buf, size_t n)
-{
-    /* `azarch display scale get` -> "Global scale: 1.35" on its first line. Report "1.35x". */
-    const char *argv[] = {"azarch", "display", "scale", "get", NULL};
-    char raw[128] = {0};
-    if (have("azarch") && az_capture(argv, raw, sizeof raw) == 0) {
-        const char *colon = strchr(raw, ':');
-        if (colon) {
-            colon++;
-            while (*colon == ' ') colon++;
-            if (*colon) { snprintf(buf, n, "%sx", colon); return buf; }
-        }
-    }
-    snprintf(buf, n, "1.35x");
-    return buf;
-}
-
-const char *az_status_display(char *buf, size_t n)
-{
-    /* A one-line summary: the primary output's current resolution (from xrandr, the line marked
-     * with a '*') and the global scale. Falls back to just the scale if xrandr is unreadable. */
-    char scalebuf[64] = {0};
-    az_status_display_scale(scalebuf, sizeof scalebuf);
-    if (have("xrandr")) {
-        /* grab the current mode: xrandr marks the active mode with a trailing '*'. Fork xrandr
-         * and scan its output for the first "  <WxH> ... *" line (az_capture is first-line only,
-         * so this reads the pipe directly). */
-        const char *argv[] = {"xrandr", "--query", NULL};
-        char res[32] = {0};
-        char line[512];
-        int pipefd[2];
-        if (pipe(pipefd) == 0) {
-            pid_t pid = fork();
-            if (pid == 0) {
-                int dn = open("/dev/null", O_RDWR);
-                if (dn >= 0) { dup2(dn, 0); dup2(dn, 2); }
-                dup2(pipefd[1], 1); close(pipefd[0]); close(pipefd[1]);
-                if (dn > 2) close(dn);
-                execvp(argv[0], (char *const *)argv);
-                _exit(127);
-            }
-            close(pipefd[1]);
-            FILE *f = fdopen(pipefd[0], "r");
-            if (f) {
-                while (fgets(line, sizeof line, f)) {
-                    if (strchr(line, '*')) {
-                        /* first token on a mode line is the resolution */
-                        char *p = line;
-                        while (*p == ' ' || *p == '\t') p++;
-                        int i = 0;
-                        while (p[i] && p[i] != ' ' && p[i] != '\t' && i < (int)sizeof res - 1) {
-                            res[i] = p[i]; i++;
-                        }
-                        res[i] = '\0';
-                        break;
-                    }
-                }
-                fclose(f);
-            } else {
-                close(pipefd[0]);
-            }
-            int st; waitpid(pid, &st, 0); (void)st;
-        }
-        if (res[0]) { snprintf(buf, n, "%s @ %s", res, scalebuf); return buf; }
-    }
-    snprintf(buf, n, "scale %s", scalebuf);
-    return buf;
-}
-
-/* The INLINE per-row Display probes. The Display screen's top "Current:" line was removed (the
- * user: "just fucking remove that 'Current: scale 1.35x' label ... add current to each line"),
- * so each row now carries its OWN current value: Global Scale keeps az_status_display_scale;
- * Resolution/Refresh/Orientation report from xrandr; Monitors reports the connected-output
- * count. All read `xrandr --query` ONCE via az_capture_all and scan it (cheap; memoised by the
- * 1.5s probe cache and only run while the Display screen is on-screen). Each degrades to a
- * readable word so a cell is never blank when xrandr is missing (e.g. a bare VM). */
-
-/* Fill `line` (size ln) with the FIRST active xrandr mode line (the one marked with a trailing
- * '*'), or leave it empty. Returns 1 if found. Shared by the resolution/refresh probes. */
-static int az_xrandr_active_mode_line(char *line, size_t ln)
-{
-    line[0] = '\0';
-    if (!have("xrandr")) return 0;
-    const char *argv[] = {"xrandr", "--query", NULL};
-    char raw[4096] = {0};
-    if (az_capture_all(argv, raw, sizeof raw) != 0 || !raw[0]) return 0;
-    char *save = NULL;
-    for (char *l = strtok_r(raw, "\n", &save); l; l = strtok_r(NULL, "\n", &save)) {
-        if (strchr(l, '*')) { snprintf(line, ln, "%s", l); return 1; }
-    }
-    return 0;
-}
-
-const char *az_status_display_resolution(char *buf, size_t n)
-{
-    /* The active mode's resolution: the first token on the '*'-marked xrandr line (e.g. from
-     * "   1920x1080     60.00*+" -> "1920x1080"). */
-    char line[512];
-    if (az_xrandr_active_mode_line(line, sizeof line)) {
-        char *p = line;
-        while (*p == ' ' || *p == '\t') p++;
-        int i = 0;
-        while (p[i] && p[i] != ' ' && p[i] != '\t' && i < (int)n - 1) { buf[i] = p[i]; i++; }
-        buf[i] = '\0';
-        if (buf[0]) return buf;
-    }
-    snprintf(buf, n, "(unknown)");
-    return buf;
-}
-
-const char *az_status_display_refresh(char *buf, size_t n)
-{
-    /* The active refresh rate: on the '*'-marked xrandr line the rate is the numeric column
-     * carrying the '*' (e.g. "1920x1080  60.00*+  75.00" -> "60 Hz"). Scan tokens for the one
-     * containing '*' and print its integer part with " Hz". */
-    char line[512];
-    if (az_xrandr_active_mode_line(line, sizeof line)) {
-        char *save = NULL;
-        for (char *t = strtok_r(line, " \t", &save); t; t = strtok_r(NULL, " \t", &save)) {
-            if (strchr(t, '*')) {
-                int hz = 0;
-                for (const char *c = t; *c && *c != '.' && *c != '*'; c++)
-                    if (*c >= '0' && *c <= '9') hz = hz * 10 + (*c - '0');
-                if (hz > 0) { snprintf(buf, n, "%d Hz", hz); return buf; }
-            }
-        }
-    }
-    snprintf(buf, n, "(unknown)");
-    return buf;
-}
-
-const char *az_status_display_orientation(char *buf, size_t n)
-{
-    /* The primary output's rotation. xrandr prints it on the "<output> connected [primary]
-     * WxH+X+Y (rotation) ..." line: the rotation word (normal/left/right/inverted) sits right
-     * before the parenthesised capabilities list. Find the connected-primary line (fall back to
-     * the first connected line) and read the orientation token. */
-    if (have("xrandr")) {
-        const char *argv[] = {"xrandr", "--query", NULL};
-        char raw[8192] = {0};
-        if (az_capture_all(argv, raw, sizeof raw) == 0 && raw[0]) {
-            char *save = NULL, *chosen = NULL, *first = NULL;
-            for (char *l = strtok_r(raw, "\n", &save); l; l = strtok_r(NULL, "\n", &save)) {
-                if (strstr(l, " connected")) {
-                    if (!first) first = l;
-                    if (strstr(l, "primary")) { chosen = l; break; }
-                }
-            }
-            if (!chosen) chosen = first;
-            if (chosen) {
-                /* orientation is whichever of these words appears on the line (inverted before
-                 * "normal" would misread, so test the specific rotations first). */
-                const char *words[] = {"left", "right", "inverted", "normal"};
-                for (size_t i = 0; i < sizeof words / sizeof words[0]; i++) {
-                    if (strstr(chosen, words[i])) { snprintf(buf, n, "%s", words[i]); return buf; }
-                }
-                snprintf(buf, n, "normal");   /* connected but no explicit token -> normal */
-                return buf;
-            }
-        }
-    }
-    snprintf(buf, n, "(unknown)");
-    return buf;
-}
-
-const char *az_status_display_monitors(char *buf, size_t n)
-{
-    /* How many outputs are connected (e.g. "1 connected" / "2 connected"). Count the
-     * " connected" lines in xrandr --query. */
-    if (have("xrandr")) {
-        const char *argv[] = {"xrandr", "--query", NULL};
-        char raw[8192] = {0};
-        if (az_capture_all(argv, raw, sizeof raw) == 0 && raw[0]) {
-            int count = 0;
-            char *save = NULL;
-            for (char *l = strtok_r(raw, "\n", &save); l; l = strtok_r(NULL, "\n", &save))
-                if (strstr(l, " connected")) count++;
-            snprintf(buf, n, "%d connected", count);
-            return buf;
-        }
-    }
-    snprintf(buf, n, "(unknown)");
-    return buf;
-}
+ * The Display status probes (summary, global scale, and the inline Resolution/Refresh/
+ * Orientation/Monitors values) MOVED to model_display.c to keep model.c under the per-file size
+ * budget. They shell out through the shared az_capture/az_capture_all/az_have helpers (exported
+ * above, declared in the header) and are declared in terminal_user_interface.h, so model_tree.c's
+ * SCREENS[] still references them by name. */
 
 /* --- filter (the search box) ------------------------------------------------ */
 static int ci_contains(const char *hay, const char *needle)
@@ -799,6 +544,13 @@ const char *az_row_command(const AzRow *r)
         snprintf(buf, sizeof buf, "%s <port>", r->target ? r->target : "");
         return buf;
     }
+    if (r->kind == AZ_ACT_PROMPT) {
+        /* the free-text prompt teaches the command with a "<value>" placeholder (the path /
+         * remote the user would type), mirroring the PORT "<port>" convention. */
+        static char buf[200];
+        snprintf(buf, sizeof buf, "%s <value>", r->target ? r->target : "");
+        return buf;
+    }
     return NULL;
 }
 
@@ -811,6 +563,11 @@ const char *az_row_base(const AzRow *r)
     if (r->kind == AZ_ACT_PORT) {
         static char buf[200];
         snprintf(buf, sizeof buf, "%s <port>", r->base);
+        return buf;
+    }
+    if (r->kind == AZ_ACT_PROMPT) {
+        static char buf[220];
+        snprintf(buf, sizeof buf, "%s <value>", r->base);
         return buf;
     }
     return r->base;

@@ -24,12 +24,13 @@ static int failures = 0;
 
 /* The top-level subsystems, in order (Network FIRST per the spec): Network, Theme, Wallpaper,
  * then the media controls Volume + Brightness (the follow-up spec added these -- they were
- * missing from the UI), then Machine Type (the PC/Laptop screen), and nothing else. */
+ * missing from the UI), then Machine Type (the PC/Laptop screen), then Backup (step six -- the
+ * opt-in backup targets, LAST), and nothing else. */
 static void test_top_level_is_network_theme_wallpaper(void)
 {
     const AzScreen *m = az_screen_find("main");
     CHECK(m != NULL);
-    CHECK(m->nrows == 8);
+    CHECK(m->nrows == 9);
     CHECK(strcmp(m->rows[0].label, "Network") == 0);   /* Network is the first option */
     CHECK(strcmp(m->rows[1].label, "Theme") == 0);
     CHECK(strcmp(m->rows[2].label, "Wallpaper") == 0);
@@ -38,6 +39,7 @@ static void test_top_level_is_network_theme_wallpaper(void)
     CHECK(strcmp(m->rows[5].label, "Default Applications") == 0);
     CHECK(strcmp(m->rows[6].label, "Display") == 0);
     CHECK(strcmp(m->rows[7].label, "Machine Type") == 0);
+    CHECK(strcmp(m->rows[8].label, "Backup") == 0);    /* the new opt-in backup entry, last */
     /* the entry title is the (re)named "Az'arch Settings" */
     CHECK(strcmp(m->title, "Az'arch Settings") == 0);
 }
@@ -50,7 +52,7 @@ static void test_screen_set_is_exactly_expected(void)
         "main", "theme", "wallpaper", "network",
         "network.wifi", "network.wired", "network.bluetooth",
         "network.airplane", "network.firewall",
-        "volume", "brightness", "machine",
+        "volume", "brightness", "machine", "backup",
         /* Default Applications: the category list + one screen per category (Mail excluded --
          * no mail client shipped, so the TUI does not surface it). */
         "defaultapps",
@@ -150,6 +152,72 @@ static void test_machine_type_screen(void)
     CHECK(main_s->rows[7].status == az_status_machine);
     CHECK(main_s->rows[7].kind == AZ_ACT_SCREEN);
     CHECK(strcmp(main_s->rows[7].target, "machine") == 0);
+}
+
+/* The Backup screen (step six): a "Backup" entry on ROWS_MAIN opens a screen that drives the
+ * SAME opt-in flow `azarch backup --configure` exposes, streamlined + OFF BY DEFAULT. Its
+ * "Current:" line is az_status_backup ("off (local only)" by default). The four rows: two
+ * non-interactive APPLIES (--status / --disable) and two AZ_ACT_PROMPT enable rows (USB / Google
+ * Drive) that prompt for the path/remote and run the non-interactive --enable-* surface. Every
+ * row is captured in-UI (show_output) and carries a Base Command + Azarch Wrapper hint; none needs
+ * sudo (the configurator writes the user's own config). */
+static void test_backup_screen(void)
+{
+    /* the ROWS_MAIN entry that opens it -- LAST row, with the target-summary status */
+    const AzScreen *main_s = az_screen_find("main");
+    CHECK(strcmp(main_s->rows[8].label, "Backup") == 0);
+    CHECK(main_s->rows[8].kind == AZ_ACT_SCREEN);
+    CHECK(strcmp(main_s->rows[8].target, "backup") == 0);
+    CHECK(main_s->rows[8].status == az_status_backup);
+
+    const AzScreen *b = az_screen_find("backup");
+    CHECK(b != NULL);
+    CHECK(strcmp(b->title, "Backup") == 0);
+    /* the screen shows the live target state ONCE via a screen-level Current: probe */
+    CHECK(b->current == az_status_backup);
+    /* the subtitle EXPLAINS the feature: off by default; local archives always happen; this only
+     * opts in to a USB / Google Drive copy. */
+    CHECK(strstr(b->subtitle, "Off by default") != NULL);
+    CHECK(strstr(b->subtitle, "local") != NULL);
+    CHECK(strstr(b->subtitle, "USB") != NULL && strstr(b->subtitle, "Google Drive") != NULL);
+    CHECK(b->nrows == 4);
+
+    int has_status = 0, has_disable = 0, has_enable_usb = 0, has_enable_gdrive = 0;
+    for (int i = 0; i < b->nrows; i++) {
+        const AzRow *r = &b->rows[i];
+        CHECK(r->needs_root == 0);        /* the configurator writes the user's own config, no sudo */
+        CHECK(r->show_output == 1);       /* every row shows its captured result in the overlay */
+        /* every row carries BOTH hint lines: an azarch wrapper AND a base command (no bare row) */
+        CHECK(az_row_command(r) != NULL);
+        CHECK(az_row_base(r) != NULL);
+        if (r->kind == AZ_ACT_APPLY &&
+            strcmp(r->target, "azarch backup --configure --status") == 0) {
+            has_status = 1;
+        }
+        if (r->kind == AZ_ACT_APPLY &&
+            strcmp(r->target, "azarch backup --configure --disable") == 0) {
+            has_disable = 1;
+        }
+        if (r->kind == AZ_ACT_PROMPT &&
+            strcmp(r->target, "azarch backup --configure --enable-usb") == 0) {
+            has_enable_usb = 1;
+            CHECK(r->prompt != NULL);                          /* asks for the mount path */
+            CHECK(strstr(az_row_command(r), "<value>") != NULL); /* wrapper has the placeholder */
+            CHECK(strstr(az_row_base(r), "<value>") != NULL);    /* base too (cp ... <value>) */
+            CHECK(strstr(az_row_base(r), "cp ") != NULL);        /* the real copy backup does */
+        }
+        if (r->kind == AZ_ACT_PROMPT &&
+            strcmp(r->target, "azarch backup --configure --enable-gdrive") == 0) {
+            has_enable_gdrive = 1;
+            CHECK(r->prompt != NULL);                          /* asks for the remote name */
+            CHECK(strstr(az_row_command(r), "<value>") != NULL);
+            CHECK(strstr(az_row_base(r), "rclone copy") != NULL); /* the real rclone copy */
+        }
+    }
+    CHECK(has_status == 1);
+    CHECK(has_disable == 1);
+    CHECK(has_enable_usb == 1);
+    CHECK(has_enable_gdrive == 1);
 }
 
 /* Default Applications: a category list + one screen per category, each letting the user CHANGE
@@ -574,6 +642,7 @@ int main(void)
     test_screen_set_is_exactly_expected();
     test_volume_and_brightness_screens();
     test_machine_type_screen();
+    test_backup_screen();
     test_default_applications_screens();
     test_display_screens();
     test_network_rows_descend();

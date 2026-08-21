@@ -117,6 +117,15 @@ FILE_PERMISSIONS = {
     # would ship it 0644 unless pinned -- and then media.py's os.access(..., X_OK) guard fails and
     # the FN keys change the volume/brightness with NO on-screen bar.
     "/usr/local/lib/azarch/azarch-osd": "0:0:755",
+    # The live Thunar-sidebar sync helper (/usr/local/lib/azarch/azarch-sidebar-sync), which
+    # regenerates ~/.config/gtk-3.0/bookmarks from the live home contents and (with --watch)
+    # keeps Thunar's Places pane in sync. SAME archiso mode-normalization as the binaries above:
+    # live_sidebar.emit_plan() emits it 0755, but the squashfs ships it 0644 unless pinned here --
+    # and then the OpenBox autostart's `[ -x '/usr/local/lib/azarch/azarch-sidebar-sync' ]` guard
+    # FAILS, so the --watch daemon never launches and Places never updates when a folder is added
+    # or removed (the reported "Places does not update" bug: the file-monitor theory was sound,
+    # but the watcher that rewrites the file was never even running because it shipped non-exec).
+    "/usr/local/lib/azarch/azarch-sidebar-sync": "0:0:755",
     # The OpenBox session autostart (~/.config/openbox/autostart). openbox-session runs
     # it via /bin/sh, but it carries a shebang and openbox.PLAN emits it 0755, so pin it
     # executable here too (archiso would otherwise normalize it to 0644). Pin both the

@@ -34,10 +34,22 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config
 import cryptography
+import live_keyboard_line
 import terminal_user_interface
 from help import HELP
 from keyboard import keyboard_status_line
 from model import Store
+
+
+def _prompt_with_keyboard_line(prompt):
+    """getpass(``prompt``) with the LIVE keyboard/Caps-Lock line refreshing above it while it
+    blocks -- so toggling Caps Lock or switching layout AT the prompt updates the line
+    immediately, exactly as `backup`/`unpack` now do. A thin adapter around
+    live_keyboard_line.prompt_with_live_keyboard_line binding the status source
+    (keyboard.keyboard_status_line) and the input (getpass). Off a tty / off X it degrades to a
+    single static "Keyboard: ..." print (the prior behaviour). Mirrors archive._prompt_with_keyboard_line."""
+    return live_keyboard_line.prompt_with_live_keyboard_line(
+        lambda: getpass.getpass(prompt), keyboard_status_line)
 
 
 def _make_cleanup(path):
@@ -58,13 +70,11 @@ def _make_cleanup(path):
 def _prompt_new_master():
     """Prompt for a new master password twice and return it, or None if the user
     gives an empty password or the two entries do not match."""
-    print(keyboard_status_line())
-    pw = getpass.getpass('Create a master password: ')
+    pw = _prompt_with_keyboard_line('Create a master password: ')
     if not pw:
         print('Empty password, aborting.')
         return None
-    print(keyboard_status_line())
-    if pw != getpass.getpass('Confirm master password: '):
+    if pw != _prompt_with_keyboard_line('Confirm master password: '):
         print('Passwords do not match.')
         return None
     return pw
@@ -161,12 +171,10 @@ def _recover_stale_plaintext(enc, plain):
     # both the confirmation and the round-trip pass -- so a mistake is always
     # recoverable by just re-running.
     for _ in range(3):
-        print(keyboard_status_line())
-        pw = getpass.getpass('Master password to re-encrypt with: ')
+        pw = _prompt_with_keyboard_line('Master password to re-encrypt with: ')
         if not pw:
             continue
-        print(keyboard_status_line())
-        if pw != getpass.getpass('Confirm master password: '):
+        if pw != _prompt_with_keyboard_line('Confirm master password: '):
             print('Passwords do not match; try again.')
             continue
         try:
@@ -234,8 +242,7 @@ def main(argv):
     else:
         pw = None
         for _ in range(3):
-            print(keyboard_status_line())
-            attempt = getpass.getpass('Master password: ')
+            attempt = _prompt_with_keyboard_line('Master password: ')
             try:
                 cryptography.decrypt_to_file(enc, plain, attempt)
                 pw = attempt

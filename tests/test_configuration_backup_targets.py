@@ -330,6 +330,84 @@ def test_azarch_backup_bare_and_unknown_flag_do_not_run_a_backup():
     assert main(["backup", "-c", "--status"]) == 0
 
 
+def test_azarch_backup_enable_usb_validates_and_enables(tmp_path, monkeypatch):
+    """Step six: the TUI drives a NON-interactive `azarch backup --configure --enable-usb <PATH>`.
+    It enables the USB target ONLY when PATH is a present, writable directory RIGHT NOW (the same
+    check the interactive picker does), and writes the config backup.config.load() then reads.
+    A missing path leaves USB disabled and exits 2 (a dead target can never enable)."""
+    src = _azarch_bundle()
+    ns = {"__name__": "azarch_bundle_enable_usb"}
+    exec(compile(src, "azarch", "exec"), ns)
+
+    path = str(tmp_path / "azarch-backup" / "backup.cfg")
+    ns["_BACKUP_CFG_PATH"] = path
+    monkeypatch.setattr(cfgmod, "CONFIG_PATH", path)
+
+    stick = tmp_path / "stick"
+    stick.mkdir()
+    # A present, writable mount enables through the real dispatch (main -> cmd_backup -> setup).
+    assert ns["main"](["backup", "--configure", "--enable-usb", str(stick)]) == 0
+    cfg = cfgmod.load()
+    assert cfg["usb_enabled"] is True and cfg["usb_root"] == str(stick)
+    assert cfg["gdrive_enabled"] is False   # gdrive untouched
+
+    # A non-existent path is REFUSED (exit 2) and does not enable / does not clobber usb_root.
+    missing = str(tmp_path / "not_mounted")
+    assert ns["main"](["backup", "--configure", "--enable-usb", missing]) == 2
+    cfg2 = cfgmod.load()
+    assert cfg2["usb_enabled"] is True and cfg2["usb_root"] == str(stick)   # unchanged
+
+    # Missing the PATH argument is a usage error (exit 2).
+    assert ns["main"](["backup", "--configure", "--enable-usb"]) == 2
+
+
+def test_azarch_backup_enable_gdrive_verifies_remote_before_enabling(tmp_path, monkeypatch):
+    """Step six: `azarch backup --configure --enable-gdrive <REMOTE>` (non-interactive, TUI-
+    driven). It enables Google Drive ONLY when rclone exists AND `rclone about <remote>` succeeds
+    (the same verify the interactive flow does); a bare name gets a ':' appended; an unreachable
+    remote leaves Drive disabled and exits 2. rclone is faked so no real Drive is needed."""
+    src = _azarch_bundle()
+    ns = {"__name__": "azarch_bundle_enable_gdrive"}
+    exec(compile(src, "azarch", "exec"), ns)
+
+    path = str(tmp_path / "azarch-backup" / "backup.cfg")
+    ns["_BACKUP_CFG_PATH"] = path
+    monkeypatch.setattr(cfgmod, "CONFIG_PATH", path)
+
+    # Fake rclone at the MODULE-FUNCTION level, INSIDE the exec'd namespace (not the shared
+    # subprocess module -- mutating that would leak into other tests). _have("rclone") -> present;
+    # _rclone_remote_ok succeeds only for "gdrive:" (the verified remote).
+    ns["_have"] = lambda prog: prog == "rclone"
+    ns["_rclone_remote_ok"] = lambda remote: remote == "gdrive:"
+
+    # A bare name "gdrive" -> ':' appended -> verified -> enabled.
+    assert ns["main"](["backup", "--configure", "--enable-gdrive", "gdrive"]) == 0
+    cfg = cfgmod.load()
+    assert cfg["gdrive_enabled"] is True and cfg["gdrive_remote"] == "gdrive:"
+    assert cfg["usb_enabled"] is False   # usb untouched
+
+    # An unreachable remote is REFUSED (exit 2) and does not enable.
+    monkeypatch.setattr(cfgmod, "CONFIG_PATH", str(tmp_path / "az2" / "backup.cfg"))
+    ns["_BACKUP_CFG_PATH"] = str(tmp_path / "az2" / "backup.cfg")
+    assert ns["main"](["backup", "--configure", "--enable-gdrive", "nope"]) == 2
+    assert cfgmod.load()["gdrive_enabled"] is False
+
+    # Missing the REMOTE argument is a usage error (exit 2).
+    assert ns["main"](["backup", "--configure", "--enable-gdrive"]) == 2
+
+
+def test_azarch_backup_enable_surfaces_are_bundled_and_helpered():
+    """The two non-interactive enable surfaces bundle into the guest CLI (so the TUI can call
+    them) and are advertised in the help. Pins the exact flags + helper functions so the C TUI
+    rows and this surface cannot drift."""
+    src = _azarch_bundle()
+    ast.parse(src)
+    assert "--enable-usb" in src
+    assert "--enable-gdrive" in src
+    assert "def _enable_usb_path(" in src
+    assert "def _enable_gdrive_remote(" in src
+
+
 def test_azarch_backup_configure_writes_the_same_config_backup_reads(tmp_path, monkeypatch):
     """The `azarch backup --configure` module and packages/backup/config.py MUST agree on the
     config path + keys (they live in different install dirs and cannot import each other).

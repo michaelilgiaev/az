@@ -53,6 +53,9 @@ static const AzRow ROWS_MAIN[] = {
     {.label="Default Applications", .kind=AZ_ACT_SCREEN, .target="defaultapps"},
     {.label="Display",      .kind=AZ_ACT_SCREEN, .target="display",    .status=az_status_display},
     {.label="Machine Type", .kind=AZ_ACT_SCREEN, .target="machine",    .status=az_status_machine},
+    /* Backup is LAST -- it is an opt-in a new user reaches once, after the day-to-day settings
+     * above. Its at-a-glance status is the target summary ("off (local only)" by default). */
+    {.label="Backup",       .kind=AZ_ACT_SCREEN, .target="backup",     .status=az_status_backup},
 };
 
 /* Theme / Wallpaper rows carry NO per-row status: the live state is shown ONCE as the
@@ -207,6 +210,38 @@ static const AzRow ROWS_BRIGHTNESS[] = {
      .base="sudo sh -c 'b=/sys/class/backlight/*; echo $(( 75*$(cat $b/max_brightness)/100 )) > $b/brightness'"},
     {.label="Set to 100%",      .kind=AZ_ACT_APPLY, .target="azarch brightness set 100",
      .base="sudo sh -c 'b=/sys/class/backlight/*; cat $b/max_brightness > $b/brightness'"},
+};
+
+/* --- Backup screen ----------------------------------------------------------
+ * A "Backup" entry on ROWS_MAIN opens this screen. It drives the SAME opt-in flow
+ * `azarch backup --configure` exposes, STREAMLINED for a new user and OFF BY DEFAULT: the two
+ * LOCAL encrypted archives `backup` writes always happen; this screen only opts IN to ALSO
+ * copying them to a USB drive and/or Google Drive. The screen's "Current:" line (az_status_backup)
+ * shows the live target state ("off (local only)" by default). Every row runs `azarch backup
+ * --configure ...` -- none needs sudo (the configurator writes the user's own config, like
+ * `azarch machine`), so needs_root stays 0; each runs captured inside the UI and shows its output.
+ *
+ * The --status/--disable rows are non-interactive APPLIES. The two ENABLE flows are interactive
+ * in the terminal (y/n prompts, `rclone config`), which cannot run cleanly in the alt-screen
+ * capture overlay -- so the TUI uses the NON-interactive enable surface added to backup_targets.py
+ * (`--enable-usb <PATH>` / `--enable-gdrive <REMOTE>`, each validating the target exactly like the
+ * interactive flow before enabling) via an AZ_ACT_PROMPT row that asks for the path/remote first.
+ * The base command is the REAL copy the enabled target then performs (cp / rclone copy), so the
+ * "Base Command:" line teaches what actually happens under the hood. */
+static const AzRow ROWS_BACKUP[] = {
+    {.label="Show backup targets",  .kind=AZ_ACT_APPLY, .target="azarch backup --configure --status",
+     .show_output=1, .base="cat ~/.config/azarch-backup/backup.cfg"},
+    {.label="Turn all targets off", .kind=AZ_ACT_APPLY, .target="azarch backup --configure --disable",
+     .show_output=1, .base="rm -f ~/.config/azarch-backup/backup.cfg"},
+    /* Enable USB: prompt for the mount PATH, then `... --enable-usb <PATH>` (validates it is a
+     * writable mounted dir before enabling). The base is the copy `backup` then does to that path. */
+    {.label="Enable USB backup",    .kind=AZ_ACT_PROMPT, .target="azarch backup --configure --enable-usb",
+     .prompt="USB mount path:", .show_output=1, .base="cp ~/backup.tar.gz.gpg"},
+    /* Enable Google Drive: prompt for the rclone REMOTE, then `... --enable-gdrive <REMOTE>`
+     * (verifies `rclone about <remote>` before enabling; run `rclone config` once in a real
+     * terminal first for the Google login). The base is the rclone copy `backup` then does. */
+    {.label="Enable Google Drive backup", .kind=AZ_ACT_PROMPT, .target="azarch backup --configure --enable-gdrive",
+     .prompt="rclone remote name (e.g. gdrive):", .show_output=1, .base="rclone copy ~/backup.tar.gz.gpg"},
 };
 
 /* --- Default Applications screens -------------------------------------------
@@ -399,6 +434,14 @@ static const AzScreen SCREENS[] = {
      .subtitle="Writes ~/.config/azarch/machine-type (PC/Laptop) or removes it to autodetect. "
                "Laptops get screen-brightness control; PCs do not.",
      .current=az_status_machine,   .rows=ROWS_MACHINE,   .nrows=AZN(ROWS_MACHINE)},
+    /* Backup: OFF BY DEFAULT. The subtitle explains the feature -- the two local archives always
+     * happen; this only opts in to a USB / Google Drive COPY. The "Current:" line shows the live
+     * target state (az_status_backup: "off (local only)" by default). */
+    {.id="backup",    .title="Backup",
+     .subtitle="Off by default. `backup` always writes two local encrypted archives; this opts "
+               "IN to ALSO copying them to a USB drive and/or Google Drive (rclone). Enabling a "
+               "target validates it first; nothing here changes the local archives.",
+     .current=az_status_backup,    .rows=ROWS_BACKUP,    .nrows=AZN(ROWS_BACKUP)},
     /* Default Applications: the category LIST is static (below); the 13 per-category screens
      * (defaultapps.web, ...) are BUILT AT RUNTIME by az_screen_find -> az_da_screen, so their
      * candidate rows resolve live against the installed .desktop files and each discloses WHERE

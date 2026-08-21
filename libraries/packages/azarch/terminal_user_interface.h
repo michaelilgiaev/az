@@ -57,6 +57,11 @@ typedef enum {
     AZ_ACT_APPLY,        /* action.target is a shell command line to run (an apply)     */
     AZ_ACT_PORT,         /* like APPLY, but PROMPT for a port first and append it to    */
                          /* action.target, e.g. "azarch network firewall port open"    */
+    AZ_ACT_PROMPT,       /* like PORT, but prompt for FREE TEXT (a path / remote name,  */
+                         /* not just digits) and append it to action.target -- e.g.     */
+                         /* "azarch backup --configure --enable-usb <PATH>". The prompt  */
+                         /* label is row->prompt; honours row->needs_root (unlike PORT,  */
+                         /* which always sudo's). Used by the Backup screen's enable rows.*/
 } AzActionKind;
 
 /* How a row should render its PREVIEW while hovered (right/lower pane). */
@@ -95,6 +100,11 @@ typedef struct {
      *      "list ports" wants its table shown; a plain toggle just needs a one-line result). */
     int needs_root;
     int show_output;
+    /* prompt: the label shown above the input line for an AZ_ACT_PROMPT row (e.g. "USB mount
+     * path:"). NULL for every other kind. AZ_ACT_PORT uses a fixed "Port number:" label baked
+     * into main.c; a PROMPT row carries its own so "Enable USB" and "Enable Google Drive" can
+     * ask for the right thing. */
+    const char *prompt;
 } AzRow;
 
 typedef struct {
@@ -147,14 +157,16 @@ int az_row_matches(const AzRow *r, const char *q);
 
 /* The one-line bash command a row teaches the user (shown under the list so they can run it
  * WITHOUT the UI). For an APPLY it is the command itself; for a PORT prompt it is the command
- * with a "<port>" placeholder; for a SCREEN it is NULL (nothing to teach). Pure. This is the
- * "Azarch Wrapper: $ ..." line, and `c` copies it. */
+ * with a "<port>" placeholder; for a PROMPT row it is the command with a "<value>" placeholder;
+ * for a SCREEN it is NULL (nothing to teach). Pure. This is the "Azarch Wrapper: $ ..." line,
+ * and `c` copies it. */
 const char *az_row_command(const AzRow *r);
 
 /* The UNDERLYING base command a row's wrapper runs (the gsettings/feh/wpctl/nmcli/ufw/... line
  * a user would type without azarch), for the "Base Command: $ ..." line that `x` copies. Returns
  * r->base verbatim for APPLY; for a PORT row it appends the same "<port>" placeholder the wrapper
- * shows; NULL for a SCREEN row or a row with no base. Pure. */
+ * shows; for a PROMPT row it appends "<value>" the same way; NULL for a SCREEN row or a row with
+ * no base. Pure. */
 const char *az_row_base(const AzRow *r);
 
 /* --- Status probes (model.c) ------------------------------------------------
@@ -172,6 +184,11 @@ const char *az_status_network(char *buf, size_t n);
 const char *az_status_machine(char *buf, size_t n);
 const char *az_status_volume(char *buf, size_t n);
 const char *az_status_brightness(char *buf, size_t n);
+/* Backup targets: a short line summarising the opt-in copy targets `azarch backup --configure`
+ * manages -- "off (local only)" when both are disabled (the default), else which are on (e.g.
+ * "USB + Google Drive", "Google Drive", "USB"). Reads the same config the configurator writes
+ * via `azarch backup --configure --status` (az_capture, never blocks on stdin). */
+const char *az_status_backup(char *buf, size_t n);
 /* Default Applications: one probe per category, each reporting the handler that category
  * currently resolves to (via `azarch default-applications get <key>`). The category set is
  * pinned to default_applications.py. */
@@ -198,10 +215,14 @@ const char *az_status_display_refresh(char *buf, size_t n);
 const char *az_status_display_orientation(char *buf, size_t n);
 const char *az_status_display_monitors(char *buf, size_t n);
 
-/* Small shared helper (model.c): run `argv` (NULL-terminated), capture the first line of
- * stdout into buf (size n). Returns 0 on a clean exit, non-zero otherwise. Never blocks
- * on stdin. Used by the status probes. */
+/* Small shared helpers (model.c): run `argv` (NULL-terminated) with stdin from /dev/null and
+ * capture stdout, never blocking on stdin. az_capture keeps only the FIRST line; az_capture_all
+ * keeps the WHOLE output (newlines and all) so a multi-line report can be scanned with strstr.
+ * Both return 0 on a clean exit, non-zero otherwise. Exported so the split-out Display probes
+ * (model_display.c) share the one implementation. az_have: is `prog` on PATH? (mirrors _have). */
 int az_capture(const char *const argv[], char *buf, size_t n);
+int az_capture_all(const char *const argv[], char *buf, size_t n);
+int az_have(const char *prog);
 
 /* --- probe cache (model.c) --------------------------------------------------
  * Run a status probe THROUGH a short-TTL memo keyed by the function pointer, so a redraw that

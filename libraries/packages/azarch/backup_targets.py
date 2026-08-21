@@ -235,6 +235,57 @@ def _backup_setup_status(cfg: dict) -> None:
         print("  (both off -- `backup` writes local archives only, the default.)")
 
 
+def _enable_usb_path(cfg: dict, path: str) -> int:
+    """Non-interactive USB enable: register + enable ``path`` as the USB target after the
+    SAME validation the interactive flow does (it must be a present, writable directory RIGHT
+    NOW, so a typo/dead mount can never enable a target). Mutates ``cfg`` and saves it.
+
+    Returns 0 on success, 2 on a bad path (nothing enabled). This is the surface the bare-`azarch`
+    TUI 'Enable USB' row calls -- the interactive picker cannot run inside the alt-screen capture
+    overlay, so the TUI prompts for the PATH and hands it here. Mirrors _setup_usb's check."""
+    usb_root = os.path.expanduser(path.strip()) if path else ""
+    if not (usb_root and os.path.isdir(usb_root) and os.access(usb_root, os.W_OK)):
+        _err(f"Not a writable mounted directory: {usb_root or '(none)'} -- USB left disabled.")
+        return 2
+    cfg["usb_enabled"] = True
+    cfg["usb_root"] = usb_root
+    _backup_cfg_save(cfg)
+    print(f"USB backup enabled -> {usb_root}")
+    return 0
+
+
+def _enable_gdrive_remote(cfg: dict, remote: str) -> int:
+    """Non-interactive Google Drive enable: register + enable ``remote`` after the SAME
+    verification the interactive flow does (rclone must exist AND ``rclone about <remote>``
+    must succeed, so a half-configured / unreachable remote can never enable). Mutates ``cfg``
+    and saves it.
+
+    Returns 0 on success, 2 on failure (nothing enabled). A bare NAME (no ':') gets the ':'
+    appended, exactly like the interactive picker. This is the surface the TUI 'Enable Google
+    Drive' row calls (it prompts for the remote name; ``rclone config`` OAuth is done once in a
+    real terminal beforehand). Mirrors _setup_gdrive's verify."""
+    remote = (remote or "").strip()
+    if not remote:
+        _err("No remote name given -- Google Drive left disabled.")
+        return 2
+    if not _have("rclone"):
+        _err("'rclone' is not installed. Install it with: sudo pacman -S rclone")
+        return 2
+    # An rclone remote is "name:" or "name:path"; only a BARE name (no ':') needs the ':'
+    # appended (the same rule the interactive picker uses -- avoids the double-colon bug).
+    if ":" not in remote:
+        remote = remote + ":"
+    if not _rclone_remote_ok(remote):
+        _err(f"Could not reach {remote} (is it a Drive remote you have logged in to via "
+             "'rclone config'?) -- Google Drive left disabled.")
+        return 2
+    cfg["gdrive_enabled"] = True
+    cfg["gdrive_remote"] = remote
+    _backup_cfg_save(cfg)
+    print(f"Google Drive backup enabled -> {remote}")
+    return 0
+
+
 def cmd_backup_setup(argv: list[str]) -> int:
     """The opt-in flow behind `azarch backup --configure` / `-c` -- enable / manage
     `backup`'s cloud + USB targets. ``argv`` is what FOLLOWS --configure/-c, so:
@@ -247,13 +298,19 @@ def cmd_backup_setup(argv: list[str]) -> int:
     function so the config path/keys stay lock-step with packages/backup/config.py and the
     exec-based unit test can drive it directly.)"""
     if argv and argv[0] in ("-h", "--help", "help"):
-        print("Usage: azarch backup --configure|-c [--status|--disable]\n\n"
+        print("Usage: azarch backup --configure|-c [--status|--disable]\n"
+              "       azarch backup --configure --enable-usb <PATH>\n"
+              "       azarch backup --configure --enable-gdrive <REMOTE>\n\n"
               "Opt in to optional backup targets for the `backup` command. By default\n"
               "`backup` writes local encrypted archives only; enabling a target here makes\n"
               "it ALSO copy those archives to a USB drive and/or Google Drive (rclone).\n\n"
-              "  (no option)  interactively enable/disable USB and Google Drive\n"
-              "  --status     print the current target state and exit\n"
-              "  --disable    turn both targets off (local-only again)\n\n"
+              "  (no option)         interactively enable/disable USB and Google Drive\n"
+              "  --status            print the current target state and exit\n"
+              "  --disable           turn both targets off (local-only again)\n"
+              "  --enable-usb PATH   enable the USB target to a writable mounted PATH\n"
+              "  --enable-gdrive REMOTE  enable Google Drive to a verified rclone REMOTE\n\n"
+              "The --enable-* forms are non-interactive (the bare-`azarch` TUI uses them);\n"
+              "each validates the target before enabling, so a dead path/remote can't enable.\n"
               "The actual backup RUN is the separate `backup` command (not `azarch backup`).\n\n"
               f"Config: {_BACKUP_CFG_PATH} (no secrets; rclone stores its own token).")
         return 0
@@ -270,6 +327,22 @@ def cmd_backup_setup(argv: list[str]) -> int:
         path = _backup_cfg_save(cfg)
         print(f"Both backup targets disabled -- `backup` writes local archives only.\nSaved {path}")
         return 0
+
+    # Non-interactive enable surfaces (what the bare-`azarch` TUI drives: the interactive
+    # picker cannot run inside the UI's capture overlay, so the TUI prompts for the value and
+    # calls these). Each VALIDATES the path/remote exactly like the interactive flow before
+    # enabling, so a typo/dead target can never be enabled.
+    if argv and argv[0] == "--enable-usb":
+        if len(argv) < 2 or not argv[1]:
+            _err("azarch backup --configure --enable-usb <PATH>: a mount PATH is required.")
+            return 2
+        return _enable_usb_path(cfg, argv[1])
+
+    if argv and argv[0] == "--enable-gdrive":
+        if len(argv) < 2 or not argv[1]:
+            _err("azarch backup --configure --enable-gdrive <REMOTE>: a remote NAME is required.")
+            return 2
+        return _enable_gdrive_remote(cfg, argv[1])
 
     if argv:
         _err(f"azarch backup --configure: unknown option: {argv[0]}")

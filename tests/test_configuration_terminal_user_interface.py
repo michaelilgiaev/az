@@ -61,12 +61,13 @@ def _command_line_interface():
 def _src(name: str) -> str:
     text = (TERMINAL_USER_INTERFACE_SRC_DIR / name).read_text(encoding="utf-8")
     # model.c was split (it grew past the size budget): the UI infrastructure stays in model.c,
-    # the static screen TREE (ROWS_* + SCREENS[]) moved to model_tree.c, and the RUNTIME Default
-    # Applications screens moved to model_default_applications.c. The tests treat "the model" as one thing,
-    # so requesting model.c transparently returns ALL THREE concatenated -- a content check for a
+    # the static screen TREE (ROWS_* + SCREENS[]) moved to model_tree.c, the RUNTIME Default
+    # Applications screens + their status probes moved to model_default_applications.c, and the
+    # Display status probes moved to model_display.c. The tests treat "the model" as one thing, so
+    # requesting model.c transparently returns ALL of them concatenated -- a content check for a
     # row/screen/probe finds it wherever it now lives.
     if name == "model.c":
-        for extra in ("model_tree.c", "model_default_applications.c"):
+        for extra in ("model_tree.c", "model_default_applications.c", "model_display.c"):
             text += "\n" + (TERMINAL_USER_INTERFACE_SRC_DIR / extra).read_text(encoding="utf-8")
     return text
 
@@ -146,7 +147,8 @@ def test_build_terminal_user_interface_inputs_are_the_c_sources():
     assert "render.c" in names
     assert "model.c" in names
     assert "model_tree.c" in names           # the static screen tree (split from model.c)
-    assert "model_default_applications.c" in names    # the runtime Default Applications screens
+    assert "model_default_applications.c" in names    # the runtime Default Applications screens + probes
+    assert "model_display.c" in names        # the Display status probes (split from model.c)
     assert "preview.c" in names
     assert "action.c" in names       # apply execution + in-UI sudo credential
     assert "Makefile" in names
@@ -528,6 +530,65 @@ def test_actions_shell_back_to_the_azarch_subcommands():
         "azarch network wifi on",
     ):
         assert cmd in model, f"missing action: {cmd}"
+
+
+def test_backup_entry_in_the_model_and_cli_surface():
+    """Step six: a "Backup" entry in the top menu drives the SAME opt-in `azarch backup
+    --configure` flow, OFF BY DEFAULT, streamlined for a new user. Pin (a) the C model has a
+    reachable "backup" screen off ROWS_MAIN with the az_status_backup Current: probe and the two
+    non-interactive applies + the two AZ_ACT_PROMPT enable rows, and (b) the bundled CLI carries
+    the non-interactive --enable-usb / --enable-gdrive surface the enable rows call."""
+    model = _src("model.c")
+    # the ROWS_MAIN row + the backup screen id + the explanatory subtitle
+    assert '.label="Backup"' in model
+    assert '.target="backup"' in model
+    assert '.id="backup"' in model
+    assert "Off by default" in model                        # the streamlined, opt-in framing
+    # the status probe (declared in the header, defined in model.c)
+    assert "az_status_backup" in model
+    assert "az_status_backup" in _src("terminal_user_interface.h")
+    # the four rows' azarch wrappers (status/disable non-interactive; enable-* prompt-driven)
+    for cmd in (
+        "azarch backup --configure --status",
+        "azarch backup --configure --disable",
+        "azarch backup --configure --enable-usb",
+        "azarch backup --configure --enable-gdrive",
+    ):
+        assert cmd in model, f"missing backup row target: {cmd}"
+    # the enable rows are AZ_ACT_PROMPT (free-text path/remote, not digits) with a prompt label
+    assert "AZ_ACT_PROMPT" in model
+    assert "USB mount path:" in model
+    # the non-interactive enable surface the enable rows call is in the bundled guest CLI
+    src = bundle_source()
+    assert "--enable-usb" in src and "--enable-gdrive" in src
+    assert "def _enable_usb_path(" in src and "def _enable_gdrive_remote(" in src
+
+
+def test_backup_status_probe_reads_the_configure_status():
+    """az_status_backup summarises the opt-in targets by asking the configurator's own
+    non-interactive `azarch backup --configure --status` (so the TUI's Current: line and the CLI
+    can't disagree), and reports the DEFAULT "off (local only)" when both are off / azarch is
+    missing -- never a blank cell."""
+    model = _src("model.c")
+    assert '"azarch", "backup", "--configure", "--status"' in model
+    assert "off (local only)" in model          # the default / fallback line
+    assert "USB + Google Drive" in model        # the both-on summary
+
+
+def test_free_text_prompt_mode_wired_for_enable_rows():
+    """The enable rows need a FREE-TEXT prompt (a path / remote), distinct from the digits-only
+    PORT prompt. Pin AZ_ACT_PROMPT + AZ_MODE_PROMPT and that main.c dispatches it to a prompt
+    handler that runs the typed value appended to the target (honouring the row's needs_root, not
+    always sudo)."""
+    header = _src("terminal_user_interface.h")
+    render_h = (TERMINAL_USER_INTERFACE_SRC_DIR / "render.h").read_text(encoding="utf-8")
+    main = _src("main.c")
+    assert "AZ_ACT_PROMPT" in header            # the new action kind
+    assert "AZ_MODE_PROMPT" in render_h         # the new input mode
+    assert "prompt_key" in main                 # the free-text prompt handler
+    assert "if (ui.mode == AZ_MODE_PROMPT)" in main   # dispatched in the input loop
+    # the handler honours the row's needs_root via g_pending_root (not a hard-coded sudo like PORT)
+    assert "g_pending_root" in main
 
 
 def test_everything_is_centred():

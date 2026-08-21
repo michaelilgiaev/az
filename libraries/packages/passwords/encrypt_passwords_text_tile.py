@@ -21,7 +21,16 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config
 import cryptography
+import live_keyboard_line
 from keyboard import keyboard_status_line
+
+
+def _prompt_with_keyboard_line(prompt):
+    """getpass(``prompt``) with the LIVE keyboard/Caps-Lock line refreshing above it while it
+    blocks (Caps Lock / layout changes AT the prompt show immediately, like `backup`/`unpack`).
+    Off a tty / off X it degrades to a single static print. Mirrors passwords._prompt_with_keyboard_line."""
+    return live_keyboard_line.prompt_with_live_keyboard_line(
+        lambda: getpass.getpass(prompt), keyboard_status_line)
 
 
 def ask(prompt, default):
@@ -58,13 +67,11 @@ def main():
     # The encrypted store is just the source name + ".gpg" (no prompt).
     out = src + '.gpg'
 
-    print(keyboard_status_line())
-    pw = getpass.getpass('Master password: ')
+    pw = _prompt_with_keyboard_line('Master password: ')
     if not pw:
         print('Empty password, aborting.')
         return 1
-    print(keyboard_status_line())
-    if pw != getpass.getpass('Confirm master password: '):
+    if pw != _prompt_with_keyboard_line('Confirm master password: '):
         print('Passwords do not match.')
         return 1
 

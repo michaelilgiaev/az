@@ -348,3 +348,122 @@ const AzScreen *az_da_screen(const char *id)
     g_da_screen.nrows = n;
     return &g_da_screen;
 }
+
+/* --- Default Applications status probes --------------------------------------
+ * Each category's "Current:" line shows the handler it currently resolves to. SNAPPINESS: this
+ * used to fork `azarch default-applications get <key>` per category per keystroke, and THAT
+ * forked `xdg-mime query` -- 13 nested subprocess pairs on every Default Applications frame,
+ * which is exactly the lag the user reported. Instead we read the handler DIRECTLY, in-process,
+ * from the two small config files xdg-mime/exo write:
+ *   * MIME categories -> the `<mime>=<id>` line under [Default Applications] in
+ *     ~/.config/mimeapps.list (XDG_CONFIG_HOME honoured). This is the SAME file `xdg-mime
+ *     query default` reads, so the value is identical -- just with no forks.
+ *   * Terminal        -> the TerminalEmulator= line in ~/.config/xfce4/helpers.rc.
+ * No subprocess at all, so the screen is instant. The key->representative-MIME table below is
+ * pinned to default_applications.py by a test (the representative MIME is that category's FIRST
+ * mime), so C and Python cannot drift. (Moved here from model.c -- next to az_da_screen()/the
+ * probe pointers they back -- to keep model.c under the per-file size budget.) */
+
+/* ~/.config (honours XDG_CONFIG_HOME), the dir mimeapps.list + helpers.rc live in. */
+static void az_config_home(char *out, size_t n)
+{
+    const char *xdg = getenv("XDG_CONFIG_HOME");
+    if (xdg && xdg[0]) { snprintf(out, n, "%s", xdg); return; }
+    const char *home = getenv("HOME");
+    snprintf(out, n, "%s/.config", home ? home : "");
+}
+
+/* Read a `key=value` (or `key value`) line's value from a small keyfile-ish config, matching the
+ * first line whose start equals `key` followed by `sep`. Trims trailing whitespace. Returns 1 on
+ * a hit (value copied into out), 0 otherwise. Used for both mimeapps.list and helpers.rc. */
+static int az_read_kv(const char *path, const char *key, char sep, char *out, size_t n)
+{
+    FILE *f = fopen(path, "r");
+    if (!f) return 0;
+    char line[1024];
+    size_t klen = strlen(key);
+    int found = 0;
+    while (fgets(line, sizeof line, f)) {
+        if (strncmp(line, key, klen) == 0 && line[klen] == sep) {
+            const char *v = line + klen + 1;
+            while (*v == ' ' || *v == '\t') v++;
+            snprintf(out, n, "%s", v);
+            size_t l = strlen(out);
+            while (l > 0 && (out[l-1] == '\n' || out[l-1] == '\r' ||
+                             out[l-1] == ' ' || out[l-1] == '\t')) out[--l] = '\0';
+            found = out[0] ? 1 : 0;
+            break;
+        }
+    }
+    fclose(f);
+    return found;
+}
+
+/* The representative MIME per MIME-backed category key (its FIRST mime in
+ * default_applications.CATEGORIES -- pinned by a test). Empty categories (mail/calculator) and
+ * terminal are handled separately in az_da_get. */
+static const char *az_da_mime_for(const char *key)
+{
+    if (strcmp(key, "web") == 0)          return "x-scheme-handler/http";
+    if (strcmp(key, "html") == 0)         return "text/html";
+    if (strcmp(key, "music") == 0)        return "audio/mpeg";
+    if (strcmp(key, "video") == 0)        return "video/mp4";
+    if (strcmp(key, "photos") == 0)       return "image/jpeg";
+    if (strcmp(key, "word") == 0)
+        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    if (strcmp(key, "spreadsheet") == 0)
+        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    if (strcmp(key, "pdf") == 0)          return "application/pdf";
+    if (strcmp(key, "source-code") == 0)  return "text/x-csrc";
+    if (strcmp(key, "file-manager") == 0) return "inode/directory";
+    if (strcmp(key, "plain-text") == 0)   return "text/plain";
+    return "";   /* mail / calculator / terminal: no representative MIME */
+}
+
+static const char *az_da_get(const char *key, char *buf, size_t n)
+{
+    char cfg[512], path[768], val[256];
+    az_config_home(cfg, sizeof cfg);
+    if (strcmp(key, "terminal") == 0) {
+        /* exo TerminalEmulator selection from helpers.rc (value is the bin name, e.g. "kitty"). */
+        snprintf(path, sizeof path, "%s/xfce4/helpers.rc", cfg);
+        if (az_read_kv(path, "TerminalEmulator", '=', val, sizeof val)) {
+            /* present as "<name>.desktop" for a uniform display unless it already is one. */
+            size_t l = strlen(val);
+            int has_suffix = l >= 8 && strcmp(val + l - 8, ".desktop") == 0;
+            snprintf(buf, n, has_suffix ? "%s" : "%s.desktop", val);
+            return buf;
+        }
+        snprintf(buf, n, "(none)");
+        return buf;
+    }
+    const char *mime = az_da_mime_for(key);
+    if (!mime[0]) { snprintf(buf, n, "(none)"); return buf; }  /* mail / calculator */
+    snprintf(path, sizeof path, "%s/mimeapps.list", cfg);
+    if (az_read_kv(path, mime, '=', val, sizeof val)) {
+        snprintf(buf, n, "%s", val);
+        return buf;
+    }
+    snprintf(buf, n, "(none)");
+    return buf;
+}
+
+/* One probe per category key. DA_PROBE(fn, "key") expands to a status function that reports the
+ * live handler for that category. Keys MUST match default_applications.CATEGORY_KEYS (pinned). */
+#define DA_PROBE(fn, key) \
+    const char *fn(char *buf, size_t n) { return az_da_get(key, buf, n); }
+DA_PROBE(az_status_da_web,          "web")
+DA_PROBE(az_status_da_mail,         "mail")
+DA_PROBE(az_status_da_html,         "html")
+DA_PROBE(az_status_da_music,        "music")
+DA_PROBE(az_status_da_video,        "video")
+DA_PROBE(az_status_da_photos,       "photos")
+DA_PROBE(az_status_da_word,         "word")
+DA_PROBE(az_status_da_spreadsheet,  "spreadsheet")
+DA_PROBE(az_status_da_pdf,          "pdf")
+DA_PROBE(az_status_da_source_code,  "source-code")
+DA_PROBE(az_status_da_file_manager, "file-manager")
+DA_PROBE(az_status_da_plain_text,   "plain-text")
+DA_PROBE(az_status_da_calculator,   "calculator")
+DA_PROBE(az_status_da_terminal,     "terminal")
+#undef DA_PROBE

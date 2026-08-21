@@ -292,7 +292,8 @@ static void draw_output(Buf *b, const AzUI *ui)
     put_center(b, ui, rows - 1, AZ_SGR_DIM, foot);
 }
 
-/* Draw a single centred input prompt (PORT or PASSWORD). Password input is shown masked. */
+/* Draw a single centred input prompt (PORT / PROMPT / PASSWORD). Password input is shown masked;
+ * PORT (digits) and PROMPT (free text) are shown as typed. */
 static void draw_prompt(Buf *b, const AzUI *ui, int masked)
 {
     int rows = ui->rows;
@@ -352,12 +353,13 @@ static void draw_prompt(Buf *b, const AzUI *ui, int masked)
 void az_render(const AzUI *ui, AzRect *preview_out)
 {
     /* Overlays/prompts REPLACE the menu and never reserve a preview rect. */
-    if (ui->mode == AZ_MODE_OUTPUT || ui->mode == AZ_MODE_PORT || ui->mode == AZ_MODE_PASSWORD) {
+    if (ui->mode == AZ_MODE_OUTPUT || ui->mode == AZ_MODE_PORT ||
+        ui->mode == AZ_MODE_PROMPT || ui->mode == AZ_MODE_PASSWORD) {
         if (preview_out) preview_out->valid = 0;
         Buf ob = {0};
         buf_str(&ob, "\033[?25l\033[2J\033[H");
         if (ui->mode == AZ_MODE_OUTPUT) draw_output(&ob, ui);
-        else draw_prompt(&ob, ui, ui->mode == AZ_MODE_PASSWORD);
+        else draw_prompt(&ob, ui, ui->mode == AZ_MODE_PASSWORD);  /* PORT/PROMPT unmasked, PASSWORD masked */
         at(&ob, ui->rows > 0 ? ui->rows : 1, ui->cols > 0 ? ui->cols : 1);
         buf_str(&ob, "\033[?25l");
         if (ob.p) { ssize_t w = write(STDOUT_FILENO, ob.p, ob.len); (void)w; }

@@ -131,12 +131,13 @@ def test_emitter_family_covers_all_config_modules():
     # librewolf PKGBUILD tiers) + 1 librewolf emit_plan builder (the AutoConfig override,
     # now a home file at the profile path, not a packaged /opt file) + 5 timedate
     # emit_plan builders (applications.py, page.py, assets.py, the launcher, the
-    # azarch-timedate.service unit) + 14 passwords emit_plan builders (the app is one flat
-    # directory now: the entry script, the optional plaintext importer, the 11 working modules
+    # azarch-timedate.service unit) + 15 passwords emit_plan builders (the app is one flat
+    # directory now: the entry script, the optional plaintext importer, the 12 working modules
     # -- __init__, config, cryptography, model, clipboard, clipboard_owner, forms, new_entry,
-    # terminal_user_interface, keyboard, help -- and the /usr/local/bin/passwords launcher; no
-    # separate pwlib/ directory copy anymore).
-    assert len(_EMITTERS) == 19 + 19 + 6 + 1 + 1 + 4 + 4 + 1 + 5 + 14
+    # terminal_user_interface, keyboard, help, and live_keyboard_line (step six: the LIVE
+    # keyboard/Caps-Lock line at the master-password getpass, a verbatim copy of the backup one)
+    # -- and the /usr/local/bin/passwords launcher; no separate pwlib/ directory copy anymore).
+    assert len(_EMITTERS) == 19 + 19 + 6 + 1 + 1 + 4 + 4 + 1 + 5 + 15
 
 
 def test_recipe_dir_contents_are_nonempty_str_both_tiers():
