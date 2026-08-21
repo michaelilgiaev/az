@@ -418,6 +418,64 @@ def test_passwords_archive_holds_the_DECRYPTED_store_and_round_trips(tmp_path):
     assert got["Vault/passwords.txt"] == secret
 
 
+def test_gpg_decrypt_stream_never_flushes_an_already_closed_stdin(tmp_path, monkeypatch):
+    """Regression for the CI-only decrypt failure (9 tests, all ``ValueError: flush of
+    closed file`` at subprocess.py:2067).
+
+    Root cause: gpg reads the ciphertext from its file ARGUMENT, not stdin; stdin carries
+    only the passphrase. The old code wrote the passphrase, did ``proc.stdin.close()``, then
+    ``proc.communicate()``. CPython's ``_communicate`` calls ``self.stdin.flush()``
+    UNCONDITIONALLY before it checks ``self.stdin.closed`` -- so flushing our already-closed
+    handle raised. The ubuntu-24.04 runners' CPython builds (3.12.14 + 3.14) raise there;
+    the maintainer's local CPython guards that flush, which is why it passed on the dev box
+    and only ever broke in CI.
+
+    We can't reproduce the exact runner build locally, so we pin the CONTRACT that makes the
+    bug impossible on every build: gpg_decrypt_stream must never hand ``communicate()`` (or
+    any flush) a stdin it already closed. Emulate the strict-CPython flush by making a closed
+    stdin's flush raise, exactly as the runners do -- the old close()+communicate() ordering
+    fails this; the fix (wait() + read stderr, or never double-handling stdin) passes."""
+    if not _has_gpg():
+        import pytest
+        pytest.skip("gpg not installed on the test host")
+    secret = "gmail\thunter2\n"
+    home = _make_home(tmp_path)
+    _make_vault(home, _PASS, plaintext=secret)
+    pw_out = os.path.join(str(home), app.PASSWORDS_ARCHIVE_NAME)
+    assert app.build_passwords_archive(str(home), _PASS, pw_out) == "ok"
+
+    real_popen = arch.subprocess.Popen
+
+    def strict_popen(*a, **k):
+        proc = real_popen(*a, **k)
+        raw_communicate = proc.communicate
+
+        def strict_communicate(*ca, **ck):
+            # The runners' CPython flushes stdin unconditionally inside communicate()
+            # BEFORE checking .closed, so calling communicate() after we already closed
+            # stdin raises "flush of closed file" (subprocess.py:2067). Reproduce that
+            # observable behaviour at the communicate() boundary: if the code handed us an
+            # already-closed stdin, blow up exactly as the runner does.
+            if proc.stdin is not None and proc.stdin.closed:
+                raise ValueError("flush of closed file")
+            return raw_communicate(*ca, **ck)
+
+        proc.communicate = strict_communicate
+        return proc
+
+    monkeypatch.setattr(arch.subprocess, "Popen", strict_popen)
+
+    got = {}
+
+    def _collect(tar, _dest):
+        for member in tar:
+            if member.isfile():
+                got[member.name] = tar.extractfile(member).read().decode("utf-8")
+
+    assert arch.gpg_decrypt_stream(pw_out, _PASS, str(tmp_path), _collect)
+    assert got.get("Vault/passwords.txt") == secret
+
+
 def test_backup_skips_passwords_when_passphrase_does_not_match_vault(tmp_path):
     """The PROMPT: a wrong master password must NOT fail the run -- the home archive is
     still made and the passwords store is skipped with a warning. build_passwords_archive

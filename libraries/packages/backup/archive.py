@@ -331,8 +331,19 @@ def gpg_decrypt_stream(enc_path, passphrase, dest_dir, tar_extract):
             proc.stdin.write((passphrase + "\n").encode("utf-8"))
         except OSError:
             pass
-    proc.stdin.close()
-    _, stderr = proc.communicate()
+    # Do NOT use proc.communicate() here: it flushes stdin unconditionally, and once we
+    # have closed stdin ourselves that flush raises "flush of closed file" on the CPython
+    # builds the CI runners ship (gpg reads the ciphertext from the file arg and can exit
+    # before the flush, so stdin is already closed/broken). Close stdin, wait for gpg, and
+    # read stderr directly -- the same close()+wait() idiom build_encrypted_tar() uses.
+    # stdout is our own pipe, drained by the reader thread, so only stderr needs reading.
+    try:
+        proc.stdin.close()
+    except OSError:
+        pass
+    stderr = proc.stderr.read()
+    proc.stderr.close()
+    proc.wait()
     reader.join()
 
     if "error" in extract_error:
