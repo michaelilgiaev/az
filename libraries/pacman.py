@@ -181,17 +181,21 @@ ISO_APP_OVERRIDES = [
      "/usr/share/applications/thunar-volman-settings.desktop", False),
     ("xfce4-about.desktop", "/usr/share/applications/xfce4-about.desktop", False),
     # Thunar gettext .mo override catalog (packages/thunar/locale): relabels the
-    # hardcoded menu strings ("Places" -> "Home Directory", etc.). The `thunar` package
-    # OWNS /usr/share/locale/en_GB/LC_MESSAGES/thunar.mo (one of 67 shipped locale
-    # catalogs), so pre-placing our catalog in the overlay hit the file-conflict wall
-    # ("thunar.mo exists in filesystem" -> pacstrap abort). Same cure as the .desktop
-    # overrides: NoExtract the path and plant our catalog post-pacstrap. en_US carries no
-    # package catalog (Thunar's msgids are American English), so it never conflicts, but we
-    # route it through the SAME machinery for symmetry -- a NoExtract of an unowned path is a
-    # harmless no-op and app_override_cp_sh installs it just like en_GB. Staged basenames are
-    # per-locale (unique under /root/azarch/apps/) and match the emit_plan dests below.
+    # hardcoded menu strings ("Places" -> "Home", the built-in default-opener, the Create
+    # Folder/Document wording). The `thunar` package OWNS /usr/share/locale/en_GB/LC_MESSAGES/
+    # thunar.mo (one of 67 shipped locale catalogs), so pre-placing our catalog in the overlay
+    # hit the file-conflict wall ("thunar.mo exists in filesystem" -> pacstrap abort). Same cure
+    # as the .desktop overrides: NoExtract the path and plant our catalog post-pacstrap. en_US
+    # and en_IL carry no package catalog (Thunar's msgids are American English), so they never
+    # conflict, but we route them through the SAME machinery for symmetry -- a NoExtract of an
+    # unowned path is a harmless no-op and app_override_cp_sh installs them just like en_GB.
+    # en_IL is the DEFAULT installed display locale (calamares seeds Asia/Jerusalem -> LANG=en_IL),
+    # so its catalog is the one that makes the relabels apply out of the box; en_US covers a
+    # US-region install and en_GB is the LC_TIME date locale. Staged basenames are per-locale
+    # (unique under /root/azarch/apps/) and match the emit_plan dests (locale.LOCALES) below.
     ("thunar.en_US.mo", "/usr/share/locale/en_US/LC_MESSAGES/thunar.mo", False),
     ("thunar.en_GB.mo", "/usr/share/locale/en_GB/LC_MESSAGES/thunar.mo", False),
+    ("thunar.en_IL.mo", "/usr/share/locale/en_IL/LC_MESSAGES/thunar.mo", False),
     # NUKE the "Devices" section from Thunar's shortcuts pane (the user: "no Devices, delete it,
     # nuke it, I dont need it there"). Thunar's DEVICES rows come from the GVfs GVolumeMonitor,
     # and `misc-volume-management=false` only stops AUTO-MOUNT -- it does NOT hide drives/volumes

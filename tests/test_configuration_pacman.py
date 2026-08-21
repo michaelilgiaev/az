@@ -110,11 +110,14 @@ def test_thunar_and_xviewer_desktop_overrides_are_planted():
     ):
         assert (f"install -Dm644 /root/azarch/apps/{name} "
                 f"/usr/share/applications/{name}") in live, name
-    # Thunar gettext .mo override catalogs: the en_GB path is package-owned, so both locale
-    # catalogs are planted post-pacstrap from the staging dir (per-locale staged basenames).
+    # Thunar gettext .mo override catalogs: the en_GB path is package-owned, so every locale
+    # catalog is planted post-pacstrap from the staging dir (per-locale staged basenames).
+    # en_IL is the DEFAULT installed locale (calamares seeds Asia/Jerusalem -> LANG=en_IL), so
+    # its catalog is what makes the overrides actually apply out of the box.
     for basename, target in (
         ("thunar.en_US.mo", "/usr/share/locale/en_US/LC_MESSAGES/thunar.mo"),
         ("thunar.en_GB.mo", "/usr/share/locale/en_GB/LC_MESSAGES/thunar.mo"),
+        ("thunar.en_IL.mo", "/usr/share/locale/en_IL/LC_MESSAGES/thunar.mo"),
     ):
         assert (f"install -Dm644 /root/azarch/apps/{basename} {target}") in live, basename
 

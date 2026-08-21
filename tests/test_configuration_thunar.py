@@ -163,11 +163,12 @@ def test_resolve_links_pref_present_but_documented_as_4_21_only():
 # --- gettext .mo override (locale.py) ---------------------------------------
 
 def test_mo_overrides_relabel_the_hardcoded_strings():
-    # The .mo catalog relabels the hardcoded Thunar strings. The "Places" -> "Home Directory"
-    # header rename was DROPPED (the Home Directory sidebar concept was deleted), so the header
-    # stays the stock "Places" -- assert the override is GONE and the others remain.
+    # The .mo catalog relabels the hardcoded Thunar strings. The shortcuts sidebar section
+    # header "Places" is renamed to "Home" (user request, step SEVEN) -- it is a hardcoded
+    # gettext msgid in the thunar binary (verified via `strings /usr/bin/thunar`), so the
+    # catalog is the supported lever. Assert that override plus the others.
     o = locale.OVERRIDES
-    assert "Places" not in o                                     # header rename dropped
+    assert o["Places"] == "Home"                                 # sidebar header rename (step 7)
     assert o['_Open With "%s"'] == "_Edit with %s"               # item 7 (built-in -> "Edit with gedit")
     assert o["Create _Folder..."] == "Create New _Folder..."     # item 8 wording
     assert o["Create _Document"] == "Create New _Document..."     # item 8 wording
@@ -185,6 +186,18 @@ def test_mo_bytes_are_a_valid_gettext_catalog(tmp_path):
         assert t.gettext(msgid) == msgstr, msgid
 
 
+def test_places_header_renames_to_home_under_the_default_en_IL_locale(tmp_path):
+    # The concrete step-7 contract: under the DEFAULT installed locale (en_IL, seeded by
+    # calamares' Asia/Jerusalem region), the catalog resolves the "Places" sidebar header msgid
+    # to "Home". This mirrors the on-box `LANG=en_IL gettext -d thunar "Places"` -> "Home" check.
+    import gettext
+    d = tmp_path / "en_IL" / "LC_MESSAGES"
+    d.mkdir(parents=True)
+    (d / "thunar.mo").write_bytes(locale.mo_bytes())
+    t = gettext.translation("thunar", localedir=str(tmp_path), languages=["en_IL"])
+    assert t.gettext("Places") == "Home"
+
+
 def test_mo_catalog_shipped_under_generated_locales_root_owned():
     # The catalog is shipped at the standard system locale path for BOTH generated locales
     # (en_US display + en_GB date), root-owned (a system catalog, not a dotfile).
@@ -195,7 +208,9 @@ def test_mo_catalog_shipped_under_generated_locales_root_owned():
         assert p in by_dest, p
         assert by_dest[p]["owner"] == "root"
         assert by_dest[p]["bytes_builder"] is locale.mo_bytes
-    assert set(locale.LOCALES) == {"en_US", "en_GB"}
+    # en_IL is the DEFAULT installed locale (calamares seeds Asia/Jerusalem), so the catalog
+    # MUST ship there too or the overrides never apply out of the box -- en_US/en_GB miss it.
+    assert set(locale.LOCALES) == {"en_US", "en_GB", "en_IL"}
 
 
 def test_gtk_menu_images_enabled_for_open_with_icons():

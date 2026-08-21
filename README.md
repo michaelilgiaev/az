@@ -151,7 +151,7 @@ You can clone this repository and compile the ISO yourself. The first compile ne
    <tbody>
    <tr><td>
 
-   **Estimate compile time.** These flags don't compile or download
+   These flags don't compile or download
    anything, they just measure your machine and connection and print how long a
    compile would take, then exit (no `sudo`, no privileged mounts needed). There are
    six, picking the compile tier (default vs `--full-compile`) and what to estimate:
@@ -202,7 +202,36 @@ You can clone this repository and compile the ISO yourself. The first compile ne
    opens in File Explorer at `\\wsl$\<distro>\home\<your-username>\azarch\output`.
 
 - **Wipe the cache** to force a fresh, fully-online recompile. Run `clear.sh`,
-  which deletes the `cache/`, `output/`, and `logs/` directories:
+  which with no flags deletes the `cache/`, `output/`, and `logs/` directories
+  (and sweeps every `__pycache__`):
+
+  <table width="100%">
+  <thead>
+  <tr><th align="left">ℹ️ NOTE</th></tr>
+  </thead>
+  <tbody>
+  <tr><td>
+
+  For anyone working on the repository, these optional flags are a safe way to
+  clear specific target directories rather than all of them. Combine flags to
+  clear several at once. With no flags, `clear.sh` clears everything.
+
+  | Flag | Clears |
+  | --- | --- |
+  | `--output`, `-o` | only `output/` |
+  | `--logs`, `-l` | only `logs/` |
+  | `--cache`, `-c` | only `cache/` (also sweeps every `__pycache__`) |
+  | `--help`, `-h` | prints usage, then exits |
+
+  Example (wipe the built ISO and logs, but keep the cache):
+
+  ```
+  bash clear.sh --output --logs
+  ```
+
+  </td></tr>
+  </tbody>
+  </table>
 
   <table width="100%">
   <thead>
@@ -212,7 +241,8 @@ You can clone this repository and compile the ISO yourself. The first compile ne
   <tr><td>
 
   If the compile was stopped mid-process, the ownership handback may not have run,
-  so some files in `cache/` can be left root-owned. In that case wipe it with:
+  so some files in `cache/` can be left root-owned. In that case wipe it with `sudo`
+  (the same flags apply):
 
   ```
   sudo bash clear.sh
