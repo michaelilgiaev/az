@@ -47,6 +47,7 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import archive  # noqa: E402  (deliberately after the sys.path bootstrap above)
+import ui       # noqa: E402  (shared CLI presentation helpers)
 
 
 # The two archives `backup` produces, by exact name (see backup.py). `unpack` recognises
@@ -91,7 +92,7 @@ def _safe_members(tar, dest_dir):
     for member in tar:
         member_path = os.path.join(dest_dir, member.name)
         if not _is_within(dest_dir, member_path):
-            print(f"  skipping unsafe path in archive: {member.name}")
+            ui.warn(f"skipping unsafe path in archive: {member.name}")
             continue
         yield member
 
@@ -133,7 +134,7 @@ def _extract_home_relative(tar, dest_dir):
             except OSError:
                 pass
         _extract_one(tar, member, dest_dir)
-        print(f"  restored {member.name}")
+        ui.bullet(member.name)
 
 
 def restore_home(enc_path, home):
@@ -142,10 +143,12 @@ def restore_home(enc_path, home):
     top-level folder back into home, recreating symlinks as links. Returns True on
     success."""
     passphrase = archive.prompt_passphrase(confirm=False)
-    print()
+    print("\nRestoring ...")
     ok = archive.gpg_decrypt_stream(enc_path, passphrase, home, _extract_home_relative)
     if ok:
-        print(f"\nRestored into {home}")
+        print()
+        print(ui.rule())
+        print(f"Restored into {home}")
     return ok
 
 
@@ -159,7 +162,7 @@ def restore_passwords(enc_path, home):
     afterwards. An existing store is OVERWRITTEN (restore policy). Returns True on
     success."""
     passphrase = archive.prompt_passphrase(confirm=False)
-    print()
+    print("\nRestoring ...")
 
     tmp_dir = tempfile.mkdtemp(prefix="azarch-unpack-")
     try:
@@ -183,8 +186,10 @@ def restore_passwords(enc_path, home):
         if not archive.gpg_encrypt_file(plain_path, store_path, passphrase):
             print("Error: could not re-encrypt the password store.", file=sys.stderr)
             return False
-        print(f"  restored {VAULT_ENCRYPTED_REL}")
-        print(f"\nRestored password store to {store_path}")
+        ui.bullet(VAULT_ENCRYPTED_REL)
+        print()
+        print(ui.rule())
+        print(f"Restored the password store to {store_path}")
         return True
     finally:
         archive.shred_dir(tmp_dir)
@@ -230,7 +235,13 @@ def main(argv=None):
     if rc is not None:
         return rc
 
-    arg = argv[0]
+    # Resolve the archive argument to an ABSOLUTE path against the caller's current
+    # working directory BEFORE validating it. The launcher no longer cd's into LIB_DIR,
+    # so a relative name like ``backup.tar.gz.gpg`` typed from ~ already resolves against
+    # the user's cwd; abspath() is belt-and-braces so validation and gpg both see the
+    # same fully-qualified path regardless of how the process was launched. classify()
+    # still keys off the BASENAME, so the destination mapping is unchanged.
+    arg = os.path.abspath(argv[0])
     error = validate_arg(arg)
     if error:
         print(f"Error: {error}", file=sys.stderr)
@@ -238,14 +249,21 @@ def main(argv=None):
 
     home = home_dir()
     kind = classify(os.path.basename(arg))
+
+    ui.header("Az'arch unpack")
+    ui.field("Archive", arg)
     if kind == "passwords":
-        print(f"Restoring password store from {arg} to ~/{VAULT_DIR_REL}/ ...")
+        ui.field("Restore", f"password store -> {os.path.join(home, VAULT_DIR_REL)}/")
+    elif kind == "unknown":
+        ui.field("Restore", f"unknown archive (home-relative) -> {home}")
+    else:
+        ui.field("Restore", f"home directories -> {home}")
+    print()
+
+    # The keyboard/Caps-Lock line prints inside prompt_passphrase(), right at the prompt.
+    if kind == "passwords":
         ok = restore_passwords(arg, home)
     else:
-        if kind == "unknown":
-            print(f"Restoring unknown archive {arg} into {home} (home-relative) ...")
-        else:
-            print(f"Restoring home archive {arg} into {home} ...")
         ok = restore_home(arg, home)
     return 0 if ok else 1
 

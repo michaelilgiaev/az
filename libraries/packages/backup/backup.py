@@ -48,6 +48,9 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import archive  # noqa: E402  (deliberately after the sys.path bootstrap above)
+import config   # noqa: E402  (opt-in cloud/USB target config; default: all disabled)
+import targets  # noqa: E402  (the optional cloud/USB copy step)
+import ui       # noqa: E402  (shared CLI presentation helpers)
 
 
 # The one directory in HOME we never back up (a deliberate dumping ground). Matched by
@@ -164,12 +167,13 @@ def prompt_passphrase():
 
 def build_home_archive(home, entries, out_path, passphrase):
     """Write ~/backup.tar.gz.gpg: the gzip-tar of ``entries`` (under ``home``), rooted
-    at the home dir (home-relative arcnames), piped through gpg. Prints one line per
-    top-level item added. Returns True on success."""
+    at the home dir (home-relative arcnames), piped through gpg. Prints one clean bullet
+    per top-level item as it is added (live feedback for a large home). Returns True on
+    success."""
     members = ((os.path.join(home, name), name) for name in entries)
     return archive.build_encrypted_tar(
         members, out_path, passphrase, tar_filter=_tar_filter,
-        on_add=lambda arcname: print(f"  added {arcname}"),
+        on_add=ui.bullet,
     )
 
 
@@ -209,6 +213,34 @@ def build_passwords_archive(home, passphrase, out_path):
         archive.shred_dir(tmp_dir)
 
 
+def _tilde(home, path):
+    """``path`` shown home-relative as ``~/name`` when it is inside ``home`` (tidier than
+    a full ``/home/<user>/...`` in the output), else the path unchanged."""
+    if path == home:
+        return "~"
+    prefix = home.rstrip("/") + "/"
+    return "~/" + path[len(prefix):] if path.startswith(prefix) else path
+
+
+def _print_plan(home, entries, symlinks, have_vault):
+    """The header block: title + rule, then aligned Home/Items/Store/Skip rows describing
+    exactly what this run will do, before the passphrase is asked."""
+    ui.header("Az'arch backup")
+    ui.field("Home", home)
+    if entries:
+        link_note = ""
+        if symlinks:
+            link_note = (f" ({symlinks} symlink kept as a link)" if symlinks == 1
+                         else f" ({symlinks} symlinks kept as links)")
+        ui.field("Items", f"{len(entries)} to archive{link_note}")
+    else:
+        ui.field("Items", "none (no top-level home folders to archive)")
+    ui.field("Store", "included if the passphrase unlocks it" if have_vault
+             else f"none at ~/{VAULT_REL}")
+    ui.field("Skip", f"'{IGNORE_DIR_NAME}', '{VAULT_DIR_NAME}', dot files")
+    print()
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] in ("-h", "--help"):
@@ -235,50 +267,68 @@ def main(argv=None):
     # exists, we still go on and attempt the passwords archive (a user whose only backable
     # thing is their password store must still get passwords.tar.gz.gpg).
     if not entries and not have_vault:
+        ui.header("Az'arch backup")
         print(f"Nothing to back up in {home} "
               f"(everything is hidden or in '{IGNORE_DIR_NAME}', and no password store).")
         return 0
 
-    if entries:
-        symlinks = _count_symlinks(home, entries)
-        print(f"Backing up {len(entries)} item(s) from {home}"
-              + (f" ({symlinks} symlink(s), kept as links)" if symlinks else "")
-              + f", skipping '{IGNORE_DIR_NAME}' and dot files.\n")
-    else:
-        print(f"No top-level home folders to archive in {home}; "
-              "backing up the password store only.\n")
+    symlinks = _count_symlinks(home, entries) if entries else 0
+    _print_plan(home, entries, symlinks, have_vault)
 
+    # The keyboard/Caps-Lock line is printed inside prompt_passphrase(), immediately
+    # before each getpass -- exactly where the user is about to type.
     passphrase = prompt_passphrase()
     print()
 
     start = time.time()
+    written = []   # (label, dest, size_text) rows for the summary
 
     # 1) The home archive -- the primary deliverable. Built only when there is something to
     #    put in it; if it is attempted and FAILS, the whole run fails.
     if entries:
+        print("Building the home archive ...")
         home_out = os.path.join(home, HOME_ARCHIVE_NAME)
         if not build_home_archive(home, entries, home_out, passphrase):
             return 1
         home_size = os.path.getsize(home_out) if os.path.exists(home_out) else 0
-        print(f"  -> {home_out} ({archive.fmt_size(home_size)})")
+        ui.result_line("home archive", _tilde(home, home_out),
+                       archive.fmt_size(home_size))
+        written.append(home_out)
+        print()
 
     # 2) The passwords archive -- best-effort. A missing store or a non-matching
     #    passphrase warns but never fails the run.
+    print("Building the password-store archive ...")
     pw_out = os.path.join(home, PASSWORDS_ARCHIVE_NAME)
     status = build_passwords_archive(home, passphrase, pw_out)
     if status == "ok":
         pw_size = os.path.getsize(pw_out) if os.path.exists(pw_out) else 0
-        print(f"  -> {pw_out} ({archive.fmt_size(pw_size)})")
+        ui.result_line("password store", _tilde(home, pw_out),
+                       archive.fmt_size(pw_size))
+        written.append(pw_out)
     elif status == "missing":
-        print(f"  note: no password store at ~/{VAULT_REL}; "
-              "skipping passwords archive.")
+        ui.note(f"no password store at ~/{VAULT_REL}; skipping it.")
     elif status == "mismatch":
-        print("  warning: the passphrase did not unlock ~/{}; ".format(VAULT_REL)
-              + "passwords store NOT included.")
+        ui.warn(f"the passphrase did not unlock ~/{VAULT_REL}; "
+                "password store NOT included.")
     else:  # "failed" -- gpg/tar error building the passwords archive
-        print("  warning: could not build the passwords archive.")
+        ui.warn("could not build the password-store archive.")
 
-    print(f"\nDone in {int(time.time() - start)}s.")
+    # 3) Optional cloud / USB copy -- ONLY when the user opted in via `azarch backup-setup`
+    #    (config default is all-disabled -> this whole block is skipped and behaviour is
+    #    exactly the local-only backup). The copy is best-effort: a failed/absent target
+    #    warns but never fails the run, since the local archives are the primary
+    #    deliverable and always remain.
+    cfg = config.load()
+    if written and config.any_target_enabled(cfg):
+        print()
+        targets.copy_archives_to_targets(written, cfg)
+
+    print()
+    print(ui.rule())
+    count = len(written)
+    print(f"Done in {int(time.time() - start)}s. "
+          f"{count} archive{'' if count == 1 else 's'} written to {home}.")
     return 0
 
 

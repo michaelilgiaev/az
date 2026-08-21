@@ -25,6 +25,20 @@ import tarfile
 import threading
 from getpass import getpass
 
+# The flat app installs every module side by side in LIB_DIR. archive.py is imported by
+# BOTH entry scripts (which each do this same insert), but it is also imported directly
+# by the test suite -- so make its own directory importable here too, before the sibling
+# ``import keyboard`` below, so that import resolves no matter who loads archive first
+# (mirrors the bootstrap in backup.py / unpack.py; a no-op when the dir is already on the
+# path).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# keyboard.py is the same self-contained libX11 readout the passwords manager ships; we
+# print its one-line layout / Caps-Lock status right before every passphrase prompt
+# (mirroring passwords.py) so a wrong layout or a stuck Caps Lock is visible before the
+# user types a (hidden) passphrase. Degrades to "Keyboard: unknown" off X.
+import keyboard  # noqa: E402  (after the sys.path bootstrap above)
+
 
 # gpg flags shared by every invocation here. ``--batch --yes`` keep it non-interactive
 # and let it overwrite a stale output; ``--pinentry-mode loopback`` makes gpg take the
@@ -71,14 +85,21 @@ def prompt_passphrase(confirm=True):
     encryption key is unrecoverable, so it is caught up front. Without ``confirm``
     (used by ``unpack``, which only DECRYPTS) a single prompt is enough: a wrong
     passphrase simply makes gpg fail, with nothing lost. An empty passphrase is always
-    rejected (gpg refuses it and it defeats the encryption)."""
+    rejected (gpg refuses it and it defeats the encryption).
+
+    The live keyboard layout / Caps-Lock line (keyboard.keyboard_status_line()) is
+    printed immediately before EACH getpass, exactly as the passwords manager does at its
+    master-password prompt, so a wrong layout or a stuck Caps Lock is visible before the
+    (hidden) passphrase is typed. It degrades to a plain "Keyboard: unknown" off X."""
     while True:
+        print(keyboard.keyboard_status_line())
         first = getpass("Encryption passphrase: " if confirm else "Passphrase: ")
         if not first:
             print("Passphrase cannot be empty.")
             continue
         if not confirm:
             return first
+        print(keyboard.keyboard_status_line())
         second = getpass("Confirm passphrase: ")
         if first == second:
             return first

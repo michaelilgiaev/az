@@ -55,6 +55,9 @@ MODULE_ORDER = [
     # display.py: the `azarch display` surface (xrandr + the GLOBAL SCALE) behind the TUI's
     # Display screen. Standalone (bundled), before command_line_interface.py.
     "display.py",
+    # backup_targets.py: the `azarch backup-setup` surface (opt in to the `backup` command's
+    # optional USB + Google Drive targets). Standalone (bundled), before command_line_interface.py.
+    "backup_targets.py",
     "sshd.py",
     # terminal_user_interface.py is the bare-`azarch` full-screen UI. It calls the theme/wallpaper/network
     # helpers by bare name, so it MUST be bundled after all of them; and before command_line_interface.py,

@@ -40,6 +40,9 @@ def usage() -> None:
         "`azarch default-applications --help`\n"
         "  display <info|scale|resolution|...>  Configure the display (xrandr) and the global\n"
         "                          UI scale. See `azarch display --help`\n"
+        "  backup-setup [--status|--disable]  Opt in to the `backup` command's optional USB /\n"
+        "                          Google Drive targets (off by default). See "
+        "`azarch backup-setup --help`\n"
         "  --sshd-hypervisor    Install host pubkey from ~/shared/authorized_keys "
         "and start sshd\n"
         "  --resolve-region     Geolocate by IP (pick a server) and set BOTH "
@@ -82,6 +85,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_default_applications(argv[1:])
     if cmd == "display":
         return cmd_display(argv[1:])
+    if cmd == "backup-setup":
+        return cmd_backup_setup(argv[1:])
     if cmd == "--sshd-hypervisor":
         return sshd_hypervisor()
     if cmd == "--resolve-date-time":

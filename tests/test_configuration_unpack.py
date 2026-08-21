@@ -217,6 +217,82 @@ def test_is_within_blocks_paths_that_escape_the_destination(tmp_path):
     assert not up._is_within(str(base), str(base / ".." / "escape"))
 
 
+# --- step three (polish): the clean unpack header + summary -----------------
+@requires_gpg
+def test_unpack_output_has_a_clean_header_and_summary(tmp_path, capsys):
+    """A `unpack` run opens with the "Az'arch unpack" header + rule and an aligned
+    Archive/Restore block, then closes with a "Restored into ..." summary. Pin the key
+    presentation markers so the polished output cannot regress (the restore behaviour is
+    pinned by the other tests)."""
+    home_arc, _pw, _secret = _build_archives(tmp_path)
+    dst = _fresh_home(tmp_path)
+    assert _run_unpack([home_arc], dst, _PASS) == 0
+    out = capsys.readouterr().out
+    assert "Az'arch unpack" in out
+    assert "Archive:" in out and "Restore:" in out
+    assert "─" in out or "-" in out                     # the header/summary rule
+    assert f"Restored into {dst}" in out
+
+
+# --- regression: a RELATIVE archive path resolves against the caller's cwd ---
+@requires_gpg
+def test_unpack_relative_archive_resolves_against_caller_cwd(tmp_path):
+    """Regression for the #1 unpack bug: `unpack backup.tar.gz.gpg` (a RELATIVE name)
+    typed from the directory that holds the archive must find and restore it.
+
+    THE BUG (reproduced here at the app level). The launcher did `cd '{LIB_DIR}'` before
+    exec'ing python, so by the time unpack.py saw the relative arg the process cwd was
+    LIB_DIR -- NOT the user's dir -- and the archive (sitting in the user's dir) was not
+    there: "Error: no such file: backup.tar.gz.gpg" even with it right in front of you. The
+    launcher tests (test_configuration_backup.py) pin the STRUCTURAL fix (no cd); this test
+    pins the app BEHAVIOUR that the no-cd launcher then delivers, and DEMONSTRATES the bug
+    mechanics with the two cwd worlds below.
+
+    We DON'T just chdir to the archive dir and pass the basename -- that would pass even
+    against the old code (the basename resolves against whatever cwd is). Instead we make
+    the two worlds explicit:
+
+      * BUGGY WORLD -- process cwd is a LIB_DIR-like dir that does NOT hold the archive
+        (what the stray `cd` produced). The relative name must FAIL to resolve there
+        (validate_arg returns an error) -- that is exactly why the cd was fatal.
+      * FIXED WORLD -- process cwd is the user's dir where the archive lives (what the
+        no-cd launcher preserves). The SAME relative name now resolves, restores, exits 0.
+    """
+    home_arc, _pw, _secret = _build_archives(tmp_path)
+    arc_dir = os.path.dirname(home_arc)
+    arc_name = os.path.basename(home_arc)          # relative: "backup.tar.gz.gpg"
+    lib_like = tmp_path / "lib_like"               # stands in for LIB_DIR (no archive here)
+    lib_like.mkdir()
+    dst = _fresh_home(tmp_path)
+
+    old_cwd = os.getcwd()
+    try:
+        # BUGGY WORLD: cwd is the LIB_DIR-like dir -> the relative name does NOT resolve
+        # (abspath(arc_name) points into lib_like, where the archive isn't). This is the
+        # failure the launcher's `cd` caused.
+        os.chdir(str(lib_like))
+        assert up.validate_arg(os.path.abspath(arc_name)) is not None
+        assert _run_unpack([arc_name], dst, _PASS) == 1
+        assert not (dst / "Documents").exists(), "nothing should have been restored"
+
+        # FIXED WORLD: cwd is the user's dir (the no-cd launcher preserves it) -> the SAME
+        # relative name resolves against cwd, restores, and exits 0.
+        os.chdir(arc_dir)
+        assert up.validate_arg(os.path.abspath(arc_name)) is None
+        assert _run_unpack([arc_name], dst, _PASS) == 0
+    finally:
+        os.chdir(old_cwd)
+    assert (dst / "Documents" / "note.txt").read_text() == "hello world"
+
+
+def test_main_abspaths_the_relative_arg_before_validating(tmp_path):
+    """Unit-level guard that main() resolves the archive arg to an ABSOLUTE path before
+    validating (so a relative name is looked up against the caller's cwd, not LIB_DIR).
+    Pin it in the source so the belt-and-braces abspath cannot be silently dropped."""
+    src = (paths.BACKUP_DIR / "unpack.py").read_text(encoding="utf-8")
+    assert "os.path.abspath(argv[0])" in src
+
+
 # --- shipping: the entry lives in the package and is discovered -------------
 def test_unpack_source_ships_and_parses():
     """unpack.py is a real source in the package (so packaging.py's module discovery ships

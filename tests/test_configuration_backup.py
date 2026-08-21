@@ -16,7 +16,7 @@ selection that follows symlinks or grabs dot files silently backs up the wrong b
 None of that raises on its own. These tests pin:
 
   * the emit_plan() dest/mode entries + that it does not mutate module state,
-  * the launcher (execs `python backup.py "$@"` from the install dir, executable),
+  * the launcher (execs `python <LIB_DIR>/backup.py "$@"` WITHOUT a cd, executable),
   * the flat-package ship contract (every runtime module installs into LIB_DIR; the
     build wiring does NOT ship, and the unit tests live in tests/ anyway),
   * the SELECTION rules from the distribution PROMPT (skip ``Ignore``, skip dot files,
@@ -106,23 +106,26 @@ def test_launcher_name_is_the_backup_command():
 
 # --- launcher ---------------------------------------------------------------
 def test_launcher_execs_python_entry_from_install_dir():
-    """The `backup` launcher cd's into the install dir (so the entry's sibling imports
-    resolve) and execs the system python on backup.py, forwarding arguments so
-    `backup --help` reaches the script. `exec` so the python process replaces the shell."""
+    """The `backup` launcher execs the system python on backup.py's ABSOLUTE path in
+    LIB_DIR, forwarding arguments so `backup --help` reaches the script. It does NOT `cd`
+    -- the caller's cwd is preserved (the entry's own sys.path bootstrap resolves the
+    sibling `import archive`), so a relative arg would resolve against the user's cwd.
+    `exec` so the python process replaces the shell."""
     sh = bk.launcher_sh()
     assert sh.startswith("#!/bin/sh")
-    assert f"cd '{bk.LIB_DIR}'" in sh
-    assert 'exec python -u backup.py "$@"' in sh
+    assert "cd " not in sh, "the launcher must NOT cd (it would break relative arg paths)"
+    assert f"exec python -u '{bk.LIB_DIR}/backup.py' \"$@\"" in sh
 
 
 def test_unpack_launcher_execs_python_entry_from_install_dir():
-    """The `unpack` launcher is the twin of the `backup` one: same cd into LIB_DIR (so the
-    shared `import archive` resolves) but execs unpack.py, forwarding the archive argument
-    (`unpack backup.tar.gz.gpg`)."""
+    """The `unpack` launcher is the twin of the `backup` one: it execs unpack.py's ABSOLUTE
+    path in LIB_DIR, forwarding the archive argument (`unpack backup.tar.gz.gpg`). Like
+    `backup` it does NOT `cd`, so a RELATIVE archive path typed from ~ resolves against the
+    caller's cwd rather than LIB_DIR (that stray cd was the #1 unpack bug)."""
     sh = bk.unpack_launcher_sh()
     assert sh.startswith("#!/bin/sh")
-    assert f"cd '{bk.LIB_DIR}'" in sh
-    assert 'exec python -u unpack.py "$@"' in sh
+    assert "cd " not in sh, "the launcher must NOT cd (it would break relative arg paths)"
+    assert f"exec python -u '{bk.LIB_DIR}/unpack.py' \"$@\"" in sh
 
 
 def test_unpack_launcher_name_is_the_unpack_command():
@@ -167,6 +170,42 @@ def test_backup_is_excluded_from_auto_app_discovery():
     """`backup` is emitted BY NAME in _emit_desktop, so it must be in _EXPLICIT_PACKAGES or
     the app-loop discovery would emit it a SECOND time (duplicate writes)."""
     assert "backup" in compiler._EXPLICIT_PACKAGES
+
+
+# --- the keyboard / Caps-Lock status line at the passphrase prompt (step 2) --
+def test_keyboard_module_ships_and_matches_passwords(tmp_path):
+    """`backup`/`unpack` show the SAME "Keyboard: us   Caps Lock: off" line the
+    `passwords` manager shows before its master-password prompt. keyboard.py is copied
+    into the backup package (self-contained libX11 + stdlib, so no imports to rewire) and
+    therefore ships automatically via emit_plan()'s module discovery. Pin that it is a
+    real source in the package AND is byte-for-byte the passwords manager's keyboard.py."""
+    bk_kbd = (paths.BACKUP_DIR / "keyboard.py").read_text(encoding="utf-8")
+    pw_kbd = (paths.PASSWORDS_DIR / "keyboard.py").read_text(encoding="utf-8")
+    assert bk_kbd == pw_kbd, "backup/keyboard.py must be a verbatim copy of passwords/keyboard.py"
+    assert "def keyboard_status_line" in bk_kbd
+    # It ships (module discovery picks up every .py except packaging.py).
+    shipped = {e["dest"] for e in bk.emit_plan()}
+    assert f"{bk.LIB_DIR}/keyboard.py" in shipped
+
+
+def test_prompt_passphrase_prints_keyboard_line_before_each_getpass(capsys, monkeypatch):
+    """The live keyboard line is printed immediately before EACH getpass, mirroring
+    passwords.py. Patch the keyboard readout to a sentinel and getpass to a canned value
+    (so nothing blocks / touches X), then confirm the sentinel is emitted -- twice on the
+    confirm path (create), once on the single-prompt path (restore)."""
+    monkeypatch.setattr(arch.keyboard, "keyboard_status_line", lambda: "Keyboard: us   Caps Lock: off")
+
+    answers = iter(["hunter2", "hunter2"])
+    monkeypatch.setattr(arch, "getpass", lambda prompt="": next(answers))
+    assert arch.prompt_passphrase(confirm=True) == "hunter2"
+    out = capsys.readouterr().out
+    assert out.count("Keyboard: us   Caps Lock: off") == 2  # before passphrase AND confirm
+
+    answers2 = iter(["hunter2"])
+    monkeypatch.setattr(arch, "getpass", lambda prompt="": next(answers2))
+    assert arch.prompt_passphrase(confirm=False) == "hunter2"
+    out2 = capsys.readouterr().out
+    assert out2.count("Keyboard: us   Caps Lock: off") == 1  # single prompt, single line
 
 
 # --- runtime dependency is in the manifest ----------------------------------
@@ -456,6 +495,26 @@ def test_backup_still_makes_passwords_archive_when_home_has_no_backable_dirs(tmp
     assert rc == 0
     assert os.path.exists(os.path.join(str(home), app.PASSWORDS_ARCHIVE_NAME))
     assert not os.path.exists(os.path.join(str(home), app.HOME_ARCHIVE_NAME))
+
+
+def test_backup_output_has_a_clean_header_and_aligned_rows(tmp_path, capsys):
+    """Step three (polish): a `backup` run opens with the "Az'arch backup" header + rule,
+    an aligned Home/Items/Store/Skip plan block, and closes with a summary line. Pin the
+    key presentation markers so the clean output cannot silently regress (behaviour stays
+    pinned by the other tests). Uses the real gpg path via _run_backup_main."""
+    if not _has_gpg():
+        import pytest
+        pytest.skip("gpg not installed on the test host")
+    home = _make_home(tmp_path)
+    _make_vault(home, _PASS)
+    rc = _run_backup_main(home, _PASS)
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Az'arch backup" in out
+    assert "─" in out or "-" in out                     # the header rule
+    assert "Home:" in out and "Items:" in out and "Skip:" in out
+    assert "home archive" in out and "password store" in out
+    assert "written to" in out                          # the summary line
 
 
 def test_backup_bails_out_only_when_nothing_at_all_to_do(tmp_path):
