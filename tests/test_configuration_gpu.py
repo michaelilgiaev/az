@@ -116,12 +116,13 @@ def test_wanted_packages_empty_for_no_vendor(tmp_path):
 
 def test_pacman_install_argv_uses_offline_file_repo(tmp_path):
     gpu = _load_gpu()
-    argv = gpu.pacman_install_argv(["nvidia", "cuda"], "/root/azarch/pacstrap-azarch-repo")
+    argv = gpu.pacman_install_argv(["nvidia-open-dkms", "cuda"],
+                                   "/root/azarch/pacstrap-azarch-repo")
     joined = " ".join(argv)
     assert "pacman" in joined
     assert "--needed" in argv                   # idempotent
     assert "--noconfirm" in argv                # non-interactive
-    assert "nvidia" in argv and "cuda" in argv
+    assert "nvidia-open-dkms" in argv and "cuda" in argv
     # Offline: a transient pacman.conf pointing at the file:// repo (never the system conf).
     assert "--config" in argv
     assert "/etc/pacman.conf" not in joined
@@ -153,15 +154,15 @@ def test_cmd_gpu_resolve_generic_is_noop_success(monkeypatch, capsys, tmp_path):
 def test_cmd_gpu_resolve_installs_only_missing(monkeypatch, tmp_path):
     gpu = _load_gpu()
     monkeypatch.setattr(gpu, "detect_vendors", lambda *a, **k: ["nvidia"])
-    # Pretend nvidia + nvidia-utils are already installed; the rest are missing.
+    # Pretend the open module + nvidia-utils are already installed; the rest are missing.
     monkeypatch.setattr(gpu, "installed_packages",
-                        lambda pkgs: {"nvidia", "nvidia-utils"})
+                        lambda pkgs: {"nvidia-open-dkms", "nvidia-utils"})
     captured = {}
     monkeypatch.setattr(gpu, "_run_install",
                         lambda pkgs: captured.__setitem__("pkgs", list(pkgs)) or 0)
     rc = gpu.cmd_gpu(["--resolve"])
     assert rc == 0
-    assert "nvidia" not in captured["pkgs"]           # already installed, filtered out
+    assert "nvidia-open-dkms" not in captured["pkgs"]  # already installed, filtered out
     assert "cuda" in captured["pkgs"]                  # missing -> installed
     assert "vulkan-icd-loader" in captured["pkgs"]     # common, missing -> installed
 
@@ -276,3 +277,56 @@ def test_all_driver_packages_are_baked_into_manifest():
         wanted.update(spec.get("dev", []))
     missing = sorted(wanted - names)
     assert not missing, f"driver packages absent from packages.x86_64: {missing}"
+
+
+def _manifest_names():
+    manifest = (Path(__file__).resolve().parent.parent
+                / "libraries/packages/packages.x86_64")
+    names = set()
+    for line in manifest.read_text().splitlines():
+        tok = line.split("#", 1)[0].strip()
+        if tok:
+            names.add(tok)
+    return names
+
+
+def test_nvidia_open_module_is_the_baked_default():
+    # The OPEN module is the default and MUST be baked into the ISO manifest; bare `nvidia`
+    # (which is not a real Arch package -- it broke the build) must be gone.
+    gpu = _load_gpu()
+    assert gpu.NVIDIA_OPEN == "nvidia-open-dkms"
+    assert gpu.DRIVER_MAP["nvidia"]["base"][0] == "nvidia-open-dkms"
+    names = _manifest_names()
+    assert "nvidia-open-dkms" in names
+    assert "nvidia" not in names                      # the build-breaking bare package is gone
+
+
+def test_no_phantom_proprietary_nvidia_package_anywhere():
+    # Arch's current driver series ships ONLY the open module; the closed/proprietary kernel
+    # module (nvidia / nvidia-dkms / nvidia-lts) no longer exists in the repos, so it must
+    # not be referenced by the driver map or baked into the manifest (a phantom target that
+    # only resolves via a Provides-alias back to the open module -- which broke the build /
+    # the offline cache when tried). Guard against it creeping back.
+    gpu = _load_gpu()
+    all_map_pkgs = set()
+    for spec in gpu.DRIVER_MAP.values():
+        all_map_pkgs.update(spec.get("base", []))
+        all_map_pkgs.update(spec.get("dev", []))
+    for phantom in ("nvidia", "nvidia-dkms", "nvidia-lts"):
+        assert phantom not in all_map_pkgs, f"{phantom} is not a real repo package"
+        assert phantom not in _manifest_names(), f"{phantom} must not be pacstrapped"
+
+
+def test_run_install_single_pacman_call(monkeypatch):
+    # --resolve does one offline install of the resolved packages (open NVIDIA module + the
+    # shared utils/cuda); there is no proprietary swap to perform.
+    gpu = _load_gpu()
+    monkeypatch.setattr(gpu.os.path, "isdir", lambda p: False)   # force system-repo argv path
+    calls = []
+    monkeypatch.setattr(gpu, "_sudo", lambda *a, **k: calls.append(list(a)) or 0)
+    rc = gpu._run_install([gpu.NVIDIA_OPEN, "nvidia-utils", "cuda"])
+    assert rc == 0
+    assert len(calls) == 1                                   # a single install, no swap
+    flat = calls[0]
+    assert gpu.NVIDIA_OPEN in flat and "cuda" in flat
+    assert "-R" not in flat                                  # nothing removed

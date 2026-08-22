@@ -43,8 +43,13 @@ DRIVER_MAP: dict[str, dict[str, list[str]]] = {
         "base": ["xf86-video-amdgpu", "vulkan-radeon", "lib32-vulkan-radeon"],
         "dev":  ["rocm-opencl-runtime", "rocm-hip-runtime", "opencl-mesa"],
     },
+    # NVIDIA ships the OPEN kernel module (nvidia-open-dkms). As of the current driver
+    # series (6xx) Arch's repos carry ONLY the open module -- the proprietary/closed kernel
+    # module was discontinued upstream and is not in extra/ (nvidia-dkms is now just a
+    # Provides alias for nvidia-open-dkms). DKMS builds it against the shipped kernel;
+    # nvidia-utils/settings/cuda/opencl are module-agnostic.
     "nvidia": {
-        "base": ["nvidia", "nvidia-utils", "lib32-nvidia-utils", "nvidia-settings"],
+        "base": ["nvidia-open-dkms", "nvidia-utils", "lib32-nvidia-utils", "nvidia-settings"],
         "dev":  ["cuda", "opencl-nvidia"],
     },
     "common": {
@@ -53,6 +58,12 @@ DRIVER_MAP: dict[str, dict[str, list[str]]] = {
         "dev":  ["vulkan-tools", "clinfo", "vulkan-headers", "opencl-headers"],
     },
 }
+
+
+# The NVIDIA open kernel module, baked into the ISO via packages.x86_64. Arch's current
+# driver series ships only this (the proprietary/closed kernel module was discontinued and
+# is not in the repos), so there is no proprietary package to fall back to without the AUR.
+NVIDIA_OPEN = "nvidia-open-dkms"
 
 
 def detect_vendors(sysfs_root: str = "/sys/bus/pci/devices") -> list[str]:
@@ -146,13 +157,10 @@ def pacman_install_argv(pkgs: list[str], repo_dir: str) -> list[str]:
             "--config", conf_path, *pkgs]
 
 
-def _run_install(pkgs: list[str]) -> int:
-    """Write the transient offline conf and run the pacman install under sudo. Falls back to
-    the system repos (no --config) when the offline repo dir is absent (e.g. an installed
-    system rather than the live ISO), so a networked machine still resolves."""
-    if not pkgs:
-        print("azarch gpu: nothing to install (drivers already present)")
-        return 0
+def _install_argv_for(pkgs: list[str]) -> list[str] | None:
+    """The pacman argv to install `pkgs`, writing the transient offline conf first. Uses the
+    file:// offline repo when it exists (the live ISO), else the system repos (an installed,
+    networked machine). Returns None only if the transient conf could not be written."""
     repo_dir = LIVE_REPO
     if os.path.isdir(repo_dir):
         conf = _offline_conf(repo_dir)
@@ -161,11 +169,21 @@ def _run_install(pkgs: list[str]) -> int:
                 fh.write(conf)
         except OSError as exc:
             _err(f"azarch gpu: could not write transient pacman.conf: {exc}")
-            return 1
-        argv = pacman_install_argv(pkgs, repo_dir)
-    else:
-        _err("azarch gpu: offline repo not found; installing from configured repos")
-        argv = ["pacman", "-Sy", "--needed", "--noconfirm", *pkgs]
+            return None
+        return pacman_install_argv(pkgs, repo_dir)
+    _err("azarch gpu: offline repo not found; installing from configured repos")
+    return ["pacman", "-Sy", "--needed", "--noconfirm", *pkgs]
+
+
+def _run_install(pkgs: list[str]) -> int:
+    """Install the resolved driver packages under sudo from the offline repo (or the system
+    repos when the offline repo dir is absent, e.g. an installed networked machine)."""
+    if not pkgs:
+        print("azarch gpu: nothing to install (drivers already present)")
+        return 0
+    argv = _install_argv_for(pkgs)
+    if argv is None:
+        return 1
     return _sudo(*argv, check=False)
 
 
@@ -190,6 +208,8 @@ def gpu_usage() -> None:
         "Detect the machine's GPU and resolve its drivers from the baked-in offline repo.\n"
         "\n"
         "  --resolve    Install the missing vendor + developer drivers for the detected GPU.\n"
+        "               NVIDIA installs the open kernel module (nvidia-open-dkms) -- Arch's\n"
+        "               current driver series ships only the open module.\n"
         "  --list       Print the full vendor -> driver package map.\n"
         "  --help       Show this help.\n"
         "  (no option)  Print the detected GPU and which driver packages are present/missing.\n"
