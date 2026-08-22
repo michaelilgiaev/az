@@ -69,11 +69,26 @@ export PYTHONPATH="$REPODIR/libraries:$REPODIR/scripts/libraries${PYTHONPATH:+:$
 # few ms on this tiny codebase and removes that whole class of confusion.
 export PYTHONDONTWRITEBYTECODE=1
 
+# Delete pytest's scratch dir when we exit, however we exit (pass, fail, or
+# Ctrl-C). pytest writes .pytest_cache into the rootdir; it is pure scratch
+# (gitignored) and this repo treats it as pollution. The trap runs on EXIT, so
+# we can no longer `exec` pytest -- that would replace this shell and the trap
+# would never fire. Instead we run pytest, capture its status, and re-exit with
+# it so `bash tests.sh` still reports the true pass/fail code.
+cleanup() { rm -rf "$REPODIR/.pytest_cache"; }
+trap cleanup EXIT
+
 echo "[tests] running pytest"
 # The default run is PURE/OFFLINE (see the header): the `network`-marked live
 # resolver-server contract test is deselected unless the caller asks for a marker
 # themselves. Run the live tier explicitly with `bash tests.sh -m network`.
+# `set -o errexit` is disabled around pytest so a test failure does not abort the
+# script before cleanup; we capture and re-raise the exit code ourselves.
+set +o errexit
 case " $* " in
-    *" -m "*|*" --markers "*) exec "$PY" -m pytest "$@" ;;
-    *)                        exec "$PY" -m pytest -m "not network" "$@" ;;
+    *" -m "*|*" --markers "*) "$PY" -m pytest "$@" ;;
+    *)                        "$PY" -m pytest -m "not network" "$@" ;;
 esac
+status=$?
+set -o errexit
+exit "$status"
