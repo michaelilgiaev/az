@@ -52,9 +52,11 @@ static const AzRow ROWS_MAIN[] = {
     {.label="Brightness",   .kind=AZ_ACT_SCREEN, .target="brightness", .status=az_status_brightness},
     {.label="Default Applications", .kind=AZ_ACT_SCREEN, .target="defaultapps"},
     {.label="Display",      .kind=AZ_ACT_SCREEN, .target="display",    .status=az_status_display},
+    {.label="GPU",          .kind=AZ_ACT_SCREEN, .target="gpu",        .status=az_status_gpu},
     {.label="Machine Type", .kind=AZ_ACT_SCREEN, .target="machine",    .status=az_status_machine},
-    /* Backup is LAST -- it is an opt-in a new user reaches once, after the day-to-day settings
-     * above. Its at-a-glance status is the target summary ("off (local only)" by default). */
+    {.label="Time & Date",  .kind=AZ_ACT_SCREEN, .target="timedate",   .status=az_status_timedate},
+    {.label="Language",     .kind=AZ_ACT_SCREEN, .target="language",   .status=az_status_language},
+    /* Backup is LAST -- an opt-in reached once, after the day-to-day settings above. */
     {.label="Backup",       .kind=AZ_ACT_SCREEN, .target="backup",     .status=az_status_backup},
 };
 
@@ -163,6 +165,36 @@ static const AzRow ROWS_MACHINE[] = {
      .base="printf 'Laptop\\n' > ~/.config/azarch/machine-type"},
     {.label="Autodetect", .kind=AZ_ACT_APPLY, .target="azarch machine --auto",
      .base="rm -f ~/.config/azarch/machine-type"},
+};
+
+/* GPU: detect the machine's GPU and resolve its drivers from the baked-in offline repo. The
+ * ISO ships a generic stack (mesa) that works everywhere; --resolve installs the RIGHT vendor +
+ * developer drivers. Resolve installs packages (pacman), so needs_root=1; the status/list rows
+ * just read, so they only show_output. Outdated drivers are `pacman -Syu`, not this screen. */
+static const AzRow ROWS_GPU[] = {
+    {.label="Detect & resolve GPU drivers", .kind=AZ_ACT_APPLY, .target="azarch gpu --resolve",
+     .needs_root=1, .show_output=1, .base="sudo pacman -Sy --needed <vendor+dev drivers>"},
+    {.label="Show detected GPU / drivers",  .kind=AZ_ACT_APPLY, .target="azarch gpu",
+     .show_output=1, .base="lspci | grep -i vga"},
+    {.label="List driver map",              .kind=AZ_ACT_APPLY, .target="azarch gpu --list",
+     .show_output=1, .base="azarch gpu --list"},
+};
+
+/* Time & Date: resolve the timezone by IP geolocation. --resolve asks the user to PICK one of
+ * 5 shuffled servers IN THE TERMINAL, then sets the zone (timedatectl / localtime). It touches
+ * the system clock config, but the tool self-escalates (apply_timezone uses timedatectl or a
+ * sudo relink), so the wrapper does not pre-secure sudo -> needs_root stays 0; show the output. */
+static const AzRow ROWS_TIMEDATE[] = {
+    {.label="Resolve timezone (pick a server)", .kind=AZ_ACT_APPLY, .target="azarch timedate --resolve",
+     .show_output=1, .base="timedatectl set-timezone <geolocated-zone>"},
+};
+
+/* Language: resolve the language/keyboard by IP geolocation. English stays the UI language;
+ * a non-English country adds its layout as a switchable second (Alt+Shift). Same server pick in
+ * the terminal. apply_language self-escalates (sudo writes locale.conf/vconsole), so needs_root=0. */
+static const AzRow ROWS_LANGUAGE[] = {
+    {.label="Resolve language (pick a server)", .kind=AZ_ACT_APPLY, .target="azarch language --resolve",
+     .show_output=1, .base="localectl set-locale / setxkbmap <region>"},
 };
 
 /* Volume: the "Current:" line shows the live level (az_status_volume); the rows set a PRECISE
@@ -434,6 +466,21 @@ static const AzScreen SCREENS[] = {
      .subtitle="Writes ~/.config/azarch/machine-type (PC/Laptop) or removes it to autodetect. "
                "Laptops get screen-brightness control; PCs do not.",
      .current=az_status_machine,   .rows=ROWS_MACHINE,   .nrows=AZN(ROWS_MACHINE)},
+    {.id="gpu",       .title="GPU",
+     .subtitle="Detects the PCI GPU and resolves its drivers from the baked-in offline repo "
+               "(vendor + developer drivers). Generic mesa already works everywhere; this adds "
+               "the right vendor stack. Outdated versions: `sudo pacman -Syu`.",
+     .current=az_status_gpu,       .rows=ROWS_GPU,       .nrows=AZN(ROWS_GPU)},
+    {.id="timedate",  .title="Time & Date",
+     .subtitle="Geolocates by IP -- you PICK one of 5 shuffled servers in the terminal -- and "
+               "sets the system timezone. The only time/date path that uses the network; "
+               "otherwise the zone is static/user-chosen.",
+     .current=az_status_timedate,  .rows=ROWS_TIMEDATE,  .nrows=AZN(ROWS_TIMEDATE)},
+    {.id="language",  .title="Language",
+     .subtitle="Geolocates by IP -- you PICK one of 5 shuffled servers in the terminal -- and "
+               "sets English plus (for a non-English country) the region language + keyboard as "
+               "a switchable second layout (Alt+Shift). English stays the UI language.",
+     .current=az_status_language,  .rows=ROWS_LANGUAGE,  .nrows=AZN(ROWS_LANGUAGE)},
     /* Backup: OFF BY DEFAULT. The subtitle explains the feature -- the two local archives always
      * happen; this only opts in to a USB / Google Drive COPY. The "Current:" line shows the live
      * target state (az_status_backup: "off (local only)" by default). */

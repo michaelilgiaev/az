@@ -182,6 +182,9 @@ const char *az_status_airplane(char *buf, size_t n);
 const char *az_status_firewall(char *buf, size_t n);
 const char *az_status_network(char *buf, size_t n);
 const char *az_status_machine(char *buf, size_t n);
+const char *az_status_gpu(char *buf, size_t n);
+const char *az_status_timedate(char *buf, size_t n);
+const char *az_status_language(char *buf, size_t n);
 const char *az_status_volume(char *buf, size_t n);
 const char *az_status_brightness(char *buf, size_t n);
 /* Backup targets: a short line summarising the opt-in copy targets `azarch backup --configure`

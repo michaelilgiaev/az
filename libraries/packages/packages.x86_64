@@ -348,3 +348,40 @@ exo
 # off-putting "spying eye" icon that modifications/xviewer.py replaces with an Az'arch icon.
 xviewer
 qalculate-gtk
+# ============================================================================
+# GPU DRIVERS -- every vendor + developer/compute stacks (for `azarch gpu --resolve`)
+# The ISO ships a generic stack (mesa, above) that works everywhere; these are baked in
+# so `azarch gpu --resolve` installs the RIGHT vendor + developer drivers OFFLINE from the
+# local repo. Outdated versions are the user's `pacman -Syu` problem, not this list's.
+# ============================================================================
+# Common (vendor-neutral loader, layers, VA-API/VDPAU bridge, dev tools)
+vulkan-icd-loader
+lib32-vulkan-icd-loader
+vulkan-mesa-layers
+libva
+libva-utils
+libvdpau-va-gl
+vulkan-tools
+clinfo
+vulkan-headers
+opencl-headers
+# Intel (graphics + compute)
+vulkan-intel
+lib32-vulkan-intel
+intel-media-driver
+libva-intel-driver
+intel-compute-runtime
+# AMD (graphics + ROCm compute)
+xf86-video-amdgpu
+vulkan-radeon
+lib32-vulkan-radeon
+rocm-opencl-runtime
+rocm-hip-runtime
+opencl-mesa
+# NVIDIA (proprietary driver + CUDA)
+nvidia
+nvidia-utils
+lib32-nvidia-utils
+nvidia-settings
+cuda
+opencl-nvidia

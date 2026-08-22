@@ -43,6 +43,10 @@ MODULE_ORDER = [
     # machine.py before media.py: media's brightness gate calls machine.is_laptop() by bare
     # name (a laptop-only control), so the machine helpers must be defined first.
     "machine.py",
+    # gpu.py: `azarch gpu` (PCI GPU detection + offline driver resolve). A hardware probe like
+    # machine.py, with no dependency on later modules; before command_line_interface.py, which
+    # dispatches `gpu` to cmd_gpu by bare name.
+    "gpu.py",
     "media.py",
     # firewall.py before network.py: network's status/dispatch call the firewall functions
     # by bare name, and this keeps every module under the per-file size budget.

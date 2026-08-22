@@ -413,6 +413,47 @@ const char *az_status_machine(char *buf, size_t n)
     return buf;
 }
 
+/* GPU: the vendor summary line `azarch gpu` prints first (e.g. "GPU vendor(s) detected: nvidia"
+ * or "GPU: generic ..."). az_capture keeps only that first line. Degrades to "unknown" if azarch
+ * is missing, so the cell is never blank -- matching az_status_machine's shape. */
+const char *az_status_gpu(char *buf, size_t n)
+{
+    const char *argv[] = {"azarch", "gpu", NULL};
+    char raw[128] = {0};
+    if (az_have("azarch") && az_capture(argv, raw, sizeof raw) == 0 && raw[0]) {
+        snprintf(buf, n, "%s", raw);
+        return buf;
+    }
+    snprintf(buf, n, "unknown");
+    return buf;
+}
+
+/* Time & Date: the current system timezone -- `azarch timedate` (no arg) prints it on line 1. */
+const char *az_status_timedate(char *buf, size_t n)
+{
+    const char *argv[] = {"azarch", "timedate", NULL};
+    char raw[128] = {0};
+    if (az_have("azarch") && az_capture(argv, raw, sizeof raw) == 0 && raw[0]) {
+        snprintf(buf, n, "%s", raw);
+        return buf;
+    }
+    snprintf(buf, n, "unknown");
+    return buf;
+}
+
+/* Language: `azarch language` (no arg) prints "LANG=..." on its first line; show that. */
+const char *az_status_language(char *buf, size_t n)
+{
+    const char *argv[] = {"azarch", "language", NULL};
+    char raw[128] = {0};
+    if (az_have("azarch") && az_capture(argv, raw, sizeof raw) == 0 && raw[0]) {
+        snprintf(buf, n, "%s", raw);
+        return buf;
+    }
+    snprintf(buf, n, "unknown");
+    return buf;
+}
+
 const char *az_status_volume(char *buf, size_t n)
 {
     /* `azarch volume get` prints "<pct>" or "<pct> muted" on its first line. Report a tidy

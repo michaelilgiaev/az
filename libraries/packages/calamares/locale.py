@@ -10,7 +10,7 @@ keyboard is English-only ("us"), and the timezone is Asia/Jerusalem, all fixed.
 The old behaviour -- IP-geolocating the timezone/country (curl ipapi.co) and
 switching the display locale from LANGUAGE_MAP -- is intentionally gone. It is
 being reimplemented as separate, user-invoked guest commands (`azarch
---resolve-date-time` / `--resolve-language` / `--resolve-region`) tracked in
+timedate --resolve` / `azarch language --resolve`) tracked in
 issue #46; that work is deliberately NOT done here. LANGUAGE_MAP is retained as
 the single source of truth those future commands will consume (adding a language
 is still a one-line Python edit), but it is no longer embedded in the shipped
@@ -192,7 +192,7 @@ RESOLVER_COUNTRY_TABLE: dict[str, tuple[str, str, str, bool]] = {
 def resolver_country_table_sh() -> str:
     """Render RESOLVER_COUNTRY_TABLE as ``CC|locale|layout|keymap|english`` lines.
     `english` is the literal 1/0. This is the data the guest resolver
-    (`azarch --resolve-language`/`--resolve-region`) maps an IP-geolocated country
+    (`azarch language --resolve`) maps an IP-geolocated country
     code onto. Kept as the canonical pipe-delimited rendering the tests pin the
     table's contents against; the command line interface itself embeds the Python form below."""
     out = []
@@ -230,7 +230,7 @@ DEFAULT_KEYMAP = "us"
 DEFAULT_TIME_LOCALE = "en_GB.UTF-8"
 
 # Az'arch default (and, since auto-resolve was removed, ONLY) timezone. Dynamic
-# geo detection is deferred to `azarch --resolve-date-time` (issue #46).
+# geo detection is deferred to `azarch timedate --resolve` (issue #46).
 DEFAULT_TIMEZONE = "Asia/Jerusalem"
 
 

@@ -1062,11 +1062,14 @@ def test_azarch_sshd_is_fail_fast_no_false_success(monkeypatch):
 # --- azarch --resolve-* guest command line interface (IP geolocation, user-chosen server) ------
 
 def test_azarch_resolve_subcommands_present_in_case_and_usage():
-    # All three resolvers must be real dispatch branches AND advertised in usage.
+    # The resolvers are now POSITIONAL subcommands (azarch timedate/language --resolve).
     out = desktop.azarch_command_line_interface()
-    for sub in ("--resolve-region", "--resolve-date-time", "--resolve-language"):
+    for sub in ("timedate", "language", "gpu"):
         assert f'cmd == "{sub}"' in out              # dispatch branch
-        assert (sub + " ") in out                    # usage line mentions it
+        assert (sub + " ") in out                    # usage mentions it
+    # The old flag surface is gone.
+    for old in ("--resolve-date-time", "--resolve-language", "--resolve-region"):
+        assert old not in out
 
 
 def test_azarch_resolve_offers_five_shuffled_servers():
@@ -1114,11 +1117,16 @@ def test_azarch_resolve_language_keeps_lang_english():
     assert '"LC_NUMERIC", "LC_TIME", "LC_MONETARY", "LC_PAPER", "LC_MEASUREMENT"' in out
 
 
-def test_azarch_resolve_region_does_both_timezone_and_language():
-    # --resolve-region must apply BOTH the timezone and the language from a single
-    # server query. Exercise the real dispatch with a stubbed resolver.
+def test_resolve_region_flag_removed():
+    # --resolve-region (do timezone AND language in one query) was intentionally dropped when
+    # the resolvers became positional (azarch timedate/language --resolve). A user runs both
+    # commands, picking a server each time. Pin that the flag is gone.
     azcli = _load_azarch_command_line_interface()
+    assert azcli.main(["--resolve-region"]) == 2
 
+
+def test_azarch_timedate_resolve_sets_timezone_only():
+    azcli = _load_azarch_command_line_interface()
     calls = []
     orig_resolve = azcli.resolve_via_server
     orig_tz = azcli.apply_timezone
@@ -1127,61 +1135,14 @@ def test_azarch_resolve_region_does_both_timezone_and_language():
         azcli.resolve_via_server = lambda: ("SV", "America/El_Salvador")
         azcli.apply_timezone = lambda tz: calls.append(("tz", tz)) or 0
         azcli.apply_language = lambda cc: calls.append(("lang", cc)) or 0
-        rc = azcli.main(["--resolve-region"])
+        rc = azcli.main(["timedate", "--resolve"])
     finally:
         azcli.resolve_via_server = orig_resolve
         azcli.apply_timezone = orig_tz
         azcli.apply_language = orig_lang
     assert rc == 0
     assert ("tz", "America/El_Salvador") in calls
-    assert ("lang", "SV") in calls
-
-
-def test_azarch_resolve_region_short_circuits_on_timezone_failure():
-    # Behavioral regression guard (the old shell ran `set -e`): if apply_timezone FAILS
-    # (e.g. the geolocated zone is not in the guest's zoneinfo), --resolve-region must
-    # bail with that code and NOT touch the keyboard/locale -- so a bad server result
-    # never half-applies the region. A port that runs both unconditionally would leave
-    # the keyboard changed after a timezone error; this pins the short-circuit.
-    azcli = _load_azarch_command_line_interface()
-
-    calls = []
-    orig_resolve = azcli.resolve_via_server
-    orig_tz = azcli.apply_timezone
-    orig_lang = azcli.apply_language
-    try:
-        azcli.resolve_via_server = lambda: ("SV", "Not/AZone")
-        azcli.apply_timezone = lambda tz: calls.append(("tz", tz)) or 1   # fails
-        azcli.apply_language = lambda cc: calls.append(("lang", cc)) or 0
-        rc = azcli.main(["--resolve-region"])
-    finally:
-        azcli.resolve_via_server = orig_resolve
-        azcli.apply_timezone = orig_tz
-        azcli.apply_language = orig_lang
-    assert rc == 1, rc
-    assert ("tz", "Not/AZone") in calls
-    assert not any(k == "lang" for k, _ in calls), calls   # language never applied
-
-
-def test_azarch_resolve_date_time_sets_timezone_only():
-    azcli = _load_azarch_command_line_interface()
-
-    calls = []
-    orig_resolve = azcli.resolve_via_server
-    orig_tz = azcli.apply_timezone
-    orig_lang = azcli.apply_language
-    try:
-        azcli.resolve_via_server = lambda: ("SV", "America/El_Salvador")
-        azcli.apply_timezone = lambda tz: calls.append(("tz", tz)) or 0
-        azcli.apply_language = lambda cc: calls.append(("lang", cc)) or 0
-        rc = azcli.main(["--resolve-date-time"])
-    finally:
-        azcli.resolve_via_server = orig_resolve
-        azcli.apply_timezone = orig_tz
-        azcli.apply_language = orig_lang
-    assert rc == 0
-    assert ("tz", "America/El_Salvador") in calls
-    assert not any(k == "lang" for k, _ in calls)   # date-time never touches language
+    assert not any(k == "lang" for k, _ in calls)
 
 
 def test_azarch_resolve_embeds_country_table_from_locale():

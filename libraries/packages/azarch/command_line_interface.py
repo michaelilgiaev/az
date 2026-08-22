@@ -2,14 +2,72 @@
 """azarch guest command line interface -- top-level dispatch (usage + main).
 
 This is the LAST module bundled into /usr/local/bin/azarch. It ties the pieces together:
-the `theme` positional subcommand (theme.cmd_theme), the `--resolve-*` geolocators
-(resolver.*), and `--sshd-hypervisor` (sshd.sshd_hypervisor). See common.py for the bundle
+the `theme` positional subcommand (theme.cmd_theme), the `timedate`/`language` positional geolocators (resolver.*) and the `gpu` command (gpu.py),
+and `--sshd-hypervisor` (sshd.sshd_hypervisor). See common.py for the bundle
 mechanism; every name referenced below is defined in an earlier bundled module.
 """
 
 from __future__ import annotations
 
 # BUNDLE_START
+
+
+def cmd_timedate(args: list[str]) -> int:
+    """`azarch timedate [--resolve]`. --resolve geolocates (user picks 1 of 5 shuffled
+    servers) and sets the system timezone; no arg prints the current zone. The ONLY timedate
+    path that touches the network -- everything else is static/user-chosen."""
+    opt = args[0] if args else ""
+    if opt in ("--help", "-h", "help"):
+        print("Usage: azarch timedate [--resolve]\n\n"
+              "  --resolve    Geolocate by IP (pick a server) and set the timezone.\n"
+              "  (no option)  Print the current system timezone.")
+        return 0
+    if opt == "--resolve":
+        result = resolve_via_server()
+        if result is None:
+            return 1
+        country, tz = result
+        print(f"Resolved: country={country} timezone={tz}")
+        return apply_timezone(tz)
+    if opt == "":
+        # Current zone: prefer timedatectl; fall back to the /etc/localtime symlink target.
+        if _have("timedatectl"):
+            subprocess.run(["timedatectl", "show", "-p", "Timezone", "--value"], check=False)
+        else:
+            try:
+                print(os.path.realpath("/etc/localtime").split("zoneinfo/", 1)[-1])
+            except OSError:
+                print("unknown")
+        return 0
+    _err(f"azarch timedate: unknown option: {opt}")
+    return 2
+
+
+def cmd_language(args: list[str]) -> int:
+    """`azarch language [--resolve]`. --resolve geolocates (user picks 1 of 5 shuffled
+    servers) and sets English + the region's language/keyboard as a switchable second layout
+    (English only for English-speaking countries); no arg prints the current LANG + layout."""
+    opt = args[0] if args else ""
+    if opt in ("--help", "-h", "help"):
+        print("Usage: azarch language [--resolve]\n\n"
+              "  --resolve    Geolocate by IP (pick a server) and set English + the region "
+              "language.\n"
+              "  (no option)  Print the current language and keyboard layout.")
+        return 0
+    if opt == "--resolve":
+        result = resolve_via_server()
+        if result is None:
+            return 1
+        country, _tz = result
+        print(f"Resolved: country={country}")
+        return apply_language(country)
+    if opt == "":
+        print("LANG=" + os.environ.get("LANG", "en_US.UTF-8"))
+        if _have("setxkbmap"):
+            subprocess.run(["setxkbmap", "-query"], check=False)
+        return 0
+    _err(f"azarch language: unknown option: {opt}")
+    return 2
 
 
 def usage() -> None:
@@ -45,11 +103,13 @@ def usage() -> None:
         "`azarch backup --help`\n"
         "  --sshd-hypervisor    Install host pubkey from ~/shared/authorized_keys "
         "and start sshd\n"
-        "  --resolve-region     Geolocate by IP (pick a server) and set BOTH "
-        "timezone and language\n"
-        "  --resolve-date-time  Geolocate by IP (pick a server) and set the timezone\n"
-        "  --resolve-language   Geolocate by IP (pick a server) and set English + "
-        "the region language"
+        "  gpu [--resolve|--list]  Detect the GPU and resolve its drivers from the baked-in\n"
+        "                          offline repo (developer drivers included). See "
+        "`azarch gpu --help`\n"
+        "  timedate [--resolve]  Geolocate by IP (pick a server) and set the timezone. See\n"
+        "                          `azarch timedate --help`\n"
+        "  language [--resolve]  Geolocate by IP (pick a server) and set English + the region\n"
+        "                          language. See `azarch language --help`"
     )
 
 
@@ -87,35 +147,14 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_display(argv[1:])
     if cmd == "backup":
         return cmd_backup(argv[1:])
+    if cmd == "gpu":
+        return cmd_gpu(argv[1:])
+    if cmd == "timedate":
+        return cmd_timedate(argv[1:])
+    if cmd == "language":
+        return cmd_language(argv[1:])
     if cmd == "--sshd-hypervisor":
         return sshd_hypervisor()
-    if cmd == "--resolve-date-time":
-        result = resolve_via_server()
-        if result is None:
-            return 1
-        country, tz = result
-        print(f"Resolved: country={country} timezone={tz}")
-        return apply_timezone(tz)
-    if cmd == "--resolve-language":
-        result = resolve_via_server()
-        if result is None:
-            return 1
-        country, _tz = result
-        print(f"Resolved: country={country}")
-        return apply_language(country)
-    if cmd == "--resolve-region":
-        result = resolve_via_server()
-        if result is None:
-            return 1
-        country, tz = result
-        print(f"Resolved: country={country} timezone={tz}")
-        # FAIL-FAST like the old shell (`set -e`): if the timezone can't be applied
-        # (e.g. unknown zone), bail WITHOUT touching the keyboard/locale, so a bad
-        # geolocation result never half-applies the region.
-        rc = apply_timezone(tz)
-        if rc != 0:
-            return rc
-        return apply_language(country)
     if cmd in ("-h", "--help", "help"):
         usage()
         return 0

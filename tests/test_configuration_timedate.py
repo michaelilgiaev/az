@@ -354,7 +354,7 @@ def _zone_from_localtime(localtime: str, zoneinfo_dir: str) -> str | None:
 
 def test_zone_resolution_follows_the_symlink(tmp_path):
     """A /etc/localtime symlink into the zoneinfo tree resolves to its IANA name, and
-    following a change (as timedatectl / azarch --resolve-date-time / a manual relink
+    following a change (as timedatectl / azarch timedate --resolve / a manual relink
     would do) yields the new zone -- with no caching, so the page updates itself."""
     zi = tmp_path / "zoneinfo"
     (zi / "Asia").mkdir(parents=True)

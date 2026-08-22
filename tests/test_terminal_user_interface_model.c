@@ -30,7 +30,7 @@ static void test_top_level_is_network_theme_wallpaper(void)
 {
     const AzScreen *m = az_screen_find("main");
     CHECK(m != NULL);
-    CHECK(m->nrows == 9);
+    CHECK(m->nrows == 12);
     CHECK(strcmp(m->rows[0].label, "Network") == 0);   /* Network is the first option */
     CHECK(strcmp(m->rows[1].label, "Theme") == 0);
     CHECK(strcmp(m->rows[2].label, "Wallpaper") == 0);
@@ -38,8 +38,11 @@ static void test_top_level_is_network_theme_wallpaper(void)
     CHECK(strcmp(m->rows[4].label, "Brightness") == 0);
     CHECK(strcmp(m->rows[5].label, "Default Applications") == 0);
     CHECK(strcmp(m->rows[6].label, "Display") == 0);
-    CHECK(strcmp(m->rows[7].label, "Machine Type") == 0);
-    CHECK(strcmp(m->rows[8].label, "Backup") == 0);    /* the new opt-in backup entry, last */
+    CHECK(strcmp(m->rows[7].label, "GPU") == 0);
+    CHECK(strcmp(m->rows[8].label, "Machine Type") == 0);
+    CHECK(strcmp(m->rows[9].label, "Time & Date") == 0);
+    CHECK(strcmp(m->rows[10].label, "Language") == 0);
+    CHECK(strcmp(m->rows[11].label, "Backup") == 0);    /* opt-in backup entry, still last */
     /* the entry title is the (re)named "Az'arch Settings" */
     CHECK(strcmp(m->title, "Az'arch Settings") == 0);
 }
@@ -52,7 +55,7 @@ static void test_screen_set_is_exactly_expected(void)
         "main", "theme", "wallpaper", "network",
         "network.wifi", "network.wired", "network.bluetooth",
         "network.airplane", "network.firewall",
-        "volume", "brightness", "machine", "backup",
+        "volume", "brightness", "machine", "timedate", "language", "backup",
         /* Default Applications: the category list + one screen per category (Mail excluded --
          * no mail client shipped, so the TUI does not surface it). */
         "defaultapps",
@@ -62,7 +65,7 @@ static void test_screen_set_is_exactly_expected(void)
         "defaultapps.calculator", "defaultapps.terminal",
         /* Display: the screen + the scale chooser + the xrandr feature screens. */
         "display", "display.scale", "display.resolution", "display.refresh",
-        "display.orientation", "display.monitors",
+        "display.orientation", "display.monitors", "gpu",
     };
     /* az_screen_count() counts only the STATIC SCREENS[] table. The 13 per-category
      * "defaultapps.<key>" screens are built at RUNTIME (az_da_screen), so they are findable but
@@ -149,9 +152,9 @@ static void test_machine_type_screen(void)
      * (Machine Type is now the EIGHTH row, after Volume, Brightness, Default Applications AND
      * Display were added before it) */
     const AzScreen *main_s = az_screen_find("main");
-    CHECK(main_s->rows[7].status == az_status_machine);
-    CHECK(main_s->rows[7].kind == AZ_ACT_SCREEN);
-    CHECK(strcmp(main_s->rows[7].target, "machine") == 0);
+    CHECK(main_s->rows[8].status == az_status_machine);
+    CHECK(main_s->rows[8].kind == AZ_ACT_SCREEN);
+    CHECK(strcmp(main_s->rows[8].target, "machine") == 0);
 }
 
 /* The Backup screen (step six): a "Backup" entry on ROWS_MAIN opens a screen that drives the
@@ -165,10 +168,10 @@ static void test_backup_screen(void)
 {
     /* the ROWS_MAIN entry that opens it -- LAST row, with the target-summary status */
     const AzScreen *main_s = az_screen_find("main");
-    CHECK(strcmp(main_s->rows[8].label, "Backup") == 0);
-    CHECK(main_s->rows[8].kind == AZ_ACT_SCREEN);
-    CHECK(strcmp(main_s->rows[8].target, "backup") == 0);
-    CHECK(main_s->rows[8].status == az_status_backup);
+    CHECK(strcmp(main_s->rows[11].label, "Backup") == 0);
+    CHECK(main_s->rows[11].kind == AZ_ACT_SCREEN);
+    CHECK(strcmp(main_s->rows[11].target, "backup") == 0);
+    CHECK(main_s->rows[11].status == az_status_backup);
 
     const AzScreen *b = az_screen_find("backup");
     CHECK(b != NULL);
@@ -609,6 +612,31 @@ static void test_wallpaper_rows_preview(void)
     CHECK(strstr(w->subtitle, "/usr/share/wallpapers") != NULL);
 }
 
+/* GPU / Time & Date / Language: the three new screens resolve, carry the right `azarch`
+ * subcommand targets, and their main-menu rows descend into them. */
+static void test_resolve_screens(void)
+{
+    const AzScreen *g = az_screen_find("gpu");
+    const AzScreen *t = az_screen_find("timedate");
+    const AzScreen *l = az_screen_find("language");
+    CHECK(g != NULL); CHECK(t != NULL); CHECK(l != NULL);
+    CHECK(strcmp(g->title, "GPU") == 0);
+    CHECK(strcmp(g->rows[0].target, "azarch gpu --resolve") == 0);
+    CHECK(g->rows[0].needs_root == 1);              /* resolve installs packages (pacman) */
+    CHECK(g->rows[0].show_output == 1);
+    CHECK(strcmp(t->rows[0].target, "azarch timedate --resolve") == 0);
+    CHECK(strcmp(l->rows[0].target, "azarch language --resolve") == 0);
+    CHECK(g->current == az_status_gpu);
+    CHECK(t->current == az_status_timedate);
+    CHECK(l->current == az_status_language);
+    /* main-menu rows descend into the new screens (indices per Step 2) */
+    const AzScreen *m = az_screen_find("main");
+    CHECK(strcmp(m->rows[7].target, "gpu") == 0);
+    CHECK(m->rows[7].status == az_status_gpu);
+    CHECK(strcmp(m->rows[9].target, "timedate") == 0);
+    CHECK(strcmp(m->rows[10].target, "language") == 0);
+}
+
 /* The search filter: empty query matches all; a label substring matches; a miss doesn't.
  * All three cases short-circuit before the live status probe. */
 static void test_row_matches(void)
@@ -642,6 +670,7 @@ int main(void)
     test_screen_set_is_exactly_expected();
     test_volume_and_brightness_screens();
     test_machine_type_screen();
+    test_resolve_screens();
     test_backup_screen();
     test_default_applications_screens();
     test_display_screens();

@@ -1364,9 +1364,9 @@ def azarch_command_line_interface() -> str:
     Subcommands (see packages/azarch/ for the full behavior):
       theme [--dark|--white]  set the system colour theme (dark default); no arg prints it
       --sshd-hypervisor   install host pubkey from ~/shared/authorized_keys, start sshd
-      --resolve-date-time geolocate by IP (pick a server) and set the timezone
-      --resolve-language  geolocate by IP and set English + the region language
-      --resolve-region    do both
+      gpu [--resolve|--list]  detect the GPU and resolve its drivers from the offline repo
+      timedate [--resolve]    geolocate by IP (pick a server) and set the timezone
+      language [--resolve]    geolocate by IP and set English + the region language
     """
     from packages.calamares.locale import resolver_country_table_py  # noqa: E402 (locale lives with the calamares package)
     from packages.azarch.bundle import bundle_source  # noqa: E402 (the command line interface package's bundler)

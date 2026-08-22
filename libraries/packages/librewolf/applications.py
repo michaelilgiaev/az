@@ -10,7 +10,7 @@ Two load-bearing design choices:
   1. TIMEZONE FOLLOWS THE SYSTEM, LIVE. The distro's timezone is configured by
      Calamares at install (default Asia/Jerusalem), but the user may change it later by
      ANY means -- the Calamares Location page, `timedatectl set-timezone`,
-     `azarch --resolve-date-time`, or hand-editing the /etc/localtime symlink. All of
+     `azarch timedate --resolve`, or hand-editing the /etc/localtime symlink. All of
      those converge on ONE ground truth: the /etc/localtime symlink's target under
      /usr/share/zoneinfo (that is literally how the system stores "the timezone"). So
      this app resolves the zone by reading that symlink on EVERY request (`_system_zone`)
@@ -48,7 +48,7 @@ PORT = 49154
 # Where the OS stores "the current timezone": /etc/localtime is a symlink into the
 # zoneinfo database, and its target path *is* the IANA zone name. Reading it live is how
 # this app follows the system zone no matter how it was changed (Calamares, timedatectl,
-# azarch --resolve-date-time, a manual symlink). Kept as constants so a test can pin them.
+# azarch timedate --resolve, a manual symlink). Kept as constants so a test can pin them.
 LOCALTIME_PATH = "/etc/localtime"
 ZONEINFO_DIR = "/usr/share/zoneinfo"
 
