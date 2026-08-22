@@ -622,10 +622,22 @@ static void test_resolve_screens(void)
     CHECK(g != NULL); CHECK(t != NULL); CHECK(l != NULL);
     CHECK(strcmp(g->title, "GPU") == 0);
     CHECK(strcmp(g->rows[0].target, "azarch gpu --resolve") == 0);
+    CHECK(g->rows[0].kind == AZ_ACT_APPLY);         /* GPU resolve is non-interactive (just installs) */
     CHECK(g->rows[0].needs_root == 1);              /* resolve installs packages (pacman) */
     CHECK(g->rows[0].show_output == 1);
-    CHECK(strcmp(t->rows[0].target, "azarch timedate --resolve") == 0);
-    CHECK(strcmp(l->rows[0].target, "azarch language --resolve") == 0);
+    /* Time & Date / Language resolve pick 1 of 5 servers INTERACTIVELY. The capture overlay
+     * feeds /dev/null to stdin, so the resolver cannot prompt there -- instead these are
+     * AZ_ACT_PROMPT rows: the UI collects the server number in-field and appends it, running
+     * "azarch <sub> --resolve --server <N>" (the non-interactive resolver path). The prompt
+     * label lists the fixed server order so the typed number is unambiguous. */
+    CHECK(t->rows[0].kind == AZ_ACT_PROMPT);
+    CHECK(strcmp(t->rows[0].target, "azarch timedate --resolve --server") == 0);
+    CHECK(t->rows[0].prompt != NULL && strstr(t->rows[0].prompt, "ipapi.co") != NULL);
+    CHECK(t->rows[0].show_output == 1);
+    CHECK(l->rows[0].kind == AZ_ACT_PROMPT);
+    CHECK(strcmp(l->rows[0].target, "azarch language --resolve --server") == 0);
+    CHECK(l->rows[0].prompt != NULL && strstr(l->rows[0].prompt, "ipapi.co") != NULL);
+    CHECK(l->rows[0].show_output == 1);
     CHECK(g->current == az_status_gpu);
     CHECK(t->current == az_status_timedate);
     CHECK(l->current == az_status_language);

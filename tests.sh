@@ -70,4 +70,10 @@ export PYTHONPATH="$REPODIR/libraries:$REPODIR/scripts/libraries${PYTHONPATH:+:$
 export PYTHONDONTWRITEBYTECODE=1
 
 echo "[tests] running pytest"
-exec "$PY" -m pytest "$@"
+# The default run is PURE/OFFLINE (see the header): the `network`-marked live
+# resolver-server contract test is deselected unless the caller asks for a marker
+# themselves. Run the live tier explicitly with `bash tests.sh -m network`.
+case " $* " in
+    *" -m "*|*" --markers "*) exec "$PY" -m pytest "$@" ;;
+    *)                        exec "$PY" -m pytest -m "not network" "$@" ;;
+esac

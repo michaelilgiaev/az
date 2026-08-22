@@ -202,30 +202,36 @@ def _load_cli():
 def test_timedate_resolve_sets_timezone_only():
     ns = _load_cli()
     calls = []
-    ns["resolve_via_server"] = lambda: ("SV", "America/El_Salvador")
+    # resolve_via_server now takes an optional non-interactive `choice`; a bare
+    # `--resolve` (no --server) must pass choice=None (the shuffle+prompt path).
+    ns["resolve_via_server"] = lambda choice=None: (
+        calls.append(("choice", choice)) or ("SV", "America/El_Salvador"))
     ns["apply_timezone"] = lambda tz: calls.append(("tz", tz)) or 0
     ns["apply_language"] = lambda cc: calls.append(("lang", cc)) or 0
     rc = ns["main"](["timedate", "--resolve"])
     assert rc == 0
     assert ("tz", "America/El_Salvador") in calls
+    assert ("choice", None) in calls
     assert not any(k == "lang" for k, _ in calls)
 
 
 def test_language_resolve_sets_language_only():
     ns = _load_cli()
     calls = []
-    ns["resolve_via_server"] = lambda: ("SV", "America/El_Salvador")
+    ns["resolve_via_server"] = lambda choice=None: (
+        calls.append(("choice", choice)) or ("SV", "America/El_Salvador"))
     ns["apply_timezone"] = lambda tz: calls.append(("tz", tz)) or 0
     ns["apply_language"] = lambda cc: calls.append(("lang", cc)) or 0
     rc = ns["main"](["language", "--resolve"])
     assert rc == 0
     assert ("lang", "SV") in calls
+    assert ("choice", None) in calls
     assert not any(k == "tz" for k, _ in calls)
 
 
 def test_timedate_resolve_propagates_resolver_failure():
     ns = _load_cli()
-    ns["resolve_via_server"] = lambda: None            # no network / bad response
+    ns["resolve_via_server"] = lambda choice=None: None   # no network / bad response
     rc = ns["main"](["timedate", "--resolve"])
     assert rc == 1
 

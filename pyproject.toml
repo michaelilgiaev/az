@@ -12,3 +12,6 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 pythonpath = ["libraries", "scripts/libraries"]
 addopts = "-ra -q --strict-markers --import-mode=importlib"
+markers = [
+    "network: test really pings external hosts; skips itself when offline (the default `bash tests.sh` run is pure/offline). Deselect with `-m 'not network'`.",
+]

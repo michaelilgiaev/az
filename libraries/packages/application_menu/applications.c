@@ -156,6 +156,8 @@ static const char *HIDDEN_IDS[] = {
     "bvnc.desktop",
     "avahi-discover.desktop",
     "calamares.desktop",          /* stock installer -- dead pkexec path, hide it */
+    "cmake-gui.desktop",          /* "CMake" GUI -- dev tool riding in on cmake, not user-facing */
+    "nvidia-settings.desktop",    /* "NVIDIA X Server Settings" -- driver tool, keep out of the menu */
     "kdesystemsettings.desktop",
     "lstopo.desktop",
     "htop.desktop",

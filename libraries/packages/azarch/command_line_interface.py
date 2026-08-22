@@ -12,18 +12,34 @@ from __future__ import annotations
 # BUNDLE_START
 
 
+def _resolve_server_choice(args: list[str]) -> str | None:
+    """Pull an optional `--server N` (N in 1-5) out of a --resolve arg list, so the
+    server can be chosen non-interactively (the C terminal UI passes the number the user
+    typed into its in-UI prompt, because its captured/`/dev/null`-stdin overlay cannot
+    host the interactive picker). Returns the digit string, or None for the interactive
+    shuffle+prompt path. `--server` with no/blank value falls back to interactive."""
+    for i, a in enumerate(args):
+        if a == "--server":
+            return args[i + 1] if i + 1 < len(args) else None
+        if a.startswith("--server="):
+            return a.split("=", 1)[1] or None
+    return None
+
+
 def cmd_timedate(args: list[str]) -> int:
-    """`azarch timedate [--resolve]`. --resolve geolocates (user picks 1 of 5 shuffled
-    servers) and sets the system timezone; no arg prints the current zone. The ONLY timedate
-    path that touches the network -- everything else is static/user-chosen."""
+    """`azarch timedate [--resolve [--server N]]`. --resolve geolocates (user picks 1 of 5
+    shuffled servers, or a fixed server via --server N) and sets the system timezone; no arg
+    prints the current zone. The ONLY timedate path that touches the network -- everything
+    else is static/user-chosen."""
     opt = args[0] if args else ""
     if opt in ("--help", "-h", "help"):
-        print("Usage: azarch timedate [--resolve]\n\n"
+        print("Usage: azarch timedate [--resolve [--server N]]\n\n"
               "  --resolve    Geolocate by IP (pick a server) and set the timezone.\n"
+              "  --server N   With --resolve: use server N (1-5) without prompting.\n"
               "  (no option)  Print the current system timezone.")
         return 0
     if opt == "--resolve":
-        result = resolve_via_server()
+        result = resolve_via_server(_resolve_server_choice(args))
         if result is None:
             return 1
         country, tz = result
@@ -44,18 +60,20 @@ def cmd_timedate(args: list[str]) -> int:
 
 
 def cmd_language(args: list[str]) -> int:
-    """`azarch language [--resolve]`. --resolve geolocates (user picks 1 of 5 shuffled
-    servers) and sets English + the region's language/keyboard as a switchable second layout
-    (English only for English-speaking countries); no arg prints the current LANG + layout."""
+    """`azarch language [--resolve [--server N]]`. --resolve geolocates (user picks 1 of 5
+    shuffled servers, or a fixed server via --server N) and sets English + the region's
+    language/keyboard as a switchable second layout (English only for English-speaking
+    countries); no arg prints the current LANG + layout."""
     opt = args[0] if args else ""
     if opt in ("--help", "-h", "help"):
-        print("Usage: azarch language [--resolve]\n\n"
+        print("Usage: azarch language [--resolve [--server N]]\n\n"
               "  --resolve    Geolocate by IP (pick a server) and set English + the region "
               "language.\n"
+              "  --server N   With --resolve: use server N (1-5) without prompting.\n"
               "  (no option)  Print the current language and keyboard layout.")
         return 0
     if opt == "--resolve":
-        result = resolve_via_server()
+        result = resolve_via_server(_resolve_server_choice(args))
         if result is None:
             return 1
         country, _tz = result

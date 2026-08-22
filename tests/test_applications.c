@@ -43,7 +43,11 @@ static void test_denylist(void) {
         "lftp.desktop", "cups.desktop", "org.kde.kmenuedit.desktop",
         "assistant.desktop", "qdbusviewer.desktop", "linguist.desktop",
         "qv4l2.desktop", "qvidcap.desktop", "designer.desktop",
-        "vim.desktop", NULL,
+        "vim.desktop",
+        /* CMake ("CMake") and nvidia-settings ("NVIDIA X Server Settings") are dev/driver
+         * tools that ride in on other packages; they must not clutter the user menu. */
+        "cmake-gui.desktop", "nvidia-settings.desktop",
+        NULL,
     };
     for (int i = 0; hidden[i]; i++)
         CHECK(az_is_hidden_desktop_id(hidden[i]) == TRUE, hidden[i]);

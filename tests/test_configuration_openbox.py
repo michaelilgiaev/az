@@ -1132,7 +1132,7 @@ def test_azarch_timedate_resolve_sets_timezone_only():
     orig_tz = azcli.apply_timezone
     orig_lang = azcli.apply_language
     try:
-        azcli.resolve_via_server = lambda: ("SV", "America/El_Salvador")
+        azcli.resolve_via_server = lambda choice=None: ("SV", "America/El_Salvador")
         azcli.apply_timezone = lambda tz: calls.append(("tz", tz)) or 0
         azcli.apply_language = lambda cc: calls.append(("lang", cc)) or 0
         rc = azcli.main(["timedate", "--resolve"])
@@ -1143,6 +1143,115 @@ def test_azarch_timedate_resolve_sets_timezone_only():
     assert rc == 0
     assert ("tz", "America/El_Salvador") in calls
     assert not any(k == "lang" for k, _ in calls)
+
+
+# --- ipwho.is timezone-shape regression (issue: dict timezone) --------------
+
+def test_ipwho_is_timezone_path_digs_the_id_field():
+    # ipwho.is returns `timezone` as a nested OBJECT ({"id": "Asia/Jerusalem", ...}),
+    # not a bare string like the other four servers. The dotted path MUST be
+    # "timezone.id" so _dig extracts the IANA zone; a bare "timezone" path yields the
+    # whole dict and apply_timezone then fails with "unknown timezone {...}".
+    azcli = _load_azarch_command_line_interface()
+    by_label = {s[0]: s for s in azcli.RESOLVER_SERVERS}
+    assert by_label["ipwho.is"][3] == "timezone.id", by_label["ipwho.is"]
+    # The other servers return a flat timezone string, so their path stays bare.
+    for label in ("ipquery.io", "ip-api.com", "ipinfo.io"):
+        assert by_label[label][3].split(".")[-1] == "timezone", by_label[label]
+
+
+def test_resolve_via_server_flattens_ipwho_is_dict_timezone(monkeypatch):
+    # End-to-end guard on the real resolve_via_server: given ipwho.is's dict-timezone
+    # payload, it must return the FLAT string "Asia/Jerusalem", never the dict. Pin the
+    # server (choice=5 -> ipwho.is in the fixed order) and stub the HTTP fetch.
+    azcli = _load_azarch_command_line_interface()
+    payload = {
+        "country_code": "IL",
+        "timezone": {"id": "Asia/Jerusalem", "abbr": "IDT", "is_dst": True,
+                     "offset": 10800, "utc": "+03:00"},
+    }
+
+    class _Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return _json.dumps(payload).encode("utf-8")
+
+    import urllib.request
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _Resp())
+    ipwho_index = [s[0] for s in azcli.RESOLVER_SERVERS].index("ipwho.is") + 1
+    result = azcli.resolve_via_server(choice=str(ipwho_index))
+    assert result == ("IL", "Asia/Jerusalem"), result
+
+
+# --- non-interactive server pick (needed for the TUI capture overlay) -------
+
+def test_resolve_via_server_choice_arg_skips_the_stdin_prompt(monkeypatch):
+    # The C terminal UI runs the resolver with stdin from /dev/null and its output
+    # captured, so an interactive "Server number:" prompt can never be answered there.
+    # resolve_via_server(choice="N") must select the Nth server WITHOUT reading stdin
+    # and WITHOUT shuffling (fixed order == RESOLVER_SERVERS), so the TUI can pass the
+    # number the user typed into the in-UI prompt.
+    azcli = _load_azarch_command_line_interface()
+
+    def _boom():
+        raise AssertionError("resolve_via_server must not read stdin when choice is given")
+
+    monkeypatch.setattr("builtins.input", _boom)
+    queried = {}
+
+    class _Resp:
+        def __init__(self, label): self.label = label
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self):
+            return _json.dumps({"country_code": "US", "timezone": "America/New_York"}).encode()
+
+    import urllib.request
+
+    def _fake_urlopen(url, *a, **k):
+        # Record which server URL was hit so we can prove choice maps to fixed order.
+        queried["url"] = url
+        return _Resp("x")
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+    # choice="1" must always hit RESOLVER_SERVERS[0]'s url (fixed, unshuffled).
+    azcli.resolve_via_server(choice="1")
+    assert queried["url"] == azcli.RESOLVER_SERVERS[0][1]
+
+
+def test_resolve_via_server_rejects_out_of_range_choice(monkeypatch):
+    azcli = _load_azarch_command_line_interface()
+    monkeypatch.setattr("builtins.input",
+                        lambda *a: (_ for _ in ()).throw(AssertionError("no stdin")))
+    assert azcli.resolve_via_server(choice="9") is None
+    assert azcli.resolve_via_server(choice="0") is None
+    assert azcli.resolve_via_server(choice="x") is None
+
+
+def test_timedate_resolve_passes_server_flag_through(monkeypatch):
+    # `azarch timedate --resolve --server 3` must forward "3" to resolve_via_server as the
+    # non-interactive choice (this is exactly what the TUI row runs).
+    azcli = _load_azarch_command_line_interface()
+    seen = {}
+    monkeypatch.setattr(azcli, "resolve_via_server",
+                        lambda choice=None: seen.__setitem__("choice", choice)
+                        or ("US", "America/New_York"))
+    monkeypatch.setattr(azcli, "apply_timezone", lambda tz: 0)
+    rc = azcli.main(["timedate", "--resolve", "--server", "3"])
+    assert rc == 0
+    assert seen["choice"] == "3"
+
+
+def test_language_resolve_passes_server_flag_through(monkeypatch):
+    azcli = _load_azarch_command_line_interface()
+    seen = {}
+    monkeypatch.setattr(azcli, "resolve_via_server",
+                        lambda choice=None: seen.__setitem__("choice", choice)
+                        or ("US", "America/New_York"))
+    monkeypatch.setattr(azcli, "apply_language", lambda cc: 0)
+    rc = azcli.main(["language", "--resolve", "--server", "2"])
+    assert rc == 0
+    assert seen["choice"] == "2"
 
 
 def test_azarch_resolve_embeds_country_table_from_locale():

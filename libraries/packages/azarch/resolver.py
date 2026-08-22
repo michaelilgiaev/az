@@ -21,7 +21,11 @@ RESOLVER_SERVERS: list[tuple[str, str, str, str]] = [
      "location.country_code", "location.timezone"),
     ("ip-api.com", "http://ip-api.com/json/", "countryCode", "timezone"),
     ("ipinfo.io", "https://ipinfo.io/json", "country", "timezone"),
-    ("ipwho.is", "https://ipwho.is/", "country_code", "timezone"),
+    # ipwho.is nests the zone under an OBJECT ("timezone": {"id": "Asia/Jerusalem",
+    # "abbr": ..., "offset": ...}), unlike the other four which return a flat string.
+    # The path must dig the ".id" leaf, or apply_timezone gets the whole dict and dies
+    # with "unknown timezone {...}". (Guarded by the live server-contract test.)
+    ("ipwho.is", "https://ipwho.is/", "country_code", "timezone.id"),
 ]
 
 
@@ -35,23 +39,36 @@ def _dig(data: dict, path: str):
     return cur
 
 
-def resolve_via_server() -> tuple[str, str] | None:
-    """Prompt the user to choose one of the 5 shuffled servers, query it, and return
-    (COUNTRY, TIMEZONE) with the country uppercased. Returns None on any failure (no
-    network, bad/empty response). Prompts/errors go to stderr."""
-    import random              # lazy, like urllib below: keep bare-`azarch` startup lean.
-    servers = list(RESOLVER_SERVERS)
-    random.shuffle(servers)
-    _err("Pick a server to geolocate this machine (1-5):")
-    for i, (label, *_rest) in enumerate(servers, 1):
-        _err(f"  {i}) {label}")
-    sys.stderr.write("Server number: ")
-    sys.stderr.flush()
-    try:
-        choice = input()
-    except EOFError:
-        _err("azarch: invalid selection")
-        return None
+def resolve_via_server(choice: str | None = None) -> tuple[str, str] | None:
+    """Choose one of the 5 geolocation servers, query it, and return (COUNTRY, TIMEZONE)
+    with the country uppercased. Returns None on any failure (no network, bad/empty
+    response, invalid selection). Prompts/errors go to stderr.
+
+    Two modes:
+      * choice is None (default, from a shell/tty): the 5 servers are SHUFFLED and the
+        user is prompted to type a number 1-5 on stdin.
+      * choice is "1".."5" (from the C terminal UI, which captures output and feeds
+        /dev/null to stdin -- an interactive prompt can never be answered there): the
+        Nth server of the FIXED, unshuffled RESOLVER_SERVERS order is used, no stdin
+        read, no menu printed. The TUI shows the fixed list itself and passes the number.
+    """
+    if choice is None:
+        import random          # lazy, like urllib below: keep bare-`azarch` startup lean.
+        servers = list(RESOLVER_SERVERS)
+        random.shuffle(servers)
+        _err("Pick a server to geolocate this machine (1-5):")
+        for i, (label, *_rest) in enumerate(servers, 1):
+            _err(f"  {i}) {label}")
+        sys.stderr.write("Server number: ")
+        sys.stderr.flush()
+        try:
+            choice = input()
+        except EOFError:
+            _err("azarch: invalid selection")
+            return None
+    else:
+        # Non-interactive pick: fixed order so the number the TUI showed maps 1:1.
+        servers = list(RESOLVER_SERVERS)
     if choice not in ("1", "2", "3", "4", "5"):
         _err(f"azarch: invalid selection {choice}")
         return None

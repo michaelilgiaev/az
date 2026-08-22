@@ -180,20 +180,29 @@ static const AzRow ROWS_GPU[] = {
      .show_output=1, .base="azarch gpu --list"},
 };
 
-/* Time & Date: resolve the timezone by IP geolocation. --resolve asks the user to PICK one of
- * 5 shuffled servers IN THE TERMINAL, then sets the zone (timedatectl / localtime). It touches
- * the system clock config, but the tool self-escalates (apply_timezone uses timedatectl or a
- * sudo relink), so the wrapper does not pre-secure sudo -> needs_root stays 0; show the output. */
+/* Time & Date: resolve the timezone by IP geolocation. --resolve normally asks the user to PICK
+ * one of 5 servers on stdin -- but the UI runs commands with output CAPTURED and stdin from
+ * /dev/null, so that interactive prompt can never be answered here. Instead this is an
+ * AZ_ACT_PROMPT row: the UI collects the server number in its own in-field prompt and appends it,
+ * running "azarch timedate --resolve --server <N>" (the non-interactive resolver path, which uses
+ * the FIXED server order the prompt lists). apply_timezone self-escalates (timedatectl / sudo
+ * relink), so needs_root stays 0; show the output. */
 static const AzRow ROWS_TIMEDATE[] = {
-    {.label="Resolve timezone (pick a server)", .kind=AZ_ACT_APPLY, .target="azarch timedate --resolve",
+    {.label="Resolve timezone (pick a server)", .kind=AZ_ACT_PROMPT,
+     .target="azarch timedate --resolve --server",
+     .prompt="Server 1-5 (1 ipapi.co  2 ipquery.io  3 ip-api.com  4 ipinfo.io  5 ipwho.is):",
      .show_output=1, .base="timedatectl set-timezone <geolocated-zone>"},
 };
 
 /* Language: resolve the language/keyboard by IP geolocation. English stays the UI language;
- * a non-English country adds its layout as a switchable second (Alt+Shift). Same server pick in
- * the terminal. apply_language self-escalates (sudo writes locale.conf/vconsole), so needs_root=0. */
+ * a non-English country adds its layout as a switchable second (Alt+Shift). Same in-UI server
+ * pick as Time & Date (the interactive stdin prompt can't run in the capture overlay), so this is
+ * an AZ_ACT_PROMPT row running "azarch language --resolve --server <N>". apply_language
+ * self-escalates (sudo writes locale.conf/vconsole), so needs_root=0. */
 static const AzRow ROWS_LANGUAGE[] = {
-    {.label="Resolve language (pick a server)", .kind=AZ_ACT_APPLY, .target="azarch language --resolve",
+    {.label="Resolve language (pick a server)", .kind=AZ_ACT_PROMPT,
+     .target="azarch language --resolve --server",
+     .prompt="Server 1-5 (1 ipapi.co  2 ipquery.io  3 ip-api.com  4 ipinfo.io  5 ipwho.is):",
      .show_output=1, .base="localectl set-locale / setxkbmap <region>"},
 };
 
