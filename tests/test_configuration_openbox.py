@@ -54,9 +54,9 @@ def _load_azarch_command_line_interface():
 
 # --- PLAN mode/owner/dest table --------------------------------------------
 
-def test_plan_has_exactly_eighteen_entries():
+def test_plan_has_exactly_nineteen_entries():
     # compiler.py iterates PLAN; a dropped/extra entry silently un-emits a file. The
-    # panel-less OpenBox session ships exactly eighteen files via PLAN:
+    # panel-less OpenBox session ships exactly nineteen files via PLAN:
     #   1. ~/.xinitrc                               (startx -> openbox-session)
     #   2. ~/.config/openbox/rc.xml                 (keybinds, theme, titlebar-button binds)
     #   3. ~/.themes/Azarch-Dark/openbox-3/themerc  (DARK Az'arch theme -- the default)
@@ -66,22 +66,24 @@ def test_plan_has_exactly_eighteen_entries():
     #   7. ~/.gtkrc-2.0                              (GTK2 dark theme default)
     #   8. /etc/dconf/db/local.d/00-azarch-theme     (dconf color-scheme=prefer-dark default)
     #   9. /etc/dconf/profile/user                   (dconf profile so the system db backs user)
-    #  10. ~/.Xresources                             (GLOBAL SCALE backbone: Xft.dpi + Xcursor.size)
-    #  11. ~/.config/openbox/autostart              (feh, setxkbmap, xcape, menu daemon, installer)
-    #  12. ~/.config/openbox/environment            (XDG_CURRENT_DESKTOP + scale env)
-    #  13. /usr/local/share/azarch/openbox-autostart-installed (staged "installed" autostart)
-    #  14. ~/.local/share menu usage seed            (default menu ordering)
-    #  15. /usr/share/applications/azarch-install.desktop (menu re-open entry, system)
-    #  16. ~/Desktop/azarch-install.desktop          (double-clickable installer launcher)
-    #  17. /usr/local/bin/azarch-install             (privileged Calamares wrapper)
-    #  18. /usr/local/bin/azarch                      (guest-side command line interface)
+    #  10. /etc/xdg/azarch-picom.conf                (OUR picom config: fading OFF, opaque frames)
+    #  11. ~/.Xresources                             (GLOBAL SCALE backbone: Xft.dpi + Xcursor.size)
+    #  12. ~/.config/openbox/autostart              (feh, setxkbmap, xcape, menu daemon, installer)
+    #  13. ~/.config/openbox/environment            (XDG_CURRENT_DESKTOP + scale env)
+    #  14. /usr/local/share/azarch/openbox-autostart-installed (staged "installed" autostart)
+    #  15. ~/.local/share menu usage seed            (default menu ordering)
+    #  16. /usr/share/applications/azarch-install.desktop (menu re-open entry, system)
+    #  17. ~/Desktop/azarch-install.desktop          (double-clickable installer launcher)
+    #  18. /usr/local/bin/azarch-install             (privileged Calamares wrapper)
+    #  19. /usr/local/bin/azarch                      (guest-side command line interface)
     # (entries 3-9 are the system theme: dark is the default; `azarch theme` toggles it; entry
-    # 10 is the GLOBAL SCALE, PROMPT Display/scale task.)
+    # 10 is the compositor config that kills the picom fade + transparent-titlebar defaults;
+    # entry 11 is the GLOBAL SCALE, PROMPT Display/scale task.)
     # NOTE: the media OSD (/usr/local/lib/azarch/azarch-osd) is NO LONGER a PLAN entry -- it is a
     # COMPILED C binary now (on_screen_display.c), built + installed by terminal_user_interface_build.build_osd()
     # like the terminal UI binary, so it is not emitted as a text file here.
     # The .bash_profile snippet is appended by emit_plan(), NOT part of PLAN.
-    assert len(desktop.PLAN) == 18
+    assert len(desktop.PLAN) == 19
 
 
 def test_plan_entries_have_the_four_declared_keys():
@@ -147,14 +149,16 @@ def test_openbox_rc_xml_entry_is_home_owned_conf():
     assert entry["builder"] is desktop.openbox_rc_xml
 
 
-def test_root_owned_dests_are_wrapper_cli_menu_entry_installed_autostart_and_dconf():
-    # Exactly six PLAN entries are root-owned: the azarch command line interface (/usr/local/bin),
+def test_root_owned_dests_are_wrapper_cli_menu_entry_installed_autostart_dconf_and_picom():
+    # Exactly seven PLAN entries are root-owned: the azarch command line interface (/usr/local/bin),
     # the installer wrapper (/usr/local/bin), the system-wide installer menu .desktop
     # (/usr/share/applications), the STAGED "installed" OpenBox autostart the Calamares install
-    # copies onto the target, and the TWO dconf system-theme files (the color-scheme=prefer-dark
-    # keyfile + the dconf profile) under /etc. Everything else is a /home/main dotfile handed to
-    # the live user (uid 1000, gid 998). The media OSD is root-owned too but is installed by the
-    # C build (build_osd), not as a PLAN text entry -- so it is not in this set.
+    # copies onto the target, the TWO dconf system-theme files (the color-scheme=prefer-dark
+    # keyfile + the dconf profile) under /etc, and OUR picom compositor config under /etc/xdg
+    # (fading OFF, opaque frames -- shared by the live + installed autostart). Everything else is a
+    # /home/main dotfile handed to the live user (uid 1000, gid 998). The media OSD is root-owned
+    # too but is installed by the C build (build_osd), not as a PLAN text entry -- so it is not in
+    # this set.
     root_dests = [e["dest"] for e in desktop.PLAN if e["owner"] == "root"]
     assert set(root_dests) == {
         desktop.INSTALL_WRAPPER_PATH,
@@ -163,6 +167,7 @@ def test_root_owned_dests_are_wrapper_cli_menu_entry_installed_autostart_and_dco
         desktop.INSTALLED_AUTOSTART_STAGING_PATH,
         desktop.DCONF_THEME_KEYFILE_PATH,
         desktop.DCONF_PROFILE_USER_PATH,
+        desktop.PICOM_CONFIG_PATH,
     }
 
 
@@ -231,10 +236,11 @@ def test_home_owner_gid_is_autologin_group():
 
 # --- emit_plan(): PLAN + bash_profile, without mutating PLAN ----------------
 
-def test_emit_plan_length_is_eighteen_plus_bash_profile():
-    # 18 PLAN entries + the appended .bash_profile snippet = 19. emit_plan() is the
-    # single sequence compiler.py iterates. (18 = 17 + the new ~/.Xresources GLOBAL SCALE entry.)
-    assert len(desktop.emit_plan()) == 19
+def test_emit_plan_length_is_nineteen_plus_bash_profile():
+    # 19 PLAN entries + the appended .bash_profile snippet = 20. emit_plan() is the
+    # single sequence compiler.py iterates. (19 = 18 + the new /etc/xdg/azarch-picom.conf
+    # compositor config that disables the picom fade + transparent-titlebar defaults.)
+    assert len(desktop.emit_plan()) == 20
 
 
 def test_emit_plan_prefix_is_plan():
@@ -261,7 +267,7 @@ def test_emit_plan_does_not_mutate_module_plan():
     before = len(desktop.PLAN)
     desktop.emit_plan()
     desktop.emit_plan()
-    assert len(desktop.PLAN) == before == 18
+    assert len(desktop.PLAN) == before == 19
 
 
 # --- xinitrc: OpenBox X11 session, no flash ---------------------------------
@@ -318,6 +324,41 @@ def test_spice_vdagent_started_in_both_autostarts():
     for au in (desktop.openbox_autostart(), desktop.openbox_autostart_installed()):
         assert "spice-vdagent" in au
         assert "command -v spice-vdagent" in au   # guarded, never breaks the session
+
+
+# --- Compositor (picom): kill the fade + transparent-titlebar packaged defaults ----------
+
+def test_picom_config_disables_fading_and_frame_opacity():
+    # The reported bugs -- "applications fade in and out" and "the openbox titlebar is
+    # transparent" -- are BOTH the packaged /etc/xdg/picom.conf defaults (fading = true,
+    # frame-opacity = 0.9), NOT anything in our OpenBox themerc. OUR picom config must turn
+    # both OFF: no window fading, and every opacity fully opaque (a solid titlebar).
+    conf = desktop.picom_conf()
+    assert "fading = false;" in conf
+    assert "frame-opacity = 1.0;" in conf
+    assert "inactive-opacity = 1.0;" in conf
+    assert "active-opacity = 1.0;" in conf
+    # Nothing may re-enable fading (a stray `fading = true;` would resurrect the bug).
+    assert "fading = true;" not in conf
+
+
+def test_autostart_runs_picom_with_our_config():
+    # picom must be launched with `--config <our file>` so it does NOT fall back to the
+    # packaged /etc/xdg/picom.conf (whose fade + 0.9 frame-opacity are the reported bugs).
+    # It runs in BOTH the live and installed session (the shared common block) and stays
+    # guarded so a machine without picom is unaffected.
+    for au in (desktop.openbox_autostart(), desktop.openbox_autostart_installed()):
+        assert f"picom --config {desktop.PICOM_CONFIG_PATH}" in au
+        assert "command -v picom" in au   # guarded, never breaks the session
+
+
+def test_picom_config_is_root_owned_conf_under_xdg():
+    # The compositor config is a system file both sessions read (the autostart is shared), so
+    # it is root-owned and a plain 0o644 config under /etc/xdg (picom's system config dir).
+    assert desktop.PICOM_CONFIG_PATH == "/etc/xdg/azarch-picom.conf"
+    entry = next(e for e in desktop.PLAN if e["dest"] == desktop.PICOM_CONFIG_PATH)
+    assert entry["owner"] == "root"
+    assert entry["mode"] == desktop._CONF
 
 
 def test_autostart_defaults_resolution_to_1920x1080():

@@ -124,9 +124,10 @@ def test_emitter_family_covers_all_config_modules():
     # application-menu usage.json seed, the system + Desktop installer launchers, the
     # install wrapper, the azarch command line interface -- plus the appended bash_profile. The
     # media OSD is NO LONGER here: it is a compiled binary now (on_screen_display.c), installed by build_osd,
-    # not a text emitter. NOW 19: the 18 PLAN entries -- the +1 over the old 17 is the new
-    # ~/.Xresources GLOBAL SCALE entry, PROMPT Display/scale task -- plus the appended
-    # bash_profile) + 6 installer +
+    # not a text emitter. NOW 20: the 19 PLAN entries -- the +2 over the old 17 are the
+    # ~/.Xresources GLOBAL SCALE entry (PROMPT Display/scale task) and the /etc/xdg/azarch-picom.conf
+    # compositor config (fading OFF + opaque frames -- kills the picom fade + transparent-titlebar
+    # defaults) -- plus the appended bash_profile) + 6 installer +
     # locale + profile + 4 pacman + 4 pkgbuild (calamares + librewolf.desktop + the two
     # librewolf PKGBUILD tiers) + 1 librewolf emit_plan builder (the AutoConfig override,
     # now a home file at the profile path, not a packaged /opt file) + 5 timedate
@@ -137,7 +138,7 @@ def test_emitter_family_covers_all_config_modules():
     # terminal_user_interface, keyboard, help, and live_keyboard_line (step six: the LIVE
     # keyboard/Caps-Lock line at the master-password getpass, a verbatim copy of the backup one)
     # -- and the /usr/local/bin/passwords launcher; no separate pwlib/ directory copy anymore).
-    assert len(_EMITTERS) == 19 + 19 + 6 + 1 + 1 + 4 + 4 + 1 + 5 + 15
+    assert len(_EMITTERS) == 19 + 20 + 6 + 1 + 1 + 4 + 4 + 1 + 5 + 15
 
 
 def test_recipe_dir_contents_are_nonempty_str_both_tiers():

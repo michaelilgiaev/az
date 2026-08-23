@@ -17,8 +17,14 @@ typedef struct AzStrip AzStrip;
 AzStrip *az_strip_new(GtkWidget *parent);
 
 /* Rebuild tiles from GPtrArray<AzWinIdent*> (thumbnails captured now). Keeps the
- * selection index in range. The array is borrowed for the duration of the call. */
+ * selection index in range. The array is borrowed for the duration of the call.
+ * If the window set is UNCHANGED (same xids, same order) this refreshes thumbnails in
+ * place instead of rebuilding -- so the periodic live refresh does not flicker. */
 void     az_strip_set_windows(AzStrip *s, GPtrArray *windows);
+
+/* Stream a fresh frame into every existing tile IN PLACE (no widget rebuild). Used by the
+ * live-refresh tick for smooth, flicker-free streaming of the window contents. */
+void     az_strip_refresh_thumbnails(AzStrip *s);
 
 /* Move the highlight to index i (wrapped into [0,count)). No-op when empty. */
 void     az_strip_select(AzStrip *s, int i);

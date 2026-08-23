@@ -30,27 +30,50 @@
 #include "theme.h"
 
 #define OFFSCREEN_MARGIN 4000
-#define REFRESH_MS       200      /* live-thumbnail refresh cadence while shown */
+/* Two refresh cadences while shown (see the two timers below):
+ *   THUMB_MS -- stream fresh thumbnail frames into the EXISTING tiles, in place. Cheap (just
+ *               XComposite captures, no widget rebuild), so it runs fast enough that the live
+ *               content reads as smooth motion instead of a 5fps slideshow.
+ *   LIST_MS  -- re-enumerate the window list (which forks `xprop` per window -- EXPENSIVE), only
+ *               to notice a window that opened or closed. That is a rare event, so it runs slowly
+ *               and stays off the smooth-streaming hot path. */
+#define THUMB_MS          50      /* ~20fps live-thumbnail streaming (in place, no rebuild) */
+#define LIST_MS          500      /* window-set (open/close) re-scan cadence (forks xprop) */
 
 typedef struct {
     GtkWidget *win;
     AzStrip   *strip;
     gboolean   shown;
-    guint      refresh_id;        /* live-thumbnail timer source, 0 when hidden */
+    guint      thumb_id;          /* fast in-place thumbnail timer, 0 when hidden */
+    guint      list_id;           /* slow window-list re-scan timer, 0 when hidden */
 } AzSwitcher;
 
 static AzSwitcher g_sw;
 
+static void commit_switcher(AzSwitcher *s);   /* fwd: used by the anti-pin Alt-state check */
+
 /* ---- live-window refresh ------------------------------------------------ */
+/* Re-enumerate the managed windows (forks xprop) and hand them to the strip. az_strip_set_windows
+ * rebuilds ONLY if the set changed; an unchanged set just streams new frames in place. */
 static void reload_windows(AzSwitcher *s) {
     GPtrArray *wins = az_windows_list();
     az_strip_set_windows(s->strip, wins);
     az_windows_free(wins);
 }
 
-static gboolean on_refresh_tick(gpointer user) {
+/* Fast tick: stream fresh thumbnail frames into the existing tiles (smooth, no rebuild). */
+static gboolean on_thumb_tick(gpointer user) {
     AzSwitcher *s = user;
-    if (!s->shown) { s->refresh_id = 0; return G_SOURCE_REMOVE; }
+    if (!s->shown) { s->thumb_id = 0; return G_SOURCE_REMOVE; }
+    az_strip_refresh_thumbnails(s->strip);
+    return G_SOURCE_CONTINUE;
+}
+
+/* Slow tick: re-scan the window LIST so a window opened/closed while the overlay is up appears/
+ * disappears. Kept slow because it forks xprop per window; the fast path never does. */
+static gboolean on_list_tick(gpointer user) {
+    AzSwitcher *s = user;
+    if (!s->shown) { s->list_id = 0; return G_SOURCE_REMOVE; }
     reload_windows(s);
     return G_SOURCE_CONTINUE;
 }
@@ -90,6 +113,37 @@ static void ungrab_seat(AzSwitcher *s) {
     gdk_seat_ungrab(seat);
 }
 
+/* Is a physical Alt (Mod1) currently held down? Queries the REAL X modifier state instead of
+ * trusting that we saw the key-release event.
+ *
+ * WHY THIS EXISTS -- the "it pinned itself" bug: the switcher is shown by SIGNAL (the A-Tab
+ * launcher), and only AFTER show_switcher() grabs the seat does the daemon start receiving key
+ * events. Alt was already held when OpenBox fired the A-Tab binding, and OpenBox owned the
+ * keyboard grab up to that instant. If the user releases Alt during the brief handoff (before OUR
+ * grab is fully in place), that release is delivered to OpenBox / dropped, NOT to us -- so
+ * on_key_release() never fires and the overlay stays up ("pinned") until a click or Escape. The
+ * gesture contract is "hold Alt to keep it, let Alt go to dismiss", so the moment our grab is
+ * live we ask the server directly whether Alt is still down; if it is NOT, the release already
+ * happened and we commit immediately. This makes releasing Alt ALWAYS dismiss, with no pin. */
+static gboolean alt_is_down(AzSwitcher *s) {
+    GdkDisplay *gdpy = gtk_widget_get_display(s->win);
+    Display *dpy = GDK_DISPLAY_XDISPLAY(gdpy);
+    Window root = DefaultRootWindow(dpy);
+    Window r, c; int rx, ry, wx, wy; unsigned int mask = 0;
+    if (!XQueryPointer(dpy, root, &r, &c, &rx, &ry, &wx, &wy, &mask))
+        return FALSE;               /* query failed -> treat as released (safer: no pin) */
+    return (mask & Mod1Mask) != 0;  /* Mod1 == Alt on the standard X modifier map */
+}
+
+/* Idle check run once, right after the overlay is shown + grabbed: if Alt is no longer held the
+ * release slipped past our grab, so commit now (the anti-pin guard -- see alt_is_down). */
+static gboolean on_check_alt_still_held(gpointer user) {
+    AzSwitcher *s = user;
+    if (s->shown && !alt_is_down(s))
+        commit_switcher(s);
+    return G_SOURCE_REMOVE;
+}
+
 /* Raise + activate a window with a proper _NET_ACTIVE_WINDOW client message so the WM
  * (OpenBox) focuses and unminimizes it -- the same path a taskbar click uses. */
 static void activate_window(AzSwitcher *s, unsigned long xid) {
@@ -113,7 +167,8 @@ static void activate_window(AzSwitcher *s, unsigned long xid) {
 static void hide_switcher(AzSwitcher *s) {
     if (!s->shown) return;
     s->shown = FALSE;
-    if (s->refresh_id) { g_source_remove(s->refresh_id); s->refresh_id = 0; }
+    if (s->thumb_id) { g_source_remove(s->thumb_id); s->thumb_id = 0; }
+    if (s->list_id)  { g_source_remove(s->list_id);  s->list_id  = 0; }
     ungrab_seat(s);
     move_window(s, gdk_screen_width() + OFFSCREEN_MARGIN,
                    gdk_screen_height() + OFFSCREEN_MARGIN);
@@ -148,8 +203,37 @@ static void show_switcher(AzSwitcher *s, int dir) {
     s->shown = TRUE;
     grab_seat(s);
     gdk_display_sync(gtk_widget_get_display(s->win));
-    if (!s->refresh_id)
-        s->refresh_id = g_timeout_add(REFRESH_MS, on_refresh_tick, s);
+    /* Two timers: fast in-place thumbnail streaming + a slow window-list re-scan (see the tick
+     * functions). Fast one gives smooth live content; slow one catches opened/closed windows. */
+    if (!s->thumb_id) s->thumb_id = g_timeout_add(THUMB_MS, on_thumb_tick, s);
+    if (!s->list_id)  s->list_id  = g_timeout_add(LIST_MS,  on_list_tick,  s);
+    /* Anti-pin guard: now that our grab is live, verify Alt is still physically held. If the
+     * release slipped past during the OpenBox->daemon grab handoff, dismiss immediately so the
+     * overlay never stays pinned (see alt_is_down / on_check_alt_still_held). Deferred to an idle
+     * so the grab + first paint settle before we query. */
+    g_idle_add(on_check_alt_still_held, s);
+}
+
+/* Map a number-key event to a 1-based tile SLOT, or 0 if the key is not a digit. 1..9 are
+ * slots 1..9 and 0 is slot 10 -- so the ten leftmost tiles are directly reachable. Both the
+ * number ROW (GDK_KEY_1..0) and the keypad (GDK_KEY_KP_1..0) are accepted. The strip is ordered
+ * librewolf, kitty, hypervisor, thunar, then the rest (ordering.c), so slot 1 == librewolf and
+ * slot 2 == kitty exactly as the user expects ("librewolf=1, kitty=2 ... press 1 -> librewolf"):
+ * the slot is the on-screen 1-based POSITION, which for the ranked apps equals their rank. */
+static int digit_slot(guint keyval) {
+    switch (keyval) {
+        case GDK_KEY_1: case GDK_KEY_KP_1: return 1;
+        case GDK_KEY_2: case GDK_KEY_KP_2: return 2;
+        case GDK_KEY_3: case GDK_KEY_KP_3: return 3;
+        case GDK_KEY_4: case GDK_KEY_KP_4: return 4;
+        case GDK_KEY_5: case GDK_KEY_KP_5: return 5;
+        case GDK_KEY_6: case GDK_KEY_KP_6: return 6;
+        case GDK_KEY_7: case GDK_KEY_KP_7: return 7;
+        case GDK_KEY_8: case GDK_KEY_KP_8: return 8;
+        case GDK_KEY_9: case GDK_KEY_KP_9: return 9;
+        case GDK_KEY_0: case GDK_KEY_KP_0: return 10;  /* 0 is the tenth slot */
+        default:                           return 0;
+    }
 }
 
 /* ---- key handling while shown ------------------------------------------- */
@@ -157,6 +241,20 @@ static gboolean on_key_press(GtkWidget *w, GdkEventKey *ev, gpointer user) {
     (void)w;
     AzSwitcher *s = user;
     if (!s->shown) return FALSE;
+
+    /* Number keys 1..9,0 jump straight to that tile (by 1-based on-screen position) and
+     * activate it -- press 1 for librewolf, 2 for kitty, etc. Ignored when the slot is past the
+     * last tile (fewer windows than the digit), so a stray high number is a harmless no-op
+     * rather than a wrong/!last-tile activation. */
+    int slot = digit_slot(ev->keyval);
+    if (slot > 0) {
+        if (slot <= az_strip_count(s->strip)) {
+            az_strip_select(s->strip, slot - 1);   /* 1-based slot -> 0-based index */
+            commit_switcher(s);
+        }
+        return TRUE;                                /* swallow digits either way while shown */
+    }
+
     switch (ev->keyval) {
         case GDK_KEY_Tab:
         case GDK_KEY_KP_Tab:
