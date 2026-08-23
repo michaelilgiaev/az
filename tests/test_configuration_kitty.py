@@ -102,6 +102,25 @@ def test_kitty_conf_sets_font_size_in_home():
     assert "font_size=" not in out
 
 
+def test_kitty_conf_puts_tab_bar_on_top():
+    # PROMPT task 1: "kitty tabs should be up instead of below". kitty defaults to
+    # tab_bar_edge bottom; we pin `tab_bar_edge top` so the tab bar renders ABOVE the
+    # content. (Setting name is `tab_bar_edge`, value `top` -- space-separated, no '='.)
+    out = kitty.kitty_conf()
+    assert "tab_bar_edge top" in out
+    assert "tab_bar_edge=" not in out
+
+
+def test_kitty_conf_binds_new_and_close_tab():
+    # PROMPT task 1: "ctrl+shift+t to open new tab, ctrl+w to close new tab". ctrl+shift+t
+    # already IS kitty's default for new_tab but we pin it per the PROMPT; ctrl+w is NOT a
+    # kitty default (kitty closes with ctrl+shift+q), so this bind is what actually changes
+    # the behaviour. close_tab closes the current tab (all its windows) == "close tab".
+    out = kitty.kitty_conf()
+    assert "map ctrl+shift+t new_tab" in out
+    assert "map ctrl+w close_tab" in out
+
+
 def test_kitty_conf_font_size_matches_gedit():
     # The whole point of pinning both: the terminal and the editor render at the same size.
     from packages import gedit
