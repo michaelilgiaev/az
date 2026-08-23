@@ -69,13 +69,22 @@ export PYTHONPATH="$REPODIR/libraries:$REPODIR/scripts/libraries${PYTHONPATH:+:$
 # few ms on this tiny codebase and removes that whole class of confusion.
 export PYTHONDONTWRITEBYTECODE=1
 
-# Delete pytest's scratch dir when we exit, however we exit (pass, fail, or
-# Ctrl-C). pytest writes .pytest_cache into the rootdir; it is pure scratch
-# (gitignored) and this repo treats it as pollution. The trap runs on EXIT, so
-# we can no longer `exec` pytest -- that would replace this shell and the trap
-# would never fire. Instead we run pytest, capture its status, and re-exit with
-# it so `bash tests.sh` still reports the true pass/fail code.
-cleanup() { rm -rf "$REPODIR/.pytest_cache"; }
+# Leave a spotless tree on EXIT, however we exit (pass, fail, or Ctrl-C). Two
+# kinds of scratch get wiped, both gitignored and both treated as pollution here:
+#   - .pytest_cache in the rootdir (pytest's scratch). We ALSO run pytest with
+#     -p no:cacheprovider (pyproject) so it is never written in the first place;
+#     this rm is the belt to that suspenders.
+#   - every __pycache__ in the tree. PYTHONDONTWRITEBYTECODE=1 above stops this
+#     run from writing any, but a stray one from some other tool must not survive
+#     a test run either -- so sweep them all. venv/ is pruned so we don't churn
+#     its thousands of cached stdlib entries (matches clear.sh).
+# The trap runs on EXIT, so we can no longer `exec` pytest -- that would replace
+# this shell and the trap would never fire. Instead we run pytest, capture its
+# status, and re-exit with it so `bash tests.sh` still reports the true code.
+cleanup() {
+    rm -rf "$REPODIR/.pytest_cache"
+    find "$REPODIR" -type d -name venv -prune -o -type d -name __pycache__ -exec rm -rf {} +
+}
 trap cleanup EXIT
 
 echo "[tests] running pytest"

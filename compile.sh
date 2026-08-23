@@ -53,6 +53,14 @@ FULL_LOG="$LOGDIR/full.log"
 STEPS_LOG="$LOGDIR/steps.log"
 mkdir -p "$LOGDIR"
 
+# Never scatter __pycache__ around the source tree. This shim is the entry point;
+# the Python build driver runs once per invocation, so byte-compiling its modules
+# to disk buys nothing and only litters libraries/**/__pycache__. Exported HERE,
+# before any branch, so every hand-off inherits it: the --estimate* early exec,
+# the PTY re-exec into `script`, and the main `python3 -m compiler` build. This
+# repo treats __pycache__ as pollution -- see clear.sh / tests.sh.
+export PYTHONDONTWRITEBYTECODE=1
+
 # Stopwatch: format a whole-second duration as e.g. "1h 04m 09s" / "7m 32s" / "12s".
 # Used at the very end to report how long the compile took, on success AND failure.
 # The SAME elapsed time also ticks LIVE during the build: _COMPILE_START (set below,

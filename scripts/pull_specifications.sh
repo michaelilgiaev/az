@@ -70,4 +70,8 @@ if [ ! -f "$PY_ENTRY" ]; then
     exit 1
 fi
 
+# Never scatter __pycache__ around the tree. This shell script is the entry
+# point; the Python it runs is short-lived, so the byte-compile cache buys
+# nothing and only litters. This repo treats __pycache__ as pollution.
+export PYTHONDONTWRITEBYTECODE=1
 exec python3 "$PY_ENTRY" "$@"

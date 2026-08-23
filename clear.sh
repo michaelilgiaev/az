@@ -7,24 +7,25 @@ usage() {
 Usage: clear.sh [-o] [-l] [-c] [-h]
 
 Clears the build tree. With NO flags it clears everything (the default):
-output/, logs/, cache/, and every __pycache__ in the project.
+output/, logs/, cache/, every __pycache__ in the project, and .pytest_cache/.
 
 Pass flags to clear only PART of the tree (flags combine):
   -o, --output   clear only output/
   -l, --logs     clear only logs/
-  -c, --cache    clear only cache/  (also sweeps every __pycache__)
+  -c, --cache    clear only cache/  (also sweeps __pycache__ and .pytest_cache/)
   -h, --help     show this help and exit
 
 Examples:
-  clear.sh            clear output/, logs/, cache/ and __pycache__ (everything)
-  clear.sh -o -l      clear output/ and logs/ only (leaves cache/ and __pycache__)
-  clear.sh -c         clear cache/ and __pycache__ only
+  clear.sh            clear output/, logs/, cache/, __pycache__, .pytest_cache (all)
+  clear.sh -o -l      clear output/ and logs/ only (leaves cache/, __pycache__, .pytest_cache)
+  clear.sh -c         clear cache/, __pycache__ and .pytest_cache only
 EOF
 }
 
 # Selective flags: without any, clear EVERYTHING (unchanged original behaviour). With one or
-# more, clear only the selected targets. __pycache__ is swept WITH cache -- so -c (or the no-flag
-# default) sweeps it, while -o/-l alone leave it. Unknown flags are rejected non-zero with usage.
+# more, clear only the selected targets. __pycache__ and .pytest_cache are swept WITH cache -- so
+# -c (or the no-flag default) sweeps them, while -o/-l alone leave them. Unknown flags are rejected
+# non-zero with usage.
 do_output=0
 do_logs=0
 do_cache=0
@@ -115,6 +116,21 @@ if [ "$sweep_pyc" -eq 1 ]; then
     echo "  [ skip    ] __pycache__ -- none found in the tree"
   else
     echo "  [ deleted ] $pyc_deleted __pycache__ director$( [ "$pyc_deleted" -eq 1 ] && echo y || echo ies )"
+  fi
+
+  # .pytest_cache is pytest's scratch dir at the repo root -- same family as
+  # __pycache__ (Python/pytest pollution, gitignored) so it rides with cache too.
+  # tests.sh now runs pytest with -p no:cacheprovider so it is not created there,
+  # but a bare `pytest` from an activated venv still could; clear.sh must wipe it.
+  if [ -e ".pytest_cache" ]; then
+    if rm -rf ".pytest_cache"; then
+      echo "  [ deleted ] .pytest_cache/"
+      pyc_deleted=$((pyc_deleted + 1))
+    else
+      echo "  [ FAILED  ] .pytest_cache/ -- could not remove; re-run: sudo ./clear.sh"
+    fi
+  else
+    echo "  [ skip    ] .pytest_cache/ -- not present"
   fi
 fi
 
