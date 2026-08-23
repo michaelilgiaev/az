@@ -75,6 +75,14 @@ FILE_PERMISSIONS = {
     # it 0644 (non-executable) unless pinned here -- and then the Super key runs a
     # non-executable file and the menu never opens.
     "/usr/local/bin/azarch-application-menu": "0:0:755",
+    # The Az'arch window-switcher launcher (run by OpenBox's A-Tab/A-S-Tab
+    # <action name="Execute"> -- OUR replacement for the built-in NextWindow list). SAME
+    # archiso mode-normalization as azarch-application-menu above: window_switcher.PLAN emits
+    # it 0755, but the squashfs ships it 0644 (non-executable) unless pinned here -- and then
+    # OpenBox's /bin/sh -c on the launcher fails with "Permission denied", which OpenBox
+    # surfaces as an error popup INSTEAD of the alt-tab overlay (the reported bug). Verified
+    # 0644 on the built ISO.
+    "/usr/local/bin/azarch-window-switcher": "0:0:755",
     # The Az'arch timedate launcher (run by azarch-timedate.service, which ExecStart's it
     # to serve the Flask Time + Calendar home page at localhost:49154). SAME archiso mode-
     # normalization as azarch-install above: timedate.PLAN emits it 0755, but the squashfs
@@ -109,6 +117,13 @@ FILE_PERMISSIONS = {
     # autostart's `[ -x ... ]` guard would then skip it, so the menu is never pre-built
     # and the first Super press does nothing / starts nothing.
     "/usr/local/lib/azarch-application-menu/azarch-application-menu-daemon": "0:0:755",
+    # The COMPILED window-switcher daemon binary (built by window_switcher.build_daemon and
+    # started from the OpenBox autostart, which keeps the alt-tab overlay hidden so the first
+    # Alt+Tab is instant). Same archiso mode-normalization as the menu daemon above: it is
+    # installed 0755, but the squashfs would ship it 0644 unless pinned -- and then the
+    # autostart's `[ -x ... ]` guard skips it, so the daemon is never pre-built and Alt+Tab
+    # starts nothing.
+    "/usr/local/lib/azarch-window-switcher/azarch-window-switcher-daemon": "0:0:755",
     # The COMPILED bare-`azarch` TERMINAL UI binary (built by terminal_user_interface_build.build_terminal_user_interface from the
     # azarch package's C sources and EXEC'd by the `azarch` command line interface for the no-argument case).
     # Same archiso mode-normalization

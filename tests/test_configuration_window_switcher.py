@@ -10,7 +10,7 @@ These pin the packaging contract (pure, no X/GTK): the install paths, that emit_
 ships the launcher executable, that the launcher text carries the direction flags + the
 signal mapping, and that the build-dep list names the XComposite stack the live
 thumbnails require. The C-level ordering + resolver behaviour is covered by the headless
-C tests (tests/test_ordering.c, tests/test_win_resolve.c).
+C tests (tests/test_ordering.c, tests/test_window_resolve.c).
 """
 
 from packages.window_switcher import window_switcher as ws

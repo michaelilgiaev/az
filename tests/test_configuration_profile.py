@@ -95,6 +95,34 @@ def test_passwords_launcher_stays_executable():
     assert f'["{launcher}"]="0:0:755"' in profile.profiledef_sh()
 
 
+def test_window_switcher_launcher_stays_executable():
+    # Regression guard for "Alt+Tab pops an OpenBox 'Permission denied' dialog": the
+    # window-switcher launcher is /usr/local/bin/azarch-window-switcher, run by OpenBox's
+    # A-Tab/A-S-Tab <action name="Execute">. archiso's squashfs normalizes the overlay mode
+    # to 0644 unless the path is pinned here -- and a 0644 launcher makes OpenBox's /bin/sh
+    # -c fail with "Permission denied", which OpenBox surfaces as an error popup instead of
+    # the overlay. The path must match window_switcher.SWITCHER_LAUNCHER_SYSTEM_PATH (the
+    # rc.xml Execute target).
+    from packages.window_switcher import window_switcher
+    launcher = window_switcher.SWITCHER_LAUNCHER_SYSTEM_PATH
+    assert launcher == "/usr/local/bin/azarch-window-switcher"
+    assert profile.FILE_PERMISSIONS[launcher] == "0:0:755"
+    assert f'["{launcher}"]="0:0:755"' in profile.profiledef_sh()
+
+
+def test_window_switcher_daemon_stays_executable():
+    # Same archiso mode-normalization as the menu daemon: the COMPILED switcher daemon is
+    # started from the OpenBox autostart, whose `[ -x ... ]` guard skips a non-executable
+    # binary -- so a 0644 daemon is never pre-built and the first Alt+Tab starts nothing.
+    # The path must match window_switcher.SWITCHER_DAEMON_BIN_SYSTEM_PATH (the autostart
+    # target).
+    from packages.window_switcher import window_switcher
+    daemon = window_switcher.SWITCHER_DAEMON_BIN_SYSTEM_PATH
+    assert daemon == "/usr/local/lib/azarch-window-switcher/azarch-window-switcher-daemon"
+    assert profile.FILE_PERMISSIONS[daemon] == "0:0:755"
+    assert f'["{daemon}"]="0:0:755"' in profile.profiledef_sh()
+
+
 def test_desktop_installer_launcher_stays_executable():
     # THE WARNING-BADGE FIX: KDE paints an "emblem-important" warning badge over a
     # Desktop .desktop launcher (and prompts on first launch) unless it is executable

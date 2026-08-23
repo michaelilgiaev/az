@@ -11,7 +11,7 @@
 #include <unistd.h>
 #include <glib.h>
 
-#include "win_resolve.h"      /* az_index_build / az_index_resolve / az_index_free */
+#include "window_resolve.h"      /* az_index_build / az_index_resolve / az_index_free */
 #include "applications.h"     /* az_scan_applications, AzAppEntry */
 
 /* Same skip set as the application-menu watcher: never offer these as "windows". */

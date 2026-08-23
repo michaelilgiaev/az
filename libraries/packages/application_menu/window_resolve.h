@@ -6,8 +6,8 @@
  * the window's PID via /proc). No behaviour change from the original in-file version;
  * the public functions just gained an `az_` prefix.
  */
-#ifndef AZ_WIN_RESOLVE_H
-#define AZ_WIN_RESOLVE_H
+#ifndef AZ_WINDOW_RESOLVE_H
+#define AZ_WINDOW_RESOLVE_H
 
 #include <glib.h>
 #include "applications.h"          /* AzAppEntry, az_app_entry_free */
@@ -28,4 +28,4 @@ const char   *az_index_resolve(DesktopIndex *ix, GPtrArray *wm_classes, int pid)
  * env/wrapper (e.g. `env FOO=1 kitty` -> "kitty"). Newly-allocated or NULL. */
 char         *az_exec_binary(char **argv);
 
-#endif /* AZ_WIN_RESOLVE_H */
+#endif /* AZ_WINDOW_RESOLVE_H */

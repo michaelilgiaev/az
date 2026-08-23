@@ -12,7 +12,7 @@ CFLAGS  += -O2 -Wall -Wextra -std=c11 -Wno-deprecated-declarations -I$(APP_DIR) 
 LDFLAGS += $(shell pkg-config --libs $(PKGS)) -lm
 
 OBJS = switcher.o windows.o thumbnail.o layout.o ordering.o \
-       win_resolve.o applications.o icons.o theme.o
+       window_resolve.o applications.o icons.o theme.o
 BIN  = azarch-window-switcher-daemon
 TESTS_DIR = ../../../tests
 
@@ -24,7 +24,7 @@ $(BIN): $(OBJS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Reused application-menu sources (compiled here without copying them into this dir).
-win_resolve.o: $(APP_DIR)/win_resolve.c
+window_resolve.o: $(APP_DIR)/window_resolve.c
 	$(CC) $(CFLAGS) -c $< -o $@
 applications.o: $(APP_DIR)/applications.c
 	$(CC) $(CFLAGS) -c $< -o $@

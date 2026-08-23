@@ -2,7 +2,7 @@
  *
  * Reuses the application-menu machinery: xprop for _NET_CLIENT_LIST + per-window
  * WM_CLASS/PID/type/name, az_scan_applications() for the .desktop set, and the shared
- * win_resolve.c index (WM_CLASS/PID -> .desktop id). Produces a list already sorted by
+ * window_resolve.c index (WM_CLASS/PID -> .desktop id). Produces a list already sorted by
  * ordering.c so the switcher just renders it left to right.
  */
 #ifndef AZ_WINDOWS_H

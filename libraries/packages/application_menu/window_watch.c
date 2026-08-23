@@ -1,7 +1,7 @@
 /* Az'arch application menu (C port) -- system-wide "app opened" detection.
  * One-to-one port of winwatch.py. See window_watch.h. */
 #include "window_watch.h"
-#include "win_resolve.h"     /* the shared window-identity -> .desktop id resolver */
+#include "window_resolve.h"     /* the shared window-identity -> .desktop id resolver */
 
 #include <string.h>
 #include <stdlib.h>
@@ -20,7 +20,7 @@ static const char *SKIP_TYPES[] = {
 };
 
 /* The window-identity -> .desktop id resolver (DesktopIndex, az_index_build /
- * az_index_resolve / az_index_free, az_exec_binary) now lives in win_resolve.c so the
+ * az_index_resolve / az_index_free, az_exec_binary) now lives in window_resolve.c so the
  * window-switcher shares it. */
 
 /* ---- xprop helpers ------------------------------------------------------ */

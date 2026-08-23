@@ -1,8 +1,8 @@
-/* Az'arch -- unit tests for the shared window->desktop resolver (win_resolve.c),
- * compiled against the SHIPPING applications.c + win_resolve.c. Pure asserts;
+/* Az'arch -- unit tests for the shared window->desktop resolver (window_resolve.c),
+ * compiled against the SHIPPING applications.c + window_resolve.c. Pure asserts;
  * non-zero exit on any failure. Built + run by tests/Makefile (delegated to by
  * the top-level `make test` and the package Makefiles' `test` target). */
-#include "win_resolve.h"
+#include "window_resolve.h"
 #include "applications.h"
 #include <glib.h>
 #include <stdio.h>
@@ -67,6 +67,6 @@ int main(void) {
     test_exec_binary();
     test_index_resolve_by_wmclass();
     if (failures) { g_printerr("%d failure(s)\n", failures); return 1; }
-    g_print("all win_resolve tests passed\n");
+    g_print("all window_resolve tests passed\n");
     return 0;
 }

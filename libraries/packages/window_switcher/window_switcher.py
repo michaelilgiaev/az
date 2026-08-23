@@ -4,7 +4,7 @@ Mirrors application_menu.py: constants for the installed paths, build_daemon() (
 the C/GTK3 daemon in a throwaway dir so the repo tree is never dirtied), launcher_py()
 (the pure-Python bin entry point, read verbatim from the source tree), and emit_plan()
 (the launcher install entry; the daemon BINARY is installed by build_daemon(), not the
-plan). The daemon REUSES four application-menu translation units (win_resolve/applications/
+plan). The daemon REUSES four application-menu translation units (window_resolve/applications/
 icons/theme) via the Makefile's -I../application_menu, so build_daemon() stages BOTH
 package dirs into the scratch tree, preserving that relative layout.
 """
@@ -46,7 +46,7 @@ _SRC_LAUNCHER = Path("launcher.py")
 
 # The four application-menu translation units the daemon reuses (compiled from
 # ../application_menu by the Makefile). Their headers ride along via the whole-dir stage.
-_REUSED_APPMENU_SOURCES = ("win_resolve.c", "applications.c", "icons.c", "theme.c")
+_REUSED_APPMENU_SOURCES = ("window_resolve.c", "applications.c", "icons.c", "theme.c")
 
 
 def _read_source(rel: Path) -> str:

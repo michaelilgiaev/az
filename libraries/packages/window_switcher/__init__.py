@@ -11,7 +11,7 @@ Like the application menu, it is a C / GTK3 resident daemon: the sources live di
 this directory (switcher.c + siblings, a Makefile), and window_switcher.py is the build
 wiring that COMPILES them into azarch-window-switcher-daemon, ships the pure-Python
 launcher (launcher.py, the bin entry point), and returns the emit plan. It REUSES four
-application-menu translation units (win_resolve/applications/icons/theme) as build inputs.
+application-menu translation units (window_resolve/applications/icons/theme) as build inputs.
 
 Modules:
     window_switcher   install paths, the daemon build (build_daemon), emit_plan()
