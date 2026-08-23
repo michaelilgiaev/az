@@ -47,6 +47,7 @@ from packages.azarch import default_applications
 from packages.librewolf import timedate
 from packages.passwords import packaging as passwords
 from packages.backup import packaging as backup
+from packages.hypervisor import packaging as hypervisor
 from packages.calamares import calamares
 from packages.calamares import locale
 # The packages tree is DISCOVERABLE: `packages` is a namespace package (its directory has NO
@@ -80,7 +81,7 @@ _DESKTOP_MODIFICATIONS = ("openbox", "librewolf")
 # and passwords have their own emit_plan() driven directly; calamares and azarch are not app-loop
 # packages at all. Keeping this list here means a newly-dropped packages/<app>/ is auto-emitted
 # unless it is added here on purpose.
-_EXPLICIT_PACKAGES = ("openbox", "librewolf", "application_menu", "passwords", "backup", "calamares", "azarch")
+_EXPLICIT_PACKAGES = ("openbox", "librewolf", "application_menu", "passwords", "backup", "hypervisor", "calamares", "azarch")
 import installer
 import pacman
 import profile
@@ -503,6 +504,23 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
     # `backup` works there too, writing ~/backup_<date>.tar.gz.gpg. See
     # packages/backup/packaging.py.
     for entry in backup.emit_plan():
+        emit.write_text(
+            airootfs / entry["dest"].lstrip("/"),
+            entry["builder"](),
+            mode=entry["mode"],
+        )
+    # Az'arch hypervisor (OUR per-directory QEMU/KVM VM runner -- the `hypervisor`
+    # command). A pure-Python app like backup and a single flat directory: emit_plan()
+    # writes the entry script (cli.py) and every working module plus the
+    # /usr/local/bin/hypervisor launcher to their fixed root-owned system paths -- one
+    # single-file entry each, so the whole flat app is expressed by the plan alone (no
+    # separate directory copy). No systemd service -- it is an interactive command. Its
+    # runtime deps (qemu-full, edk2-ovmf, virt-viewer) are in the manifest. The launcher
+    # deliberately does NOT cd (unlike passwords): `hypervisor` derives the VM identity
+    # from the caller's CWD, which the launcher must preserve. The OFFLINE Calamares
+    # install rsyncs it onto the installed system, so `hypervisor` works there too. See
+    # packages/hypervisor/packaging.py.
+    for entry in hypervisor.emit_plan():
         emit.write_text(
             airootfs / entry["dest"].lstrip("/"),
             entry["builder"](),

@@ -138,6 +138,16 @@ PASSWORDS_DIR = PACKAGESDIR / "passwords"
 # `backup` rolls the user's top-level home folders (skipping ~/Ignore and dot files,
 # keeping symlinks as links) into ~/backup_<date>.tar.gz.gpg (GPG/AES256).
 BACKUP_DIR = PACKAGESDIR / "backup"
+# The Az'arch hypervisor package (per-directory QEMU/KVM VM runner -- the `hypervisor`
+# command): a flat directory holding the entry script (cli.py), every working module
+# (configuration/config_schema/config_watcher/graphics/checks/qemu_command/
+# virtual_machine) and packaging.py (the build wiring that copies them into the airootfs
+# and installs the /usr/local/bin/hypervisor launcher). A pure-Python app we author, so
+# it lives under libraries/packages/ like backup. `hypervisor` spins up a QEMU/KVM VM
+# whose identity is derived from the directory it is run in (name/disk/NVRAM/shared/SSH),
+# with all settings in a per-directory hypervisor.cfg. HOST-side tool -- distinct from the
+# guest-side `azarch --sshd-hypervisor`.
+HYPERVISOR_DIR = PACKAGESDIR / "hypervisor"
 # The `azarch` guest command line interface is a Python PACKAGE now (libraries/packages/azarch/): it grew a
 # `theme` subcommand (and more to come), so the single module was split into small modules
 # (common, country_table, resolver, theme, sshd, command_line_interface). The single /usr/local/bin/azarch

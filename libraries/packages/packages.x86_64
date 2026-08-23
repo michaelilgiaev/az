@@ -183,6 +183,18 @@ xdotool
 # (disabled) config rclone is never invoked. Shipped so the opt-in works out of the box
 # (rclone stores its own OAuth token under ~/.config/rclone). NOT from the AUR.
 rclone
+# qemu-full + edk2-ovmf + virt-viewer: the system binaries the `hypervisor` command
+# (packages/hypervisor/) shells out to. It is a HOST-side tool -- run `hypervisor` inside a
+# directory and it spins up a per-directory QEMU/KVM VM. qemu-full provides
+# `qemu-system-x86_64` (runs the VM) and `qemu-img` (creates the qcow2 disk); edk2-ovmf
+# provides the OVMF UEFI firmware (OVMF_CODE / the OVMF_VARS NVRAM template the VM boots
+# from); virt-viewer provides `remote-viewer` (the SPICE display window). Named explicitly
+# here because the shipped app hard-depends on them (none is pulled in by the baseline: the
+# releng image ships only the GUEST agents qemu-guest-agent/spice-vdagent, not the host
+# emulator). `pgrep` (the running-state check) comes from procps-ng in base. NOT from the AUR.
+qemu-full
+edk2-ovmf
+virt-viewer
 go
 zip
 unzip

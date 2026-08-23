@@ -97,6 +97,12 @@ FILE_PERMISSIONS = {
     # path (this was the last build's bug #1). Root-owned on PATH, so every user gets them.
     "/usr/local/bin/backup": "0:0:755",
     "/usr/local/bin/unpack": "0:0:755",
+    # The Az'arch `hypervisor` launcher (the per-directory QEMU/KVM VM runner the user runs
+    # by typing `hypervisor`). SAME archiso mode-normalization as passwords/backup above:
+    # packages/hypervisor/packaging.emit_plan() emits it 0755, but the squashfs ships it 0644
+    # (non-executable) unless pinned here -- and then typing `hypervisor` fails with
+    # "Permission denied". Root-owned on PATH, so every user gets the command.
+    "/usr/local/bin/hypervisor": "0:0:755",
     # The COMPILED application-menu daemon binary (built by application_menu.build_daemon
     # and started from the OpenBox autostart). Same archiso mode-normalization: it is
     # installed 0755, but the squashfs would ship it 0644 unless pinned -- and the

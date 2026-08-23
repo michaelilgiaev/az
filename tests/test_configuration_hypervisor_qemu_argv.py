@@ -1,0 +1,158 @@
+"""build_qemu_argv -- the pure QEMU command-line assembler extracted from do_run.
+
+do_run() does the host checks, filesystem setup, and process launch; the actual
+QEMU argv list is built by build_qemu_argv(), which is PURE: it takes already
+resolved inputs (the disk path, the display/gpu args, the iso args, the forwarded
+ssh port) and returns the argv list. No process launch, no filesystem mutation.
+That purity is what lets us pin the command here without a real host.
+
+These tests pin the STRUCTURE that matters (identity, the pflash + disk drives,
+and the cfg/port-gated blocks: iso, audio, shared 9p, networking, USB, and the
+ssh hostfwd), not the exact byte-for-byte flag soup -- so a deliberate device
+tweak does not force a rewrite, but a dropped disk drive or a mis-gated block is
+caught.
+"""
+
+from __future__ import annotations
+
+from hypervisor_helpers import make_cfg
+
+from packages.hypervisor import virtual_machine as vm
+
+
+def _cfg(tmp_path, **cfg_overrides):
+    """A Config rooted at tmp_path with an overridable HypervisorCfg (coerced types)."""
+    return make_cfg(str(tmp_path), **cfg_overrides)
+
+
+def _pairs(argv, flag):
+    """Every value that immediately follows `flag` in argv (e.g. all -device values)."""
+    return [argv[i + 1] for i, tok in enumerate(argv) if tok == flag and i + 1 < len(argv)]
+
+
+def test_returns_a_list_starting_with_the_qemu_binary(tmp_path):
+    cfg = _cfg(tmp_path)
+    argv = vm.build_qemu_argv(cfg, disk=cfg.disk, gpu_args=[], iso_args=[], port=None)
+    assert isinstance(argv, list)
+    assert argv[0] == "qemu-system-x86_64"
+
+
+def test_identity_carries_vm_and_proc(tmp_path):
+    cfg = _cfg(tmp_path)
+    argv = vm.build_qemu_argv(cfg, disk=cfg.disk, gpu_args=[], iso_args=[], port=None)
+    assert f"{cfg.vm},process={cfg.proc}" in _pairs(argv, "-name")
+
+
+def test_pflash_and_disk_drives_present(tmp_path):
+    cfg = _cfg(tmp_path)
+    argv = vm.build_qemu_argv(cfg, disk=cfg.disk, gpu_args=[], iso_args=[], port=None)
+    drives = _pairs(argv, "-drive")
+    # UEFI CODE (readonly) + VARS (writable) pflash, and the qcow2 system disk.
+    assert any("if=pflash" in d and "readonly=on" in d and cfg.code in d for d in drives)
+    assert any("if=pflash" in d and cfg.vars in d for d in drives)
+    assert any(cfg.disk in d and "format=qcow2" in d for d in drives)
+
+
+def test_ram_and_cpus_from_cfg(tmp_path):
+    cfg = _cfg(tmp_path, ram="8192", cpus="4")
+    argv = vm.build_qemu_argv(cfg, disk=cfg.disk, gpu_args=[], iso_args=[], port=None)
+    assert "8192" in _pairs(argv, "-m")
+    assert any(s.startswith("4,sockets=1,cores=4") for s in _pairs(argv, "-smp"))
+
+
+def test_gpu_and_iso_args_are_spliced_in_verbatim(tmp_path):
+    cfg = _cfg(tmp_path)
+    gpu = ["-device", "virtio-vga", "-display", "none"]
+    iso = ["-device", "ich9-ahci,id=sata"]
+    argv = vm.build_qemu_argv(cfg, disk=cfg.disk, gpu_args=gpu, iso_args=iso, port=None)
+    joined = " ".join(argv)
+    assert "virtio-vga" in joined and "ich9-ahci,id=sata" in joined
+
+
+def test_audio_present_when_on_absent_when_off(tmp_path):
+    on = _cfg(tmp_path, audio="on")
+    off = _cfg(tmp_path, audio="off")
+    argv_on = vm.build_qemu_argv(on, disk=on.disk, gpu_args=[], iso_args=[], port=None)
+    argv_off = vm.build_qemu_argv(off, disk=off.disk, gpu_args=[], iso_args=[], port=None)
+    assert any("pipewire" in a for a in _pairs(argv_on, "-audiodev"))
+    assert not any("pipewire" in a for a in _pairs(argv_off, "-audiodev"))
+
+
+def test_shared_9p_present_only_when_shared_enabled(tmp_path):
+    off = _cfg(tmp_path, shared=False)
+    on = _cfg(tmp_path, shared=True)   # True == the working ./shared dir
+    argv_off = vm.build_qemu_argv(off, disk=off.disk, gpu_args=[], iso_args=[], port=None)
+    argv_on = vm.build_qemu_argv(on, disk=on.disk, gpu_args=[], iso_args=[], port=None)
+    assert not any("virtio-9p" in d for d in _pairs(argv_off, "-device"))
+    assert any("virtio-9p" in d for d in _pairs(argv_on, "-device"))
+    assert any(on.shared in f for f in _pairs(argv_on, "-fsdev"))
+
+
+def test_shared_custom_path_is_exported(tmp_path):
+    custom = "/mnt/host/project"
+    cfg = _cfg(tmp_path, shared=custom)
+    argv = vm.build_qemu_argv(cfg, disk=cfg.disk, gpu_args=[], iso_args=[], port=None)
+    # the custom path is exported, NOT the default ./shared dir.
+    assert any(f"path={custom}," in f for f in _pairs(argv, "-fsdev"))
+    assert not any(cfg.shared in f for f in _pairs(argv, "-fsdev"))
+
+
+def test_hostfwd_present_iff_port_given(tmp_path):
+    cfg = _cfg(tmp_path)
+    no_port = vm.build_qemu_argv(cfg, disk=cfg.disk, gpu_args=[], iso_args=[], port=None)
+    with_port = vm.build_qemu_argv(cfg, disk=cfg.disk, gpu_args=[], iso_args=[], port=49155)
+    assert not any("hostfwd" in n for n in _pairs(no_port, "-netdev"))
+    assert any("hostfwd=tcp::49155-:22" in n for n in _pairs(with_port, "-netdev"))
+
+
+def test_network_user_has_a_nic_none_has_none(tmp_path):
+    user = _cfg(tmp_path, network="user")
+    none = _cfg(tmp_path, network="none")
+    argv_user = vm.build_qemu_argv(user, disk=user.disk, gpu_args=[], iso_args=[], port=None)
+    argv_none = vm.build_qemu_argv(none, disk=none.disk, gpu_args=[], iso_args=[], port=None)
+    assert any("virtio-net-pci" in d for d in _pairs(argv_user, "-device"))
+    assert any(n.startswith("user,") for n in _pairs(argv_user, "-netdev"))
+    assert not any("virtio-net-pci" in d for d in _pairs(argv_none, "-device"))
+    assert "-netdev" not in argv_none
+
+
+def test_network_interface_bridges_onto_that_interface(tmp_path):
+    cfg = _cfg(tmp_path, network="eno1")
+    argv = vm.build_qemu_argv(cfg, disk=cfg.disk, gpu_args=[], iso_args=[], port=None)
+    # a named interface bridges: a bridge netdev naming eno1, plus a virtio NIC.
+    assert any("bridge" in n and "eno1" in n for n in _pairs(argv, "-netdev"))
+    assert any("virtio-net-pci" in d for d in _pairs(argv, "-device"))
+
+
+def test_hostfwd_only_applies_to_user_mode(tmp_path):
+    # An interface bridge does not carry the user-mode hostfwd (there is no
+    # user netdev to hang it on); the port is only meaningful for network=user.
+    iface = _cfg(tmp_path, network="eno1")
+    argv = vm.build_qemu_argv(iface, disk=iface.disk, gpu_args=[], iso_args=[], port=49155)
+    assert not any("hostfwd" in n for n in _pairs(argv, "-netdev"))
+
+
+def test_usb_passthrough_absent_when_empty(tmp_path):
+    off = _cfg(tmp_path, usb=[])
+    argv_off = vm.build_qemu_argv(off, disk=off.disk, gpu_args=[], iso_args=[], port=None)
+    assert not any("qemu-xhci" in d for d in _pairs(argv_off, "-device"))
+    assert not any("usb-host" in d for d in _pairs(argv_off, "-device"))
+
+
+def test_usb_passthrough_one_device(tmp_path):
+    on = _cfg(tmp_path, usb=["/dev/bus/usb/003/004"])
+    argv = vm.build_qemu_argv(on, disk=on.disk, gpu_args=[], iso_args=[], port=None)
+    assert any("qemu-xhci" in d for d in _pairs(argv, "-device"))
+    devs = _pairs(argv, "-device")
+    assert any("usb-host" in d and "hostdevice=/dev/bus/usb/003/004" in d for d in devs)
+
+
+def test_usb_passthrough_many_devices_each_get_a_host_device(tmp_path):
+    paths = ["/dev/bus/usb/003/004", "/dev/bus/usb/001/002"]
+    on = _cfg(tmp_path, usb=paths)
+    argv = vm.build_qemu_argv(on, disk=on.disk, gpu_args=[], iso_args=[], port=None)
+    devs = _pairs(argv, "-device")
+    for p in paths:
+        assert any("usb-host" in d and f"hostdevice={p}" in d for d in devs), p
+    # exactly one controller regardless of device count.
+    assert sum("qemu-xhci" in d for d in devs) == 1
