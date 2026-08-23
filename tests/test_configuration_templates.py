@@ -1,10 +1,14 @@
-"""packages.templates -- the ~/Templates "Create Document" set for Thunar (PROMPT batch 8).
+"""packages.thunar.templates -- the ~/Templates "Create Document" set for Thunar (PROMPT batch 8).
+
+The templates module was FOLDED INTO the thunar package (it is a submodule now,
+packages/thunar/templates.py, imported as `from packages.thunar import templates`), so it is
+tested here alongside the rest of the Thunar setup rather than as its own top-level package.
 
 Why these tests matter: Thunar populates its Create Document submenu from ~/Templates, and the
 LibreOffice templates must be VALID ODF packages (mimetype stored first + a manifest) or
 LibreOffice refuses to open the copy. These pin: the template SET, the XDG_TEMPLATES_DIR
-pointer, that the ODF files are real ZIP/ODF packages, and the emit-plan wiring (HOME,
-skel-mirrored, ODF as binary).
+pointer, that the ODF files are real ZIP/ODF packages, the emit-plan wiring (HOME,
+skel-mirrored, ODF as binary), and that thunar.emit_plan() folds the templates entries in.
 """
 
 from __future__ import annotations
@@ -12,8 +16,9 @@ from __future__ import annotations
 import io
 import zipfile
 
-from packages import templates
+from packages import thunar
 from packages.thunar import home_directory
+from packages.thunar import templates
 
 
 def test_templates_dir_is_created_by_home_layout():
@@ -90,3 +95,16 @@ def test_odf_bytes_are_deterministic():
     # reproducible and this can be pinned).
     for name, mime, cls, body in templates._ODF_KINDS:
         assert templates.odf_bytes(mime, cls, body) == templates.odf_bytes(mime, cls, body)
+
+
+def test_thunar_emit_plan_folds_in_the_templates_entries():
+    # The merge's load-bearing wiring: templates no longer has its own auto-discovered
+    # package, so thunar.emit_plan() MUST carry every templates entry (else the ~/Templates
+    # set + XDG pointer would silently stop shipping). Match the whole templates sub-plan by
+    # dest against the combined thunar plan.
+    thunar_dests = {e["dest"] for e in thunar.emit_plan()}
+    for e in templates.emit_plan():
+        assert e["dest"] in thunar_dests, e["dest"]
+    # spot-check the two load-bearing ones are really in there.
+    assert templates.USER_DIRS_PATH in thunar_dests
+    assert f"{templates.TEMPLATES_DIR}/Text Document.txt" in thunar_dests

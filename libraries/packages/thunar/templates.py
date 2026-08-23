@@ -1,5 +1,11 @@
 """~/Templates -- the "Create Document" template set for Thunar (PROMPT batch item 8).
 
+This is a SUBMODULE of the thunar package (packages/thunar/templates.py): the template set,
+the XDG_TEMPLATES_DIR pointer, and the Thunar config that consumes them all belong together, so
+this lives right next to the rest of the Thunar setup and thunar.emit_plan() folds its plan in
+(it is NOT a separately-discovered top-level package anymore). It sits beside home_directory --
+which creates the ~/Templates DIRECTORY this module then fills -- for the same reason.
+
 Thunar populates its "Create New Document..." submenu from the XDG templates dir: every FILE
 in ~/Templates (the dir named by XDG_TEMPLATES_DIR in ~/.config/user-dirs.dirs) becomes a
 "Create Document -> <that file's name>" entry that COPIES the template into the current folder.
@@ -27,9 +33,10 @@ packages/thunar/actions), which appears on the folder background right where Cre
 Folder/Document are. So Create Link IS present in that same right-click flow.
 
 WHERE IT GOES. All HOME files (owner "home", skel-mirrored) -- the templates and user-dirs.dirs
-belong to the user. compiler emits this module's emit_plan() alongside the others; the ODF
-templates ride the bytes_builder plan-entry kind (binary), the text ones the normal builder.
-The Templates directory itself is created by compiler._emit_homedir (home_directory.TEMPLATES).
+belong to the user. thunar.emit_plan() folds this module's emit_plan() into the combined Thunar
+plan, which compiler._emit_apps writes alongside every other package's; the ODF templates ride
+the bytes_builder plan-entry kind (binary), the text ones the normal builder. The Templates
+directory itself is created by compiler._emit_homedir (home_directory.EXTRA_DIRECTORIES).
 """
 
 from __future__ import annotations
@@ -40,7 +47,8 @@ import zipfile
 # The live user's home (matches openbox.HOME / the airootfs /home/main tree).
 HOME = "/home/main"
 
-# The templates directory (created by compiler._emit_homedir from home_directory.TEMPLATES).
+# The templates directory (created by compiler._emit_homedir from the sibling
+# home_directory.EXTRA_DIRECTORIES, which lists "Templates").
 TEMPLATES_DIRNAME = "Templates"
 TEMPLATES_DIR = f"{HOME}/{TEMPLATES_DIRNAME}"
 
@@ -58,7 +66,7 @@ def user_dirs_dirs() -> str:
     missing lines)."""
     return (
         "# This file is written by xdg-user-dirs-update\n"
-        "# Az'arch ships it (packages/templates) so XDG_TEMPLATES_DIR points at ~/Templates\n"
+        "# Az'arch ships it (packages/thunar/templates) so XDG_TEMPLATES_DIR points at ~/Templates\n"
         "# (Thunar's Create Document submenu reads that dir). Format is XDG_xxx_DIR=\"$HOME/yyy\".\n"
         'XDG_DESKTOP_DIR="$HOME/Desktop"\n'
         'XDG_DOWNLOAD_DIR="$HOME/Downloads"\n'
@@ -183,8 +191,9 @@ _CONF = 0o644
 def emit_plan() -> list[dict]:
     """Return the emit plan for the templates + user-dirs.dirs. All HOME files (owner "home",
     skel-mirrored): the text template + user-dirs.dirs as normal text builders, the ODF trio as
-    bytes_builder (binary) entries. compiler._emit_apps writes them (the Templates DIRECTORY is
-    created separately by _emit_homedir from home_directory.TEMPLATES)."""
+    bytes_builder (binary) entries. thunar.emit_plan() folds these into the combined Thunar plan
+    that compiler._emit_apps writes (the Templates DIRECTORY is created separately by
+    _emit_homedir from home_directory.EXTRA_DIRECTORIES)."""
     plan: list[dict] = [
         {
             "builder": user_dirs_dirs,

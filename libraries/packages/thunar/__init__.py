@@ -20,6 +20,10 @@ the on-disk home layout are built from the same list):
     images, Create Link via zenity, Open Terminal Here via kitty) + the `link` helper script.
   * launcher.py -- the thunar.desktop override (Name="Thunar", custom Az'arch icon) + the
     custom icon files.
+  * templates.py -- the ~/Templates "Create Document" set (an empty text doc + the LibreOffice
+    ODF trio) and ~/.config/user-dirs.dirs pointing XDG_TEMPLATES_DIR at ~/Templates (PROMPT
+    batch item 8). Folded in from the former standalone packages/templates; its plan is
+    appended to emit_plan() below.
 
 WHAT LANDS WHERE:
   HOME files (owner "home", chowned 1000:998 and mirrored into /etc/skel):
@@ -44,6 +48,7 @@ from . import locale
 from . import menu_cleanup
 from . import settings
 from . import sidebar
+from . import templates
 
 # Re-export the public constants callers/tests reach for (paths + the icon name), so
 # `from packages import thunar; thunar.THUNARRC_PATH` works like the flat modules.
@@ -59,6 +64,8 @@ ICON_ASSET = launcher.ICON_ASSET
 ICON_SCALABLE_PATH = launcher.ICON_SCALABLE_PATH
 ICON_PNG_SIZES = launcher.ICON_PNG_SIZES
 LIVE_SIDEBAR_SYNC_DEST = live_sidebar.SYNC_SCRIPT_DEST
+TEMPLATES_DIR = templates.TEMPLATES_DIR
+USER_DIRS_PATH = templates.USER_DIRS_PATH
 
 _CONF = 0o644
 _EXEC = 0o755
@@ -166,4 +173,10 @@ def emit_plan() -> list[dict]:
     # at runtime, so additions show up in the sidebar -- PROMPT). Root-owned executable; wired
     # into session startup by packages/openbox's autostart.
     plan += live_sidebar.emit_plan()
+    # The ~/Templates "Create Document" set + the XDG_TEMPLATES_DIR pointer (PROMPT batch item 8).
+    # Folded in from the former standalone packages/templates: all HOME files (owner "home",
+    # skel-mirrored) -- the text template + user-dirs.dirs as text builders, the LibreOffice ODF
+    # trio as bytes_builder (binary) entries. The Templates DIRECTORY itself is created by
+    # _emit_homedir from home_directory.EXTRA_DIRECTORIES.
+    plan += templates.emit_plan()
     return plan

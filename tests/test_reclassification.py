@@ -97,26 +97,28 @@ def test_the_upstream_tailoring_packages_live_under_packages():
     # with an __init__.py, and import as `from packages import <name>`.
     packages_dir = paths.PACKAGESDIR
     for name in ("fastfetch", "librewolf", "openbox", "kitty", "gedit", "thunar",
-                 "vlc", "gimp", "xviewer", "libreoffice", "templates"):
+                 "vlc", "gimp", "xviewer", "libreoffice"):
         assert (packages_dir / name / "__init__.py").is_file(), (
             f"packages/{name}/__init__.py must exist so the package loads"
         )
 
 
-def test_the_four_merges_live_inside_their_target_package():
-    # The four merged modules are FILES inside their target package now, not their own
+def test_the_merges_live_inside_their_target_package():
+    # The merged modules are FILES inside their target package now, not their own
     # top-level directories. Each is importable as a submodule of that package.
     from packages.thunar import home_directory   # home_directory -> thunar
+    from packages.thunar import templates        # templates -> thunar
     from packages.openbox import scale           # scale -> openbox
     from packages.librewolf import timedate      # timedate -> librewolf
     assert home_directory.__file__.endswith("libraries/packages/thunar/home_directory.py")
+    assert templates.__file__.endswith("libraries/packages/thunar/templates.py")
     assert scale.__file__.endswith("libraries/packages/openbox/scale.py")
     assert timedate.__file__.endswith("libraries/packages/librewolf/timedate.py")
     # ckbcomp is a companion SCRIPT (copied verbatim, never imported), so it is just a file
     # under the calamares package, not a submodule.
     assert (paths.PACKAGESDIR / "calamares" / "ckbcomp.py").is_file()
     # ...and their old top-level homes must be gone.
-    for gone in ("home_directory", "scale", "ckbcomp", "timedate"):
+    for gone in ("home_directory", "templates", "scale", "ckbcomp", "timedate"):
         assert not (paths.PACKAGESDIR / gone).exists(), (
             f"packages/{gone}/ must be gone -- it was merged into its target package"
         )

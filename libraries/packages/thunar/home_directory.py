@@ -103,9 +103,9 @@ TRASH_DIRS: tuple[str, ...] = (
 # --- Extra (non-sidebar) directories -------------------------------------------
 # Directories created in the home layout that are NOT part of the sidebar shortcut set (so they
 # are deliberately kept OUT of DIRECTORIES above, which drives the sidebar). ~/Templates holds
-# the Thunar "Create Document" template set (packages/templates ships the template FILES
-# and the XDG_TEMPLATES_DIR pointer -- PROMPT batch item 8). Created in both /home/main and
-# /etc/skel by compiler._emit_homedir so the submenu works for the live and installed user.
+# the Thunar "Create Document" template set (the sibling packages/thunar/templates ships the
+# template FILES and the XDG_TEMPLATES_DIR pointer -- PROMPT batch item 8). Created in both
+# /home/main and /etc/skel by compiler._emit_homedir so the submenu works for live + installed.
 EXTRA_DIRECTORIES: tuple[str, ...] = (
     "Templates",
 )

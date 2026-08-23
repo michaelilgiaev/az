@@ -71,7 +71,9 @@ from packages import gedit
 # package (Thunar's sidebar is built from the same list), so _emit_homedir reads it from there.
 from packages.thunar import home_directory
 # The per-application tweaks that expose ONLY emit_plan() (kitty, vlc, libreoffice, gimp, thunar,
-# xviewer, templates) are NOT imported by name -- _emit_apps discovers them. The packages the
+# xviewer) are NOT imported by name -- _emit_apps discovers them. (thunar folds in the ~/Templates
+# "Create Document" set from its templates submodule, so there is no standalone templates package.)
+# The packages the
 # compiler already drives explicitly (the desktop pair openbox/librewolf, plus application_menu,
 # passwords, calamares, and the azarch guest command line interface) are excluded from that
 # discovery so they are not emitted twice. See _EXPLICIT_PACKAGES below.
@@ -577,7 +579,7 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
     # The per-application tweaks are DISCOVERED, not hard-coded: every package exposing an
     # emit_plan() (kitty icon | vlc vlcrc | gedit .desktop + gschema | libreoffice
     # registrymodifications.xcu | gimp gimprc | thunar thunarrc/xfconf/gtk.css/bookmarks/uca.xml
-    # + icon | xviewer icon | templates ~/Templates set | ... plus any newly-added
+    # + icon + the ~/Templates "Create Document" set | xviewer icon | ... plus any newly-added
     # packages/<app>/__init__.py) contributes its entries here, EXCEPT the ones the compiler
     # drives by name (_EXPLICIT_PACKAGES: the desktop pair openbox/librewolf, application_menu,
     # passwords, calamares, azarch). default_applications (a packages.azarch module, the XDG
