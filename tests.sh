@@ -79,16 +79,13 @@ cleanup() { rm -rf "$REPODIR/.pytest_cache"; }
 trap cleanup EXIT
 
 echo "[tests] running pytest"
-# The default run is PURE/OFFLINE (see the header): the `network`-marked live
-# resolver-server contract test is deselected unless the caller asks for a marker
-# themselves. Run the live tier explicitly with `bash tests.sh -m network`.
+# The default run includes EVERYTHING, network-marked live tests included. The
+# `network`-marked tests ping real external hosts and skip themselves when
+# offline, so a plain `bash tests.sh` still passes without connectivity.
 # `set -o errexit` is disabled around pytest so a test failure does not abort the
 # script before cleanup; we capture and re-raise the exit code ourselves.
 set +o errexit
-case " $* " in
-    *" -m "*|*" --markers "*) "$PY" -m pytest "$@" ;;
-    *)                        "$PY" -m pytest -m "not network" "$@" ;;
-esac
+"$PY" -m pytest "$@"
 status=$?
 set -o errexit
 exit "$status"
