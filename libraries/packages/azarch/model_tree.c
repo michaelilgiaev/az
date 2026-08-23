@@ -56,6 +56,9 @@ static const AzRow ROWS_MAIN[] = {
     {.label="Machine Type", .kind=AZ_ACT_SCREEN, .target="machine",    .status=az_status_machine},
     {.label="Time & Date",  .kind=AZ_ACT_SCREEN, .target="timedate",   .status=az_status_timedate},
     {.label="Language",     .kind=AZ_ACT_SCREEN, .target="language",   .status=az_status_language},
+    /* Hypervisor: the per-directory VM runner's GLOBAL install defaults (its status summarises
+     * ram/cpus/disk/net). Sits just before the opt-in Backup entry. */
+    {.label="Hypervisor",   .kind=AZ_ACT_SCREEN, .target="hypervisor", .status=az_status_hypervisor},
     /* Backup is LAST -- an opt-in reached once, after the day-to-day settings above. */
     {.label="Backup",       .kind=AZ_ACT_SCREEN, .target="backup",     .status=az_status_backup},
 };
@@ -285,6 +288,40 @@ static const AzRow ROWS_BACKUP[] = {
      .prompt="rclone remote name (e.g. gdrive):", .show_output=1, .base="rclone copy ~/backup.tar.gz.gpg"},
 };
 
+/* --- Hypervisor screen ------------------------------------------------------
+ * A "Hypervisor" entry on ROWS_MAIN opens this screen. `hypervisor` is a PER-DIRECTORY VM runner
+ * (the directory you run it in IS the VM); this screen edits the GLOBAL DEFAULTS every NEW
+ * `hypervisor install` starts from -- NOT any one VM. It drives the non-interactive `hypervisor
+ * --configure` surface (command_line_interface.py): --status prints the effective defaults,
+ * --reset drops them back to the built-ins, and --set KEY VALUE validates + saves one default into
+ * ~/.config/azarch-hypervisor/defaults.cfg. A directory's own hypervisor.cfg still WINS for that VM.
+ *
+ * The --status/--reset rows are APPLIES; the --set rows are AZ_ACT_PROMPT (prompt for the value,
+ * then append it to the target -- exactly like the Backup enable rows). We expose the five keys a
+ * user tunes most (ram/cpus/disk_size/network/audio); the rest stay editable per-VM in
+ * hypervisor.cfg and via `hypervisor --configure --set` on the command line. None needs sudo (the
+ * defaults file is the user's own), so needs_root stays 0; each runs captured inside the UI. The
+ * base command teaches the underlying edit (writing the key into the user's defaults.cfg). */
+static const AzRow ROWS_HYPERVISOR[] = {
+    {.label="Show defaults",              .kind=AZ_ACT_APPLY, .target="hypervisor --configure --status",
+     .show_output=1, .base="cat ~/.config/azarch-hypervisor/defaults.cfg"},
+    {.label="Reset to built-in defaults", .kind=AZ_ACT_APPLY, .target="hypervisor --configure --reset",
+     .show_output=1, .base="rm -f ~/.config/azarch-hypervisor/defaults.cfg"},
+    /* The PROMPT rows' base teaches the underlying `KEY = value` line written into the defaults
+     * file; az_row_base() appends the "<value>" placeholder, so the base ends at "KEY =" (the
+     * defaults path is disclosed in the screen subtitle, not repeated on every row). */
+    {.label="Set default RAM (MiB)",      .kind=AZ_ACT_PROMPT, .target="hypervisor --configure --set ram",
+     .prompt="RAM in MiB (e.g. 16384):",        .show_output=1, .base="ram ="},
+    {.label="Set default CPUs",           .kind=AZ_ACT_PROMPT, .target="hypervisor --configure --set cpus",
+     .prompt="vCPU count (e.g. 16):",           .show_output=1, .base="cpus ="},
+    {.label="Set default disk size",      .kind=AZ_ACT_PROMPT, .target="hypervisor --configure --set disk_size",
+     .prompt="disk size (e.g. 200G):",          .show_output=1, .base="disk_size ="},
+    {.label="Set default network",        .kind=AZ_ACT_PROMPT, .target="hypervisor --configure --set network",
+     .prompt="network (user | none | iface):",  .show_output=1, .base="network ="},
+    {.label="Set default audio",          .kind=AZ_ACT_PROMPT, .target="hypervisor --configure --set audio",
+     .prompt="audio (on | off):",               .show_output=1, .base="audio ="},
+};
+
 /* --- Default Applications screens -------------------------------------------
  * A "Default Applications" entry on ROWS_MAIN opens the `defaultapps` screen, which lists the
  * 14 categories (Web/HTML/Music/.../Terminal). Each category row's status shows the handler it
@@ -490,6 +527,14 @@ static const AzScreen SCREENS[] = {
                "sets English plus (for a non-English country) the region language + keyboard as "
                "a switchable second layout (Alt+Shift). English stays the UI language.",
      .current=az_status_language,  .rows=ROWS_LANGUAGE,  .nrows=AZN(ROWS_LANGUAGE)},
+    /* Hypervisor: the GLOBAL defaults every NEW `hypervisor install` starts from. The subtitle
+     * makes clear these are DEFAULTS for new VMs and that a directory's own hypervisor.cfg still
+     * wins; the "Current:" line (az_status_hypervisor) summarises ram/cpus/disk/net. */
+    {.id="hypervisor", .title="Hypervisor",
+     .subtitle="Defaults for NEW VMs the `hypervisor` command creates (each directory is its own "
+               "VM). Changing a default here affects future `hypervisor install`s; a directory's "
+               "own hypervisor.cfg still wins for that VM.",
+     .current=az_status_hypervisor, .rows=ROWS_HYPERVISOR, .nrows=AZN(ROWS_HYPERVISOR)},
     /* Backup: OFF BY DEFAULT. The subtitle explains the feature -- the two local archives always
      * happen; this only opts in to a USB / Google Drive COPY. The "Current:" line shows the live
      * target state (az_status_backup: "off (local only)" by default). */

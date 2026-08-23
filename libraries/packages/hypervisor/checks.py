@@ -1,7 +1,7 @@
 """checks.py - the die() helper and precondition checks.
 
 Ported from libraries/common.sh's require_* functions. Each check raises
-HypervisorError (caught in cli.py, printed as 'hypervisor: <msg>' and exit 1)
+HypervisorError (caught in command_line_interface.py, printed as 'hypervisor: <msg>' and exit 1)
 instead of calling `exit` directly, so the checks stay composable and testable.
 """
 
@@ -13,7 +13,7 @@ import subprocess
 
 
 class HypervisorError(Exception):
-    """A user-facing error. cli.py prints it and exits 1."""
+    """A user-facing error. command_line_interface.py prints it and exits 1."""
 
 
 def die(msg: str) -> "typing.NoReturn":  # noqa: F821

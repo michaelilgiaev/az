@@ -1,4 +1,4 @@
-"""config_watcher.py - live hypervisor.cfg reload with validation and safe revert.
+"""configuration_watcher.py - live hypervisor.cfg reload with validation and safe revert.
 
 While a VM runs, the hypervisor watches hypervisor.cfg (mtime poll on a daemon
 thread, matching virtual_machine._maximize_window; stdlib only, no new deps). On
@@ -34,14 +34,14 @@ import time
 from dataclasses import dataclass, field
 
 # Flat app, dual-mode sibling import (see configuration.py for the full rationale): use
-# package-relative imports when loaded as packages.hypervisor.config_watcher (tests / -m),
+# package-relative imports when loaded as packages.hypervisor.configuration_watcher (the test suite),
 # and a sys.path bootstrap + bare imports when loaded flat by absolute path (the launcher).
 if __package__:
-    from . import config_schema
+    from . import configuration_schema
     from . import configuration
 else:  # loaded flat (run by absolute path via the launcher) -- no parent package
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    import config_schema  # noqa: E402  (after the sys.path bootstrap above)
+    import configuration_schema  # noqa: E402  (after the sys.path bootstrap above)
     import configuration  # noqa: E402
 
 
@@ -80,7 +80,7 @@ def evaluate_save(new_text: str, last_good: Snapshot) -> ChangeDecision:
     reboot-required.
     """
     raw = configuration._migrate_legacy_keys(_parse_text(new_text))
-    coerced, errors = config_schema.coerce_all(raw)
+    coerced, errors = configuration_schema.coerce_all(raw)
     if errors:
         return ChangeDecision(valid=False, errors=errors, revert_text=last_good.text)
 
@@ -89,7 +89,7 @@ def evaluate_save(new_text: str, last_good: Snapshot) -> ChangeDecision:
     new_values = dict(last_good.values)
     new_values.update(coerced)
 
-    changed = [k for k in config_schema.KEYS
+    changed = [k for k in configuration_schema.KEYS
                if new_values.get(k) != last_good.values.get(k)]
     live = [k for k in changed if k in _LIVE_KEYS]
     reboot = [k for k in changed if k not in _LIVE_KEYS]
@@ -112,7 +112,7 @@ def _has_known_keys(text: str) -> bool:
     Guards against adopting an empty / all-comments / partial-write body as the
     last-known-good."""
     raw = configuration._migrate_legacy_keys(_parse_text(text))
-    return any(k in config_schema.SCHEMA for k in raw)
+    return any(k in configuration_schema.SCHEMA for k in raw)
 
 
 def _atomic_write(path: str, text: str) -> None:

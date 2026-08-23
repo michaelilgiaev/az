@@ -1,7 +1,8 @@
-"""cli.py - argument parsing, usage text, and the dispatch entry point.
+"""command_line_interface.py - argument parsing, usage text, and the dispatch entry point.
 
-This file only parses args and calls into virtual_machine.py; all the real logic
-lives in the other modules.
+This file parses args and calls into virtual_machine.py (the per-directory subcommands)
+or configuration_defaults.py (the global `--configure` defaults surface); all the real
+logic lives in the other modules.
 """
 
 from __future__ import annotations
@@ -14,15 +15,22 @@ import sys
 # absolute path (the launcher does NOT cd -- the caller's CWD is preserved so
 # `Config.from_cwd()` resolves the VM against the directory the user is in) __package__ is
 # empty, so we bootstrap sys.path and import the bare siblings; when imported by the test
-# suite as packages.hypervisor.cli, __package__ is set, so we use package-relative imports
-# (one HypervisorError class, shared with the tests). Mirrors packages/backup/backup.py.
+# suite as packages.hypervisor.command_line_interface, __package__ is set, so we use
+# package-relative imports (one HypervisorError class shared with the tests). Mirrors
+# packages/backup/backup.py.
 if __package__:
+    from . import configuration
+    from . import configuration_defaults
+    from . import configuration_schema
     from . import virtual_machine as vm
     from .checks import HypervisorError
     from .configuration import Config, DEFAULT_SSH_FORWARD_PORT
 else:  # loaded flat (run by absolute path via the launcher) -- no parent package
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    import virtual_machine as vm  # noqa: E402  (after the sys.path bootstrap above)
+    import configuration  # noqa: E402  (after the sys.path bootstrap above)
+    import configuration_defaults  # noqa: E402
+    import configuration_schema  # noqa: E402
+    import virtual_machine as vm  # noqa: E402
     from checks import HypervisorError  # noqa: E402
     from configuration import Config, DEFAULT_SSH_FORWARD_PORT  # noqa: E402
 
@@ -50,6 +58,9 @@ USAGE:
                              disk directly (Btrfs @/@home layout only).
   hypervisor status          Show VM name, files, running state, SSH port, toggles.
   hypervisor stop            Power this VM off.
+  hypervisor --configure [--status | --set KEY VALUE | --reset]
+                             Manage the GLOBAL defaults every NEW `hypervisor install`
+                             starts from (this dir's own hypervisor.cfg still wins).
   hypervisor help            This text.
 
 hypervisor.cfg keys (all settings live here -- edit freely; a running VM applies
@@ -87,6 +98,13 @@ def main(argv: list[str] | None = None) -> int:
     rest = argv[1:]
 
     try:
+        # `--configure` edits the GLOBAL user defaults (~/.config/azarch-hypervisor);
+        # it is NOT a per-directory VM action, so it runs BEFORE Config.from_cwd() and
+        # works from anywhere (an empty dir with no disk/iso would make from_cwd resolve
+        # a VM that does not exist). Mirrors `azarch backup --configure`.
+        if cmd in ("--configure", "-c", "configure"):
+            return _do_configure(rest)
+
         cfg = Config.from_cwd()
 
         if cmd == "install":
@@ -111,6 +129,57 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         return 130
     return 0
+
+
+def _configure_usage() -> str:
+    keys = ", ".join(configuration_schema.KEYS)
+    return (
+        "Usage: hypervisor --configure --status\n"
+        "       hypervisor --configure --set KEY VALUE\n"
+        "       hypervisor --configure --reset\n\n"
+        "Manage the GLOBAL defaults every NEW `hypervisor install` starts from\n"
+        "(stored in " + configuration_defaults.defaults_path() + ").\n"
+        "A directory's own hypervisor.cfg still wins for that VM.\n\n"
+        "  --status         print the effective defaults (built-in + your overrides)\n"
+        "  --set KEY VALUE  validate VALUE and save it as the default for KEY\n"
+        "  --reset          delete all overrides (back to the built-in defaults)\n\n"
+        "KEY is one of: " + keys
+    )
+
+
+def _do_configure(rest: list[str]) -> int:
+    """The `hypervisor --configure` surface: manage the global default overrides. Returns an
+    exit code. Non-interactive (the bare-`azarch` TUI drives --set/--status/--reset); mirrors
+    `azarch backup --configure`. Never raises HypervisorError -- it validates via the schema
+    and reports its own errors so a bad --set is a clean non-zero exit, not a traceback."""
+    if not rest or rest[0] in ("-h", "--help", "help"):
+        print(_configure_usage())
+        return 0 if rest else 2
+
+    opt = rest[0]
+    if opt == "--status":
+        sys.stdout.write(configuration.render_defaults_text(configuration.effective_defaults()))
+        return 0
+    if opt == "--reset":
+        configuration_defaults.reset()
+        print("hypervisor defaults reset to the built-in values.")
+        return 0
+    if opt == "--set":
+        if len(rest) < 3:
+            print("hypervisor --configure --set KEY VALUE: a KEY and VALUE are required.",
+                  file=sys.stderr)
+            return 2
+        key, value = rest[1], rest[2]
+        ok, err = configuration_defaults.set_key(key, value)
+        if not ok:
+            print(f"hypervisor --configure: {err}", file=sys.stderr)
+            return 1
+        print(f"hypervisor default set: {key} = {value.strip()}")
+        return 0
+
+    print(f"hypervisor --configure: unknown option: {opt}\n", file=sys.stderr)
+    print(_configure_usage(), file=sys.stderr)
+    return 2
 
 
 def _parse_install_args(rest: list[str]) -> tuple:
@@ -173,8 +242,8 @@ def _flag_value(rest: list[str], flag: str) -> str:
     return ""
 
 
-# cli.py IS the entry the /usr/local/bin/hypervisor launcher execs directly (see
-# packaging.py), so it must run main() when executed as a script -- the source relied on
-# __main__.py for this, but the launcher targets cli.py. Mirrors packages/backup/backup.py.
+# command_line_interface.py IS the entry the /usr/local/bin/hypervisor launcher execs
+# directly (see packaging.py), so it must run main() when executed as a script -- the
+# launcher targets THIS file (there is no __main__.py). Mirrors packages/backup/backup.py.
 if __name__ == "__main__":
     sys.exit(main())

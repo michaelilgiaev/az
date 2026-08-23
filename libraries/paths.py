@@ -139,10 +139,11 @@ PASSWORDS_DIR = PACKAGESDIR / "passwords"
 # keeping symlinks as links) into ~/backup_<date>.tar.gz.gpg (GPG/AES256).
 BACKUP_DIR = PACKAGESDIR / "backup"
 # The Az'arch hypervisor package (per-directory QEMU/KVM VM runner -- the `hypervisor`
-# command): a flat directory holding the entry script (cli.py), every working module
-# (configuration/config_schema/config_watcher/graphics/checks/qemu_command/
-# virtual_machine) and packaging.py (the build wiring that copies them into the airootfs
-# and installs the /usr/local/bin/hypervisor launcher). A pure-Python app we author, so
+# command): a flat directory holding the entry script (command_line_interface.py), every
+# working module (configuration/configuration_schema/configuration_watcher/
+# configuration_defaults/graphics/checks/qemu_command/virtual_machine) and packaging.py
+# (the build wiring that copies them into the airootfs and installs the
+# /usr/local/bin/hypervisor launcher). A pure-Python app we author, so
 # it lives under libraries/packages/ like backup. `hypervisor` spins up a QEMU/KVM VM
 # whose identity is derived from the directory it is run in (name/disk/NVRAM/shared/SSH),
 # with all settings in a per-directory hypervisor.cfg. HOST-side tool -- distinct from the

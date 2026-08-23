@@ -10,7 +10,7 @@ artifacts into the airootfs (root-owned system paths -- the OFFLINE Calamares in
 rsyncs the live rootfs, so they carry onto the installed system with no separate
 installer step). Like backup this is a PURE-PYTHON app (nothing to compile).
 
-The app is a flat directory: the entry script (cli.py) and every module it imports sit
+The app is a flat directory: the entry script (command_line_interface.py) and every module it imports sit
 side by side, so emit_plan() ships each of them as its own single-file entry into
 LIB_DIR (plus the /usr/local/bin/hypervisor launcher). The set of shipped modules is
 discovered from the source dir -- every .py except this build wiring -- so adding or
@@ -19,20 +19,20 @@ removing a module needs no edit here.
 Layers:
   * SOURCE tree -- libraries/packages/hypervisor/ (paths.HYPERVISOR_DIR):
       __init__.py                     the package init (makes the dir importable in tests)
-      __main__.py                     `python -m packages.hypervisor` entry (-> cli.main)
-      cli.py                          THE ENTRY the launcher execs (arg parse + dispatch)
+      command_line_interface.py       THE ENTRY the launcher execs (arg parse + dispatch)
       configuration.py                CWD-derived VM identity/paths/config
-      config_schema.py                typed hypervisor.cfg schema + validation
-      config_watcher.py               live cfg reload with validate/revert
+      configuration_schema.py         typed hypervisor.cfg schema + validation
+      configuration_watcher.py        live cfg reload with validate/revert
+      configuration_defaults.py       user-wide default overrides (~/.config/azarch-hypervisor)
       graphics.py                     DRM render-node selection
       checks.py                       precondition checks + die()/HypervisorError
       qemu_command.py                 the pure QEMU argv assembler
       virtual_machine.py              install/run/share/status/stop logic
       packaging.py                    THIS module -- install paths, launcher, emit_plan()
   * INSTALLED layout (root-owned), all flat in LIB_DIR:
-      /usr/local/lib/azarch-hypervisor/cli.py       the `hypervisor` entry script
+      /usr/local/lib/azarch-hypervisor/command_line_interface.py       the `hypervisor` entry script
       /usr/local/lib/azarch-hypervisor/<module>.py  every runtime module (flat)
-      /usr/local/bin/hypervisor                     the launcher (execs cli.py)
+      /usr/local/bin/hypervisor                     the launcher (execs command_line_interface.py)
 
 Runtime dependencies (system binaries the app shells out to): `qemu-system-x86_64`
 and `qemu-img` (qemu-full) to run/create the VM, the OVMF UEFI firmware (edk2-ovmf),
@@ -49,20 +49,20 @@ import paths
 # --- Installed system paths (root-owned) ------------------------------------
 # Where the app lands in the live/installed rootfs. Under /usr/local (our stuff), so
 # the OFFLINE install's unpackfs rsync carries it to the target unchanged. Mirrors
-# backup.LIB_DIR. The app is ONE FLAT directory: the entry script (cli.py) and every
+# backup.LIB_DIR. The app is ONE FLAT directory: the entry script (command_line_interface.py) and every
 # module it imports sit side by side here, and the entry does `sys.path.insert(0, <its
 # own dir>)` so the bare `import <module>` calls resolve.
 LIB_DIR = "/usr/local/lib/azarch-hypervisor"
 # The entry script the `hypervisor` launcher execs. It lands in LIB_DIR beside the other
 # modules; its own `sys.path.insert(0, <dir of __file__>)` makes the sibling imports
 # (`import virtual_machine`, `import configuration`, ...) resolve from wherever it is run.
-ENTRY_SYSTEM_PATH = f"{LIB_DIR}/cli.py"
+ENTRY_SYSTEM_PATH = f"{LIB_DIR}/command_line_interface.py"
 # The bin entry point on PATH -- the actual `hypervisor` command. A tiny wrapper that
 # execs the system python on the entry script's ABSOLUTE path in LIB_DIR WITHOUT changing
 # directory. The no-cd is LOAD-BEARING here: `hypervisor` derives the whole VM identity
 # from the caller's CURRENT WORKING DIRECTORY (Config.from_cwd()), so the launcher must
 # preserve it -- a `cd` into LIB_DIR (as the passwords launcher does) would make every VM
-# resolve to LIB_DIR. The sibling imports still resolve without the cd because cli.py does
+# resolve to LIB_DIR. The sibling imports still resolve without the cd because command_line_interface.py does
 # `sys.path.insert(0, <dir of __file__>)` at startup, keyed off the script's own absolute
 # path rather than the cwd. Ships 0o755 (see the profile.py file_permissions map -- archiso
 # would otherwise normalise it to 0644 on the squashfs).
@@ -78,10 +78,10 @@ _NON_SHIPPED = frozenset({"packaging.py"})
 
 def _shipped_module_names() -> list[str]:
     """Every runtime .py file the app ships to LIB_DIR (sorted): the whole hypervisor
-    source dir minus the build wiring (packaging.py). The entry script (cli.py),
-    __init__.py, __main__.py and every working module are all included -- they must
-    travel together for the flat sibling imports to resolve. (The unit tests are in
-    tests/, not here.)"""
+    source dir minus the build wiring (packaging.py). The entry script
+    (command_line_interface.py), __init__.py and every working module are all included --
+    they must travel together for the flat sibling imports to resolve. (The unit tests are
+    in tests/, not here.)"""
     return sorted(
         p.name
         for p in paths.HYPERVISOR_DIR.iterdir()
@@ -123,7 +123,7 @@ def launcher_sh() -> str:
     the whole VM identity from the caller's CURRENT WORKING DIRECTORY, so the caller's
     cwd MUST be preserved (a ``cd`` into LIB_DIR would make every VM resolve to LIB_DIR;
     this is the port's single most important correctness point). The sibling imports
-    still resolve without the ``cd`` because cli.py does ``sys.path.insert(0, <dir of
+    still resolve without the ``cd`` because command_line_interface.py does ``sys.path.insert(0, <dir of
     __file__>)`` at startup, which keys off the script's own absolute path rather than
     the cwd. `exec` so the python process replaces the shell (clean signals -- the app
     installs SIGTERM/SIGINT handling around the viewer/VM). `"$@"` is quoted so arguments

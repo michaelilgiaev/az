@@ -1,4 +1,4 @@
-"""config_schema -- the typed hypervisor.cfg schema, coercion, and validation.
+"""configuration_schema -- the typed hypervisor.cfg schema, coercion, and validation.
 
 The whole point of Part 2 is that hypervisor.cfg is no longer "bools + strings":
 each key has a real type (bool, int, str, false-or-path, list-of-paths) and a
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from packages.hypervisor import config_schema as cs
+from packages.hypervisor import configuration_schema as cs
 
 
 # --- booleans ---------------------------------------------------------------

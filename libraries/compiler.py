@@ -511,7 +511,7 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
         )
     # Az'arch hypervisor (OUR per-directory QEMU/KVM VM runner -- the `hypervisor`
     # command). A pure-Python app like backup and a single flat directory: emit_plan()
-    # writes the entry script (cli.py) and every working module plus the
+    # writes the entry script (command_line_interface.py) and every working module plus the
     # /usr/local/bin/hypervisor launcher to their fixed root-owned system paths -- one
     # single-file entry each, so the whole flat app is expressed by the plan alone (no
     # separate directory copy). No systemd service -- it is an interactive command. Its

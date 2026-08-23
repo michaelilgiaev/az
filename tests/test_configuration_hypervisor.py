@@ -14,7 +14,7 @@ cwd -- the single most important correctness point of the port). None of that ra
 its own. These tests pin:
 
   * the emit_plan() dest/mode entries + that it does not mutate module state,
-  * the launcher (execs `python <LIB_DIR>/cli.py "$@"` WITHOUT a cd, executable),
+  * the launcher (execs `python <LIB_DIR>/command_line_interface.py "$@"` WITHOUT a cd, executable),
   * the flat-package ship contract (every runtime module installs into LIB_DIR; the
     build wiring does NOT ship),
   * the CWD-preservation guard (the launcher must NOT cd -- else Config.from_cwd breaks),
@@ -39,7 +39,7 @@ from packages.hypervisor import packaging as hv
 
 # --- emit_plan() contract ---------------------------------------------------
 EXPECTED_KEY_PLAN = {
-    "/usr/local/lib/azarch-hypervisor/cli.py": 0o644,
+    "/usr/local/lib/azarch-hypervisor/command_line_interface.py": 0o644,
     "/usr/local/lib/azarch-hypervisor/configuration.py": 0o644,
     "/usr/local/lib/azarch-hypervisor/virtual_machine.py": 0o644,
     "/usr/local/lib/azarch-hypervisor/qemu_command.py": 0o644,
@@ -102,24 +102,24 @@ def test_launcher_name_is_the_hypervisor_command():
 
 # --- launcher (the CWD-preservation guard is the port's key correctness point) --
 def test_launcher_execs_python_entry_from_install_dir_without_cd():
-    """The `hypervisor` launcher execs the system python on cli.py's ABSOLUTE path in
+    """The `hypervisor` launcher execs the system python on command_line_interface.py's ABSOLUTE path in
     LIB_DIR, forwarding arguments so `hypervisor install foo.iso` reaches the script. It
     MUST NOT `cd` -- `hypervisor` derives the whole VM identity from the caller's CURRENT
     WORKING DIRECTORY (Config.from_cwd()), so a cd into LIB_DIR would make EVERY VM resolve
-    to LIB_DIR. The sibling imports still resolve because cli.py does its own sys.path
+    to LIB_DIR. The sibling imports still resolve because command_line_interface.py does its own sys.path
     bootstrap. `exec` so the python process replaces the shell."""
     sh = hv.launcher_sh()
     assert sh.startswith("#!/bin/sh")
     assert "cd " not in sh, "the launcher must NOT cd (it would break Config.from_cwd)"
-    assert f"exec python -u '{hv.LIB_DIR}/cli.py' \"$@\"" in sh
-    assert hv.ENTRY_SYSTEM_PATH == f"{hv.LIB_DIR}/cli.py"
+    assert f"exec python -u '{hv.LIB_DIR}/command_line_interface.py' \"$@\"" in sh
+    assert hv.ENTRY_SYSTEM_PATH == f"{hv.LIB_DIR}/command_line_interface.py"
 
 
 def test_entry_script_carries_the_syspath_bootstrap():
-    """Because the launcher does NOT cd, the entry (cli.py) MUST insert its own directory on
+    """Because the launcher does NOT cd, the entry (command_line_interface.py) MUST insert its own directory on
     sys.path so its sibling imports (`import virtual_machine`, `import configuration`, ...)
     resolve when run by absolute path. Pin that bootstrap is present in the shipped entry."""
-    src = (paths.HYPERVISOR_DIR / "cli.py").read_text(encoding="utf-8")
+    src = (paths.HYPERVISOR_DIR / "command_line_interface.py").read_text(encoding="utf-8")
     assert "sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))" in src
 
 
@@ -150,10 +150,10 @@ def test_dual_mode_sibling_imports_have_a_flat_fallback():
     (used when the launcher execs the module by absolute path, where there is no parent
     package). Pin the invariant that makes the launcher path safe: EVERY module that carries
     a package-relative import (`from .`) ALSO carries the flat sys.path bootstrap -- so a
-    relative import can never be reached without its flat fallback. (__main__.py is exempt:
-    it runs ONLY as `python -m packages.hypervisor`, a guaranteed package context.)"""
+    relative import can never be reached without its flat fallback. (packaging.py is exempt:
+    it is build wiring, imported only as part of the package, never execed flat.)"""
     for p in paths.HYPERVISOR_DIR.iterdir():
-        if p.suffix != ".py" or p.name in ("packaging.py", "__main__.py"):
+        if p.suffix != ".py" or p.name == "packaging.py":
             continue
         src = p.read_text(encoding="utf-8")
         tree = ast.parse(src, filename=p.name)
@@ -169,13 +169,13 @@ def test_dual_mode_sibling_imports_have_a_flat_fallback():
 
 
 def test_entry_runs_main_when_executed_as_a_script():
-    """cli.py IS the file the /usr/local/bin/hypervisor launcher execs directly (not via
-    __main__.py -- that path only serves `python -m packages.hypervisor`). So cli.py MUST
-    call main() under `if __name__ == '__main__'`, or the launcher would import the module,
-    define main(), and exit 0 WITHOUT ever running the command (a silent no-op -- exactly
-    the bug this guards). Mirrors packages/backup/backup.py's entry."""
-    src = (paths.HYPERVISOR_DIR / "cli.py").read_text(encoding="utf-8")
-    tree = ast.parse(src, filename="cli.py")
+    """command_line_interface.py IS the file the /usr/local/bin/hypervisor launcher execs
+    directly (there is no __main__.py). So command_line_interface.py MUST call main() under
+    `if __name__ == '__main__'`, or the launcher would import the module, define main(), and
+    exit 0 WITHOUT ever running the command (a silent no-op -- exactly the bug this guards).
+    Mirrors packages/backup/backup.py's entry."""
+    src = (paths.HYPERVISOR_DIR / "command_line_interface.py").read_text(encoding="utf-8")
+    tree = ast.parse(src, filename="command_line_interface.py")
     has_main_guard = any(
         isinstance(node, ast.If)
         and isinstance(node.test, ast.Compare)
@@ -183,7 +183,7 @@ def test_entry_runs_main_when_executed_as_a_script():
         and node.test.left.id == "__name__"
         for node in tree.body
     )
-    assert has_main_guard, "cli.py must run main() under `if __name__ == '__main__'`"
+    assert has_main_guard, "command_line_interface.py must run main() under `if __name__ == '__main__'`"
     assert "sys.exit(main())" in src
 
 

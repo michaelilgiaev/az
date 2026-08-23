@@ -532,6 +532,64 @@ const char *az_status_backup(char *buf, size_t n)
     return buf;
 }
 
+/* Pull the value for `key` out of a `hypervisor --configure --status` dump (lines of the form
+ * "key = value"). Writes the trimmed value into out (size on) and returns 1 on a hit, 0 otherwise.
+ * The haystack is modified-safe (we scan a copy the caller owns) and matches the WHOLE key before
+ * '=' so "ram" never matches inside "disk_size"/other keys. */
+static int hv_field(const char *text, const char *key, char *out, size_t on)
+{
+    size_t kl = strlen(key);
+    for (const char *l = text; l && *l; ) {
+        const char *eol = strchr(l, '\n');
+        size_t len = eol ? (size_t)(eol - l) : strlen(l);
+        const char *p = l;
+        while (*p == ' ' || *p == '\t') p++;            /* skip leading space */
+        if ((size_t)(l + len - p) > kl && strncmp(p, key, kl) == 0) {
+            const char *q = p + kl;
+            while (*q == ' ' || *q == '\t') q++;
+            if (*q == '=') {
+                q++;
+                while (*q == ' ' || *q == '\t') q++;    /* value start */
+                const char *vend = (eol ? eol : l + len);
+                while (vend > q && (vend[-1] == ' ' || vend[-1] == '\t' || vend[-1] == '\r'))
+                    vend--;
+                size_t vl = (size_t)(vend - q);
+                if (vl >= on) vl = on - 1;
+                memcpy(out, q, vl);
+                out[vl] = '\0';
+                return 1;
+            }
+        }
+        if (!eol) break;
+        l = eol + 1;
+    }
+    return 0;
+}
+
+const char *az_status_hypervisor(char *buf, size_t n)
+{
+    /* The GLOBAL defaults every NEW `hypervisor install` starts from (the per-directory VM's own
+     * hypervisor.cfg still wins for that VM). `hypervisor --configure --status` prints every key as
+     * "key = value" (built-in defaults with the user's ~/.config/azarch-hypervisor overrides layered
+     * on). We summarise the four a user tunes most -- ram/cpus/disk/network -- into one line.
+     * Reading through the CLI (not the file) keeps this agreeing with what --status shows. */
+    const char *argv[] = {"hypervisor", "--configure", "--status", NULL};
+    char raw[1024] = {0};
+    char ram[32], cpus[32], disk[32], net[64];
+    if (az_have("hypervisor") && az_capture_all(argv, raw, sizeof raw) == 0 && raw[0] &&
+        hv_field(raw, "ram", ram, sizeof ram) &&
+        hv_field(raw, "cpus", cpus, sizeof cpus) &&
+        hv_field(raw, "disk_size", disk, sizeof disk) &&
+        hv_field(raw, "network", net, sizeof net)) {
+        snprintf(buf, n, "ram %s | cpus %s | disk %s | net %s", ram, cpus, disk, net);
+        return buf;
+    }
+    /* hypervisor missing or the read failed: report the BUILT-IN defaults, never a blank cell.
+     * These mirror configuration._CFG_DEFAULTS (ram 16384, cpus 16, disk 200G, network user). */
+    snprintf(buf, n, "ram 16384 | cpus 16 | disk 200G | net user");
+    return buf;
+}
+
 /* --- Default Applications probes ---------------------------------------------
  * The az_status_da_* probes (each category's live current-handler line) MOVED to
  * model_default_applications.c -- they sit next to az_da_screen() (the runtime candidate

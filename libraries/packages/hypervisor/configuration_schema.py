@@ -1,11 +1,11 @@
-"""config_schema.py - the typed hypervisor.cfg schema, coercion, and validation.
+"""configuration_schema.py - the typed hypervisor.cfg schema, coercion, and validation.
 
 Part 2 turned hypervisor.cfg from "bools + strings" into a real typed config:
 each key coerces to a Python type and is validated. This module is the SINGLE
 SOURCE OF TRUTH for that. Two callers share it:
 
   * configuration.HypervisorCfg.from_dir -- parses the file into typed values.
-  * config_watcher -- on every live save, re-runs coerce_all(); an empty error
+  * configuration_watcher -- on every live save, re-runs coerce_all(); an empty error
     list means "valid -> apply", a non-empty one means "invalid -> revert".
 
 Everything here is PURE (str in, typed value or error string out): no I/O, no

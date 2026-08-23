@@ -18,13 +18,13 @@ import sys
 import time
 
 # Flat app, dual-mode sibling import (see configuration.py for the full rationale): use
-# package-relative imports when loaded as packages.hypervisor.virtual_machine (tests / -m)
+# package-relative imports when loaded as packages.hypervisor.virtual_machine (the test suite)
 # so the sibling modules (and their HypervisorError class) are the SAME objects the tests
 # hold, and a sys.path bootstrap + bare imports when loaded flat by absolute path (via the
-# launcher, which execs cli.py). Mirrors packages/backup/archive.py's bootstrap.
+# launcher, which execs command_line_interface.py). Mirrors packages/backup/archive.py's bootstrap.
 if __package__:
     from . import checks
-    from . import config_watcher
+    from . import configuration_watcher
     from .checks import die, is_running
     from .configuration import (
         Config, HypervisorCfg, _CFG_DEFAULTS, _hypervisor_cfg_text, select_ssh_port,
@@ -34,7 +34,7 @@ if __package__:
 else:  # loaded flat (run by absolute path via the launcher) -- no parent package
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import checks  # noqa: E402  (after the sys.path bootstrap above)
-    import config_watcher  # noqa: E402
+    import configuration_watcher  # noqa: E402
     from checks import die, is_running  # noqa: E402
     from configuration import (  # noqa: E402
         Config, HypervisorCfg, _CFG_DEFAULTS, _hypervisor_cfg_text, select_ssh_port,
@@ -271,7 +271,7 @@ def _gpu_args(cfg: Config) -> list[str]:
     return ["-device", vga, "-display", f"egl-headless,rendernode={rendernode}"]
 
 
-def _make_snapshot(cfg: Config) -> "config_watcher.Snapshot":
+def _make_snapshot(cfg: Config) -> "configuration_watcher.Snapshot":
     """The last-known-good snapshot the watcher reverts to: the CURRENT on-disk
     hypervisor.cfg text (so a revert restores the user's exact file, comments and
     all) with the already-validated coerced values from cfg.hcfg.
@@ -287,9 +287,9 @@ def _make_snapshot(cfg: Config) -> "config_watcher.Snapshot":
             text = fh.read()
     except OSError:
         text = ""
-    if not config_watcher._has_known_keys(text):
+    if not configuration_watcher._has_known_keys(text):
         text = _hypervisor_cfg_text(values)
-    return config_watcher.Snapshot(values=values, text=text)
+    return configuration_watcher.Snapshot(values=values, text=text)
 
 
 def _launch(cfg: Config, qemu: list[str], port: "int | None") -> None:
@@ -300,7 +300,7 @@ def _launch(cfg: Config, qemu: list[str], port: "int | None") -> None:
     invalid ones."""
     qemu_proc: subprocess.Popen | None = None
     viewer_proc: subprocess.Popen | None = None
-    watcher: "config_watcher.ConfigWatcher | None" = None
+    watcher: "configuration_watcher.ConfigWatcher | None" = None
 
     def cleanup(*_a) -> None:
         if watcher is not None:
@@ -364,7 +364,7 @@ def _launch(cfg: Config, qemu: list[str], port: "int | None") -> None:
 
         # Watch hypervisor.cfg for live edits: valid ones are applied/logged,
         # invalid ones are reverted to the file we booted with.
-        watcher = config_watcher.ConfigWatcher(cfg.hypervisor_cfg_path,
+        watcher = configuration_watcher.ConfigWatcher(cfg.hypervisor_cfg_path,
                                                _make_snapshot(cfg))
         watcher.start()
 

@@ -24,13 +24,14 @@ static int failures = 0;
 
 /* The top-level subsystems, in order (Network FIRST per the spec): Network, Theme, Wallpaper,
  * then the media controls Volume + Brightness (the follow-up spec added these -- they were
- * missing from the UI), then Machine Type (the PC/Laptop screen), then Backup (step six -- the
- * opt-in backup targets, LAST), and nothing else. */
+ * missing from the UI), then Machine Type (the PC/Laptop screen), then Hypervisor (the
+ * per-directory VM runner's global install defaults), then Backup (the opt-in backup targets,
+ * LAST), and nothing else. */
 static void test_top_level_is_network_theme_wallpaper(void)
 {
     const AzScreen *m = az_screen_find("main");
     CHECK(m != NULL);
-    CHECK(m->nrows == 12);
+    CHECK(m->nrows == 13);
     CHECK(strcmp(m->rows[0].label, "Network") == 0);   /* Network is the first option */
     CHECK(strcmp(m->rows[1].label, "Theme") == 0);
     CHECK(strcmp(m->rows[2].label, "Wallpaper") == 0);
@@ -42,7 +43,8 @@ static void test_top_level_is_network_theme_wallpaper(void)
     CHECK(strcmp(m->rows[8].label, "Machine Type") == 0);
     CHECK(strcmp(m->rows[9].label, "Time & Date") == 0);
     CHECK(strcmp(m->rows[10].label, "Language") == 0);
-    CHECK(strcmp(m->rows[11].label, "Backup") == 0);    /* opt-in backup entry, still last */
+    CHECK(strcmp(m->rows[11].label, "Hypervisor") == 0); /* per-directory VM defaults */
+    CHECK(strcmp(m->rows[12].label, "Backup") == 0);    /* opt-in backup entry, still last */
     /* the entry title is the (re)named "Az'arch Settings" */
     CHECK(strcmp(m->title, "Az'arch Settings") == 0);
 }
@@ -55,7 +57,7 @@ static void test_screen_set_is_exactly_expected(void)
         "main", "theme", "wallpaper", "network",
         "network.wifi", "network.wired", "network.bluetooth",
         "network.airplane", "network.firewall",
-        "volume", "brightness", "machine", "timedate", "language", "backup",
+        "volume", "brightness", "machine", "timedate", "language", "hypervisor", "backup",
         /* Default Applications: the category list + one screen per category (Mail excluded --
          * no mail client shipped, so the TUI does not surface it). */
         "defaultapps",
@@ -168,10 +170,10 @@ static void test_backup_screen(void)
 {
     /* the ROWS_MAIN entry that opens it -- LAST row, with the target-summary status */
     const AzScreen *main_s = az_screen_find("main");
-    CHECK(strcmp(main_s->rows[11].label, "Backup") == 0);
-    CHECK(main_s->rows[11].kind == AZ_ACT_SCREEN);
-    CHECK(strcmp(main_s->rows[11].target, "backup") == 0);
-    CHECK(main_s->rows[11].status == az_status_backup);
+    CHECK(strcmp(main_s->rows[12].label, "Backup") == 0);
+    CHECK(main_s->rows[12].kind == AZ_ACT_SCREEN);
+    CHECK(strcmp(main_s->rows[12].target, "backup") == 0);
+    CHECK(main_s->rows[12].status == az_status_backup);
 
     const AzScreen *b = az_screen_find("backup");
     CHECK(b != NULL);
@@ -221,6 +223,66 @@ static void test_backup_screen(void)
     CHECK(has_disable == 1);
     CHECK(has_enable_usb == 1);
     CHECK(has_enable_gdrive == 1);
+}
+
+/* The Hypervisor screen: a "Hypervisor" entry on ROWS_MAIN (just before Backup) opens a screen
+ * that manages the GLOBAL defaults every NEW `hypervisor install` starts from -- it drives the
+ * non-interactive `hypervisor --configure` surface (--status / --reset / --set KEY VALUE). Its
+ * "Current:" line is az_status_hypervisor (a short ram/cpus/disk/net summary). The rows: a --status
+ * APPLY, a --reset APPLY, and several AZ_ACT_PROMPT --set rows (ram/cpus/disk_size/network/audio)
+ * that prompt for the value and append it. Every row is captured in-UI and carries a Base + Wrapper
+ * hint; none needs sudo (the defaults file is the user's own ~/.config/azarch-hypervisor). */
+static void test_hypervisor_screen(void)
+{
+    /* the ROWS_MAIN entry that opens it -- row 11, just before Backup, with the summary status */
+    const AzScreen *main_s = az_screen_find("main");
+    CHECK(strcmp(main_s->rows[11].label, "Hypervisor") == 0);
+    CHECK(main_s->rows[11].kind == AZ_ACT_SCREEN);
+    CHECK(strcmp(main_s->rows[11].target, "hypervisor") == 0);
+    CHECK(main_s->rows[11].status == az_status_hypervisor);
+
+    const AzScreen *h = az_screen_find("hypervisor");
+    CHECK(h != NULL);
+    CHECK(strcmp(h->title, "Hypervisor") == 0);
+    CHECK(h->current == az_status_hypervisor);
+    /* the subtitle EXPLAINS that these are defaults for NEW VMs and a dir's own cfg still wins */
+    CHECK(strstr(h->subtitle, "default") != NULL);
+    CHECK(strstr(h->subtitle, "hypervisor.cfg") != NULL);
+    CHECK(h->nrows >= 4);
+
+    int has_status = 0, has_reset = 0, has_set_ram = 0, has_set_network = 0;
+    for (int i = 0; i < h->nrows; i++) {
+        const AzRow *r = &h->rows[i];
+        CHECK(r->needs_root == 0);        /* the user's own config file, no sudo */
+        /* every row carries BOTH hint lines: an azarch wrapper AND a base command (no bare row) */
+        CHECK(az_row_command(r) != NULL);
+        CHECK(az_row_base(r) != NULL);
+        if (r->kind == AZ_ACT_APPLY &&
+            strcmp(r->target, "hypervisor --configure --status") == 0) {
+            has_status = 1;
+            CHECK(r->show_output == 1);   /* the status dump lands in the overlay */
+        }
+        if (r->kind == AZ_ACT_APPLY &&
+            strcmp(r->target, "hypervisor --configure --reset") == 0) {
+            has_reset = 1;
+        }
+        if (r->kind == AZ_ACT_PROMPT &&
+            strcmp(r->target, "hypervisor --configure --set ram") == 0) {
+            has_set_ram = 1;
+            CHECK(r->prompt != NULL);                              /* asks for the value */
+            CHECK(strstr(az_row_command(r), "<value>") != NULL);   /* wrapper placeholder */
+            CHECK(strstr(az_row_base(r), "<value>") != NULL);      /* base placeholder too */
+        }
+        if (r->kind == AZ_ACT_PROMPT &&
+            strcmp(r->target, "hypervisor --configure --set network") == 0) {
+            has_set_network = 1;
+            CHECK(r->prompt != NULL);
+        }
+    }
+    CHECK(has_status == 1);
+    CHECK(has_reset == 1);
+    CHECK(has_set_ram == 1);
+    CHECK(has_set_network == 1);
 }
 
 /* Default Applications: a category list + one screen per category, each letting the user CHANGE
@@ -684,6 +746,7 @@ int main(void)
     test_machine_type_screen();
     test_resolve_screens();
     test_backup_screen();
+    test_hypervisor_screen();
     test_default_applications_screens();
     test_display_screens();
     test_network_rows_descend();

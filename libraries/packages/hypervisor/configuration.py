@@ -17,20 +17,20 @@ import sys
 from dataclasses import dataclass
 
 # Flat app: the sibling modules must resolve to the SAME module object however this file
-# is loaded. When loaded AS part of the packages.hypervisor package (the test suite, or
-# `python -m packages.hypervisor`), __package__ is set -> use package-relative imports so
-# there is exactly ONE checks/config_schema module (and therefore one HypervisorError
-# class the tests can catch). When loaded FLAT by absolute path (the launcher execs
-# cli.py, which has no parent package), fall back to a sys.path bootstrap + bare sibling
-# imports. Mirrors the flat layout of packages/backup + packages/passwords, but made
+# is loaded. When loaded AS part of the packages.hypervisor package (the test suite, which
+# imports `from packages.hypervisor import ...`), __package__ is set -> use package-relative
+# imports so there is exactly ONE checks/configuration_schema module (and therefore one
+# HypervisorError class the tests can catch). When loaded FLAT by absolute path (the launcher
+# execs command_line_interface.py, which has no parent package), fall back to a sys.path
+# bootstrap + bare sibling imports. Mirrors the flat layout of packages/backup + passwords, but made
 # dual-mode because this app raises a custom exception the tests assert on across the
 # import boundary (backup/passwords use return codes, so they never needed this).
 if __package__:
-    from . import config_schema
+    from . import configuration_schema
     from .checks import die
 else:  # loaded flat (run by absolute path via the launcher) -- no parent package
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    import config_schema  # noqa: E402  (after the sys.path bootstrap above)
+    import configuration_schema  # noqa: E402  (after the sys.path bootstrap above)
     from checks import die  # noqa: E402
 
 CODE = "/usr/share/edk2/x64/OVMF_CODE.4m.fd"
@@ -102,12 +102,31 @@ def _render_defaults() -> dict:
     return dict(_CFG_DEFAULTS)
 
 
+def effective_defaults() -> dict:
+    """The base defaults a fresh `hypervisor install` starts from: the built-in
+    _CFG_DEFAULTS with the user's global overrides (defaults.cfg) layered on top. Coerced
+    values, in schema order. This is what `hypervisor --configure --status` reports and what
+    the bare-`azarch` TUI summarises -- deliberately EXCLUDES any per-directory hypervisor.cfg
+    and env (those are per-VM, not defaults)."""
+    vals = dict(_CFG_DEFAULTS)
+    _apply_user_defaults(vals)
+    return vals
+
+
+def render_defaults_text(vals: dict) -> str:
+    """Render effective defaults as plain `key = value` lines (schema order), for the
+    `--configure --status` report. Unlike _hypervisor_cfg_text this carries NO comments --
+    it is a status dump, not a generated cfg file."""
+    return "".join(f"{key} = {_render_value(key, vals[key])}\n"
+                   for key in configuration_schema.KEYS)
+
+
 def _hypervisor_cfg_text(vals: dict) -> str:
     """Generate hypervisor.cfg text: one '# comment' line then 'key = value' per
     setting, in schema order. `vals` holds COERCED values (as from _CFG_DEFAULTS
     or a HypervisorCfg)."""
     lines: list[str] = []
-    for key in config_schema.KEYS:
+    for key in configuration_schema.KEYS:
         comment = _CFG_COMMENTS.get(key)
         if comment:
             lines.append(f"# {comment}")
@@ -133,11 +152,16 @@ class HypervisorCfg:
 
     @classmethod
     def from_dir(cls, directory: str) -> "HypervisorCfg":
+        # Layering (lowest priority first): built-in defaults -> the user's global
+        # default overrides (~/.config/azarch-hypervisor/defaults.cfg) -> this directory's
+        # own hypervisor.cfg -> env. So a global default changes what NEW installs and
+        # unset keys resolve to, while a directory's own cfg still wins for that VM.
         vals = dict(_CFG_DEFAULTS)
+        _apply_user_defaults(vals)
         path = os.path.join(directory, _HYPERVISOR_CFG_NAME)
         if os.path.isfile(path):
             raw = _migrate_legacy_keys(_parse_conf(path))
-            coerced, errors = config_schema.coerce_all(raw)
+            coerced, errors = configuration_schema.coerce_all(raw)
             if errors:
                 die(f"{_HYPERVISOR_CFG_NAME}: " + "; ".join(errors))
             vals.update(coerced)
@@ -182,10 +206,28 @@ def _apply_env_overrides(vals: dict) -> None:
         if env in _ENV_BOOL_ONEZERO:
             vals[key] = raw == "1"
             continue
-        ok, val, err = config_schema.coerce_one(key, raw)
+        ok, val, err = configuration_schema.coerce_one(key, raw)
         if not ok:
             die(f"{env}: {err} (got '{raw}')")
         vals[key] = val
+
+
+def _apply_user_defaults(vals: dict) -> None:
+    """Layer the user's global default overrides (defaults.cfg) over the built-in defaults.
+
+    Imported LAZILY to avoid an import cycle (configuration_defaults imports this module).
+    Each override is re-coerced through the schema; a value that fails is SILENTLY skipped
+    (the file is optional and set_key already validated on write -- degrading a stray bad
+    line to "use the built-in" must never fail a VM launch, unlike a directory's own
+    hypervisor.cfg which dies loudly)."""
+    if __package__:
+        from . import configuration_defaults
+    else:  # loaded flat by absolute path via the launcher -- no parent package
+        import configuration_defaults  # noqa: E402
+    for key, raw in configuration_defaults.load().items():
+        ok, val, _err = configuration_schema.coerce_one(key, raw)
+        if ok and val is not None:
+            vals[key] = val
 
 
 def _slugify(base: str) -> str:
@@ -355,12 +397,12 @@ def select_ssh_port(cfg: Config) -> int:
     port (65535) -- if everything up to there is busy it dies cleanly rather than
     letting the bump reach 65536 and crash socket.bind (OverflowError)."""
     port = cfg.hcfg.ssh_guest_to_host_port_forward or DEFAULT_SSH_FORWARD_PORT
-    while port <= config_schema._MAX_PORT:
+    while port <= configuration_schema._MAX_PORT:
         if not _port_in_use(port):
             return port
         port += 1
     die(f"no free host port available at or above "
-        f"{cfg.hcfg.ssh_guest_to_host_port_forward} (up to {config_schema._MAX_PORT})")
+        f"{cfg.hcfg.ssh_guest_to_host_port_forward} (up to {configuration_schema._MAX_PORT})")
 
 
 def _port_in_use(port: int) -> bool:

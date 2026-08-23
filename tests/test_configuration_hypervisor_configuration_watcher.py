@@ -1,4 +1,4 @@
-"""config_watcher -- live hypervisor.cfg reload: validate, apply, or safe-revert.
+"""configuration_watcher -- live hypervisor.cfg reload: validate, apply, or safe-revert.
 
 While a VM runs, the hypervisor watches hypervisor.cfg. On every save there are
 exactly two outcomes (the user's spec):
@@ -17,7 +17,7 @@ without a running VM -- which is the whole point of the safety guarantee.
 
 from __future__ import annotations
 
-from packages.hypervisor import config_watcher as cw
+from packages.hypervisor import configuration_watcher as cw
 from packages.hypervisor import configuration as config
 
 

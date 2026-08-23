@@ -20,7 +20,7 @@ import os
 import sys
 
 # Flat app, dual-mode sibling import (see configuration.py for the full rationale): use a
-# package-relative import when loaded as packages.hypervisor.qemu_command (tests / -m), and
+# package-relative import when loaded as packages.hypervisor.qemu_command (the test suite), and
 # a sys.path bootstrap + bare import when loaded flat by absolute path (via the launcher).
 if __package__:
     from .configuration import Config

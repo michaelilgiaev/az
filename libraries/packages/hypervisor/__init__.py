@@ -17,19 +17,20 @@ This package is one flat directory (like packages/backup and packages/passwords)
 Entry points:
     hypervisor                      the `hypervisor` command (install/run/share/status/stop)
 
-Subcommands (see cli.py usage): install / run / share / status / stop / help.
+Subcommands (see command_line_interface.py usage): install / run / share / status / stop /
+--configure (manage the global install defaults) / help.
 
 Modules:
-    cli                             THE ENTRY -- arg parsing, usage text, dispatch
+    command_line_interface          THE ENTRY -- arg parsing, usage text, dispatch
                                     (the launcher execs this; carries the sys.path bootstrap)
     configuration                   CWD-derived VM identity, paths, config (env > cfg > default)
-    config_schema                   the typed hypervisor.cfg schema, coercion, validation (pure)
-    config_watcher                  live hypervisor.cfg reload with validate + safe revert
+    configuration_schema            the typed hypervisor.cfg schema, coercion, validation (pure)
+    configuration_watcher           live hypervisor.cfg reload with validate + safe revert
+    configuration_defaults          user-wide default overrides (~/.config/azarch-hypervisor)
     graphics                        DRM render-node selection for the GPU 3D offload
     checks                          precondition checks + die()/HypervisorError
     qemu_command                    the pure QEMU argv assembler (no launch, no I/O)
     virtual_machine                 the subcommand logic: install / run / share / status / stop
-    __main__                        `python -m packages.hypervisor` -> cli.main
 
 Also here (not part of the runtime import graph):
     packaging                       ISO build wiring (install paths, launcher, emit_plan)

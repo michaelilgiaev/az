@@ -192,6 +192,11 @@ const char *az_status_brightness(char *buf, size_t n);
  * "USB + Google Drive", "Google Drive", "USB"). Reads the same config the configurator writes
  * via `azarch backup --configure --status` (az_capture, never blocks on stdin). */
 const char *az_status_backup(char *buf, size_t n);
+/* Hypervisor defaults: a short summary of the GLOBAL defaults every NEW `hypervisor install`
+ * starts from -- e.g. "ram 16384 | cpus 16 | disk 200G | net user". Reads the same surface the
+ * TUI edits (`hypervisor --configure --status`, az_capture_all, never blocks on stdin); degrades
+ * to the built-in defaults summary when `hypervisor` is missing so the cell is never blank. */
+const char *az_status_hypervisor(char *buf, size_t n);
 /* Default Applications: one probe per category, each reporting the handler that category
  * currently resolves to (via `azarch default-applications get <key>`). The category set is
  * pinned to default_applications.py. */
