@@ -45,12 +45,28 @@ $(TERMINAL_USER_INTERFACE_TEST_BIN): test_terminal_user_interface_model.c $(TERM
 $(ACT_TEST_BIN): test_terminal_user_interface_action.c $(TERMINAL_USER_INTERFACE_DIR)/action.c $(TERMINAL_USER_INTERFACE_DIR)/action.h
 	$(CC) $(TERMINAL_USER_INTERFACE_TEST_CFLAGS) test_terminal_user_interface_action.c $(TERMINAL_USER_INTERFACE_DIR)/action.c -o $@
 
-test: $(TEST_BIN) $(TERMINAL_USER_INTERFACE_TEST_BIN) $(ACT_TEST_BIN)
+# The SHARED window->desktop resolver (win_resolve.c), used by BOTH the application-menu
+# window watcher and the window-switcher. Linked against applications.c for az_app_entry_free
+# and the AzAppEntry the index is built from.
+WINRES_TEST_BIN = test_win_resolve
+$(WINRES_TEST_BIN): test_win_resolve.c $(APP_DIR)/win_resolve.c $(APP_DIR)/applications.c $(APP_DIR)/win_resolve.h $(APP_DIR)/applications.h
+	$(CC) $(TEST_CFLAGS) test_win_resolve.c $(APP_DIR)/win_resolve.c $(APP_DIR)/applications.c -o $@ $(TEST_LIBS)
+
+# The window-switcher ordering comparator (ordering.c) -- fixed leading order + alphabetical
+# tail. Pure (no GTK/X), so it is unit-tested headless like the rest.
+SW_DIR = ../libraries/packages/window_switcher
+ORDER_TEST_BIN = test_ordering
+$(ORDER_TEST_BIN): test_ordering.c $(SW_DIR)/ordering.c $(SW_DIR)/ordering.h
+	$(CC) $(TEST_CFLAGS) -I$(SW_DIR) test_ordering.c $(SW_DIR)/ordering.c -o $@ $(TEST_LIBS)
+
+test: $(TEST_BIN) $(TERMINAL_USER_INTERFACE_TEST_BIN) $(ACT_TEST_BIN) $(WINRES_TEST_BIN) $(ORDER_TEST_BIN)
 	./$(TEST_BIN)
 	./$(TERMINAL_USER_INTERFACE_TEST_BIN)
 	./$(ACT_TEST_BIN)
+	./$(WINRES_TEST_BIN)
+	./$(ORDER_TEST_BIN)
 
 clean:
-	rm -f $(TEST_BIN) $(TERMINAL_USER_INTERFACE_TEST_BIN) $(ACT_TEST_BIN)
+	rm -f $(TEST_BIN) $(TERMINAL_USER_INTERFACE_TEST_BIN) $(ACT_TEST_BIN) $(WINRES_TEST_BIN) $(ORDER_TEST_BIN)
 
 .PHONY: test clean

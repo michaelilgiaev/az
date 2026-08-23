@@ -117,6 +117,11 @@ PACKAGES_FILE = PACKAGESDIR / "packages.x86_64"
 # pure-Python launcher (launcher.py), and generates the .desktop entry. The whole menu
 # is OURS, so it is a package here, not a patch.
 APPLICATION_MENU_DIR = PACKAGESDIR / "application_menu"
+# The Az'arch window-switcher package (C / GTK3): the alt-tab overlay (switcher.c +
+# windows/thumbnail/layout/ordering, a Makefile) lives DIRECTLY here alongside
+# window_switcher.py -- the build wiring that compiles them into the daemon binary and
+# ships the launcher. It reuses four application-menu translation units as build inputs.
+WINDOW_SWITCHER_DIR = PACKAGESDIR / "window_switcher"
 # The Az'arch timedate site (Flask Time + Calendar home page): applications.py/page.py/assets.py +
 # timedate.py (the build wiring that copies them into the airootfs, installs the launcher, and
 # ships the systemd service). LibreWolf lands on this page (startup + Home), so the site was

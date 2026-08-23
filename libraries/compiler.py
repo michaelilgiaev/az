@@ -83,7 +83,7 @@ _DESKTOP_MODIFICATIONS = ("openbox", "librewolf")
 # and passwords have their own emit_plan() driven directly; calamares and azarch are not app-loop
 # packages at all. Keeping this list here means a newly-dropped packages/<app>/ is auto-emitted
 # unless it is added here on purpose.
-_EXPLICIT_PACKAGES = ("openbox", "librewolf", "application_menu", "passwords", "backup", "hypervisor", "calamares", "azarch")
+_EXPLICIT_PACKAGES = ("openbox", "librewolf", "application_menu", "window_switcher", "passwords", "backup", "hypervisor", "calamares", "azarch")
 import installer
 import pacman
 import profile
@@ -439,6 +439,23 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
         airootfs / application_menu.MENU_DAEMON_BIN_SYSTEM_PATH.lstrip("/")
     )
     for entry in application_menu.emit_plan():
+        emit.write_text(
+            airootfs / entry["dest"].lstrip("/"),
+            entry["builder"](),
+            mode=entry["mode"],
+        )
+    # The Az'arch window switcher (alt-tab): a SECOND compiled C/GTK3 daemon, OUR
+    # replacement for OpenBox's built-in NextWindow list (a horizontal, Windows-like
+    # overlay of LIVE window thumbnails). build_daemon() stages this package AND
+    # application_menu (four reused translation units) into a scratch tree and installs the
+    # binary; emit_plan() ships the pure-Python launcher (the bin entry point A-Tab runs).
+    # OpenBox autostart starts the daemon + picom, and rc.xml binds A-Tab/A-S-Tab to the
+    # launcher (see packages/openbox).
+    from packages.window_switcher import window_switcher as window_switcher_pkg
+    window_switcher_pkg.build_daemon(
+        airootfs / window_switcher_pkg.SWITCHER_DAEMON_BIN_SYSTEM_PATH.lstrip("/")
+    )
+    for entry in window_switcher_pkg.emit_plan():
         emit.write_text(
             airootfs / entry["dest"].lstrip("/"),
             entry["builder"](),

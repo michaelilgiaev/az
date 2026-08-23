@@ -246,6 +246,10 @@ xorg-xset
 libx11
 libxrandr
 libxft
+libxcomposite
+libxdamage
+libxrender
+picom
 xcb-util-cursor
 mesa
 feh

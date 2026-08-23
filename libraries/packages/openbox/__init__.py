@@ -222,6 +222,15 @@ from packages.application_menu import application_menu as _app_menu  # noqa: E40
 MENU_LAUNCHER = _app_menu.MENU_LAUNCHER_SYSTEM_PATH
 MENU_DAEMON_BIN = _app_menu.MENU_DAEMON_BIN_SYSTEM_PATH
 
+# The Az'arch window switcher (alt-tab): OUR replacement for OpenBox's built-in
+# NextWindow list -- a horizontal, Windows-like overlay of LIVE window thumbnails. Also a
+# resident C/GTK3 daemon (built once, kept hidden); rc.xml binds A-Tab/A-S-Tab to the
+# launcher (/usr/local/bin/azarch-window-switcher --next/--prev) which signals it.
+from packages.window_switcher import window_switcher as _switcher  # noqa: E402  (the switcher is OUR package)
+
+SWITCHER_LAUNCHER = _switcher.SWITCHER_LAUNCHER_SYSTEM_PATH
+SWITCHER_DAEMON_BIN = _switcher.SWITCHER_DAEMON_BIN_SYSTEM_PATH
+
 
 # --- 1. ~/.xinitrc ----------------------------------------------------------
 def xinitrc() -> str:
@@ -876,11 +885,21 @@ def openbox_rc_xml() -> str:
     <keybind key="A-F4">
       <action name="Close"/>
     </keybind>
+    <!-- Alt+Tab: the Az'arch window switcher (packages/window_switcher), which REPLACES
+         OpenBox's built-in vertical icon list. A horizontal, Windows-like overlay of LIVE
+         window thumbnails, ordered librewolf/kitty/hypervisor/thunar/alphabetical. The
+         launcher signals the resident daemon (the next flag advances forward, prev
+         backward). Releasing Alt (the daemon grabs the seat, so it sees the release)
+         commits the selection. -->
     <keybind key="A-Tab">
-      <action name="NextWindow"/>
+      <action name="Execute">
+        <command>{SWITCHER_LAUNCHER} --next</command>
+      </action>
     </keybind>
     <keybind key="A-S-Tab">
-      <action name="PreviousWindow"/>
+      <action name="Execute">
+        <command>{SWITCHER_LAUNCHER} --prev</command>
+      </action>
     </keybind>
     <keybind key="W-d">
       <action name="ToggleShowDesktop"/>
@@ -1134,6 +1153,19 @@ command -v xcape >/dev/null 2>&1 && \\
 #    first Super press is instant (the C/GTK3 daemon, see application_menu/menu.c).
 [ -x '{MENU_DAEMON_BIN}' ] && \\
     setsid '{MENU_DAEMON_BIN}' >/dev/null 2>&1 < /dev/null &
+
+# 3a. Compositor (picom): REQUIRED for the alt-tab switcher to read LIVE pixels of every
+#     window (even covered/minimized ones) via XComposite. Without it, obscured windows
+#     have no backing pixmap and the switcher falls back to their app icon. Started before
+#     the switcher daemon so redirection is already in place. Guarded; harmless if absent.
+command -v picom >/dev/null 2>&1 && \\
+    setsid picom >/dev/null 2>&1 < /dev/null &
+
+# 3b. Az'arch window-switcher daemon: build the alt-tab overlay once and keep it hidden so
+#     the first Alt+Tab is instant (the C/GTK3 daemon, see packages/window_switcher). Bound
+#     to A-Tab/A-S-Tab in rc.xml via the launcher, which signals this daemon.
+[ -x '{SWITCHER_DAEMON_BIN}' ] && \\
+    setsid '{SWITCHER_DAEMON_BIN}' >/dev/null 2>&1 < /dev/null &
 
 # 4. FN media keys, hold-to-drag: X autorepeat governs how fast HOLDING an FN volume/brightness
 #    key repeats (each repeat is one `azarch volume/brightness` step -> the OSD "fast drag").

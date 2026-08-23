@@ -422,6 +422,30 @@ def test_rc_xml_binds_super_and_menu_to_the_launcher():
     assert f"<command>{desktop.MENU_LAUNCHER}</command>" in out
 
 
+def test_rc_xml_binds_alt_tab_to_switcher_not_nextwindow():
+    # Alt+Tab / Alt+Shift+Tab run the Az'arch window switcher (a horizontal, Windows-like
+    # LIVE-thumbnail overlay), NOT OpenBox's built-in vertical NextWindow list. The
+    # launcher takes a direction (--next forward, --prev backward).
+    out = desktop.openbox_rc_xml()
+    assert '<keybind key="A-Tab">' in out
+    assert '<keybind key="A-S-Tab">' in out
+    assert desktop.SWITCHER_LAUNCHER == "/usr/local/bin/azarch-window-switcher"
+    assert f"<command>{desktop.SWITCHER_LAUNCHER} --next</command>" in out
+    assert f"<command>{desktop.SWITCHER_LAUNCHER} --prev</command>" in out
+    # The old built-in switcher actions are gone.
+    assert "NextWindow" not in out
+    assert "PreviousWindow" not in out
+
+
+def test_autostart_starts_picom_and_switcher_daemon():
+    # The compositor (picom) and the switcher daemon are started warm from the SHARED
+    # autostart block, so they land on BOTH the live and installed sessions. picom is
+    # required for the switcher's live thumbnails (XComposite backing pixmaps).
+    for au in (desktop.openbox_autostart(), desktop.openbox_autostart_installed()):
+        assert "picom" in au
+        assert desktop.SWITCHER_DAEMON_BIN in au
+
+
 def _root_context_block(rc_xml: str) -> str:
     # Return just the <context name="Root">...</context> block from rc.xml, so a test can
     # assert on the desktop-click bindings in isolation (the window-icon context is

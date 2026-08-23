@@ -1,6 +1,7 @@
 /* Az'arch application menu (C port) -- system-wide "app opened" detection.
  * One-to-one port of winwatch.py. See window_watch.h. */
 #include "window_watch.h"
+#include "win_resolve.h"     /* the shared window-identity -> .desktop id resolver */
 
 #include <string.h>
 #include <stdlib.h>
@@ -18,157 +19,9 @@ static const char *SKIP_TYPES[] = {
     "_NET_WM_WINDOW_TYPE_COMBO", "_NET_WM_WINDOW_TYPE_DND", NULL
 };
 
-/* ---- desktop index (window identity -> desktop id) ---------------------- */
-typedef struct {
-    GHashTable *by_startup_wmclass;  /* casefolded -> did (both owned) */
-    GHashTable *by_exec_bin;
-    GHashTable *by_id_stem;
-} DesktopIndex;
-
-/* Basename of the real launched binary from an Exec argv[0], skipping a leading
- * env/wrapper (env FOO=1 kitty). Returns newly-allocated or NULL. */
-static char *exec_binary(char **argv) {
-    if (!argv) return NULL;
-    int idx = 0;
-    while (argv[idx]) {
-        char *base = g_path_get_basename(argv[idx]);
-        gboolean is_env = (strcmp(base, "env") == 0) || (strchr(argv[idx], '=') != NULL);
-        g_free(base);
-        if (is_env) { idx++; continue; }
-        break;
-    }
-    if (!argv[idx]) return NULL;
-    char *b = g_path_get_basename(argv[idx]);
-    if (!b[0]) { g_free(b); return NULL; }
-    return b;
-}
-
-static void idx_set_default(GHashTable *t, const char *key_cf, const char *did) {
-    if (!g_hash_table_contains(t, key_cf))
-        g_hash_table_insert(t, g_strdup(key_cf), g_strdup(did));
-}
-
-static DesktopIndex *index_build(GPtrArray *entries) {
-    DesktopIndex *ix = g_new0(DesktopIndex, 1);
-    ix->by_startup_wmclass = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
-    ix->by_exec_bin        = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
-    ix->by_id_stem         = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
-
-    for (guint i = 0; i < entries->len; i++) {
-        AzAppEntry *e = g_ptr_array_index(entries, i);
-        const char *did = e->desktop_id;
-        if (e->startup_wmclass && e->startup_wmclass[0]) {
-            char *cf = g_utf8_casefold(e->startup_wmclass, -1);
-            idx_set_default(ix->by_startup_wmclass, cf, did);
-            g_free(cf);
-        }
-        char *eb = exec_binary(e->exec_argv);
-        if (eb) {
-            char *cf = g_utf8_casefold(eb, -1);
-            idx_set_default(ix->by_exec_bin, cf, did);
-            g_free(cf);
-            g_free(eb);
-        }
-        char *stem;
-        if (g_str_has_suffix(did, ".desktop"))
-            stem = g_strndup(did, strlen(did) - 8);
-        else
-            stem = g_strdup(did);
-        char *stem_cf = g_utf8_casefold(stem, -1);
-        idx_set_default(ix->by_id_stem, stem_cf, did);
-        g_free(stem_cf);
-        char *dot = strrchr(stem, '.');
-        if (dot) {
-            char *last_cf = g_utf8_casefold(dot + 1, -1);
-            idx_set_default(ix->by_id_stem, last_cf, did);
-            g_free(last_cf);
-        }
-        g_free(stem);
-    }
-    return ix;
-}
-
-static void index_free(DesktopIndex *ix) {
-    if (!ix) return;
-    g_hash_table_destroy(ix->by_startup_wmclass);
-    g_hash_table_destroy(ix->by_exec_bin);
-    g_hash_table_destroy(ix->by_id_stem);
-    g_free(ix);
-}
-
-static char *proc_exe_basename(int pid) {
-    char *link = g_strdup_printf("/proc/%d/exe", pid);
-    char *target = g_file_read_link(link, NULL);
-    g_free(link);
-    if (!target) return NULL;
-    char *base = g_path_get_basename(target);
-    g_free(target);
-    if (g_str_has_suffix(base, " (deleted)"))
-        base[strlen(base) - strlen(" (deleted)")] = '\0';
-    if (!base[0]) { g_free(base); return NULL; }
-    return base;
-}
-
-static GPtrArray *proc_cmdline_bins(int pid) {
-    GPtrArray *out = g_ptr_array_new_with_free_func(g_free);
-    char *path = g_strdup_printf("/proc/%d/cmdline", pid);
-    char *raw = NULL; gsize len = 0;
-    if (g_file_get_contents(path, &raw, &len, NULL)) {
-        gsize start = 0; int i = 0;
-        for (gsize p = 0; p <= len && i < 4; p++) {
-            if (p == len || raw[p] == '\0') {
-                if (p > start) {
-                    char *tok = g_strndup(raw + start, p - start);
-                    char *base = g_path_get_basename(tok);
-                    if (base[0] && (i == 0 || strchr(tok, '/')))
-                        g_ptr_array_add(out, g_strdup(base));
-                    g_free(base); g_free(tok);
-                    i++;
-                }
-                start = p + 1;
-            }
-        }
-    }
-    g_free(raw); g_free(path);
-    return out;
-}
-
-static const char *index_resolve(DesktopIndex *ix, GPtrArray *wm_classes, int pid) {
-    for (guint i = 0; i < wm_classes->len; i++) {
-        char *cf = g_utf8_casefold(g_ptr_array_index(wm_classes, i), -1);
-        const char *hit = g_hash_table_lookup(ix->by_startup_wmclass, cf);
-        g_free(cf);
-        if (hit) return hit;
-    }
-    for (guint i = 0; i < wm_classes->len; i++) {
-        char *cf = g_utf8_casefold(g_ptr_array_index(wm_classes, i), -1);
-        const char *hit = g_hash_table_lookup(ix->by_exec_bin, cf);
-        if (!hit) hit = g_hash_table_lookup(ix->by_id_stem, cf);
-        g_free(cf);
-        if (hit) return hit;
-    }
-    if (pid > 0) {
-        char *base = proc_exe_basename(pid);
-        if (base) {
-            char *cf = g_utf8_casefold(base, -1);
-            const char *hit = g_hash_table_lookup(ix->by_exec_bin, cf);
-            if (!hit) hit = g_hash_table_lookup(ix->by_id_stem, cf);
-            g_free(cf); g_free(base);
-            if (hit) return hit;
-        }
-        GPtrArray *bins = proc_cmdline_bins(pid);
-        const char *hit = NULL;
-        for (guint i = 0; i < bins->len && !hit; i++) {
-            char *cf = g_utf8_casefold(g_ptr_array_index(bins, i), -1);
-            hit = g_hash_table_lookup(ix->by_exec_bin, cf);
-            if (!hit) hit = g_hash_table_lookup(ix->by_id_stem, cf);
-            g_free(cf);
-        }
-        g_ptr_array_free(bins, TRUE);
-        if (hit) return hit;
-    }
-    return NULL;
-}
+/* The window-identity -> .desktop id resolver (DesktopIndex, az_index_build /
+ * az_index_resolve / az_index_free, az_exec_binary) now lives in win_resolve.c so the
+ * window-switcher shares it. */
 
 /* ---- xprop helpers ------------------------------------------------------ */
 static char *run_xprop(char **args) {
@@ -217,14 +70,14 @@ struct AzWatcher {
 static DesktopIndex *watcher_index(AzWatcher *w) {
     if (!w->index) {
         GPtrArray *entries = w->provider(w->user);
-        w->index = index_build(entries);
+        w->index = az_index_build(entries);
         g_ptr_array_free(entries, TRUE);
     }
     return w->index;
 }
 
 void az_watcher_refresh_index(AzWatcher *w) {
-    if (w->index) { index_free(w->index); w->index = NULL; }
+    if (w->index) { az_index_free(w->index); w->index = NULL; }
 }
 
 static void parse_props(const char *out, GPtrArray *wm_classes, int *pid,
@@ -293,7 +146,7 @@ static void consider(AzWatcher *w, const char *win, DesktopIndex *ix) {
     if (all_skippable(types)) goto done;
     if (pid > 0 && pid == w->own_pid) goto done;
 
-    const char *did = index_resolve(ix, wm_classes, pid);
+    const char *did = az_index_resolve(ix, wm_classes, pid);
     if (!did) goto done;
 
     if (pid > 0) {
@@ -389,7 +242,7 @@ void az_watcher_stop(AzWatcher *w) {
 void az_watcher_free(AzWatcher *w) {
     if (!w) return;
     az_watcher_stop(w);
-    if (w->index) index_free(w->index);
+    if (w->index) az_index_free(w->index);
     g_hash_table_destroy(w->seen);
     g_hash_table_destroy(w->pid_last_tick);
     g_free(w);
