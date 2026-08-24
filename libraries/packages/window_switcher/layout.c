@@ -207,15 +207,37 @@ void az_strip_set_windows(AzStrip *s, GPtrArray *windows) {
     az_strip_select(s, s->selected);
 }
 
+/* Push the strip's queued redraws to the SCREEN right now. The overlay is an override-redirect
+ * window shown by MOVING it on-screen (never re-mapped -- see switcher.c), so it is not driven by
+ * the usual map/expose cycle a normal toplevel gets from the WM. gtk_widget_queue_draw only
+ * *queues* an invalidation; without a frame being pumped, that queued draw can sit unflushed until
+ * some unrelated event (a changing thumbnail) happens to force one. That is exactly why moving the
+ * SELECTION updated s->selected + the az-tile-selected CSS class correctly (the widget state was
+ * right) yet the blue border did not appear to move on screen, and why the live tiles updated only
+ * sparsely. Forcing the toplevel's pending updates out to the X server makes the change visible
+ * immediately: queue on the toplevel, process its updates synchronously, then flush the display. */
+static void az_strip_flush(AzStrip *s) {
+    GtkWidget *top = gtk_widget_get_toplevel(s->box);
+    if (!top || !gtk_widget_is_toplevel(top)) return;
+    GdkWindow *gw = gtk_widget_get_window(top);
+    if (!gw) return;
+    gtk_widget_queue_draw(top);
+    gdk_window_process_updates(gw, TRUE);
+    gdk_display_flush(gtk_widget_get_display(top));
+}
+
 /* Stream a fresh frame into every EXISTING tile without rebuilding the widget tree. This is what
  * makes the live render smooth: the periodic tick calls this (via az_strip_set_windows when the
  * window set is unchanged) so each tile just shows newer pixels -- no widget churn, no re-layout,
- * no flicker. A minimized/covered window with no pixmap keeps its icon fallback until it maps. */
+ * no flicker. A minimized/covered window with no pixmap keeps its icon fallback until it maps.
+ * az_strip_flush pushes the new frames to the screen so the override-redirect overlay actually
+ * streams (without it the tiles only repaint when some other event forces a frame). */
 void az_strip_refresh_thumbnails(AzStrip *s) {
     for (guint i = 0; i < s->tiles->len; i++) {
         AzTile *t = g_ptr_array_index(s->tiles, i);
         set_tile_image(s, t->image, t->xid, t->icon_name);
     }
+    az_strip_flush(s);
 }
 
 void az_strip_select(AzStrip *s, int i) {
@@ -229,6 +251,11 @@ void az_strip_select(AzStrip *s, int i) {
         if (k == i) gtk_style_context_add_class(ctx, "az-tile-selected");
         else        gtk_style_context_remove_class(ctx, "az-tile-selected");
     }
+    /* Flush the border change to the screen NOW. Toggling the CSS class updates the widget's
+     * style correctly, but on this override-redirect overlay the resulting redraw is only queued;
+     * without this the selected-tile border does not visibly move (the reported bug: "pressing Tab
+     * again doesn't move to the window on the right"). */
+    az_strip_flush(s);
 }
 
 int az_strip_selected(AzStrip *s) { return s->selected; }
