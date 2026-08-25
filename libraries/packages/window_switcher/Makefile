@@ -11,7 +11,7 @@ CFLAGS  += -O2 -Wall -Wextra -std=c11 -Wno-deprecated-declarations -I$(APP_DIR) 
            $(shell pkg-config --cflags $(PKGS))
 LDFLAGS += $(shell pkg-config --libs $(PKGS)) -lm
 
-OBJS = switcher.o windows.o thumbnail.o layout.o ordering.o \
+OBJS = switcher.o windows.o thumbnail.o layout.o ordering.o switch_logic.o \
        window_resolve.o applications.o icons.o theme.o
 BIN  = azarch-window-switcher-daemon
 TESTS_DIR = ../../../tests

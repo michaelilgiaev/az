@@ -268,6 +268,15 @@ unsigned long az_strip_selected_xid(AzStrip *s) {
     return t->xid;
 }
 
+int az_strip_index_of_xid(AzStrip *s, unsigned long xid) {
+    if (xid == 0) return -1;
+    for (guint i = 0; i < s->tiles->len; i++) {
+        AzTile *t = g_ptr_array_index(s->tiles, i);
+        if (t->xid == xid) return (int)i;
+    }
+    return -1;
+}
+
 void az_strip_free(AzStrip *s) {
     if (!s) return;
     if (s->icons) az_icons_free(s->icons);

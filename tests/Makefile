@@ -59,14 +59,27 @@ ORDER_TEST_BIN = test_ordering
 $(ORDER_TEST_BIN): test_ordering.c $(SW_DIR)/ordering.c $(SW_DIR)/ordering.h
 	$(CC) $(TEST_CFLAGS) -I$(SW_DIR) test_ordering.c $(SW_DIR)/ordering.c -o $@ $(TEST_LIBS)
 
-test: $(TEST_BIN) $(TERMINAL_USER_INTERFACE_TEST_BIN) $(ACT_TEST_BIN) $(WINDOW_RESOLVE_TEST_BIN) $(ORDER_TEST_BIN)
+# The window-switcher SELECTION LOGIC (switch_logic.c) -- the pure keyval+state -> direction
+# decision and the focus-anchored fresh-open start index. These are the two decisions the two
+# reported bugs lived in (shift+tab backward routing; wrong start index), factored out of the
+# GTK handler so they are unit-tested headless. switch_logic.c itself pulls NO GDK headers (it
+# mirrors the few GDK_KEY_*/GDK_SHIFT_MASK values it needs as local constants, pinned by a
+# _Static_assert in switcher.c); the TEST includes <gdk/gdk.h> to drive it with the real GDK
+# keysyms, which are header-only, so we add the GTK3 cflags for that header but link glib only.
+SW_LOGIC_TEST_BIN = test_switch_logic
+SW_LOGIC_CFLAGS   = $(TEST_CFLAGS) -I$(SW_DIR) $(shell pkg-config --cflags gtk+-3.0)
+$(SW_LOGIC_TEST_BIN): test_switch_logic.c $(SW_DIR)/switch_logic.c $(SW_DIR)/switch_logic.h
+	$(CC) $(SW_LOGIC_CFLAGS) test_switch_logic.c $(SW_DIR)/switch_logic.c -o $@ $(TEST_LIBS)
+
+test: $(TEST_BIN) $(TERMINAL_USER_INTERFACE_TEST_BIN) $(ACT_TEST_BIN) $(WINDOW_RESOLVE_TEST_BIN) $(ORDER_TEST_BIN) $(SW_LOGIC_TEST_BIN)
 	./$(TEST_BIN)
 	./$(TERMINAL_USER_INTERFACE_TEST_BIN)
 	./$(ACT_TEST_BIN)
 	./$(WINDOW_RESOLVE_TEST_BIN)
 	./$(ORDER_TEST_BIN)
+	./$(SW_LOGIC_TEST_BIN)
 
 clean:
-	rm -f $(TEST_BIN) $(TERMINAL_USER_INTERFACE_TEST_BIN) $(ACT_TEST_BIN) $(WINDOW_RESOLVE_TEST_BIN) $(ORDER_TEST_BIN)
+	rm -f $(TEST_BIN) $(TERMINAL_USER_INTERFACE_TEST_BIN) $(ACT_TEST_BIN) $(WINDOW_RESOLVE_TEST_BIN) $(ORDER_TEST_BIN) $(SW_LOGIC_TEST_BIN)
 
 .PHONY: test clean

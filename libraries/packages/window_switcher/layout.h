@@ -34,6 +34,10 @@ int      az_strip_count(AzStrip *s);
 /* XID of the selected tile's window, or 0 when empty. */
 unsigned long az_strip_selected_xid(AzStrip *s);
 
+/* Index of the tile whose window is `xid`, or -1 if no tile matches (including xid == 0).
+ * Used to anchor the fresh-open selection on the currently-focused window. */
+int      az_strip_index_of_xid(AzStrip *s, unsigned long xid);
+
 void     az_strip_free(AzStrip *s);
 
 #endif /* AZ_LAYOUT_H */

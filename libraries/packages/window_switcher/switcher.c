@@ -28,6 +28,18 @@
 #include "windows.h"
 #include "ordering.h"
 #include "theme.h"
+#include "switch_logic.h"
+
+/* Pin the mirrored keysym/mask values in switch_logic.c against the REAL GDK headers (included
+ * here transitively via gtk). If GDK ever renumbered these, the pure module -- which cannot
+ * include the GDK headers without dragging the whole toolchain into its headless test -- would
+ * silently disagree; these asserts make that a compile error instead. */
+_Static_assert(GDK_KEY_Tab          == 0xff09, "GDK_KEY_Tab drift vs switch_logic.c");
+_Static_assert(GDK_KEY_KP_Tab       == 0xff89, "GDK_KEY_KP_Tab drift vs switch_logic.c");
+_Static_assert(GDK_KEY_ISO_Left_Tab == 0xfe20, "GDK_KEY_ISO_Left_Tab drift vs switch_logic.c");
+_Static_assert(GDK_KEY_Left         == 0xff51, "GDK_KEY_Left drift vs switch_logic.c");
+_Static_assert(GDK_KEY_Right        == 0xff53, "GDK_KEY_Right drift vs switch_logic.c");
+_Static_assert(GDK_SHIFT_MASK       == (1u<<0), "GDK_SHIFT_MASK drift vs switch_logic.c");
 
 #define OFFSCREEN_MARGIN 4000
 /* Two refresh cadences while shown (see the two timers below):
@@ -44,13 +56,18 @@ typedef struct {
     GtkWidget *win;
     AzStrip   *strip;
     gboolean   shown;
+    gboolean   warm;              /* strip has been populated at least once (see warmup/show) */
+    gboolean   navigated;         /* user moved the selection (Tab/arrow) since this show opened */
+    int        last_dir;          /* dir of the current show, for the post-show re-anchor */
     guint      thumb_id;          /* fast in-place thumbnail timer, 0 when hidden */
     guint      list_id;           /* slow window-list re-scan timer, 0 when hidden */
+    guint      idle_reload_id;    /* one-shot post-show reload (kept off the hot path), 0 if none */
 } AzSwitcher;
 
 static AzSwitcher g_sw;
 
 static void commit_switcher(AzSwitcher *s);   /* fwd: used by the anti-pin Alt-state check */
+static unsigned long active_window_xid(AzSwitcher *s);  /* fwd: used by the post-show re-anchor */
 
 /* ---- live-window refresh ------------------------------------------------ */
 /* Re-enumerate the managed windows (forks xprop) and hand them to the strip. az_strip_set_windows
@@ -76,6 +93,55 @@ static gboolean on_list_tick(gpointer user) {
     if (!s->shown) { s->list_id = 0; return G_SOURCE_REMOVE; }
     reload_windows(s);
     return G_SOURCE_CONTINUE;
+}
+
+/* Re-enumerate the real window set NOW and fix up the selection against it. This is the heavy work
+ * (forks xprop + captures every tile's XComposite pixmap, ~150-220ms) that show_switcher deferred
+ * so the overlay could paint instantly off the WARM strip; running it replaces that possibly-stale
+ * set with the current one. Cancels any pending idle first so it is idempotent whether reached via
+ * the idle or forced synchronously from commit_switcher.
+ *
+ * Selection fix-up has two cases:
+ *   - The user has NOT navigated yet (fresh open): re-anchor the focus-relative start against the
+ *     new set (a window opened/closed since the strip was warmed -> the start still lands on the
+ *     tile next to the focused window).
+ *   - The user HAS navigated (pressed Tab/Shift+Tab/arrow): their chosen WINDOW is intentional, so
+ *     preserve it by XID -- find where that window sits in the new set and keep it selected. Never
+ *     re-anchor over a deliberate navigation (that was the "commit re-anchor discards the user's
+ *     Tab" bug). If the chosen window vanished, az_strip_set_windows already clamped the index into
+ *     range, so we leave that clamped selection as the graceful fallback. */
+static void refresh_and_reanchor(AzSwitcher *s) {
+    if (s->idle_reload_id) { g_source_remove(s->idle_reload_id); s->idle_reload_id = 0; }
+    unsigned long chosen = s->navigated ? az_strip_selected_xid(s->strip) : 0;
+    reload_windows(s);
+    s->warm = TRUE;
+    int n = az_strip_count(s->strip);
+    if (n <= 0) return;
+    if (s->navigated) {
+        int idx = az_strip_index_of_xid(s->strip, chosen);
+        if (idx >= 0) az_strip_select(s->strip, idx);   /* keep the user's window; else clamp stands */
+    } else {
+        int focused_index = az_strip_index_of_xid(s->strip, active_window_xid(s));
+        az_strip_select(s->strip, az_switch_start_index(n, s->last_dir, focused_index));
+    }
+}
+
+/* One-shot reload scheduled by show_switcher AFTER the overlay is already on-screen, so the paint
+ * is not blocked by the heavy enumeration/capture (the "delayed / not snappy" fix). It refreshes
+ * the set + re-anchors the selection to the correct tile a frame later.
+ *
+ * NOTE on ordering: this is a DEFAULT-priority idle, which sits BELOW GDK's event dispatch, so a
+ * very fast Alt release CAN be delivered (committing) before this idle runs. That does not cause a
+ * stale/wrong or crashing commit, because commit_switcher force-runs refresh_and_reanchor() itself
+ * if this idle is still pending -- so a commit always operates on the freshly-loaded set -- and
+ * activate_window traps X errors so even a since-closed xid is a safe no-op. Keeping this at
+ * default priority (not G_PRIORITY_HIGH) is deliberate: it lets GTK paint the overlay first. */
+static gboolean on_idle_reload(gpointer user) {
+    AzSwitcher *s = user;
+    s->idle_reload_id = 0;               /* clear BEFORE refresh so it does not try to re-cancel us */
+    if (!s->shown) return G_SOURCE_REMOVE;
+    refresh_and_reanchor(s);
+    return G_SOURCE_REMOVE;
 }
 
 /* ---- show / hide (by move, like the menu) ------------------------------- */
@@ -158,43 +224,108 @@ static void activate_window(AzSwitcher *s, unsigned long xid) {
     ev.xclient.format = 32;
     ev.xclient.data.l[0] = 2;            /* source: pager/direct user action */
     ev.xclient.data.l[1] = CurrentTime;
+    /* Trap X errors around the raise: the selected xid may have been destroyed between when the
+     * strip last enumerated it and this commit (a window closed while the overlay was up, or the
+     * warm strip carried a since-closed window). XRaiseWindow on a dead window raises BadWindow,
+     * and GDK's default error handler is FATAL (it calls exit()), so an unguarded raise would
+     * crash the whole daemon on that race. Trapping makes a stale-xid commit a harmless no-op --
+     * the WM simply keeps the current focus -- exactly as thumbnail.c traps its own capture
+     * round-trips for the same "the window can vanish underneath us" reason. */
+    gdk_error_trap_push();
     XSendEvent(dpy, root, False,
                SubstructureRedirectMask | SubstructureNotifyMask, &ev);
     XRaiseWindow(dpy, (Window)xid);
-    XFlush(dpy);
+    XSync(dpy, False);                   /* surface any BadWindow now, inside the trap */
+    gdk_error_trap_pop_ignored();
+}
+
+/* The window the WM currently reports as focused (_NET_ACTIVE_WINDOW on the root), or 0 if
+ * unset/unavailable. Used to anchor the fresh-open selection on the user's current window so a
+ * tap of Alt+Tab moves relative to it (see show_switcher / az_switch_start_index). */
+static unsigned long active_window_xid(AzSwitcher *s) {
+    GdkDisplay *gdpy = gtk_widget_get_display(s->win);
+    Display *dpy = GDK_DISPLAY_XDISPLAY(gdpy);
+    Window root = DefaultRootWindow(dpy);
+    Atom prop = XInternAtom(dpy, "_NET_ACTIVE_WINDOW", False);
+    Atom actual_type; int actual_format;
+    unsigned long nitems = 0, bytes_after = 0;
+    unsigned char *data = NULL;
+    unsigned long xid = 0;
+    if (XGetWindowProperty(dpy, root, prop, 0, 1, False, XA_WINDOW,
+                           &actual_type, &actual_format, &nitems, &bytes_after,
+                           &data) == Success) {
+        if (data && nitems >= 1 && actual_format == 32)
+            xid = *(unsigned long *)(void *)data;
+        if (data) XFree(data);
+    }
+    return xid;
 }
 
 static void hide_switcher(AzSwitcher *s) {
     if (!s->shown) return;
     s->shown = FALSE;
-    if (s->thumb_id) { g_source_remove(s->thumb_id); s->thumb_id = 0; }
-    if (s->list_id)  { g_source_remove(s->list_id);  s->list_id  = 0; }
+    if (s->thumb_id)       { g_source_remove(s->thumb_id);       s->thumb_id = 0; }
+    if (s->list_id)        { g_source_remove(s->list_id);        s->list_id = 0; }
+    if (s->idle_reload_id) { g_source_remove(s->idle_reload_id); s->idle_reload_id = 0; }
     ungrab_seat(s);
     move_window(s, gdk_screen_width() + OFFSCREEN_MARGIN,
                    gdk_screen_height() + OFFSCREEN_MARGIN);
     gdk_display_flush(gtk_widget_get_display(s->win));
 }
 
-/* Commit: activate the selected window, then hide. */
+/* Commit: activate the selected window, then hide.
+ *
+ * If the post-show reload is still pending (a FAST Alt release beat the default-priority idle --
+ * GDK events outrank it), run it synchronously HERE first, so the committed selection is anchored
+ * on the CURRENT window set rather than the possibly-stale warm strip we mapped instantly. Without
+ * this, a quick tap could commit a tile that a since-closed window used to occupy -- the wrong
+ * window, and (before activate_window trapped X errors) a BadWindow crash on its dead xid. This
+ * closes the stale-commit race while keeping the instant paint (the idle stays low-priority so the
+ * common, non-fast-release case still paints before reloading). */
 static void commit_switcher(AzSwitcher *s) {
+    if (s->idle_reload_id) refresh_and_reanchor(s);
     unsigned long xid = az_strip_selected_xid(s->strip);
     hide_switcher(s);
     activate_window(s, xid);
 }
 
 /* Show (or, if already shown, just advance). dir: +1 forward, -1 backward.
- * On a fresh open, Windows pre-selects the PREVIOUS window: forward lands on index 1,
- * backward on the last, so one tap of Alt+Tab flips to the last-used window. */
+ *
+ * SNAPPINESS: the overlay must appear the instant Alt+Tab is pressed. The heavy work -- listing
+ * windows (forks xprop) and capturing every tile's live XComposite pixmap -- costs ~150-220ms, so
+ * it is DEFERRED to an idle (on_idle_reload) that runs AFTER the overlay is already mapped. This
+ * function does only the cheap part (~4ms): pick the focus-anchored start on the WARM strip, then
+ * move on-screen + grab. The strip is kept populated between uses (warmup seeds it; each show's
+ * idle-reload refreshes it), so there is always a correct, current-enough set of tiles to show
+ * immediately. This is what fixes "delayed / not snappy" -- and with it the quick Alt+Shift+Tab
+ * that used to feel dead (it was landing during the pre-map stall) now registers, because the
+ * overlay is live before the user can react.
+ *
+ * On a fresh open the start is anchored on the focused window and stepped one in `dir` (forward ->
+ * next tile, backward -> previous), so one tap flips to the adjacent window; az_switch_start_index
+ * (unit-tested) does the math and falls back to the legacy Windows-like default when the focused
+ * window is not a tile. */
 static void show_switcher(AzSwitcher *s, int dir) {
     if (s->shown) {
+        /* Already up: another A-Tab/A-S-Tab advances the selection. That is a deliberate move, so
+         * mark it navigated (a pending reload must then preserve this window, not re-anchor). */
+        s->navigated = TRUE;
         az_strip_select(s->strip, az_strip_selected(s->strip) + dir);
         return;
     }
-    reload_windows(s);
+    s->navigated = FALSE;                /* fresh open: the start is the focus-anchored default */
+    s->last_dir = dir;
+    /* Cold start ONLY: if the strip was never populated (daemon just launched and warmup's seed
+     * has not happened yet), we have nothing to show, so pay the reload once. Every subsequent
+     * open reuses the warm strip and skips this -- the reload happens off the hot path below. */
+    if (!s->warm || az_strip_count(s->strip) == 0) {
+        reload_windows(s);
+        s->warm = TRUE;
+    }
     int n = az_strip_count(s->strip);
     if (n <= 0) return;                  /* nothing to switch to */
-    int start = (dir >= 0) ? (n > 1 ? 1 : 0) : (n - 1);
-    az_strip_select(s->strip, start);
+    int focused_index = az_strip_index_of_xid(s->strip, active_window_xid(s));
+    az_strip_select(s->strip, az_switch_start_index(n, dir, focused_index));
 
     int x, y;
     center_on_primary(s, &x, &y);
@@ -207,6 +338,9 @@ static void show_switcher(AzSwitcher *s, int dir) {
      * functions). Fast one gives smooth live content; slow one catches opened/closed windows. */
     if (!s->thumb_id) s->thumb_id = g_timeout_add(THUMB_MS, on_thumb_tick, s);
     if (!s->list_id)  s->list_id  = g_timeout_add(LIST_MS,  on_list_tick,  s);
+    /* Refresh the window set + thumbnails NOW that the overlay is visible (heavy work off the hot
+     * path; re-anchors the selection if the set changed). One-shot -- see on_idle_reload. */
+    if (!s->idle_reload_id) s->idle_reload_id = g_idle_add(on_idle_reload, s);
     /* Anti-pin guard: now that our grab is live, verify Alt is still physically held. If the
      * release slipped past during the OpenBox->daemon grab handoff, dismiss immediately so the
      * overlay never stays pinned (see alt_is_down / on_check_alt_still_held). Deferred to an idle
@@ -249,29 +383,27 @@ static gboolean on_key_press(GtkWidget *w, GdkEventKey *ev, gpointer user) {
     int slot = digit_slot(ev->keyval);
     if (slot > 0) {
         if (slot <= az_strip_count(s->strip)) {
+            s->navigated = TRUE;                   /* explicit pick -> preserve it across a reload */
             az_strip_select(s->strip, slot - 1);   /* 1-based slot -> 0-based index */
             commit_switcher(s);
         }
         return TRUE;                                /* swallow digits either way while shown */
     }
 
+    /* Tab / Shift+Tab / ISO_Left_Tab / Left / Right -> move the selection. The keyval+state
+     * -> direction decision is the pure, unit-tested az_switch_direction (switch_logic.c), so
+     * "shift+tab goes back" is proven headless and cannot silently regress. A REAL Shift+Tab
+     * arrives as ISO_Left_Tab; that maps to -1 there. az_strip_select flushes the repaint. */
+    int dir = az_switch_direction(ev->keyval, ev->state);
+    if (dir != 0) {
+        /* Mark that the user deliberately moved the selection, so a subsequent reload preserves
+         * THIS window (by xid) instead of snapping back to the focus-anchored fresh-open start. */
+        s->navigated = TRUE;
+        az_strip_select(s->strip, az_strip_selected(s->strip) + dir);
+        return TRUE;
+    }
+
     switch (ev->keyval) {
-        case GDK_KEY_Tab:
-        case GDK_KEY_KP_Tab:
-            if (ev->state & GDK_SHIFT_MASK)
-                az_strip_select(s->strip, az_strip_selected(s->strip) - 1);
-            else
-                az_strip_select(s->strip, az_strip_selected(s->strip) + 1);
-            return TRUE;
-        case GDK_KEY_ISO_Left_Tab:       /* Shift+Tab on X */
-            az_strip_select(s->strip, az_strip_selected(s->strip) - 1);
-            return TRUE;
-        case GDK_KEY_Right:
-            az_strip_select(s->strip, az_strip_selected(s->strip) + 1);
-            return TRUE;
-        case GDK_KEY_Left:
-            az_strip_select(s->strip, az_strip_selected(s->strip) - 1);
-            return TRUE;
         case GDK_KEY_Escape:
             hide_switcher(s);            /* cancel: no focus change */
             return TRUE;
@@ -326,6 +458,14 @@ static void build_window(AzSwitcher *s) {
 static void warmup(AzSwitcher *s) {
     move_window(s, gdk_screen_width() + OFFSCREEN_MARGIN,
                    gdk_screen_height() + OFFSCREEN_MARGIN);
+    /* SEED the strip off-screen at login so the FIRST Alt+Tab is instant: this pays the heavy
+     * window-list + thumbnail cost once, now, while nobody is waiting -- instead of on the first
+     * show (where it was the ~150-220ms "delayed / not snappy" stall). Every show thereafter
+     * reuses this warm strip and refreshes it off the hot path (see show_switcher/on_idle_reload).
+     * Guarded implicitly: if no windows exist yet the strip is simply empty and the first show
+     * falls back to its cold-load path. */
+    reload_windows(s);
+    s->warm = TRUE;
     gtk_widget_show_all(s->win);          /* the one real map, off-screen */
     while (gtk_events_pending())
         gtk_main_iteration_do(FALSE);
@@ -359,8 +499,21 @@ static gboolean on_sig_pipe(GIOChannel *src, GIOCondition cond, gpointer user) {
         if (buf[i] == SIGTERM || buf[i] == SIGINT) { gtk_main_quit(); return TRUE; }
         last = buf[i];
     }
+    /* Show latency is the whole point of the snappiness work, so it is measurable: when
+     * AZARCH_SWITCHER_TIMING is set we print how long show_switcher took (the signal-to-mapped
+     * cost) to stderr. The live integration test (tests/integration_window_switcher_live.py) reads
+     * this and asserts it stays small -- it was ~200ms when show_switcher did the window
+     * enumeration + thumbnail capture inline, and is a few ms now that both are off the hot path.
+     * Gated by the env var so normal runs emit nothing. */
+    static int timing = -1;
+    if (timing < 0) timing = (g_getenv("AZARCH_SWITCHER_TIMING") != NULL) ? 1 : 0;
+    gint64 t0 = timing ? g_get_monotonic_time() : 0;
     if (last == SIGUSR1) show_switcher(s, +1);
     else if (last == SIGUSR2) show_switcher(s, -1);
+    if (timing && (last == SIGUSR1 || last == SIGUSR2)) {
+        fprintf(stderr, "AZARCH_SHOW_MS %.1f\n", (g_get_monotonic_time() - t0) / 1000.0);
+        fflush(stderr);
+    }
     return TRUE;
 }
 
