@@ -17,6 +17,8 @@
 #include <glib/gstdio.h>          /* g_unlink */
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
+#include <X11/keysym.h>          /* XK_Shift_L / XK_Shift_R for the physical-shift keymap probe */
+#include <X11/XKBlib.h>           /* XkbLockGroup -- keep the layout US while the overlay is up */
 #include <signal.h>
 #include <string.h>
 #include <stdlib.h>
@@ -62,6 +64,8 @@ typedef struct {
     guint      thumb_id;          /* fast in-place thumbnail timer, 0 when hidden */
     guint      list_id;           /* slow window-list re-scan timer, 0 when hidden */
     guint      idle_reload_id;    /* one-shot post-show reload (kept off the hot path), 0 if none */
+    int        saved_group;       /* XKB layout group active before we forced US on show (-1 = none) */
+    gboolean   shift_held;        /* event-driven latch: a physical Shift key is currently down */
 } AzSwitcher;
 
 static AzSwitcher g_sw;
@@ -161,6 +165,81 @@ static void center_on_primary(AzSwitcher *s, int *out_x, int *out_y) {
     int h = req.height > 0 ? req.height : 200;
     *out_x = geo.x + (geo.width  - w) / 2;
     *out_y = geo.y + (geo.height - h) / 2;
+}
+
+/* Is a physical Shift key (either side) currently held DOWN? Reads the raw hardware key bitmap via
+ * XQueryKeymap, NOT the event's modifier bits.
+ *
+ * WHY THIS EXISTS -- the "Alt+Shift+Tab goes forward" bug: Az'arch binds Alt+Shift to the
+ * grp:alt_shift_toggle language switch. With that binding live, the Shift key (while Alt is held)
+ * is bound to the XKB group-switch ACTION, so it stops acting as a plain Shift modifier -- the Tab
+ * event that follows arrives WITHOUT GDK_SHIFT_MASK (XKB consumed the Shift for the toggle), and
+ * with the group pinned to US the held Shift contributes NEITHER ShiftMask NOR the group bit, so
+ * neither the event state nor XQueryPointer's mask can see it. XQueryKeymap sidesteps all of that:
+ * it reports the physical up/down state of the Shift keys directly from the hardware bitmap, immune
+ * to how XKB has remapped the modifier. The keycodes are resolved from the keysyms (not hardcoded)
+ * so this survives a non-default keymap.
+ *
+ * SCOPE -- this is used ONLY for the ONE show-time decision (seed the latch + pick the opening
+ * direction), never per in-overlay keypress. That matters: a single/slow XQueryKeymap read IS
+ * reliable, but during a FAST held-Alt+Shift Tab burst the per-event snapshot transiently reads
+ * Shift as UP (shiftHW would flicker 1,1,0,0) and racing it per keypress made later Tabs step
+ * forward nondeterministically. The in-overlay direction instead uses s->shift_held, an
+ * event-driven latch fed by the ordered Shift key press/release events (see on_key_press/release),
+ * which cannot miss a physically-held Shift. */
+static gboolean shift_physically_down(AzSwitcher *s) {
+    GdkDisplay *gdpy = gtk_widget_get_display(s->win);
+    Display *dpy = GDK_DISPLAY_XDISPLAY(gdpy);
+    char keys[32];
+    XQueryKeymap(dpy, keys);
+    KeyCode kl = XKeysymToKeycode(dpy, XK_Shift_L);
+    KeyCode kr = XKeysymToKeycode(dpy, XK_Shift_R);
+    gboolean l = kl && (keys[kl >> 3] & (1 << (kl & 7)));
+    gboolean r = kr && (keys[kr >> 3] & (1 << (kr & 7)));
+    return (l || r) ? TRUE : FALSE;
+}
+
+/* Read the XKB locked layout group (0 = us, 1 = il here), or -1 if XKB is unavailable. */
+static int current_group(AzSwitcher *s) {
+    GdkDisplay *gdpy = gtk_widget_get_display(s->win);
+    Display *dpy = GDK_DISPLAY_XDISPLAY(gdpy);
+    XkbStateRec st;
+    if (XkbGetState(dpy, XkbUseCoreKbd, &st) != Success) return -1;
+    return st.locked_group;
+}
+
+/* Force the keyboard layout back to group 0 (US). Cheap, idempotent -- safe to call on every
+ * keypress while the overlay is up. */
+static void force_us_group(AzSwitcher *s) {
+    GdkDisplay *gdpy = gtk_widget_get_display(s->win);
+    Display *dpy = GDK_DISPLAY_XDISPLAY(gdpy);
+    XkbLockGroup(dpy, XkbUseCoreKbd, 0);
+    XSync(dpy, False);
+}
+
+/* On show: remember the group the user was in, then pin the layout to US so that Alt+Shift can no
+ * longer flip to Hebrew WHILE the switcher is up. This is the fix for "Alt+Shift+Tab goes forward
+ * instead of backward": Az'arch binds Alt+Shift to the grp:alt_shift_toggle language switch, so on
+ * a physical keyboard XKB eats the Shift as the group-toggle chord and OpenBox sees only plain
+ * Alt+Tab. Holding the group at US for the lifetime of the overlay stops the toggle, so the daemon
+ * (which holds the seat grab) sees a real Shift+Tab -> ISO_Left_Tab -> backward. The user's rule:
+ * "when the window switcher is on it shouldn't switch languages". The global Alt+Shift Hebrew
+ * toggle is untouched everywhere else -- we only override it for the duration of the overlay and
+ * restore the previous group on hide. */
+static void lock_us_group(AzSwitcher *s) {
+    s->saved_group = current_group(s);   /* -1 if XKB unavailable -> restore becomes a no-op */
+    force_us_group(s);
+}
+
+/* On hide: restore the layout group the user had before we pinned US, so Hebrew (or whatever they
+ * were on) comes right back. If we never saved one (XKB unavailable), do nothing. */
+static void restore_group(AzSwitcher *s) {
+    if (s->saved_group < 0) return;
+    GdkDisplay *gdpy = gtk_widget_get_display(s->win);
+    Display *dpy = GDK_DISPLAY_XDISPLAY(gdpy);
+    XkbLockGroup(dpy, XkbUseCoreKbd, s->saved_group);
+    XSync(dpy, False);
+    s->saved_group = -1;
 }
 
 static void grab_seat(AzSwitcher *s) {
@@ -267,6 +346,7 @@ static void hide_switcher(AzSwitcher *s) {
     if (s->thumb_id)       { g_source_remove(s->thumb_id);       s->thumb_id = 0; }
     if (s->list_id)        { g_source_remove(s->list_id);        s->list_id = 0; }
     if (s->idle_reload_id) { g_source_remove(s->idle_reload_id); s->idle_reload_id = 0; }
+    restore_group(s);      /* give back the layout group (Hebrew) the user had before we pinned US */
     ungrab_seat(s);
     move_window(s, gdk_screen_width() + OFFSCREEN_MARGIN,
                    gdk_screen_height() + OFFSCREEN_MARGIN);
@@ -314,6 +394,23 @@ static void show_switcher(AzSwitcher *s, int dir) {
         return;
     }
     s->navigated = FALSE;                /* fresh open: the start is the focus-anchored default */
+    s->shift_held = FALSE;               /* fresh open: clear the latch before seeding it below */
+
+    /* First-chord correction for Alt+Shift+Tab. On a physical keyboard the OPENING Alt+Shift+Tab
+     * never reaches the daemon as backward: XKB fires the grp:alt_shift_toggle on the chord and
+     * eats the Shift, so OpenBox sees a plain Alt+Tab and runs the launcher's --next (dir=+1). But
+     * the Shift key is still physically held at the instant we show, so read the hardware directly:
+     * if Shift is down on a fresh open, the user meant BACKWARD -- flip dir so a single lone
+     * Alt+Shift+Tab opens on the previous window, matching the in-overlay Shift+Tab behaviour.
+     *
+     * The Shift-DOWN that started the chord happened PRE-GRAB (the daemon was not grabbing the seat
+     * yet), so no on_key_press latched it -- seed the latch from this one show-time poll so it is
+     * already warm if the user holds Alt+Shift and immediately bursts Tab. A single poll here is
+     * safe (single/slow XQueryKeymap reads are reliable; only fast per-keypress polling raced). */
+    gboolean shift_at_show = shift_physically_down(s);
+    s->shift_held = shift_at_show;
+    if (shift_at_show) dir = -1;
+
     s->last_dir = dir;
     /* Cold start ONLY: if the strip was never populated (daemon just launched and warmup's seed
      * has not happened yet), we have nothing to show, so pay the reload once. Every subsequent
@@ -333,6 +430,15 @@ static void show_switcher(AzSwitcher *s, int dir) {
     gdk_window_raise(gtk_widget_get_window(s->win));
     s->shown = TRUE;
     grab_seat(s);
+    /* Pin the layout to US for the lifetime of the overlay so Alt+Shift can't flip to Hebrew while
+     * navigating (restored on hide). This is what makes in-overlay Alt+Shift+Tab go backward. */
+    lock_us_group(s);
+    /* If Shift was held at show, the opening chord ALREADY flipped the group to Hebrew before we
+     * grabbed (see above), so the "saved" group we just captured is that accidental Hebrew, not
+     * what the user was really in. Overwrite it with US so hide does NOT strand them in Hebrew after
+     * an Alt+Shift+Tab. A DELIBERATE Alt+Shift language switch (no Tab, overlay closed) is unaffected
+     * -- it never enters show_switcher. */
+    if (shift_at_show) s->saved_group = 0;
     gdk_display_sync(gtk_widget_get_display(s->win));
     /* Two timers: fast in-place thumbnail streaming + a slow window-list re-scan (see the tick
      * functions). Fast one gives smooth live content; slow one catches opened/closed windows. */
@@ -376,6 +482,30 @@ static gboolean on_key_press(GtkWidget *w, GdkEventKey *ev, gpointer user) {
     AzSwitcher *s = user;
     if (!s->shown) return FALSE;
 
+    /* Event-driven Shift latch. A physically-held Shift is the signal that a Tab means BACKWARD, but
+     * it cannot be read reliably per keypress (see shift_physically_down): under the US pin the held
+     * Shift shows up in neither the event state nor XQueryPointer's mask, and XQueryKeymap flickers
+     * during a fast burst. The HARDWARE KEYCODE, however, is invariant no matter how XKB mangles the
+     * keysym, and key press/release events are delivered in order, so latch on it: Shift down sets
+     * the flag, Shift up (in on_key_release) clears it. Resolve the keycodes from the keysyms so a
+     * non-default keymap still works. */
+    Display *xdpy = GDK_DISPLAY_XDISPLAY(gtk_widget_get_display(s->win));
+    KeyCode shift_l = XKeysymToKeycode(xdpy, XK_Shift_L);
+    KeyCode shift_r = XKeysymToKeycode(xdpy, XK_Shift_R);
+    if (ev->hardware_keycode == shift_l || ev->hardware_keycode == shift_r)
+        s->shift_held = TRUE;
+
+    /* The Alt+Shift language-toggle (grp:alt_shift_toggle) fires on the Shift-DOWN while Alt is
+     * held and delivers ISO_Next_Group/ISO_Prev_Group here, flipping the layout to Hebrew mid
+     * gesture (and eating the Shift so the following Tab loses its shift bit). Swallow it and force
+     * the layout back to US so the overlay never switches language and the next Shift+Tab stays a
+     * real backward step. (The latch was already set above from this same event's Shift keycode.) */
+    if (ev->keyval == GDK_KEY_ISO_Next_Group || ev->keyval == GDK_KEY_ISO_Prev_Group ||
+        ev->keyval == GDK_KEY_ISO_First_Group || ev->keyval == GDK_KEY_ISO_Last_Group) {
+        force_us_group(s);
+        return TRUE;
+    }
+
     /* Number keys 1..9,0 jump straight to that tile (by 1-based on-screen position) and
      * activate it -- press 1 for librewolf, 2 for kitty, etc. Ignored when the slot is past the
      * last tile (fewer windows than the digit), so a stray high number is a harmless no-op
@@ -395,6 +525,19 @@ static gboolean on_key_press(GtkWidget *w, GdkEventKey *ev, gpointer user) {
      * "shift+tab goes back" is proven headless and cannot silently regress. A REAL Shift+Tab
      * arrives as ISO_Left_Tab; that maps to -1 there. az_strip_select flushes the repaint. */
     int dir = az_switch_direction(ev->keyval, ev->state);
+
+    /* Az'arch's Alt+Shift language toggle robs a Tab of its Shift: with grp:alt_shift_toggle bound,
+     * XKB consumes the Shift (for the group switch) so the Tab arrives as a BARE Tab (state has no
+     * shift bit) and az_switch_direction would return FORWARD -- the reported "Alt+Shift+Tab goes
+     * forward" bug. Recover the intent from the event-driven latch: if this is a Tab-family key and
+     * a Shift key is currently held (per s->shift_held, fed by the ordered Shift key events), force
+     * backward. This survives a fast held-Alt+Shift Tab burst that polling the hardware per keypress
+     * could not (see shift_physically_down / the latch in on_key_press). */
+    if ((ev->keyval == GDK_KEY_Tab || ev->keyval == GDK_KEY_KP_Tab ||
+         ev->keyval == GDK_KEY_ISO_Left_Tab) && s->shift_held) {
+        dir = -1;
+    }
+
     if (dir != 0) {
         /* Mark that the user deliberately moved the selection, so a subsequent reload preserves
          * THIS window (by xid) instead of snapping back to the focus-anchored fresh-open start. */
@@ -421,6 +564,15 @@ static gboolean on_key_release(GtkWidget *w, GdkEventKey *ev, gpointer user) {
     (void)w;
     AzSwitcher *s = user;
     if (!s->shown) return FALSE;
+
+    /* Clear the Shift latch on a physical Shift-up (the counterpart to the set in on_key_press), so
+     * that after the user lets Shift go a subsequent Tab in the same overlay steps forward again.
+     * Matched by hardware keycode -- invariant under XKB's group remapping. */
+    Display *xdpy = GDK_DISPLAY_XDISPLAY(gtk_widget_get_display(s->win));
+    if (ev->hardware_keycode == XKeysymToKeycode(xdpy, XK_Shift_L) ||
+        ev->hardware_keycode == XKeysymToKeycode(xdpy, XK_Shift_R))
+        s->shift_held = FALSE;
+
     if (ev->keyval == GDK_KEY_Alt_L || ev->keyval == GDK_KEY_Alt_R ||
         ev->keyval == GDK_KEY_Meta_L || ev->keyval == GDK_KEY_Meta_R) {
         commit_switcher(s);
@@ -562,6 +714,8 @@ int main(int argc, char **argv) {
     }
 
     AzSwitcher *s = &g_sw;
+    s->saved_group = -1;                 /* no group saved until the first show pins US */
+    s->shift_held = FALSE;               /* Shift latch starts clear (also reset on each fresh open) */
     build_window(s);
     warmup(s);
 

@@ -70,6 +70,17 @@ else if(!strncmp(t,"up:",3)){int k=kc(t+3);if(k>=0){emit(EV_KEY,k,0);syn();}}t=s
 usleep(200000);ioctl(ufd,UI_DEV_DESTROY);close(ufd);return 0;}
 """
 
+# Reads the XKB locked layout group (0 = us, 1 = il here). Used to prove the overlay does NOT flip
+# the language while it is shown (the daemon pins US) and that a real Alt+Shift+Tab therefore
+# navigates backward instead of toggling to Hebrew. Prints just the integer group.
+_GRPSTATE_C = r"""
+#include <X11/XKBlib.h>
+#include <stdio.h>
+int main(void){Display*d=XOpenDisplay(NULL);if(!d)return 1;XkbStateRec s;
+if(XkbGetState(d,XkbUseCoreKbd,&s)!=Success){XCloseDisplay(d);return 1;}
+printf("%d\n",s.locked_group);XCloseDisplay(d);return 0;}
+"""
+
 # Gdk full-root screenshot (works for override-redirect overlays; note GdkPixbuf is 2.0).
 _SHOT_PY = r"""
 import sys, gi
@@ -126,6 +137,7 @@ class Harness:
     def __init__(self, tmp: Path):
         self.tmp = tmp
         self.uinput = tmp / "uinput_key"
+        self.grpstate = tmp / "grpstate"
         self.shot = tmp / "shot.py"
         self.daemon = tmp / "azarch-window-switcher-daemon"
         self.stderr_log = tmp / "daemon.stderr"
@@ -133,11 +145,37 @@ class Harness:
 
     def build(self):
         (self.tmp / "uinput_key.c").write_text(_UINPUT_C)
+        (self.tmp / "grpstate.c").write_text(_GRPSTATE_C)
         self.shot.write_text(_SHOT_PY)
         cc = _sh(f"gcc -O2 -o {self.uinput} {self.tmp/'uinput_key.c'}")
         if cc.returncode != 0:
             raise SystemExit(f"uinput build failed:\n{cc.stderr}")
+        gc = _sh(f"gcc -O2 -o {self.grpstate} {self.tmp/'grpstate.c'} -lX11")
+        if gc.returncode != 0:
+            raise SystemExit(f"grpstate build failed:\n{gc.stderr}")
         ws.build_daemon(self.daemon)  # compiles the repo HEAD sources
+
+    def group(self):
+        """The current XKB locked layout group (0=us, 1=il), or None if it can't be read."""
+        r = _sh(str(self.grpstate))
+        try:
+            return int(r.stdout.strip())
+        except (ValueError, AttributeError):
+            return None
+
+    def set_group(self, g: int):
+        """Force the layout group (0=us). Resets any Hebrew latch left over from a prior chord."""
+        _sh(f"setxkbmap -layout us,il -option grp:alt_shift_toggle")
+        # XkbLockGroup via a throwaway one-liner (setxkbmap alone does not reset locked_group).
+        _sh(
+            "python3 - <<'PY'\n"
+            "import gi\ngi.require_version('Gdk','3.0')\nfrom gi.repository import Gdk\n"
+            "import ctypes,ctypes.util\n"
+            "x=ctypes.CDLL(ctypes.util.find_library('X11'))\n"
+            "d=x.XOpenDisplay(None)\n"
+            f"x.XkbLockGroup(d,0x0100,{g})\n"  # 0x0100 == XkbUseCoreKbd
+            "x.XSync(d,0)\nx.XCloseDisplay(d)\nPY"
+        )
 
     def start_daemon(self):
         if PIDFILE.exists():
@@ -211,6 +249,33 @@ class Harness:
         """Hold Alt, SIGUSR1 (--next), release -> commit; return the activated WM_CLASS."""
         return self.open_and_commit(signal.SIGUSR1)
 
+    def open_chord_and_commit(self, backward: bool):
+        """Drive a REAL physical Alt+Tab / Alt+Shift+Tab chord (uinput) end to end and return the
+        committed WM_CLASS. Unlike open_and_commit (which fakes direction via SIGUSR2), this fires
+        the actual key chord OpenBox+XKB see, so it exercises the true bug: Az'arch binds Alt+Shift
+        to the language toggle, so a physical Alt+Shift+Tab used to open FORWARD (XKB ate the Shift)
+        and flip to Hebrew. The daemon's fix (pin US on show + read the physical Shift key) must make
+        this chord open BACKWARD with the group staying US. The launcher (SIGUSR1) still opens the
+        overlay -- as it does on real hardware, where the first chord reaches OpenBox as plain
+        Alt+Tab -- and the physical Shift held at show-time is what flips the daemon to backward."""
+        import threading
+        if backward:
+            # Alt down, Shift down, Tab tap, Shift up, Alt up -- Shift is held THROUGH the show.
+            seq = ("down:ALT,sleep:250,down:SHIFT,sleep:200,down:TAB,sleep:90,up:TAB,"
+                   "sleep:600,up:SHIFT,sleep:150,up:ALT")
+        else:
+            seq = "down:ALT,sleep:250,down:TAB,sleep:90,up:TAB,sleep:600,up:ALT"
+        t = threading.Thread(target=self.inject, args=(seq,))
+        t.start()
+        # The real first chord reaches OpenBox as plain Alt+Tab -> launcher --next -> SIGUSR1. Fire
+        # that while Alt (and, for backward, Shift) are still held so show_switcher sees them.
+        time.sleep(0.55)
+        os.kill(self.pid, signal.SIGUSR1)
+        time.sleep(0.5)
+        t.join()
+        time.sleep(0.5)
+        return _active_class()
+
 
 def _diff_nonempty(a: Path, b: Path) -> bool:
     """True if the two PNGs differ (the overlay repainted). Uses PIL if present, else bytes."""
@@ -266,21 +331,14 @@ def main() -> int:
         else:
             print(f"  OK Bug2: focus-relative starts differ: {picks}")
 
-        # --- Bug 1: BACKWARD (Shift+Tab) actually goes the other way. -----------
-        # HARNESS NOTE: a REAL Alt+Shift+Tab from the CLOSED state is dispatched by OpenBox's
-        # A-S-Tab binding as `azarch-window-switcher --prev` -> SIGUSR2 -> show_switcher(-1). That
-        # SIGNAL path is what the user actually triggers, and it is fully reliable to drive here.
-        # We deliberately do NOT inject a Tab key under the daemon's seat grab to test direction:
-        # both XTEST (xdotool) and a hotplugged uinput device are unreliable under an active grab
-        # (XTEST remaps Shift+Tab's ISO_Left_Tab into ISO_Next_Group; a uinput slave's events may
-        # not reach the grabbing client at all). The pure keyval+state->direction decision for an
-        # under-grab Shift+Tab (ISO_Left_Tab -> -1) is proven exhaustively and deterministically by
-        # the headless tests/test_switch_logic.c instead -- the right layer for that.
-        #
-        # Here we prove the end-to-end BACKWARD path: from the SAME focused window, a forward open
-        # (SIGUSR1) commits the tile AFTER it, and a backward open (SIGUSR2) commits the tile BEFORE
-        # it. Those must differ and must straddle the focused tile -- if backward were broken (e.g.
-        # it stepped forward, or ignored dir), the two would collapse to the same commit.
+        # --- Bug 1: BACKWARD (Shift+Tab) actually goes the other way (via the SIGNAL path). -----
+        # This first check drives direction by SIGNAL: forward = SIGUSR1 (OpenBox's A-Tab -> --next),
+        # backward = SIGUSR2 (A-S-Tab -> --prev). It proves show_switcher(-1) itself steps the other
+        # way: from the SAME focused window a forward open commits the tile AFTER it and a backward
+        # open the tile BEFORE it, so the two must differ. It does NOT prove the physical Alt+Shift
+        # +Tab chord survives XKB's language toggle -- that end-to-end path is covered by Bug1b just
+        # below, which injects the real chord. (The pure keyval+state->direction decision is also
+        # proven exhaustively headless by tests/test_switch_logic.c.)
         fwd = {}
         bwd = {}
         for target in ("librewolf", "kitty", "thunar"):
@@ -301,6 +359,48 @@ def main() -> int:
         else:
             print(f"  OK Bug1: backward differs from forward for {differ} "
                   f"(A-S-Tab steps the other way)")
+
+        # --- Bug 1b: a REAL Alt+Shift+Tab chord opens backward AND keeps the layout US. --------
+        # This is the true end-to-end reproduction the SIGUSR2 test above cannot cover. Az'arch
+        # binds Alt+Shift to grp:alt_shift_toggle, so a physical Alt+Shift+Tab used to (a) flip the
+        # layout US->Hebrew and (b) open FORWARD, because XKB consumed the Shift as the group-switch
+        # chord and OpenBox saw a bare Alt+Tab. The daemon fix pins the group to US on show and reads
+        # the PHYSICAL Shift key (XQueryKeymap) to recover the backward intent. We inject the actual
+        # chord through the uinput keyboard (evdev -> libinput -> XKB, the real path) and assert:
+        #   * forward chord (Alt+Tab) and backward chord (Alt+Shift+Tab) from the same focus DIFFER;
+        #   * the locked layout group stays 0 (US) across the backward chord -- no Hebrew flip.
+        # (Earlier harness generations skipped this believing a hotplugged uinput device can't reach
+        # the grabbing client; it can -- verified -- so the real chord is tested here directly.)
+        h.set_group(0)
+        cfwd, cbwd, groups = {}, {}, {}
+        for target in ("librewolf", "kitty", "thunar"):
+            if _focus(target, tmp):
+                h.set_group(0)
+                cfwd[target] = h.open_chord_and_commit(backward=False)
+                _focus(target, tmp)
+                h.set_group(0)
+                cbwd[target] = h.open_chord_and_commit(backward=True)
+                groups[target] = h.group()
+                print(f"  focus={target!r}: chord fwd -> {cfwd[target]!r} | "
+                      f"chord bwd -> {cbwd[target]!r} | group after bwd={groups[target]}")
+        cpairs = [(t, cfwd[t], cbwd[t]) for t in cfwd if t in cbwd and cfwd[t] and cbwd[t]]
+        cdiffer = [t for (t, f, b) in cpairs if f != b]
+        flipped = [t for t, g in groups.items() if g not in (0, None)]
+        if not cpairs:
+            failures.append("Bug1b: could not drive any real Alt+(Shift+)Tab chord to a commit")
+        elif not cdiffer:
+            failures.append(
+                f"Bug1b: a REAL Alt+Shift+Tab chord commits the SAME window as Alt+Tab -- the "
+                f"physical-Shift backward path is broken (fwd={cfwd}, bwd={cbwd})"
+            )
+        elif flipped:
+            failures.append(
+                f"Bug1b: the layout switched to Hebrew (group != 0) during an Alt+Shift+Tab chord "
+                f"for {flipped} (groups={groups}); the overlay must NOT switch languages while shown"
+            )
+        else:
+            print(f"  OK Bug1b: real Alt+Shift+Tab chord goes backward for {cdiffer} "
+                  f"and the layout stayed US (groups={groups})")
 
         # --- Bug 3: the overlay is SNAPPY -- show latency stays tiny. -----------
         # The daemon prints "AZARCH_SHOW_MS <ms>" per show (AZARCH_SWITCHER_TIMING, set by the
