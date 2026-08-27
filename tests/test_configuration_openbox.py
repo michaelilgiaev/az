@@ -137,6 +137,56 @@ def test_install_wrapper_entry_is_root_owned_exec():
     assert entry["builder"] is desktop.install_wrapper_sh
 
 
+def test_install_wrapper_has_gui_cli_and_help():
+    # azarch-install is now a dispatcher: GUI (Calamares) by default with a display, a
+    # scripted CLI installer for SSH (--cli / no display), and a --help. Assert all three
+    # surfaces are present in the generated launcher.
+    w = desktop.install_wrapper_sh()
+    assert "--help" in w and "Usage: azarch-install" in w
+    assert "--gui" in w and "--cli" in w
+    # GUI path still launches Calamares the same way.
+    assert "calamares" in w
+    # CLI path runs the scripted installer baked under /root/azarch.
+    assert desktop.INSTALL_CLI_SCRIPT_PATH in w
+    assert "INSTALL_CLI_SCRIPT_PATH" or "/root/azarch/azarch-install-cli.sh" in w
+
+
+def test_install_wrapper_cli_is_the_ssh_path_when_no_display():
+    # The whole point of the CLI path: with NO display (an SSH session) `azarch-install`
+    # must fall back to the scripted installer, not try to open a GUI. Assert the launcher
+    # branches on DISPLAY/WAYLAND_DISPLAY and calls the CLI runner otherwise.
+    w = desktop.install_wrapper_sh()
+    assert 'if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; then' in w
+    assert "run_cli" in w and "run_gui" in w
+
+
+def test_install_wrapper_auto_and_disk_preseed_the_installer():
+    # --auto and --disk pre-seed the scripted installer's disk selection (via
+    # AZ_INSTALL_CHOICE / AZ_INSTALL_DISK) so an SSH install can run unattended.
+    w = desktop.install_wrapper_sh()
+    assert "AZ_INSTALL_CHOICE=1" in w                 # --auto -> largest disk
+    assert "AZ_INSTALL_DISK=" in w                    # --disk <dev>
+    assert "--disk" in w
+
+
+def test_install_wrapper_is_valid_sh():
+    # It ships as /bin/sh and is exec'd directly; a syntax error would break the installer
+    # launch entirely. Syntax-check with `sh -n`.
+    import subprocess
+    import tempfile
+    import os
+    w = desktop.install_wrapper_sh()
+    assert w.startswith("#!/bin/sh\n")
+    fd, path = tempfile.mkstemp(suffix=".sh", dir="/tmp")
+    try:
+        os.write(fd, w.encode())
+        os.close(fd)
+        r = subprocess.run(["sh", "-n", path], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+    finally:
+        os.remove(path)
+
+
 def test_openbox_rc_xml_entry_is_home_owned_conf():
     # OpenBox's rc.xml is a plain config (0o644) and must be handed to the live user
     # (home-owned; mirrored into /etc/skel) or the session cannot read its keybinds.
@@ -882,6 +932,23 @@ def test_autostart_launches_the_installer_once():
     assert f"( sleep 2; '{desktop.INSTALL_WRAPPER_PATH}' )" in out
 
 
+def test_live_autostart_shows_the_security_notice():
+    # The base desktop's LIVE session runs `azarch security-notice` once (it self-gates on
+    # the ssh variant / a real password and self-silences after the first show). It is a
+    # LIVE-only line -- the installed autostart must NOT carry it (the installed system has
+    # a real user password, so the "password not configured" warning does not apply).
+    live = desktop.openbox_autostart()
+    assert "azarch security-notice" in live
+
+
+def test_installed_autostart_has_no_security_notice_or_installer():
+    # The installed autostart drops BOTH live-only lines: the first-run installer AND the
+    # security notice. (It is the shared common block only.)
+    installed = desktop.openbox_autostart_installed()
+    assert "azarch security-notice" not in installed
+    assert desktop.INSTALL_WRAPPER_PATH not in installed
+
+
 def test_autostart_is_sh_script():
     # openbox-session runs it via /bin/sh; it ships executable, so a shebang is required.
     assert desktop.openbox_autostart().startswith("#!/bin/sh\n")
@@ -998,7 +1065,9 @@ def test_install_wrapper_pins_qt_scale_factor_one():
     # sudo boundary with `env QT_SCALE_FACTOR=1` on the exec line -- exporting it in the
     # unprivileged shell alone is not enough.
     out = desktop.install_wrapper_sh()
-    exec_line = next(ln for ln in out.splitlines() if ln.startswith("exec "))
+    # The GUI exec is now inside run_gui(); find the calamares exec line (indented).
+    exec_line = next(ln.strip() for ln in out.splitlines()
+                     if ln.strip().startswith("exec ") and "calamares" in ln)
     assert "env QT_SCALE_FACTOR=1 calamares" in exec_line
     # And the session's fractional QT_SCALE_FACTOR must NOT survive to the exec: no
     # `QT_SCALE_FACTOR=<fraction>` is passed through (only the pinned integer 1).
@@ -1011,8 +1080,8 @@ def test_install_wrapper_does_not_override_appdata_dir():
     # Check the actual command line (the `exec` line), not the explanatory
     # comments, which mention the flag on purpose.
     exec_line = next(
-        ln for ln in desktop.install_wrapper_sh().splitlines()
-        if ln.startswith("exec ")
+        ln.strip() for ln in desktop.install_wrapper_sh().splitlines()
+        if ln.strip().startswith("exec ") and "calamares" in ln
     )
     assert "-c" not in exec_line
     assert exec_line == "exec sudo -E env QT_SCALE_FACTOR=1 calamares"
@@ -1086,11 +1155,37 @@ def test_azarch_sshd_refuses_bare_root_target():
 def test_azarch_sshd_opens_firewall_before_starting_sshd():
     # setup-pkgs.sh sets 'ufw default deny incoming', so without an explicit allow
     # the forwarded host->guest :22 is dropped even though sshd listens. The allow must
-    # come BEFORE sshd starts so the port is reachable the instant it listens.
+    # come BEFORE sshd starts so the port is reachable the instant it listens. The rule is
+    # 22/tcp explicitly (the user's "port 22 configured to allow tcp").
     out = desktop.azarch_command_line_interface()
-    allow_idx = out.index('"ufw", "allow", "ssh"')
+    allow_idx = out.index('"ufw", "allow", "22/tcp"')
     start_idx = out.index('"systemctl", "enable", "--now", "sshd"')
     assert allow_idx < start_idx
+
+
+def test_azarch_sshd_enables_sshd_even_without_the_9p_share(monkeypatch):
+    # The INSTALLED ssh desktop is bare metal: there is NO 9p `shared` folder. The bring-up
+    # must SKIP the host-pubkey install (best effort, hypervisor-only) and STILL enable+
+    # start sshd (password login via the --ssh password baked into /etc/shadow). A
+    # regression that made pubkey install fatal would leave the installed ssh desktop with
+    # sshd OFF -- exactly what the user does not want.
+    import types
+    azcli = _load_azarch_command_line_interface()
+    calls: list[tuple] = []
+    monkeypatch.setattr(azcli, "_sudo", lambda *a, **k: calls.append(a) or 0)
+    # No share: the mount attempt fails, so the pubkey step bows out gracefully.
+    monkeypatch.setattr(azcli, "_is_mountpoint", lambda p: False)
+    monkeypatch.setenv("SUDO_USER", "main")
+    import pwd
+    tmp = pytest.importorskip("tempfile").mkdtemp()
+    monkeypatch.setattr(pwd, "getpwnam", lambda u: types.SimpleNamespace(pw_dir=tmp))
+    rc = azcli.sshd_hypervisor()
+    assert rc == 0
+    # sshd was enabled+started and :22/tcp opened despite no pubkey being installed.
+    assert ("systemctl", "enable", "--now", "sshd") in calls
+    assert ("ufw", "allow", "22/tcp") in calls
+    # No authorized_keys install was attempted (no share/key present).
+    assert not any(a[:1] == ("install",) for a in calls), calls
 
 
 def test_azarch_sshd_is_fail_fast_no_false_success(monkeypatch):

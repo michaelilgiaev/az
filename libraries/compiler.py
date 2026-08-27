@@ -103,8 +103,10 @@ STEP_WEIGHTS = [0] + [8] * 12 + [250, 120, 270, 270]
 # The ISO variants a build CAN produce, in assembly order -- the canonical MAX set that
 # sizes STEP_WEIGHTS's two mkarchiso weights. Every step up to mkarchiso is variant-
 # independent (same packages, same airootfs). WHICH of these actually build is decided
-# at runtime by _variants_for(): the base `azarch` medium ALWAYS, and the `azarch-sshd`
-# medium ONLY when --ssh="<PASSWORD>" opts in (no default password is ever shipped).
+# at runtime by _variants_for(): the base `azarch-desktop` medium ALWAYS, and the
+# `azarch-desktop-ssh` medium ONLY when --ssh="<PASSWORD>" opts in (no default password
+# is ever shipped). The variant KEYS stay base/sshd; profile.ISO_NAMES maps them to the
+# product-line artifact names.
 VARIANTS = ("base", "sshd")
 
 # PGID of the currently-running mkarchiso child (0 = none). mkarchiso is spawned in
@@ -139,6 +141,41 @@ def parse_ssh_flag(argv: list[str]) -> str | None:
         if token.startswith("--ssh="):
             value = token.split("=", 1)[1]
             return value or None
+    return None
+
+
+def ssh_flag_present(argv: list[str]) -> bool:
+    """True if the operator wrote the `--ssh` flag AT ALL -- bare (`--ssh`), empty
+    (`--ssh=`, `--ssh=""`), or with a value (`--ssh=pw`).
+
+    This is the OTHER half of three-state detection: parse_ssh_flag() reports the VALUE
+    (None when blank/absent), and this reports PRESENCE. Together they let main() tell
+    "operator asked for the ssh ISO but forgot the password" (present, no value -> HARD
+    STOP with an explanation) apart from "operator never mentioned ssh" (absent -> build
+    the base ISO only, which is correct). A token like `--sshfoo` is NOT the flag."""
+    return any(t == "--ssh" or t.startswith("--ssh=") for t in argv)
+
+
+def check_ssh_flag(argv: list[str]) -> str | None:
+    """Validate the --ssh flag combination, returning an ERROR MESSAGE to abort on, or
+    None to proceed.
+
+    The rule the user asked for: the flag "demands a string or it doesn't work". So a
+    PRESENT-but-blank flag (`--ssh`, `--ssh=`) is a hard error -- it must stop the build
+    and EXPLAIN why, rather than silently building the base ISO only (the reported bug:
+    `--ssh` with no password produced no ssh ISO AND no explanation). An ABSENT flag is
+    fine (base-only). A flag WITH a value is fine (the ssh ISO builds).
+
+    Pure (argv in, message out) so main() can print+exit on it and tests can assert it."""
+    if ssh_flag_present(argv) and parse_ssh_flag(argv) is None:
+        return (
+            'The --ssh flag needs a password: --ssh="<PASSWORD>". You passed --ssh with '
+            "no value, so there is nothing to set as the ssh desktop's login password. "
+            "No default password is ever shipped, so the ssh ISO was NOT built and "
+            "nothing was changed. Re-run with a real password, e.g. "
+            'compile.sh --ssh="mysecret", or drop --ssh entirely to build just the base '
+            "desktop ISO (ssh disabled)."
+        )
     return None
 
 
@@ -354,14 +391,18 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # The first-boot script/service/conf. profiledef.sh (archiso metadata at the
     # PROFILE ROOT) is NOT emitted here: its iso_name is the one thing that differs
     # per variant, so it is written per-variant in the finalize loop below. Calamares
-    # (auto-launched from the OpenBox session, step 8) is the SOLE installer: the
-    # legacy terminal azarch-iso-installer.sh is no longer emitted to the live user's
-    # Desktop (the on-disk installer scripts remain in libraries/installer.py for the
-    # first-boot pipeline, but the Desktop launcher is gone).
+    # (auto-launched from the OpenBox session, step 8) is the GUI installer. The scripted
+    # terminal installer is ALSO emitted (as azarch-install-cli.sh under /root/azarch) so
+    # `azarch-install --cli` can install over SSH with no X -- same partition/pacstrap/
+    # chroot-setup pipeline as the first-boot installer, just driven from a terminal.
     bar.step("Emit installer payload")
     emit.write_exec(ea / "first-boot-setup.sh", installer.first_boot_sh())
     emit.write_text(ea / "first-boot-setup.service", installer.first_boot_service())
     emit.write_text(ea / "first-boot-setup.conf", installer.first_boot_conf())
+    # The scripted (terminal/SSH) installer -- the CLI half of azarch-install. Baked under
+    # /root/azarch alongside the payload it reads (packages.x86_64, chroot-setup.sh, the
+    # offline repo). openbox.INSTALL_CLI_SCRIPT_PATH points azarch-install --cli at it.
+    emit.write_exec(ea / "azarch-install-cli.sh", installer.installer_sh())
 
     # 11 -- Resolve build pacman.conf and mirrors.
     # Writes the pacstrap/mkarchiso build pacman.conf, injects the persistent CacheDir,
@@ -425,8 +466,8 @@ def _apply_variant(W: Path, airootfs: Path, variant: str,
     """Overlay the per-variant differences onto the shared profile tree just before
     its mkarchiso pass. Three things differ between the base and sshd ISOs:
 
-      1. profiledef iso_name -- drives the artifact filename (azarch-<ver>.iso vs
-         azarch-sshd-<ver>.iso). Rewritten at the profile root every pass.
+      1. profiledef iso_name -- drives the artifact filename (azarch-desktop-<ver>.iso vs
+         azarch-desktop-ssh-<ver>.iso). Rewritten at the profile root every pass.
       2. the sshd-hypervisor auto-setup service -- emitted AND enabled (a
          multi-user.target.wants symlink) ONLY for the sshd variant, so that ISO
          auto-runs `azarch --sshd-hypervisor` at boot. The base ISO must have
@@ -1223,7 +1264,7 @@ def _probe_and_maybe_switch(W: Path, conf: str, localrepo: Path, bar: ProgressBa
     subprocess.run(["rm", "-rf", str(probe)], check=False)
 
 
-def _run_mkarchiso(sudo, W: Path, bar: ProgressBar, reclaim_after, iso_name: str = "azarch") -> Path:
+def _run_mkarchiso(sudo, W: Path, bar: ProgressBar, reclaim_after, iso_name: str = "azarch-desktop") -> Path:
     # temp dir cleanup (matches the old "Cleaning up temp directory" step)
     subprocess.run(["rm", "-rf", str(W / ".temp")], check=False)
     # Reset the mkarchiso work tree BEFORE every pass. This is load-bearing for the
@@ -1516,6 +1557,15 @@ def main() -> int:
     if estimate.parse_estimate_flag(sys.argv[1:]) is not None:
         return estimate.run(sys.argv[1:])
 
+    # HARD STOP: `--ssh` present but with no password. The flag demands a string; a bare
+    # `--ssh` / `--ssh=` must ABORT with an explanation rather than silently building the
+    # base ISO only (the reported bug). Do this BEFORE any workspace/cache setup so it is a
+    # clean, side-effect-free early exit.
+    ssh_flag_error = check_ssh_flag(sys.argv[1:])
+    if ssh_flag_error:
+        sys.stderr.write("[x] " + ssh_flag_error + "\n")
+        return 2
+
     paths.CACHEDIR.mkdir(parents=True, exist_ok=True)
 
     # Python owns full.log from here on: route stdout/stderr through a tee that
@@ -1540,13 +1590,13 @@ def main() -> int:
     ssh_password = parse_ssh_flag(sys.argv[1:])
     ssh_hash = ssh_password_hash(ssh_password) if ssh_password else None
     if ssh_hash:
-        print("[*] --ssh supplied: building the base `azarch` ISO AND the opt-in "
-              "`azarch-sshd` ISO")
-        print("    (the sshd medium sets `main`'s password from --ssh and auto-runs "
-              "`azarch --sshd-hypervisor` at boot).")
+        print("[*] --ssh supplied: building the base `azarch-desktop` ISO AND the opt-in "
+              "`azarch-desktop-ssh` ISO")
+        print("    (the ssh medium sets `main`'s password from --ssh, enables sshd, and "
+              "opens port 22 at boot).")
     else:
-        print("[*] Building the base `azarch` ISO only. Pass --ssh=\"<PASSWORD>\" to "
-              "ALSO build the opt-in `azarch-sshd` ISO.")
+        print("[*] Building the base `azarch-desktop` ISO only (ssh disabled). Pass "
+              "--ssh=\"<PASSWORD>\" to ALSO build the opt-in `azarch-desktop-ssh` ISO.")
 
     offline = cache_is_complete()
     _stale_cache_notice(offline)

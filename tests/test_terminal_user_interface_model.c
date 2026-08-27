@@ -31,7 +31,7 @@ static void test_top_level_is_network_theme_wallpaper(void)
 {
     const AzScreen *m = az_screen_find("main");
     CHECK(m != NULL);
-    CHECK(m->nrows == 13);
+    CHECK(m->nrows == 14);
     CHECK(strcmp(m->rows[0].label, "Network") == 0);   /* Network is the first option */
     CHECK(strcmp(m->rows[1].label, "Theme") == 0);
     CHECK(strcmp(m->rows[2].label, "Wallpaper") == 0);
@@ -44,7 +44,8 @@ static void test_top_level_is_network_theme_wallpaper(void)
     CHECK(strcmp(m->rows[9].label, "Time & Date") == 0);
     CHECK(strcmp(m->rows[10].label, "Language") == 0);
     CHECK(strcmp(m->rows[11].label, "Hypervisor") == 0); /* per-directory VM defaults */
-    CHECK(strcmp(m->rows[12].label, "Backup") == 0);    /* opt-in backup entry, still last */
+    CHECK(strcmp(m->rows[12].label, "Power") == 0);      /* shutdown/restart/sleep/lock + timers */
+    CHECK(strcmp(m->rows[13].label, "Backup") == 0);    /* opt-in backup entry, still last */
     /* the entry title is the (re)named "Az'arch Settings" */
     CHECK(strcmp(m->title, "Az'arch Settings") == 0);
 }
@@ -56,8 +57,9 @@ static void test_screen_set_is_exactly_expected(void)
     const char *want[] = {
         "main", "theme", "wallpaper", "network",
         "network.wifi", "network.wired", "network.bluetooth",
-        "network.airplane", "network.firewall",
-        "volume", "brightness", "machine", "timedate", "language", "hypervisor", "backup",
+        "network.airplane", "network.firewall", "network.ssh",
+        "volume", "brightness", "machine", "timedate", "language", "hypervisor",
+        "power", "backup",
         /* Default Applications: the category list + one screen per category (Mail excluded --
          * no mail client shipped, so the TUI does not surface it). */
         "defaultapps",
@@ -168,12 +170,13 @@ static void test_machine_type_screen(void)
  * sudo (the configurator writes the user's own config). */
 static void test_backup_screen(void)
 {
-    /* the ROWS_MAIN entry that opens it -- LAST row, with the target-summary status */
+    /* the ROWS_MAIN entry that opens it -- LAST row (index 13 now, after Power), with the
+     * target-summary status */
     const AzScreen *main_s = az_screen_find("main");
-    CHECK(strcmp(main_s->rows[12].label, "Backup") == 0);
-    CHECK(main_s->rows[12].kind == AZ_ACT_SCREEN);
-    CHECK(strcmp(main_s->rows[12].target, "backup") == 0);
-    CHECK(main_s->rows[12].status == az_status_backup);
+    CHECK(strcmp(main_s->rows[13].label, "Backup") == 0);
+    CHECK(main_s->rows[13].kind == AZ_ACT_SCREEN);
+    CHECK(strcmp(main_s->rows[13].target, "backup") == 0);
+    CHECK(main_s->rows[13].status == az_status_backup);
 
     const AzScreen *b = az_screen_find("backup");
     CHECK(b != NULL);
@@ -646,7 +649,7 @@ static void test_network_subscreens_have_current_and_no_row_spam(void)
 {
     const char *subs[] = {
         "network.wifi", "network.wired", "network.bluetooth",
-        "network.airplane", "network.firewall",
+        "network.airplane", "network.firewall", "network.ssh",
     };
     for (size_t i = 0; i < sizeof subs / sizeof subs[0]; i++) {
         const AzScreen *s = az_screen_find(subs[i]);
@@ -659,6 +662,114 @@ static void test_network_subscreens_have_current_and_no_row_spam(void)
      * summary of each sub-screen -- not a repeated label), so those DO have a status. */
     const AzScreen *net = az_screen_find("network");
     for (int r = 0; r < net->nrows; r++) CHECK(net->rows[r].status != NULL);
+}
+
+/* The SSH Server screen (Network > SSH Server -- the spec's streamlined ssh entry). It must
+ * resolve, show sshd state via a screen-level Current: probe, and carry rows to START/STOP the
+ * server, run the hypervisor bring-up (`azarch --sshd-hypervisor`), and open/close :22 -- each
+ * privileged (needs_root) and teaching a base command + the azarch wrapper. */
+static void test_ssh_server_screen(void)
+{
+    const AzScreen *s = az_screen_find("network.ssh");
+    CHECK(s != NULL);
+    CHECK(strcmp(s->title, "SSH Server") == 0);
+    CHECK(s->current == az_status_ssh);            /* sshd active/inactive shown once, up top */
+    /* the subtitle explains the security implication (the spec: brief explanation + notice) */
+    CHECK(strstr(s->subtitle, "ssh") != NULL || strstr(s->subtitle, "SSH") != NULL);
+    CHECK(strstr(s->subtitle, "22") != NULL);       /* mentions the port */
+    int has_start = 0, has_stop = 0, has_hyper = 0, has_open = 0;
+    for (int i = 0; i < s->nrows; i++) {
+        CHECK(s->rows[i].kind == AZ_ACT_APPLY);
+        CHECK(s->rows[i].needs_root == 1);          /* every ssh action secures sudo first */
+        CHECK(az_row_command(&s->rows[i]) != NULL); /* teaches the azarch wrapper */
+        CHECK(az_row_base(&s->rows[i]) != NULL);    /* AND the base command */
+        if (strcmp(s->rows[i].target, "azarch network ssh start") == 0) has_start = 1;
+        if (strcmp(s->rows[i].target, "azarch network ssh stop") == 0) has_stop = 1;
+        if (strcmp(s->rows[i].target, "azarch --sshd-hypervisor") == 0) has_hyper = 1;
+        if (strcmp(s->rows[i].target, "azarch network firewall port open 22/tcp") == 0) has_open = 1;
+    }
+    CHECK(has_start == 1);
+    CHECK(has_stop == 1);
+    CHECK(has_hyper == 1);                           /* the "button" for azarch --sshd-hypervisor */
+    CHECK(has_open == 1);
+    /* the Network parent has an "SSH Server" row that descends here, with the sshd status */
+    const AzScreen *net = az_screen_find("network");
+    int found = 0;
+    for (int i = 0; i < net->nrows; i++)
+        if (strcmp(net->rows[i].label, "SSH Server") == 0) {
+            found = 1;
+            CHECK(net->rows[i].kind == AZ_ACT_SCREEN);
+            CHECK(strcmp(net->rows[i].target, "network.ssh") == 0);
+            CHECK(net->rows[i].status == az_status_ssh);
+        }
+    CHECK(found == 1);
+}
+
+/* The Power screen (shutdown / restart / sleep / lock, with timers). It resolves, shows any
+ * pending timer via a Current: probe, and carries the immediate actions (systemctl-backed,
+ * needs_root except lock) plus AZ_ACT_PROMPT timer rows and status/cancel. */
+static void test_power_screen(void)
+{
+    const AzScreen *p = az_screen_find("power");
+    CHECK(p != NULL);
+    CHECK(strcmp(p->title, "Power") == 0);
+    CHECK(p->current == az_status_power);
+    int has_shutdown = 0, has_restart = 0, has_sleep = 0, has_lock = 0, has_prompt = 0, has_cancel = 0;
+    for (int i = 0; i < p->nrows; i++) {
+        CHECK(az_row_command(&p->rows[i]) != NULL);   /* teaches the azarch wrapper */
+        CHECK(az_row_base(&p->rows[i]) != NULL);      /* AND the base command */
+        if (strcmp(p->rows[i].target, "azarch power shutdown") == 0) {
+            has_shutdown = 1; CHECK(p->rows[i].needs_root == 1);
+        }
+        if (strcmp(p->rows[i].target, "azarch power restart") == 0) has_restart = 1;
+        if (strcmp(p->rows[i].target, "azarch power sleep") == 0) has_sleep = 1;
+        if (strcmp(p->rows[i].target, "azarch power lock") == 0) {
+            has_lock = 1; CHECK(p->rows[i].needs_root == 0);   /* locking needs no root */
+        }
+        if (p->rows[i].kind == AZ_ACT_PROMPT) {
+            has_prompt = 1;
+            CHECK(p->rows[i].prompt != NULL);          /* asks for a duration */
+        }
+        if (strcmp(p->rows[i].target, "azarch power shutdown --cancel") == 0) has_cancel = 1;
+    }
+    CHECK(has_shutdown == 1);
+    CHECK(has_restart == 1);
+    CHECK(has_sleep == 1);
+    CHECK(has_lock == 1);
+    CHECK(has_prompt == 1);                            /* at least one scheduled-timer row */
+    CHECK(has_cancel == 1);
+    /* the main menu has a Power row that descends here */
+    const AzScreen *m = az_screen_find("main");
+    int found = 0;
+    for (int i = 0; i < m->nrows; i++)
+        if (strcmp(m->rows[i].label, "Power") == 0) {
+            found = 1;
+            CHECK(strcmp(m->rows[i].target, "power") == 0);
+            CHECK(m->rows[i].status == az_status_power);
+        }
+    CHECK(found == 1);
+}
+
+/* The firewall DEFAULT-policy control (the "general incoming and outgoing rule configuration"
+ * the spec asks the UI to display AND control). The screen's Current: probe is the policy
+ * summary, and rows wrap `azarch network firewall default <in> <out>`. */
+static void test_firewall_default_policy_control(void)
+{
+    const AzScreen *fw = az_screen_find("network.firewall");
+    CHECK(fw != NULL);
+    /* Current: line now surfaces the default incoming/outgoing policy. */
+    CHECK(fw->current == az_status_firewall_policy);
+    int has_recommended = 0, has_allow_in = 0;
+    for (int i = 0; i < fw->nrows; i++) {
+        if (strcmp(fw->rows[i].target, "azarch network firewall default deny allow") == 0) {
+            has_recommended = 1;
+            CHECK(fw->rows[i].needs_root == 1);
+        }
+        if (strcmp(fw->rows[i].target, "azarch network firewall default allow allow") == 0)
+            has_allow_in = 1;
+    }
+    CHECK(has_recommended == 1);   /* deny incoming + allow outgoing (the Az'arch baseline) */
+    CHECK(has_allow_in == 1);      /* open incoming (advanced) */
 }
 
 /* Wallpaper rows request the image preview and carry the right ids. */
@@ -755,6 +866,9 @@ int main(void)
     test_row_base_command();
     test_subtitles_explain_and_wallpaper_is_accented();
     test_firewall_lists_and_configures_ports();
+    test_firewall_default_policy_control();
+    test_ssh_server_screen();
+    test_power_screen();
     test_current_is_screen_level_not_per_row();
     test_network_subscreens_have_current_and_no_row_spam();
     test_wallpaper_rows_preview();

@@ -245,7 +245,9 @@ def test_current_packages_command_lists_native_explicit_packages():
 
 def test_profiledef_names_the_sshd_iso():
     pd = mk.profiledef_sh()
-    assert 'iso_name="azarch-sshd"' in pd
+    # Method B builds the ssh flavour of the desktop line -> azarch-desktop-ssh (matches
+    # the recipe's profile.ISO_NAME_SSHD).
+    assert 'iso_name="azarch-desktop-ssh"' in pd
     assert pd.startswith("#!/usr/bin/env bash")
 
 
@@ -307,8 +309,8 @@ def test_overlay_sshd_variant_writes_hashed_shadow_and_enables_the_auto_setup(mo
     os.makedirs(os.path.join(profile, "airootfs/etc"), exist_ok=True)
     fake_hash = "$6$salt$" + "z" * 86
     mk._overlay_sshd_variant(profile, fake_hash)
-    # profiledef names the sshd ISO.
-    assert 'iso_name="azarch-sshd"' in (tmp_path / "profile/profiledef.sh").read_text()
+    # profiledef names the ssh ISO (desktop line).
+    assert 'iso_name="azarch-desktop-ssh"' in (tmp_path / "profile/profiledef.sh").read_text()
     # shadow: main hashed, root locked (the sole writer of the ISO shadow).
     shadow = (tmp_path / "profile/airootfs/etc/shadow").read_text()
     rows = {l.split(":")[0]: l.split(":")[1] for l in shadow.splitlines()}

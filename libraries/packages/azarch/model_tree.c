@@ -59,6 +59,9 @@ static const AzRow ROWS_MAIN[] = {
     /* Hypervisor: the per-directory VM runner's GLOBAL install defaults (its status summarises
      * ram/cpus/disk/net). Sits just before the opt-in Backup entry. */
     {.label="Hypervisor",   .kind=AZ_ACT_SCREEN, .target="hypervisor", .status=az_status_hypervisor},
+    /* Power: shutdown / restart / sleep / lock, with optional timers -- a completionist
+     * home in the UI for the session/power controls (the spec asks for these options here). */
+    {.label="Power",        .kind=AZ_ACT_SCREEN, .target="power",      .status=az_status_power},
     /* Backup is LAST -- an opt-in reached once, after the day-to-day settings above. */
     {.label="Backup",       .kind=AZ_ACT_SCREEN, .target="backup",     .status=az_status_backup},
 };
@@ -92,6 +95,7 @@ static const AzRow ROWS_NETWORK[] = {
     {.label="Bluetooth",     .kind=AZ_ACT_SCREEN, .target="network.bluetooth", .status=az_status_bluetooth},
     {.label="Airplane mode", .kind=AZ_ACT_SCREEN, .target="network.airplane",  .status=az_status_airplane},
     {.label="Firewall",      .kind=AZ_ACT_SCREEN, .target="network.firewall",  .status=az_status_firewall},
+    {.label="SSH Server",    .kind=AZ_ACT_SCREEN, .target="network.ssh",       .status=az_status_ssh},
 };
 
 /* The sub-screen action rows carry NO per-row .status -- the live state is shown ONCE as the
@@ -152,6 +156,78 @@ static const AzRow ROWS_FIREWALL[] = {
      .base="sudo ufw deny"},
     {.label="Delete a port rule", .kind=AZ_ACT_PORT, .target="azarch network firewall port delete", .needs_root=1, .show_output=1,
      .base="sudo ufw delete allow"},
+    /* DEFAULT-policy control (the "general incoming and outgoing rule configuration" the spec
+     * asks the UI to display AND control). The screen's "Current:" line shows the live default
+     * (az_status_firewall_policy); these rows SET it, wrapping `azarch network firewall default
+     * <in> <out>`. The Az'arch baseline is deny incoming + allow outgoing; the two "reset"
+     * rows restore it, and the openers/closers flip one side. */
+    {.label="Show default policy", .kind=AZ_ACT_APPLY, .target="azarch network firewall status", .needs_root=1, .show_output=1,
+     .base="sudo ufw status verbose"},
+    {.label="Default: deny incoming, allow outgoing (recommended)", .kind=AZ_ACT_APPLY,
+     .target="azarch network firewall default deny allow", .needs_root=1,
+     .base="sudo ufw default deny incoming && sudo ufw default allow outgoing"},
+    {.label="Allow incoming (open -- not recommended)", .kind=AZ_ACT_APPLY,
+     .target="azarch network firewall default allow allow", .needs_root=1,
+     .base="sudo ufw default allow incoming"},
+    {.label="Deny outgoing (lock down)", .kind=AZ_ACT_APPLY,
+     .target="azarch network firewall default deny deny", .needs_root=1,
+     .base="sudo ufw default deny outgoing"},
+};
+
+/* SSH Server: start/stop the ssh server and manage the firewall for it, from ONE screen (the
+ * spec: an "SSH Server" option under Network with everything -- start/stop, firewall notice,
+ * a button for `azarch --sshd-hypervisor`, brief explanations, base-vs-wrapper commands). The
+ * default desktop ships ssh OFF; this is where a user turns it on/off deliberately. "Start"
+ * runs the full bring-up (opens :22/tcp then enables sshd); the firewall row opens the port on
+ * its own; "Status" shows sshd + the port. Every action is privileged (needs_root=1). */
+static const AzRow ROWS_SSH[] = {
+    {.label="Start ssh server (open :22 + enable sshd)", .kind=AZ_ACT_APPLY,
+     .target="azarch network ssh start", .needs_root=1, .show_output=1,
+     .base="sudo ufw allow 22/tcp && sudo systemctl enable --now sshd"},
+    {.label="Stop ssh server (disable sshd + close :22)", .kind=AZ_ACT_APPLY,
+     .target="azarch network ssh stop", .needs_root=1, .show_output=1,
+     .base="sudo systemctl disable --now sshd && sudo ufw delete allow 22/tcp"},
+    {.label="Status (sshd + firewall :22)", .kind=AZ_ACT_APPLY,
+     .target="azarch network ssh status", .needs_root=1, .show_output=1,
+     .base="systemctl is-active sshd; sudo ufw status"},
+    {.label="Set up for hypervisor (install host key + start sshd)", .kind=AZ_ACT_APPLY,
+     .target="azarch --sshd-hypervisor", .needs_root=1, .show_output=1,
+     .base="sudo azarch --sshd-hypervisor"},
+    {.label="Open :22 in firewall only", .kind=AZ_ACT_APPLY,
+     .target="azarch network firewall port open 22/tcp", .needs_root=1, .show_output=1,
+     .base="sudo ufw allow 22/tcp"},
+    {.label="Close :22 in firewall only", .kind=AZ_ACT_APPLY,
+     .target="azarch network firewall port delete 22/tcp", .needs_root=1, .show_output=1,
+     .base="sudo ufw delete allow 22/tcp"},
+};
+
+/* Power: shutdown / restart / sleep / lock, plus scheduled timers. The immediate power
+ * actions call `systemctl poweroff|reboot|suspend` under the hood (needs_root=1 so the UI
+ * secures a sudo credential first); lock needs no root. The "in ..." rows are AZ_ACT_PROMPT
+ * rows: the UI collects a duration (e.g. 30m) and appends it to `azarch power <verb> --in`.
+ * Cancel/status wrap the same. The "Current:" line shows whether a timer is pending
+ * (az_status_power). This is the completionist power menu the spec asks for. */
+static const AzRow ROWS_POWER[] = {
+    {.label="Shut down now", .kind=AZ_ACT_APPLY, .target="azarch power shutdown", .needs_root=1,
+     .base="sudo systemctl poweroff"},
+    {.label="Restart now", .kind=AZ_ACT_APPLY, .target="azarch power restart", .needs_root=1,
+     .base="sudo systemctl reboot"},
+    {.label="Sleep (suspend) now", .kind=AZ_ACT_APPLY, .target="azarch power sleep", .needs_root=1,
+     .base="sudo systemctl suspend"},
+    {.label="Lock screen", .kind=AZ_ACT_APPLY, .target="azarch power lock",
+     .base="loginctl lock-session"},
+    {.label="Schedule shutdown in...", .kind=AZ_ACT_PROMPT, .target="azarch power shutdown --in",
+     .prompt="Delay (e.g. 30m, 1h, 90s, or a number of minutes):", .needs_root=1, .show_output=1,
+     .base="sudo shutdown -h +<minutes>  (via a systemd-run timer)"},
+    {.label="Schedule restart in...", .kind=AZ_ACT_PROMPT, .target="azarch power restart --in",
+     .prompt="Delay (e.g. 30m, 1h, 90s, or a number of minutes):", .needs_root=1, .show_output=1,
+     .base="sudo shutdown -r +<minutes>  (via a systemd-run timer)"},
+    {.label="Timer status", .kind=AZ_ACT_APPLY, .target="azarch power shutdown --status", .show_output=1,
+     .base="systemctl list-timers azarch-shutdown.timer"},
+    {.label="Cancel scheduled shutdown", .kind=AZ_ACT_APPLY, .target="azarch power shutdown --cancel", .needs_root=1,
+     .base="sudo systemctl stop azarch-shutdown.timer"},
+    {.label="Cancel scheduled restart", .kind=AZ_ACT_APPLY, .target="azarch power restart --cancel", .needs_root=1,
+     .base="sudo systemctl stop azarch-restart.timer"},
 };
 
 /* Machine Type: show what Az'arch recognises (PC or Laptop) via the "Current:" line, and let
@@ -491,8 +567,15 @@ static const AzScreen SCREENS[] = {
                "the internet.",
      .current=az_status_airplane,  .rows=ROWS_AIRPLANE,  .nrows=AZN(ROWS_AIRPLANE)},
     {.id="network.firewall",  .title="Firewall",
-     .subtitle="Wraps ufw: enable/disable, status numbered, and allow/deny/delete a port.",
-     .current=az_status_firewall,  .rows=ROWS_FIREWALL,  .nrows=AZN(ROWS_FIREWALL)},
+     .subtitle="Wraps ufw: enable/disable, the incoming/outgoing DEFAULT policy, status "
+               "numbered, and allow/deny/delete a port. Default policy shown above.",
+     .current=az_status_firewall_policy, .rows=ROWS_FIREWALL, .nrows=AZN(ROWS_FIREWALL)},
+    {.id="network.ssh",       .title="SSH Server",
+     .subtitle="Start/stop the ssh server (sshd) and open/close port 22/tcp. Off by default. "
+               "Exposing ssh to an untrusted network lets anyone who can reach this machine "
+               "try to log in -- use a strong password or key auth and only open :22 when "
+               "you need remote access. Wraps `azarch --sshd-hypervisor` + ufw + systemctl.",
+     .current=az_status_ssh,       .rows=ROWS_SSH,       .nrows=AZN(ROWS_SSH)},
     /* Volume: the "Current:" line shows the live level; the rows set a precise level (or step /
      * mute), each popping the bottom-middle cyan OSD bar. */
     {.id="volume",    .title="Volume",
@@ -543,6 +626,11 @@ static const AzScreen SCREENS[] = {
                "IN to ALSO copying them to a USB drive and/or Google Drive (rclone). Enabling a "
                "target validates it first; nothing here changes the local archives.",
      .current=az_status_backup,    .rows=ROWS_BACKUP,    .nrows=AZN(ROWS_BACKUP)},
+    {.id="power",     .title="Power",
+     .subtitle="Shut down, restart, sleep (suspend) or lock -- now, or on a timer. Wraps "
+               "systemctl poweroff/reboot/suspend and loginctl lock-session; scheduled actions "
+               "use a systemd-run timer (status/cancel from here). Current timer shown above.",
+     .current=az_status_power,     .rows=ROWS_POWER,     .nrows=AZN(ROWS_POWER)},
     /* Default Applications: the category LIST is static (below); the 13 per-category screens
      * (defaultapps.web, ...) are BUILT AT RUNTIME by az_screen_find -> az_da_screen, so their
      * candidate rows resolve live against the installed .desktop files and each discloses WHERE

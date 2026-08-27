@@ -14,11 +14,18 @@ from __future__ import annotations
 
 # ISO base names per build variant. mkarchiso names the artifact
 # <iso_name>-<version>-<arch>.iso, so these drive the two output filenames:
-#   base -> azarch-<ver>-x86_64.iso        (the normal live/install medium)
-#   sshd -> azarch-sshd-<ver>-x86_64.iso   (same, but auto-runs
-#                                           `azarch --sshd-hypervisor` at boot)
-ISO_NAME = "azarch"
-ISO_NAME_SSHD = "azarch-sshd"
+#   base -> azarch-desktop-<ver>-x86_64.iso      (the normal live/install medium)
+#   sshd -> azarch-desktop-ssh-<ver>-x86_64.iso  (same, but ssh is ENABLED and `main`
+#                                                 has the operator's --ssh password)
+#
+# "desktop" is the product LINE and "-ssh" its sub-flavour. This leaves room for a future
+# "server" line (azarch-server) without disturbing the base/sshd variant KEYS the build
+# branches on -- those stay `base`/`sshd`; only the artifact NAME carries the product line.
+# The two ISOs are separated in output/ by the digit-anchored glob "{iso_name}-[0-9]*.iso":
+# "azarch-desktop-2026..." matches base, "azarch-desktop-ssh-..." does not (the char after
+# "azarch-desktop-" is 's', not a digit), exactly as before the rename.
+ISO_NAME = "azarch-desktop"
+ISO_NAME_SSHD = "azarch-desktop-ssh"
 
 # The set of recognized build variants -> iso_name. compiler.run loops over the
 # runtime-selected variants (compiler._variants_for), calling iso_name_for per variant
@@ -34,7 +41,7 @@ INSTALL_DIR = "arch"
 
 
 def iso_name_for(variant: str = "base") -> str:
-    """The mkarchiso iso_name for a build variant (unknown -> base 'azarch')."""
+    """The mkarchiso iso_name for a build variant (unknown -> base 'azarch-desktop')."""
     return ISO_NAMES.get(variant, ISO_NAME)
 
 BOOTMODES = (

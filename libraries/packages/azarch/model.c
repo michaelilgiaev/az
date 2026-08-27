@@ -374,6 +374,65 @@ const char *az_status_firewall(char *buf, size_t n)
     return buf;
 }
 
+const char *az_status_power(char *buf, size_t n)
+{
+    /* The Power screen's "Current:" line: whether any azarch power timer is pending.
+     * `systemctl list-timers` lists active timers; we look for any azarch-* power timer and
+     * report "timer pending" vs "no timer". A plain read (no root). Degrades to "ready". */
+    if (!az_have("systemctl")) { snprintf(buf, n, "ready"); return buf; }
+    const char *argv[] = {"systemctl", "list-timers", "--all", "--no-legend", NULL};
+    char raw[2048] = {0};
+    if (az_capture_all(argv, raw, sizeof raw) == 0 &&
+        (strstr(raw, "azarch-shutdown.timer") || strstr(raw, "azarch-restart.timer") ||
+         strstr(raw, "azarch-sleep.timer"))) {
+        snprintf(buf, n, "timer pending");
+        return buf;
+    }
+    snprintf(buf, n, "no timer");
+    return buf;
+}
+
+const char *az_status_ssh(char *buf, size_t n)
+{
+    /* The SSH Server screen's "Current:" line: whether sshd is running. `systemctl
+     * is-active sshd` prints "active"/"inactive"/"failed" and exits 0 only when active, so
+     * we key off the printed word (falling back to the exit code). Needs no root -- it is a
+     * plain read. Degrades to "unknown" so the cell is never blank. */
+    if (!az_have("systemctl")) { snprintf(buf, n, "systemctl not found"); return buf; }
+    const char *argv[] = {"systemctl", "is-active", "sshd", NULL};
+    char raw[32] = {0};
+    az_capture(argv, raw, sizeof raw);   /* is-active exits non-zero when inactive */
+    if (raw[0]) { snprintf(buf, n, "sshd %s", raw); return buf; }
+    snprintf(buf, n, "sshd unknown");
+    return buf;
+}
+
+const char *az_status_firewall_policy(char *buf, size_t n)
+{
+    /* The firewall DEFAULT-policy screen's "Current:" line: the incoming/outgoing default.
+     * `ufw status verbose` prints a line like "Default: deny (incoming), allow (outgoing),
+     * disabled (routed)". We capture it (via sudo -n; "needs sudo" if no cached credential)
+     * and surface just the Default: summary so the user sees the current in/out policy. */
+    if (!az_have("ufw")) { snprintf(buf, n, "ufw not found"); return buf; }
+    const char *argv[] = {"sudo", "-n", "ufw", "status", "verbose", NULL};
+    char raw[512] = {0};
+    if (az_capture_all(argv, raw, sizeof raw) != 0) { snprintf(buf, n, "needs sudo"); return buf; }
+    /* Find the "Default:" line and copy its remainder. */
+    const char *d = strstr(raw, "Default:");
+    if (d) {
+        d += 8;
+        while (*d == ' ') d++;
+        char *nl = strchr(d, '\n');
+        size_t len = nl ? (size_t)(nl - d) : strlen(d);
+        if (len >= n) len = n - 1;
+        memcpy(buf, d, len);
+        buf[len] = '\0';
+        return buf;
+    }
+    snprintf(buf, n, "unknown");
+    return buf;
+}
+
 const char *az_status_network(char *buf, size_t n)
 {
     /* The top-level Network row says, in plain words, whether the machine can reach the

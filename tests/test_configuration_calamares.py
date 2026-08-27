@@ -106,6 +106,18 @@ def test_services_conf_schema_only_units():
     assert bt["action"] == "disable"
 
 
+def test_services_conf_does_not_touch_sshd_auto_setup():
+    # The ssh desktop variant enables sshd-hypervisor-setup in the airootfs, which unpackfs
+    # copies verbatim onto the installed system -- so the INSTALLED ssh desktop runs the
+    # sshd bring-up at first boot too (ssh in both live AND installed, as the user asked).
+    # Calamares' services-systemd config must therefore NOT disable it (nor stock sshd);
+    # a stray disable here would silently kill ssh on the installed ssh desktop.
+    doc = yaml.safe_load(calamares.services_conf())
+    names = {u["name"] for u in doc["units"]}
+    assert "sshd-hypervisor-setup" not in names
+    assert "sshd" not in names and "ssh" not in names
+
+
 # --- settings.conf sequence -------------------------------------------------
 
 def test_settings_sequence_uses_services_systemd():

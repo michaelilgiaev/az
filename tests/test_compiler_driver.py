@@ -39,6 +39,15 @@ def test_run_installs_ckbcomp_into_usr_bin():
     assert 'usr/bin/ckbcomp' in src
 
 
+def test_run_emits_the_cli_installer_script():
+    # The scripted (terminal/SSH) installer -- the CLI half of azarch-install -- must be
+    # baked into the ISO under /root/azarch so `azarch-install --cli` can install over SSH.
+    # Assert run() writes installer.installer_sh() to azarch-install-cli.sh (executable).
+    src = inspect.getsource(compiler.run)
+    assert 'installer.installer_sh()' in src
+    assert 'azarch-install-cli.sh' in src
+
+
 def test_emit_calamares_ships_the_window_icon_into_branding():
     # The installer's WINDOW ICON (the "Az'" tile OpenBox draws on the titlebar) is the
     # branding productIcon: a real PNG copied INTO branding/azarch/. Assert _emit_calamares

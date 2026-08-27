@@ -180,6 +180,38 @@ def test_installer_sh_ansi_escape_sequences():
     assert s.count("\\033") == 3
 
 
+def test_installer_sh_enables_sshd_on_target_for_ssh_variant():
+    # The scripted (CLI/SSH) installer does a FRESH pacstrap, so unlike the Calamares
+    # verbatim copy it must EXPLICITLY carry the ssh auto-setup unit onto the target when
+    # installing from the ssh variant -- otherwise a CLI/SSH install of azarch-desktop-ssh
+    # would end up with sshd DISABLED (the user wants ssh in BOTH live and installed). It is
+    # gated on the live enable-link's presence, so the BASE variant install stays a no-op.
+    s = installer.installer_sh()
+    # gated on the live ssh enable-link (only the ssh variant has it)
+    assert "/etc/systemd/system/multi-user.target.wants/sshd-hypervisor-setup.service" in s
+    # copies the unit + creates the enable-link on the target
+    assert "cp /etc/systemd/system/sshd-hypervisor-setup.service /mnt/etc/systemd/system/sshd-hypervisor-setup.service" in s
+    assert "ln -sf /etc/systemd/system/sshd-hypervisor-setup.service" in s
+    # and the shadow (with the --ssh hash on the ssh variant) is copied so the account has a
+    # login credential on the installed system.
+    assert "cp /etc/shadow /mnt/etc/shadow" in s
+
+
+def test_installer_sh_preseed_choice_and_disk_for_ssh():
+    # The scripted installer is the CLI/SSH install path (azarch-install --cli). For an
+    # UNATTENDED SSH install it must accept a pre-seeded disk selection via env instead of
+    # the interactive `read`: AZ_INSTALL_CHOICE (1=auto, 2=manual) and AZ_INSTALL_DISK. When
+    # they are unset the interactive prompts still run (a plain `--cli` over SSH works step
+    # by step). Assert both env hooks exist AND the interactive read is still the fallback.
+    s = installer.installer_sh()
+    assert 'if [ -n "$AZ_INSTALL_CHOICE" ]; then' in s
+    assert 'choice="$AZ_INSTALL_CHOICE"' in s
+    assert 'read -p "Enter option (1 or 2): " choice' in s   # interactive fallback kept
+    assert 'if [ -n "$AZ_INSTALL_DISK" ]; then' in s
+    assert 'manual_disk="$AZ_INSTALL_DISK"' in s
+    assert 'read -p "Enter the device name' in s             # interactive fallback kept
+
+
 def test_installer_sh_fdisk_keystrokes_uefi_and_bios():
     # UEFI carves a +1G EFI system partition; BIOS carves a +1M BIOS-boot
     # partition. The exact fdisk keystroke pipelines differ; both must ship.

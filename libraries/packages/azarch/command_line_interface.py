@@ -119,6 +119,10 @@ def usage() -> None:
         "  backup --configure|-c [--status|--disable]  Opt in to USB / Google Drive copy\n"
         "                          targets for the backup command (off by default). See "
         "`azarch backup --help`\n"
+        "  power <shutdown|restart|sleep|lock>  Power/session control with optional "
+        "timers\n"
+        "                          (--in D, --at T, --status, --cancel). Also as "
+        "`azarch shutdown` etc.\n"
         "  --sshd-hypervisor    Install host pubkey from ~/shared/authorized_keys "
         "and start sshd\n"
         "  mkazarchiso --ssh=\"<PASSWORD>\" [--out DIR]  Build the azarch-sshd ISO FROM the\n"
@@ -175,8 +179,22 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_timedate(argv[1:])
     if cmd == "language":
         return cmd_language(argv[1:])
+    if cmd == "power":
+        return cmd_power(argv[1:])
+    # The power verbs are ALSO exposed at the top level for convenience (azarch shutdown,
+    # azarch restart, azarch sleep, azarch lock), dispatching to the same handlers.
+    if cmd == "shutdown":
+        return _power_verb("shutdown", argv[1:])
+    if cmd == "restart":
+        return _power_verb("restart", argv[1:])
+    if cmd == "sleep":
+        return _power_verb("sleep", argv[1:])
+    if cmd == "lock":
+        return cmd_lock(argv[1:])
     if cmd == "--sshd-hypervisor":
         return sshd_hypervisor()
+    if cmd == "security-notice":
+        return cmd_security_notice(argv[1:])
     if cmd == "mkazarchiso":
         return cmd_mkazarchiso(argv[1:])
     if cmd in ("-h", "--help", "help"):

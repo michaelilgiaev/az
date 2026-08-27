@@ -64,8 +64,15 @@ MODULE_ORDER = [
     # command_line_interface.py.
     "backup_targets.py",
     "sshd.py",
+    # security_notice.py: the first-run `azarch security-notice` warning (shown from the
+    # live autostart). Uses only shared helpers; before command_line_interface.py, whose
+    # main() dispatches `security-notice` to cmd_security_notice by bare name.
+    "security_notice.py",
+    # power.py: `azarch power|shutdown|restart|sleep|lock` with timer flags. Standalone
+    # (bundled), before command_line_interface.py, which dispatches those verbs by bare name.
+    "power.py",
     # mkazarchiso.py: Method B -- `azarch mkazarchiso --ssh=...` repacks the LIVE system
-    # into the azarch-sshd ISO. Standalone (bundled), before command_line_interface.py,
+    # into the azarch-desktop-ssh ISO. Standalone (bundled), before command_line_interface.py,
     # whose main() dispatches the `mkazarchiso` subcommand to cmd_mkazarchiso by bare name.
     "mkazarchiso.py",
     # terminal_user_interface.py is the bare-`azarch` full-screen UI. It calls the theme/wallpaper/network

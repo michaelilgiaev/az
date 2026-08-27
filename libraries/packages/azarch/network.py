@@ -594,6 +594,43 @@ def cmd_ip(args: list[str]) -> int:
 
 
 # ---------------------------------------------------------------------------
+# ssh server (sshd) -- start/stop/status
+# ---------------------------------------------------------------------------
+def cmd_ssh(args: list[str]) -> int:
+    """`azarch network ssh <start|stop|status>` -- the SSH SERVER front-end.
+
+    start  -> `azarch --sshd-hypervisor` bring-up: install the host pubkey (if the 9p
+              shared folder is present), generate host keys, OPEN port 22/tcp in the
+              firewall, then enable+start sshd. So one command makes the box reachable
+              over ssh with the firewall opened for it.
+    stop   -> disable+stop sshd and CLOSE port 22 again (sshd_stop).
+    status -> whether sshd is active + whether :22 is allowed (sshd_status).
+
+    This is the CLI behind the TUI's Network > SSH Server screen. The default desktop
+    ships ssh OFF; this is how a user turns it on/off deliberately."""
+    verb = args[0] if args else "status"
+    if verb == "start":
+        return sshd_hypervisor()
+    if verb == "stop":
+        return sshd_stop()
+    if verb == "status":
+        return sshd_status()
+    if verb in ("--help", "-h", "help"):
+        print("Usage: azarch network ssh <start|stop|status>\n"
+              "\n"
+              "  start   Open port 22/tcp and enable+start the ssh server (sshd).\n"
+              "  stop    Disable+stop sshd and close port 22 again.\n"
+              "  status  Show whether sshd is running and whether :22 is allowed.\n"
+              "\n"
+              "Security: exposing ssh to an untrusted network lets anyone who can reach\n"
+              "this machine attempt to log in. Use a strong password or key auth, and\n"
+              "only open :22 when you need remote access.")
+        return 0
+    _err(f"azarch network ssh: unknown command: {verb}")
+    return 2
+
+
+# ---------------------------------------------------------------------------
 # top-level dispatch + usage
 # ---------------------------------------------------------------------------
 def network_usage() -> None:
@@ -611,6 +648,8 @@ def network_usage() -> None:
         "  airplane [on|off|toggle|status] Kill or restore ALL radios at once.\n"
         "  firewall ...                    status, enable/disable, default <in> <out>, "
         "port list|open|close|delete.\n"
+        "  ssh <start|stop|status>         Start/stop the ssh server (opens/closes "
+        ":22/tcp).\n"
         "  ip ...                          show, static <iface> <addr/prefix> <gw> "
         "[dns...], dynamic <iface>.\n"
         "  --help                          Show this help.\n"
@@ -637,6 +676,8 @@ def cmd_network(args: list[str]) -> int:
         return cmd_airplane(rest)
     if noun == "firewall":
         return cmd_firewall(rest)
+    if noun == "ssh":
+        return cmd_ssh(rest)
     if noun == "ip":
         return cmd_ip(rest)
     if noun in ("--help", "-h", "help"):

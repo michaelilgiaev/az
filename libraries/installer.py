@@ -38,7 +38,16 @@ echo -e "${RED}WARNING:${RESET} This will erase everything on the targeted disk 
 echo "Select an installation option:"
 echo "1. Automatically detect largest disk (excludes USB drives) and install azarch"
 echo "2. Manually select disk to erase and install azarch"
-read -p "Enter option (1 or 2): " choice
+# Non-interactive pre-seed (used by `azarch-install --cli --auto` / `--disk`, so an SSH
+# install can run unattended): if AZ_INSTALL_CHOICE is set we use it instead of prompting;
+# AZ_INSTALL_DISK pre-answers the manual device prompt. Unset -> the interactive read runs,
+# so a plain `azarch-install --cli` over SSH still works step by step.
+if [ -n "$AZ_INSTALL_CHOICE" ]; then
+    choice="$AZ_INSTALL_CHOICE"
+    echo "Enter option (1 or 2): $choice (pre-seeded)"
+else
+    read -p "Enter option (1 or 2): " choice
+fi
 
 # Convert size strings to bytes
 convert_to_bytes() {
@@ -62,7 +71,12 @@ if [ "$choice" = "2" ]; then
         echo "$line"
     done
     echo "----------------"
-    read -p "Enter the device name (e.g., sda or nvme0n1): " manual_disk
+    if [ -n "$AZ_INSTALL_DISK" ]; then
+        manual_disk="$AZ_INSTALL_DISK"
+        echo "Enter the device name (e.g., sda or nvme0n1): $manual_disk (pre-seeded)"
+    else
+        read -p "Enter the device name (e.g., sda or nvme0n1): " manual_disk
+    fi
     if [ ! -b "/dev/$manual_disk" ]; then
         echo "Invalid disk selected!"
         exit 1
@@ -217,6 +231,23 @@ mkdir -p /mnt/etc/profile.d
 cp /root/azarch/first-boot-setup.sh /mnt/home/main/.config/first-boot/first-boot-setup.sh
 cp /root/azarch/first-boot-setup.service /mnt/etc/systemd/system/first-boot-setup.service
 cp /root/azarch/first-boot-setup.conf /mnt/home/main/.config/first-boot/first-boot-setup.conf
+
+# SSH VARIANT -> carry ssh onto the INSTALLED system. The GUI (Calamares) install copies
+# the whole live rootfs verbatim (enable-link included), but this SCRIPTED installer does a
+# fresh pacstrap, so the sshd auto-setup unit would NOT be enabled on the target unless we
+# copy it here. We do it ONLY when the LIVE medium is the ssh variant (its enable-link is
+# present) -- so a CLI/SSH install of azarch-desktop-ssh gives an installed system that
+# ALSO enables sshd on first boot (matching the live session). The `main` account already
+# carries the --ssh password hash via the /etc/shadow copy above, so the installed system
+# is reachable with that password. On the base variant this block is a no-op (no link ->
+# nothing copied), so the base install stays ssh-disabled.
+if [ -e /etc/systemd/system/multi-user.target.wants/sshd-hypervisor-setup.service ]; then
+    echo "[*] SSH variant: enabling sshd auto-setup on the installed system..."
+    cp /etc/systemd/system/sshd-hypervisor-setup.service /mnt/etc/systemd/system/sshd-hypervisor-setup.service
+    mkdir -p /mnt/etc/systemd/system/multi-user.target.wants
+    ln -sf /etc/systemd/system/sshd-hypervisor-setup.service \\
+        /mnt/etc/systemd/system/multi-user.target.wants/sshd-hypervisor-setup.service
+fi
 
 echo "[*] Copying pacman configuration..."
 mkdir -p /mnt/etc

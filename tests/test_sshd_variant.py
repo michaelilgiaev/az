@@ -1,25 +1,28 @@
-"""The `azarch-sshd` build variant: the second ISO a single build produces,
-identical to the base one but named azarch-sshd-<ver>-x86_64.iso and auto-running
-`azarch --sshd-hypervisor` at boot.
+"""The `sshd` build variant: the opt-in second ISO named azarch-desktop-ssh-<ver>-
+x86_64.iso, identical to the base `azarch-desktop` one but with ssh ENABLED (it
+auto-runs `azarch --sshd-hypervisor` at boot) and `main` carrying the operator's
+build-time --ssh password.
 
-A single `compile.sh` run builds BOTH ISOs (there is no build-time flag to pick
-one): every step up to mkarchiso is variant-independent, so the flow is
-compile.sh -> compiler.py -> compiler.run(), which loops over compiler.VARIANTS
-("base", "sshd") applying each variant's tiny differences via compiler._apply_variant
-and running one mkarchiso pass each.
+The base/desktop ISO is ALWAYS built; the ssh ISO is OPT-IN via `--ssh="<PASSWORD>"`
+(no default password is ever shipped -- see data/PROMPT.md DECISION 2). A bare/blank
+`--ssh` is a HARD ERROR, not a silent base-only build (see check_ssh_flag). The flow is
+compile.sh -> compiler.py -> compiler.run(), which loops over the RUNTIME-selected
+variants (compiler._variants_for: base always, sshd only with a password) applying each
+variant's tiny differences via compiler._apply_variant and running one mkarchiso pass
+each.
 
-The two observable per-variant effects, both checked here as pure data/emit (no
-mkarchiso):
+The observable per-variant effects, checked here as pure data/emit (no mkarchiso):
 
-  1. profiledef's iso_name flips azarch -> azarch-sshd, so mkarchiso writes the
-     azarch-sshd-*.iso filename the prompt asked for.
-  2. _apply_variant emits + enables sshd-hypervisor-setup.service (a systemd
-     oneshot that runs `azarch --sshd-hypervisor`) ONLY for the sshd variant; the
-     base ISO gets NEITHER the unit nor its enable link, so there it stays a manual
-     `sudo azarch --sshd-hypervisor`.
+  1. profiledef's iso_name flips azarch-desktop -> azarch-desktop-ssh, so mkarchiso
+     writes the azarch-desktop-ssh-*.iso filename.
+  2. _apply_variant emits + enables sshd-hypervisor-setup.service (a systemd oneshot that
+     runs `azarch --sshd-hypervisor`) ONLY for the sshd variant; the base ISO gets NEITHER
+     the unit nor its enable link, so there it stays ssh-disabled.
+  3. the sshd variant's /etc/shadow carries the operator's real hash for `main`; the base
+     ISO ships LOCKED accounts (no password login).
 
-A drift in any of these silently ships the wrong ISO name or an sshd ISO that does
-NOT actually start sshd on boot (or a base ISO that unexpectedly does).
+A drift in any of these silently ships the wrong ISO name, an ssh ISO that does NOT
+actually start sshd on boot, or a base ISO that unexpectedly does.
 """
 
 from __future__ import annotations
@@ -27,6 +30,7 @@ from __future__ import annotations
 import inspect
 import os
 import re
+import sys
 
 import pytest
 
@@ -54,9 +58,37 @@ def test_parse_ssh_flag_absent_is_none():
 
 
 def test_parse_ssh_flag_empty_value_is_none():
-    # `--ssh=` with a blank value is treated as absent (no sshd ISO), never as a blank
-    # password. This is the "empty string -> no sshd ISO" rule.
+    # `--ssh=` with a blank value yields None from the VALUE parser (there is no
+    # password). Whether that is a hard error is decided in main() via ssh_flag_present:
+    # a PRESENT-but-blank flag is an error, an ABSENT flag builds base-only. parse_ssh_flag
+    # only reports the value; it never conflates the two.
     assert compiler.parse_ssh_flag(["--ssh="]) is None
+
+
+# --- ssh_flag_present: three-state detection (absent vs present-but-blank) ----
+
+def test_ssh_flag_present_detects_bare_and_valued_forms():
+    # The flag is "present" whether written bare (`--ssh`), empty (`--ssh=`), quoted-empty
+    # (`--ssh=""` arrives as `--ssh=`) or with a value (`--ssh=pw`). This is what lets
+    # main() distinguish "operator asked for ssh but forgot the password" (hard stop) from
+    # "operator never mentioned ssh" (base-only, fine).
+    assert compiler.ssh_flag_present(["--ssh"]) is True
+    assert compiler.ssh_flag_present(["--ssh="]) is True
+    assert compiler.ssh_flag_present(["--ssh=pw"]) is True
+    assert compiler.ssh_flag_present(["--full-compile", "--ssh"]) is True
+
+
+def test_ssh_flag_absent_is_not_present():
+    assert compiler.ssh_flag_present([]) is False
+    assert compiler.ssh_flag_present(["--full-compile"]) is False
+    # A DIFFERENT flag that merely starts with the letters must not match.
+    assert compiler.ssh_flag_present(["--sshfoo"]) is False
+
+
+def test_ssh_flag_present_bare_flag_has_no_value():
+    # A bare `--ssh` (no '=') is "present" but carries no value -> main() must hard-stop.
+    assert compiler.ssh_flag_present(["--ssh"]) is True
+    assert compiler.parse_ssh_flag(["--ssh"]) is None
 
 
 def test_parse_ssh_flag_returns_password():
@@ -99,6 +131,51 @@ def test_ssh_password_hash_rejects_blank():
     # of parse_ssh_flag returning None for "").
     with pytest.raises(ValueError):
         compiler.ssh_password_hash("")
+
+
+# --- the --ssh hard stop: present-but-blank must ABORT, not silently base-only ---
+
+def test_ssh_flag_error_none_when_absent():
+    # No --ssh at all: base-only build, no error. check_ssh_flag returns None so main()
+    # proceeds normally.
+    assert compiler.check_ssh_flag([]) is None
+    assert compiler.check_ssh_flag(["--full-compile"]) is None
+
+
+def test_ssh_flag_error_none_when_valued():
+    # --ssh=pw: a real password, no error (the ssh ISO will build).
+    assert compiler.check_ssh_flag(["--ssh=hunter2"]) is None
+
+
+def test_ssh_flag_error_message_when_present_but_blank():
+    # The reported bug: `--ssh` (bare) and `--ssh=` built base-only with NO explanation.
+    # Now they must yield an explanatory error string (which main() prints to stderr and
+    # exits non-zero on) instead of silently proceeding.
+    for argv in (["--ssh"], ["--ssh="], ["--full-compile", "--ssh"]):
+        msg = compiler.check_ssh_flag(argv)
+        assert msg, f"blank --ssh must produce an error message: {argv!r}"
+        assert "--ssh" in msg
+        # It must EXPLAIN that a password is required (the user's complaint was the lack
+        # of an explanation), and tell them the correct form.
+        assert "password" in msg.lower()
+        assert '--ssh="' in msg  # points at the correct --ssh="<PASSWORD>" form
+
+
+def test_main_exits_nonzero_on_blank_ssh(monkeypatch, capsys):
+    # End-to-end: main() must ABORT (non-zero) before doing any build work when --ssh is
+    # present but blank. We stub the heavy build entry points so a regression that lets it
+    # fall through would try to build and fail differently -- but the guard should return
+    # first. run() is stubbed to raise so we can PROVE it was never reached.
+    monkeypatch.setattr(sys, "argv", ["compiler", "--ssh"])
+
+    def _boom(*a, **k):
+        raise AssertionError("run() must NOT be reached when --ssh is blank")
+
+    monkeypatch.setattr(compiler, "run", _boom)
+    rc = compiler.main()
+    assert rc != 0
+    err = capsys.readouterr().err
+    assert "--ssh" in err and "password" in err.lower()
 
 
 # --- run() selects variants at runtime from the ssh hash ---------------------
@@ -174,22 +251,25 @@ def _iso_name(pd: str) -> str:
 
 
 def test_iso_name_for_maps_variants():
-    assert profile.iso_name_for("base") == "azarch"
-    assert profile.iso_name_for("sshd") == "azarch-sshd"
+    # The base/default ISO is the "desktop" product line; the ssh flavour is
+    # "desktop-ssh" (a future "server" line slots in as azarch-server without touching
+    # the base/sshd variant keys). See profile.ISO_NAMES.
+    assert profile.iso_name_for("base") == "azarch-desktop"
+    assert profile.iso_name_for("sshd") == "azarch-desktop-ssh"
     # An unknown variant must fall back to the base name, never crash the build.
-    assert profile.iso_name_for("nonsense") == "azarch"
-    assert profile.iso_name_for() == "azarch"
+    assert profile.iso_name_for("nonsense") == "azarch-desktop"
+    assert profile.iso_name_for() == "azarch-desktop"
 
 
-def test_profiledef_base_is_azarch():
-    assert _iso_name(profile.profiledef_sh("base")) == "azarch"
+def test_profiledef_base_is_azarch_desktop():
+    assert _iso_name(profile.profiledef_sh("base")) == "azarch-desktop"
     # Default (no arg) is the base ISO.
-    assert _iso_name(profile.profiledef_sh()) == "azarch"
+    assert _iso_name(profile.profiledef_sh()) == "azarch-desktop"
 
 
-def test_profiledef_sshd_is_azarch_sshd():
-    # This is what makes mkarchiso name the artifact azarch-sshd-<ver>-x86_64.iso.
-    assert _iso_name(profile.profiledef_sh("sshd")) == "azarch-sshd"
+def test_profiledef_sshd_is_azarch_desktop_ssh():
+    # This is what makes mkarchiso name the artifact azarch-desktop-ssh-<ver>-x86_64.iso.
+    assert _iso_name(profile.profiledef_sh("sshd")) == "azarch-desktop-ssh"
 
 
 def test_only_iso_name_differs_between_variants():
@@ -199,7 +279,7 @@ def test_only_iso_name_differs_between_variants():
     # parity is what "basically like the normal one" requires).
     base = profile.profiledef_sh("base")
     sshd = profile.profiledef_sh("sshd")
-    norm = lambda s: s.replace('iso_name="azarch-sshd"', 'iso_name="azarch"')
+    norm = lambda s: s.replace('iso_name="azarch-desktop-ssh"', 'iso_name="azarch-desktop"')
     assert norm(sshd) == base
 
 
@@ -233,6 +313,54 @@ def test_sshd_service_ordering_is_sane():
 def test_sshd_service_guarded_on_cli_presence():
     # ConditionPathExists keeps it from failing loudly if the azarch command line interface is absent.
     assert "ConditionPathExists=/usr/local/bin/azarch" in system.SSHD_HYPERVISOR_SETUP_SERVICE
+
+
+# --- base desktop ships ssh DISABLED everywhere ------------------------------
+
+def test_link_services_never_enables_stock_sshd():
+    # The default desktop must ship with ssh OFF. _link_services enables the curated daemon
+    # set (NetworkManager/CUPS/spice + the azarch oneshots) -- it must NEVER enable the
+    # stock sshd.service or ssh.socket, or the base ISO would listen on :22 with a LOCKED
+    # account (or, worse on an installed system, expose ssh unexpectedly).
+    src = inspect.getsource(compiler._link_services)
+    assert "sshd.service" not in src
+    assert "ssh.socket" not in src
+    assert "sshd.socket" not in src
+
+
+def test_base_airootfs_enables_no_ssh_unit(tmp_path):
+    # After the FULL base link + variant apply, the base airootfs must contain NO ssh
+    # enable-link of any kind under multi-user.target.wants.
+    root = tmp_path / "root"
+    compiler._link_services(root)
+    compiler._apply_variant(root.parent, root, "base", ssh_password_hash=None)
+    wants = root / "etc/systemd/system/multi-user.target.wants"
+    if wants.is_dir():
+        names = [p.name for p in wants.iterdir()]
+        assert not any("ssh" in n for n in names), f"base must enable no ssh unit: {names}"
+
+
+# --- firewall parity: base = no ports; ssh = 22/tcp --------------------------
+
+def test_base_firewall_opens_no_ports():
+    # The base desktop's live firewall baseline (installer.setup_pkgs_sh): incoming DENY,
+    # outgoing ALLOW, and NO service ports opened. It must not `ufw allow` anything but the
+    # explicit off-box deny of the timedate port.
+    import installer
+    sh = installer.setup_pkgs_sh()
+    assert "ufw default deny incoming" in sh
+    assert "ufw default allow outgoing" in sh
+    # No port is OPENED in the base baseline (the only allow-style verbs would be `allow`).
+    assert "ufw allow" not in sh
+
+
+def test_ssh_variant_opens_22_tcp_via_sshd_bringup():
+    # The ssh desktop opens :22/tcp -- via the sshd bring-up (sshd.py), on top of the same
+    # deny-incoming base. Assert the bring-up path opens 22/tcp (the user's "port 22 allow
+    # tcp"). The bring-up lives in the guest CLI; check its shipped source.
+    from packages import openbox as desktop
+    src = desktop.azarch_command_line_interface()
+    assert '"ufw", "allow", "22/tcp"' in src
 
 
 # --- always-on links: identical for both variants ---------------------------
@@ -272,7 +400,7 @@ def test_apply_variant_sshd_emits_and_enables_service(tmp_path):
     assert link.is_symlink()
     assert os.readlink(link) == "/etc/systemd/system/sshd-hypervisor-setup.service"
     # profiledef at the profile root carries the sshd iso_name.
-    assert _iso_name((W / "profiledef.sh").read_text()) == "azarch-sshd"
+    assert _iso_name((W / "profiledef.sh").read_text()) == "azarch-desktop-ssh"
 
 
 def test_apply_variant_base_has_no_sshd_service_or_link(tmp_path):
@@ -281,7 +409,7 @@ def test_apply_variant_base_has_no_sshd_service_or_link(tmp_path):
     compiler._apply_variant(W, airootfs, "base", ssh_password_hash=None)
     assert not _svc_dest(airootfs).exists()
     assert not _link_dest(airootfs).is_symlink()
-    assert _iso_name((W / "profiledef.sh").read_text()) == "azarch"
+    assert _iso_name((W / "profiledef.sh").read_text()) == "azarch-desktop"
 
 
 def test_apply_variant_base_after_sshd_removes_the_leftover(tmp_path):
@@ -343,17 +471,18 @@ def test_mkarchiso_pass_resets_work_dir_before_running():
 
 
 def test_iso_selection_glob_distinguishes_base_from_sshd():
-    # output/ can hold BOTH azarch-*.iso and azarch-sshd-*.iso. The base pass must
-    # never pick up the sshd ISO. mkarchiso names artifacts <iso_name>-<YYYY.MM.DD>-
+    # output/ can hold BOTH azarch-desktop-*.iso and azarch-desktop-ssh-*.iso. The base
+    # pass must never pick up the ssh ISO. mkarchiso names artifacts <iso_name>-<YYYY.MM.DD>-
     # <arch>.iso, so anchoring the glob with a digit after "{iso_name}-" separates
-    # them ("azarch-2026..." matches base; "azarch-sshd-..." does not, since 's' is
-    # not a digit). Emulate the exact glob _run_mkarchiso uses and assert the split.
+    # them ("azarch-desktop-2026..." matches base; "azarch-desktop-ssh-..." does not,
+    # since 's' is not a digit). Emulate the exact glob _run_mkarchiso uses.
     import fnmatch
-    both = ["azarch-2026.07.31-x86_64.iso", "azarch-sshd-2026.07.31-x86_64.iso"]
-    base_hits = [f for f in both if fnmatch.fnmatch(f, "azarch-[0-9]*.iso")]
-    sshd_hits = [f for f in both if fnmatch.fnmatch(f, "azarch-sshd-[0-9]*.iso")]
-    assert base_hits == ["azarch-2026.07.31-x86_64.iso"]
-    assert sshd_hits == ["azarch-sshd-2026.07.31-x86_64.iso"]
+    both = ["azarch-desktop-2026.07.31-x86_64.iso",
+            "azarch-desktop-ssh-2026.07.31-x86_64.iso"]
+    base_hits = [f for f in both if fnmatch.fnmatch(f, "azarch-desktop-[0-9]*.iso")]
+    sshd_hits = [f for f in both if fnmatch.fnmatch(f, "azarch-desktop-ssh-[0-9]*.iso")]
+    assert base_hits == ["azarch-desktop-2026.07.31-x86_64.iso"]
+    assert sshd_hits == ["azarch-desktop-ssh-2026.07.31-x86_64.iso"]
     # And the source really uses the digit-anchored glob (not a bare "-*.iso").
     import inspect
     src = inspect.getsource(compiler._run_mkarchiso)

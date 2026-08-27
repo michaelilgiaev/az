@@ -113,6 +113,14 @@ def wallpaper_metadata_json(wp_id: str) -> str:
 # a menu launcher.
 INSTALL_WRAPPER_PATH = "/usr/local/bin/azarch-install"
 
+# The scripted (terminal) installer the CLI/SSH path runs, baked into the live ISO under
+# the azarch payload dir (/root/azarch) alongside chroot-setup.sh + packages.x86_64 + the
+# offline repo it pacstraps from. `azarch-install --cli` execs it via sudo. It is the SAME
+# partition/pacstrap/chroot-setup pipeline as the first-boot installer, authored in
+# libraries/installer.installer_sh, so a headless SSH install produces the same system a
+# GUI Calamares install would.
+INSTALL_CLI_SCRIPT_PATH = "/root/azarch/azarch-install-cli.sh"
+
 # The Calamares installer window's WM_CLASS. VERIFIED with `xprop WM_CLASS` on the running
 # installer in the live VM: BOTH fields are the lowercase "calamares" --
 #     WM_CLASS(STRING) = "calamares", "calamares"
@@ -1307,6 +1315,14 @@ command -v setxkbmap >/dev/null 2>&1 && \\
 if [ -x '{INSTALL_WRAPPER_PATH}' ]; then
     ( sleep 2; '{INSTALL_WRAPPER_PATH}' ) &
 fi
+
+# 8. LIVE-ONLY -- first-run SECURITY NOTICE (once). `azarch security-notice` explains that
+#    the base desktop ships with password login + ssh OFF, and that enabling either exposes
+#    the box over the network. It SELF-GATES: it stays quiet on the ssh variant (ssh was
+#    chosen deliberately) and once a real login password is set, and self-silences after the
+#    first show. Stripped from the installed autostart (the installed system has a real
+#    user password, so the warning does not apply there).
+command -v azarch >/dev/null 2>&1 && ( sleep 4; azarch security-notice ) &
 """
 
 
@@ -1523,29 +1539,110 @@ def install_wrapper_sh() -> str:
     leaving it scaled by the DPI channel alone like everything else (~1.35x -> a
     centered ~1387x758). This is the ONE app that needed the explicit factor dropped;
     the session env is unchanged so the rest of the desktop keeps its Qt factor."""
-    return """\
+    return f"""\
 #!/bin/sh
-# azarch-install -- privileged Calamares launcher for the live session.
-# `main` has passwordless sudo on the live medium, so this needs no polkit agent.
+# azarch-install -- the Az'arch installer launcher for the live session.
 #
-# XDG_RUNTIME_DIR is unset before elevating: `sudo -E` would otherwise pass main's
-# /run/user/1000 through to the root Qt process, which then logs a "runtime directory
-# is owned by uid 1000, not 0" warning. DISPLAY/XAUTHORITY (the load-bearing X vars)
-# are still preserved by -E, and root can read main's ~/.Xauthority, so Calamares
-# connects to the running X server fine.
+# TWO front-ends over the SAME install:
+#   * GUI (default when a display is present): the Calamares graphical installer.
+#   * CLI (`--cli`, or automatically when there is no display -- e.g. over SSH): the
+#     scripted terminal installer at {INSTALL_CLI_SCRIPT_PATH}. This is what lets a user
+#     install Az'arch entirely over an SSH session, with no X.
 #
-# No `-c /etc/calamares`: that flag overrides the app-data dir and makes Calamares look
-# for qml/ under /etc/calamares (which does not exist), a fatal startup error.
-# Calamares already reads /etc/calamares/settings.conf and branding by default.
+# `main` has passwordless sudo on the live medium, so neither path needs a polkit agent.
 #
-# QT_SCALE_FACTOR=1 for the installer ONLY: the session exports QT_SCALE_FACTOR=<scale>
-# AND a high Xft.dpi (=96*scale), and Qt would apply BOTH -- double-scaling Calamares to
-# ~scale*scale (~1.82x at 1.35), nearly full-screen. Pinning the factor to 1 leaves it
-# scaled by the DPI channel alone, like every other app (~1.35x). `env QT_SCALE_FACTOR=1`
-# re-sets it ACROSS the sudo boundary (sudo -E would carry the session's value into root).
-unset XDG_RUNTIME_DIR
-export QT_SCALE_FACTOR=1
-exec sudo -E env QT_SCALE_FACTOR=1 calamares
+# Usage:
+#   azarch-install                 Launch the installer (GUI if a display exists, else CLI).
+#   azarch-install --gui           Force the Calamares GUI installer.
+#   azarch-install --cli           Force the scripted terminal installer (interactive).
+#   azarch-install --cli --auto    CLI install onto the largest fixed disk, no prompts.
+#   azarch-install --cli --disk sdX CLI install onto /dev/sdX, no prompts.
+#   azarch-install --help          Show this help.
+
+usage() {{
+    cat <<'EOF'
+Usage: azarch-install [--gui | --cli [--auto | --disk <dev>]] [--help]
+
+  (no option)         Launch the installer. Uses the Calamares GUI when a display is
+                      available, otherwise falls back to the scripted terminal installer
+                      (so `azarch-install` over SSH just works).
+  --gui               Force the Calamares graphical installer.
+  --cli               Force the scripted terminal installer (asks auto vs manual disk).
+  --cli --auto        Non-interactive: install onto the largest FIXED disk (skips
+                      removable/USB), no prompts.
+  --cli --disk <dev>  Non-interactive: install onto /dev/<dev> (e.g. sda, nvme0n1).
+  --help, -h          Show this help.
+
+The CLI and GUI installers produce the same system (same packages, same chroot setup).
+Both ERASE the target disk. Run over SSH with --cli to install headlessly.
+EOF
+}}
+
+run_gui() {{
+    # XDG_RUNTIME_DIR is unset before elevating: `sudo -E` would otherwise pass main's
+    # /run/user/1000 through to the root Qt process, which then logs a "runtime directory
+    # is owned by uid 1000, not 0" warning. DISPLAY/XAUTHORITY (the load-bearing X vars)
+    # are still preserved by -E, and root can read main's ~/.Xauthority, so Calamares
+    # connects to the running X server fine.
+    #
+    # No `-c /etc/calamares`: that flag overrides the app-data dir and makes Calamares look
+    # for qml/ under /etc/calamares (which does not exist), a fatal startup error.
+    # Calamares already reads /etc/calamares/settings.conf and branding by default.
+    #
+    # QT_SCALE_FACTOR=1 for the installer ONLY: the session exports QT_SCALE_FACTOR=<scale>
+    # AND a high Xft.dpi (=96*scale), and Qt would apply BOTH -- double-scaling Calamares to
+    # ~scale*scale (~1.82x at 1.35), nearly full-screen. Pinning it to 1 leaves it scaled by
+    # the DPI channel alone (~1.35x). `env QT_SCALE_FACTOR=1` re-sets it ACROSS the sudo
+    # boundary (sudo -E would carry the session's value into root).
+    unset XDG_RUNTIME_DIR
+    export QT_SCALE_FACTOR=1
+    exec sudo -E env QT_SCALE_FACTOR=1 calamares
+}}
+
+run_cli() {{
+    # The scripted installer needs root and reads its payload from /root/azarch (mode 0750,
+    # readable only by root -- so the existence check goes through sudo, not a bare test as
+    # `main`). It honours AZ_INSTALL_CHOICE (1=auto largest disk, 2=manual) and
+    # AZ_INSTALL_DISK to run without prompts; with neither set it prompts interactively
+    # (fine over SSH).
+    if ! sudo test -r '{INSTALL_CLI_SCRIPT_PATH}'; then
+        echo "azarch-install: CLI installer not found at {INSTALL_CLI_SCRIPT_PATH}" >&2
+        exit 1
+    fi
+    exec sudo -E env ${{AZ_INSTALL_CHOICE:+AZ_INSTALL_CHOICE=$AZ_INSTALL_CHOICE}} \\
+        ${{AZ_INSTALL_DISK:+AZ_INSTALL_DISK=$AZ_INSTALL_DISK}} \\
+        bash '{INSTALL_CLI_SCRIPT_PATH}'
+}}
+
+mode=auto
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --gui) mode=gui ;;
+        --cli) mode=cli ;;
+        --auto) AZ_INSTALL_CHOICE=1; export AZ_INSTALL_CHOICE ;;
+        --disk) shift; AZ_INSTALL_CHOICE=2; AZ_INSTALL_DISK="$1"
+                export AZ_INSTALL_CHOICE AZ_INSTALL_DISK ;;
+        --disk=*) AZ_INSTALL_CHOICE=2; AZ_INSTALL_DISK="${{1#--disk=}}"
+                export AZ_INSTALL_CHOICE AZ_INSTALL_DISK ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "azarch-install: unknown option: $1" >&2; usage >&2; exit 2 ;;
+    esac
+    shift
+done
+
+case "$mode" in
+    gui) run_gui ;;
+    cli) run_cli ;;
+    auto)
+        # No explicit mode: GUI when a display is present, else the CLI installer (this is
+        # the SSH path -- no DISPLAY -> scripted installer).
+        if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; then
+            run_gui
+        else
+            run_cli
+        fi
+        ;;
+esac
 """
 
 

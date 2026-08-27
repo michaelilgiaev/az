@@ -451,6 +451,18 @@ int main(void)
     if (tcgetattr(STDIN_FILENO, &g_orig_termios) != 0)
         return no_tty_pointer();
 
+    /* SUDO FIX: privileged applies run `azarch <subcmd>`, which internally calls
+     * `sudo <tool>`. We CAPTURE those applies with stdin from /dev/null (no hidden
+     * prompt) and wrap them in `timeout 30` -- so if the inner sudo ever tried to PROMPT
+     * (an expired/absent credential), it would read EOF and stall until timeout, and the
+     * user would see only "reported an error". We already secure the sudo credential in
+     * the UI (the masked password prompt) BEFORE running a needs_root apply, so the inner
+     * sudo should use the cached timestamp. This env var tells the azarch CLI's _sudo to
+     * add `-n` (non-interactive): with the credential cached it succeeds silently; if it is
+     * somehow missing it FAILS FAST with sudo's own clear message instead of hanging on a
+     * dead prompt. Set once here so every apply the UI spawns inherits it. */
+    setenv("AZARCH_SUDO_NONINTERACTIVE", "1", 1);
+
     atexit(on_exit_restore);
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);

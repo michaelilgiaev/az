@@ -180,6 +180,17 @@ const char *az_status_wired(char *buf, size_t n);
 const char *az_status_bluetooth(char *buf, size_t n);
 const char *az_status_airplane(char *buf, size_t n);
 const char *az_status_firewall(char *buf, size_t n);
+/* SSH Server: whether sshd is running ("sshd active"/"sshd inactive"). `systemctl is-active
+ * sshd` -- a plain read, no root. This is the "Current:" line of the Network > SSH Server
+ * screen the user asked for. */
+const char *az_status_ssh(char *buf, size_t n);
+/* Firewall DEFAULT policy: the incoming/outgoing default summary ("deny (incoming), allow
+ * (outgoing), ...") pulled from `ufw status verbose`'s Default: line. Reports "needs sudo"
+ * when no cached credential. Backs the firewall default-policy control the user asked for. */
+const char *az_status_firewall_policy(char *buf, size_t n);
+/* Power: whether any azarch power timer (shutdown/restart/sleep) is pending ("timer pending"
+ * vs "no timer"), read from `systemctl list-timers`. The "Current:" line of the Power screen. */
+const char *az_status_power(char *buf, size_t n);
 const char *az_status_network(char *buf, size_t n);
 const char *az_status_machine(char *buf, size_t n);
 const char *az_status_gpu(char *buf, size_t n);
