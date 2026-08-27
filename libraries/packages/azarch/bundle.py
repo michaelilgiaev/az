@@ -64,6 +64,10 @@ MODULE_ORDER = [
     # command_line_interface.py.
     "backup_targets.py",
     "sshd.py",
+    # mkazarchiso.py: Method B -- `azarch mkazarchiso --ssh=...` repacks the LIVE system
+    # into the azarch-sshd ISO. Standalone (bundled), before command_line_interface.py,
+    # whose main() dispatches the `mkazarchiso` subcommand to cmd_mkazarchiso by bare name.
+    "mkazarchiso.py",
     # terminal_user_interface.py is the bare-`azarch` full-screen UI. It calls the theme/wallpaper/network
     # helpers by bare name, so it MUST be bundled after all of them; and before command_line_interface.py,
     # whose main() dispatches the no-argument case to run_terminal_user_interface().

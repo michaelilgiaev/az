@@ -10,17 +10,66 @@ from __future__ import annotations
 
 # --- User / group databases -------------------------------------------------
 # Baked into airootfs/etc so the live ISO has the `main` autologin user (uid 1000,
-# gid 998=autologin) and a passwordless root. Blank password fields = no password.
+# gid 998=autologin) and root.
+#
+# SECURITY (DECISION 1 -- Ubuntu/casper standard): the password fields (index 1)
+# are LOCKED (`!`), NOT blank. A blank field means "empty password accepted": if any
+# service ever listens (an operator-added sshd, a serial getty), a remote party logs
+# in with NO password -- the exact hole the old blank fields opened when the ISO was
+# port-forwarded / in a DMZ. A locked `!` cannot be authenticated by ANY input string,
+# so password login is IMPOSSIBLE, while autologin (getty/DM bypasses the password PAM
+# entirely) still drops straight into the `main` desktop. `sudo` for the live user is
+# unaffected: SUDOERS_MAIN is NOPASSWD, which short-circuits authentication before any
+# password is ever consulted (an adversary check confirmed rootpw is therefore inert
+# for `main`). See shadow_for() for the opt-in sshd variant, which replaces `main`'s
+# locked field with a real sha-512 hash supplied at build time (never blank, never a
+# shipped default).
 
 PASSWD = """\
 root:x:0:0:root:/root:/usr/bin/bash
 main:x:1000:998::/home/main:/usr/bin/bash
 """
 
-SHADOW = """\
-root::14871::::::
-main::14871::::::
+# The LOCKED password field. `!` and `*` are equivalent "no valid password" markers;
+# `!` is the conventional locked-account value (matches `passwd -l`).
+LOCKED_PASSWORD = "!"
+
+SHADOW = f"""\
+root:{LOCKED_PASSWORD}:14871::::::
+main:{LOCKED_PASSWORD}:14871::::::
 """
+
+
+def shadow_for(main_password_hash: str | None = None) -> str:
+    """Return the /etc/shadow contents for a build variant.
+
+    * main_password_hash is None  -> the base/default SHADOW: BOTH accounts LOCKED.
+      This is what the always-built desktop ISO ships (DECISION 1): no password login
+      is possible for anyone, autologin still works.
+
+    * main_password_hash is a crypt hash (starts with `$`) -> the sshd variant's
+      shadow: `main` carries that real sha-512 hash (the operator's --ssh password,
+      hashed at BUILD TIME), root stays LOCKED. This is the ONLY account sshd accepts,
+      so the operator can log in remotely with the password they chose, and nobody can
+      log in as root by password (DECISION 2: no blank field, no shipped default).
+
+    A non-hash value (blank, or a plaintext password) is REJECTED: the --ssh flag must
+    resolve to a proper hash before it ever reaches shadow, so a plaintext credential
+    can never be silently baked into the image. `!`/`*` (already-locked) are allowed so
+    callers can pass the base value back through unchanged.
+    """
+    if main_password_hash is None:
+        return SHADOW
+    if main_password_hash not in ("!", "*") and not main_password_hash.startswith("$"):
+        raise ValueError(
+            "shadow_for: main_password_hash must be a crypt hash (starts with '$') or a "
+            f"locked marker ('!'/'*'), never a blank/plaintext password (got {main_password_hash!r}). "
+            "Hash the --ssh password with `openssl passwd -6` / `mkpasswd -m sha-512` first."
+        )
+    return (
+        f"root:{LOCKED_PASSWORD}:14871::::::\n"
+        f"main:{main_password_hash}:14871::::::\n"
+    )
 
 GSHADOW = """\
 root:!*::

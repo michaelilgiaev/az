@@ -20,9 +20,9 @@ from __future__ import annotations
 ISO_NAME = "azarch"
 ISO_NAME_SSHD = "azarch-sshd"
 
-# The set of recognized build variants -> iso_name. A single build assembles ALL
-# of these (see compiler.VARIANTS): compiler.run loops over them, calling iso_name_for
-# per variant to name each ISO. There is no build-time flag to pick one.
+# The set of recognized build variants -> iso_name. compiler.run loops over the
+# runtime-selected variants (compiler._variants_for), calling iso_name_for per variant
+# to name each ISO. The base ISO is always built; the sshd ISO is opt-in via --ssh.
 ISO_NAMES = {
     "base": ISO_NAME,
     "sshd": ISO_NAME_SSHD,

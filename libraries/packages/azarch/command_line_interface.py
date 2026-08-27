@@ -121,6 +121,10 @@ def usage() -> None:
         "`azarch backup --help`\n"
         "  --sshd-hypervisor    Install host pubkey from ~/shared/authorized_keys "
         "and start sshd\n"
+        "  mkazarchiso --ssh=\"<PASSWORD>\" [--out DIR]  Build the azarch-sshd ISO FROM the\n"
+        "                          RUNNING system (captures packages installed while live);\n"
+        "                          --ssh sets the `main` login password. See "
+        "`azarch mkazarchiso --help`\n"
         "  gpu [--resolve|--list]  Detect the GPU and resolve its drivers from the baked-in\n"
         "                          offline repo (developer drivers included). See "
         "`azarch gpu --help`\n"
@@ -173,6 +177,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_language(argv[1:])
     if cmd == "--sshd-hypervisor":
         return sshd_hypervisor()
+    if cmd == "mkazarchiso":
+        return cmd_mkazarchiso(argv[1:])
     if cmd in ("-h", "--help", "help"):
         usage()
         return 0

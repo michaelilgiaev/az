@@ -95,16 +95,16 @@ import system
 # len(STEP_WEIGHTS) - 1 MUST equal the number of bar.step() calls in run(). The
 # final FOUR weights belong, in order, to: the package-cache giant, the makepkg
 # stage (our own calamares/librewolf; heavy in the default tier, VERY heavy with
-# --full-compile), and the TWO mkarchiso giants -- one per ISO variant, since a
-# single build now assembles BOTH the base `azarch` and the `azarch-sshd` ISOs
-# (they share every step up to here, so the second is only a second mkarchiso pass).
+# --full-compile), and the TWO mkarchiso giants -- one per POSSIBLE ISO variant.
+# The bar is sized for the MAXIMUM (base + sshd); a base-only build (no --ssh) simply
+# runs one mkarchiso pass and finalize() snaps the bar to full, so over-sizing is safe.
 STEP_WEIGHTS = [0] + [8] * 12 + [250, 120, 270, 270]
 
-# The ISO variants a single build produces, in assembly order. Every step up to
-# mkarchiso is variant-independent (same packages, same airootfs), so both ISOs
-# come out of one build: the base `azarch` medium and the `azarch-sshd` medium
-# (identical, but auto-running `azarch --sshd-hypervisor` at boot). This is why
-# there is no build-time flag to pick one -- compile.sh always makes both.
+# The ISO variants a build CAN produce, in assembly order -- the canonical MAX set that
+# sizes STEP_WEIGHTS's two mkarchiso weights. Every step up to mkarchiso is variant-
+# independent (same packages, same airootfs). WHICH of these actually build is decided
+# at runtime by _variants_for(): the base `azarch` medium ALWAYS, and the `azarch-sshd`
+# medium ONLY when --ssh="<PASSWORD>" opts in (no default password is ever shipped).
 VARIANTS = ("base", "sshd")
 
 # PGID of the currently-running mkarchiso child (0 = none). mkarchiso is spawned in
@@ -117,6 +117,66 @@ def _sudo() -> list[str]:
     # `-n` (non-interactive) so a chown/unmount during Ctrl-C teardown after the
     # sudo timestamp expired fails fast instead of blocking on a password prompt.
     return [] if paths.is_root() else ["sudo", "-n"]
+
+
+# --- Method A: the --ssh=<PASSWORD> opt-in for the sshd ISO ------------------
+# The sshd ISO is OPT-IN: it is built ONLY when `--ssh="<PASSWORD>"` is supplied with
+# a non-empty string, and that password becomes the `main` login credential (hashed
+# into that variant's /etc/shadow). No flag / empty string -> no sshd ISO. This is the
+# security posture from data/PROMPT.md DECISION 2: no default password is ever shipped;
+# the SSH variant's credential must come from the operator at build time.
+
+def parse_ssh_flag(argv: list[str]) -> str | None:
+    """Pull the `--ssh=<PASSWORD>` value out of argv, or None if absent/empty.
+
+    Mirrors the codebase's existing value-flag precedent (command_line_interface.py
+    parses --server=/--ssh= via split("=", 1)[1]) so a password containing '=' is not
+    truncated. An empty value (`--ssh=`) returns None: the flag "demands a string or it
+    doesn't work" -- a blank string opts OUT of the sshd ISO rather than shipping a
+    blank password.
+    """
+    for token in argv:
+        if token.startswith("--ssh="):
+            value = token.split("=", 1)[1]
+            return value or None
+    return None
+
+
+def ssh_password_hash(password: str) -> str:
+    """Hash a build-time --ssh password into a sha-512 crypt hash ($6$...) for shadow.
+
+    Never store or ship the plaintext: the image carries only this hash. Uses
+    `openssl passwd -6`, present on every host that runs mkarchiso (openssl is a hard
+    dependency of the archiso/pacman toolchain). Python's own crypt module is gone as
+    of 3.13, so openssl is the single, portable source of a sha-512 crypt hash. A blank
+    password is rejected -- the flag must resolve to a real credential before shadow.
+    """
+    if not password:
+        raise ValueError("ssh_password_hash: refusing to hash an empty password")
+    try:
+        out = subprocess.run(
+            ["openssl", "passwd", "-6", "-stdin"],
+            input=password, capture_output=True, text=True, check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as e:
+        raise RuntimeError(
+            "ssh_password_hash: `openssl passwd -6` failed -- openssl is required to "
+            f"hash the --ssh password ({e})."
+        ) from e
+    if not out.startswith("$6$"):
+        raise RuntimeError(
+            f"ssh_password_hash: openssl produced an unexpected hash (not $6$): {out!r}"
+        )
+    return out
+
+
+def _variants_for(ssh_hash: str | None) -> tuple[str, ...]:
+    """The ISO variants a build ACTUALLY produces this run. The base/desktop ISO is
+    ALWAYS built; the sshd ISO is built ONLY when an --ssh password (already hashed)
+    was supplied. Preserves VARIANTS order (base first)."""
+    if ssh_hash:
+        return VARIANTS
+    return ("base",)
 
 
 def kill_active_child(sudo: list[str]) -> None:
@@ -136,21 +196,25 @@ def kill_active_child(sudo: list[str]) -> None:
 
 
 def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
-        full_compile: bool = False) -> list[Path]:
+        full_compile: bool = False, ssh_password_hash: str | None = None) -> list[Path]:
     """Execute all steps; return the paths of the built ISOs. Raises on failure.
 
     full_compile: when True, Az'arch's own packages (librewolf) are compiled from
     source instead of repackaged from the verified upstream tarball. Passed to the
     makepkg stage below.
 
-    A single build produces BOTH ISO variants (see VARIANTS): the base `azarch`
-    medium and the `azarch-sshd` medium (identical, but named azarch-sshd and
-    auto-running `azarch --sshd-hypervisor` at boot). Every step up to mkarchiso is
-    variant-independent -- same packages, same airootfs -- so the two variants
-    differ only in the profiledef iso_name and whether the sshd-hypervisor
-    auto-setup service is emitted+enabled. Those variant-specific bits plus a
-    per-variant mkarchiso pass run in the finalize loop at the end; the heavy,
-    shared work (package cache, own-package build) happens exactly once.
+    ssh_password_hash: the operator's --ssh password ALREADY HASHED (sha-512 crypt),
+    or None. It decides whether the OPT-IN sshd ISO is built (DECISION 2: no default
+    password is ever shipped -- the sshd variant's credential comes from the operator
+    at build time). None -> ONLY the base/desktop ISO is built. A hash -> the base ISO
+    PLUS the `azarch-sshd` medium, whose /etc/shadow carries that hash for `main` and
+    which auto-runs `azarch --sshd-hypervisor` at boot.
+
+    Every step up to mkarchiso is variant-independent -- same packages, same shared
+    airootfs -- so the shared, heavy work (package cache, own-package build) happens
+    exactly once. The per-variant differences (profiledef iso_name, the sshd-hypervisor
+    auto-setup service, and the variant's /etc/shadow) plus a per-variant mkarchiso
+    pass run in the finalize loop at the end.
     """
     W = paths.WORKDIR
     airootfs = W / "airootfs"
@@ -189,7 +253,11 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # autologin `main` user the getty drops straight into on the live console).
     bar.step("Provision airootfs accounts (console autologin)")
     emit.write_text(airootfs / "etc/passwd", system.PASSWD)
-    emit.write_text(airootfs / "etc/shadow", system.SHADOW, mode=0o600)
+    # Shadow ships LOCKED by default (both accounts, DECISION 1): no password login is
+    # possible on the base/desktop ISO, autologin still works. The opt-in sshd variant
+    # rewrites `main`'s field to the operator's hash per-pass in _apply_variant, so this
+    # shared write is the safe locked baseline both variants start from.
+    emit.write_text(airootfs / "etc/shadow", system.shadow_for(None), mode=0o600)
     emit.write_text(airootfs / "etc/gshadow", system.GSHADOW, mode=0o600)
     emit.write_text(airootfs / "etc/group", system.GROUP)
     home = airootfs / "home/main"
@@ -331,17 +399,19 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     bar._arm(); bar.draw()
     _refold_own_packages_into_repo(W, full_compile)
 
-    # 14/15 -- Assemble BOTH ISO variants (two GIANT mkarchiso passes, weight 270 each).
-    # Every step above is variant-independent, so we now overlay each variant's tiny
-    # differences (its profiledef iso_name + whether the sshd-hypervisor auto-setup
-    # service is emitted/enabled) onto the shared airootfs and run one mkarchiso pass
-    # per variant. mkarchiso re-copies the profile's airootfs overlay into its work
-    # tree at the start of each pass, so toggling the sshd enable-symlink in the
-    # profile between passes is correctly reflected in each ISO. The base pass runs
-    # first, then the sshd pass; both land in output/ with their distinct iso_name.
+    # 14/15 -- Assemble the selected ISO variant(s) (one GIANT mkarchiso pass each,
+    # weight 270). The base ISO always builds; the sshd ISO only when --ssh opted in
+    # (_variants_for). Every step above is variant-independent, so we overlay each
+    # variant's tiny differences (its profiledef iso_name, its /etc/shadow, and whether
+    # the sshd-hypervisor auto-setup service is emitted/enabled) onto the shared airootfs
+    # and run one mkarchiso pass per variant. mkarchiso re-copies the profile's airootfs
+    # overlay into its work tree at the start of each pass, so toggling the shadow /
+    # sshd enable-symlink between passes is correctly reflected in each ISO. The base
+    # pass runs first, then (if selected) the sshd pass; each lands in output/ with its
+    # distinct iso_name.
     isos: list[Path] = []
-    for variant in VARIANTS:
-        _apply_variant(W, airootfs, variant)
+    for variant in _variants_for(ssh_password_hash):
+        _apply_variant(W, airootfs, variant, ssh_password_hash=ssh_password_hash)
         bar.step(f"Assemble {profile.iso_name_for(variant)} ISO (mkarchiso)")
         isos.append(_run_mkarchiso(sudo, W, bar, reclaim_after_mkarchiso,
                                    iso_name=profile.iso_name_for(variant)))
@@ -350,9 +420,10 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
 
 # --- helpers ---------------------------------------------------------------
 
-def _apply_variant(W: Path, airootfs: Path, variant: str) -> None:
+def _apply_variant(W: Path, airootfs: Path, variant: str,
+                   ssh_password_hash: str | None = None) -> None:
     """Overlay the per-variant differences onto the shared profile tree just before
-    its mkarchiso pass. Two things differ between the base and sshd ISOs:
+    its mkarchiso pass. Three things differ between the base and sshd ISOs:
 
       1. profiledef iso_name -- drives the artifact filename (azarch-<ver>.iso vs
          azarch-sshd-<ver>.iso). Rewritten at the profile root every pass.
@@ -362,6 +433,14 @@ def _apply_variant(W: Path, airootfs: Path, variant: str) -> None:
          NEITHER, so we affirmatively remove both when building it -- otherwise a
          leftover from the preceding sshd... (order is base-first today, but this
          stays correct if the order ever flips) would bleed into the base ISO.
+      3. /etc/shadow -- the base ISO ships LOCKED accounts (no password login); the
+         sshd ISO replaces `main`'s field with the operator's build-time hash so
+         they can log in remotely with the --ssh password. Rewritten every pass so a
+         hashed shadow from a preceding sshd pass never leaks into the base ISO.
+
+    ssh_password_hash is REQUIRED (a sha-512 crypt hash) when variant == "sshd": the
+    sshd ISO must never be built with the base locked shadow -- that would ship an sshd
+    nobody can authenticate to, silently hiding that the credential was dropped.
 
     Everything else in the profile is identical across variants and already staged."""
     emit.write_exec(W / "profiledef.sh", profile.profiledef_sh(variant))
@@ -369,10 +448,20 @@ def _apply_variant(W: Path, airootfs: Path, variant: str) -> None:
     link = (airootfs / "etc/systemd/system/multi-user.target.wants"
             / "sshd-hypervisor-setup.service")
     if variant == "sshd":
+        if not ssh_password_hash:
+            raise ValueError(
+                "_apply_variant: the sshd variant requires an --ssh password hash; "
+                "refusing to build an sshd ISO with the base (locked) shadow."
+            )
+        # main gets the operator's real hash; root stays locked.
+        emit.write_text(airootfs / "etc/shadow",
+                        system.shadow_for(ssh_password_hash), mode=0o600)
         emit.write_text(svc, system.SSHD_HYPERVISOR_SETUP_SERVICE)
         emit.link("/etc/systemd/system/sshd-hypervisor-setup.service", link)
     else:
-        # Base ISO: ensure no trace of the sshd auto-setup unit or its enable link.
+        # Base ISO: LOCK the shadow (relock even if a prior sshd pass left a hashed
+        # one in the shared airootfs) and strip the sshd auto-setup unit + enable link.
+        emit.write_text(airootfs / "etc/shadow", system.shadow_for(None), mode=0o600)
         link.unlink(missing_ok=True)
         svc.unlink(missing_ok=True)
 
@@ -1443,13 +1532,21 @@ def main() -> int:
         print("[*] --full-compile: Az'arch's own packages will be built ENTIRELY from source.")
         print("    This includes a LibreWolf/Firefox compile that can take 1.5-3+ hours.")
 
-    # Every build produces BOTH ISO variants -- the base `azarch` medium and the
-    # `azarch-sshd` medium (identical, but auto-running `azarch --sshd-hypervisor` at
-    # boot). They share every step up to mkarchiso, so the second is only a second
-    # mkarchiso pass; there is deliberately no flag to pick one. run() emits both
-    # and returns both ISO paths.
-    print("[*] Building BOTH ISO variants: azarch and azarch-sshd "
-          "(the sshd medium auto-runs `azarch --sshd-hypervisor` at boot).")
+    # The base/desktop ISO is ALWAYS built. The `azarch-sshd` ISO is OPT-IN: it is built
+    # ONLY when `--ssh="<PASSWORD>"` supplies a non-empty string (DECISION 2 -- no default
+    # password is ever shipped; the sshd variant's credential comes from the operator at
+    # build time). The password is hashed HERE (sha-512 crypt) and threaded into run();
+    # the plaintext never leaves this process. An empty/missing --ssh -> no sshd ISO.
+    ssh_password = parse_ssh_flag(sys.argv[1:])
+    ssh_hash = ssh_password_hash(ssh_password) if ssh_password else None
+    if ssh_hash:
+        print("[*] --ssh supplied: building the base `azarch` ISO AND the opt-in "
+              "`azarch-sshd` ISO")
+        print("    (the sshd medium sets `main`'s password from --ssh and auto-runs "
+              "`azarch --sshd-hypervisor` at boot).")
+    else:
+        print("[*] Building the base `azarch` ISO only. Pass --ssh=\"<PASSWORD>\" to "
+              "ALSO build the opt-in `azarch-sshd` ISO.")
 
     offline = cache_is_complete()
     _stale_cache_notice(offline)
@@ -1492,6 +1589,7 @@ def main() -> int:
     bar.init()
     try:
         isos = run(bar, offline, full_compile=full_compile,
+                   ssh_password_hash=ssh_hash,
                    reclaim_after_mkarchiso=own.reclaim_full)
     except SystemExit as e:
         teardown()
@@ -1506,9 +1604,12 @@ def main() -> int:
 
     bar.subfrac = 1000
     bar.finalize()
-    # Both ISO variants were built; report each with its size. (isos is ordered
-    # base, sshd -- see VARIANTS.)
-    lines = [f"\n[ {bar.total_steps}/{bar.total_steps} ] [OK] {len(isos)} ISOs built successfully:"]
+    # Report each ISO actually built with its size. The count is conditional now: the
+    # base ISO always, plus the sshd ISO only when --ssh was supplied (isos is ordered
+    # base first -- see _variants_for). Pluralize honestly so we never claim two ISOs
+    # when only one was built.
+    noun = "ISO" if len(isos) == 1 else "ISOs"
+    lines = [f"\n[ {bar.total_steps}/{bar.total_steps} ] [OK] {len(isos)} {noun} built successfully:"]
     for iso in isos:
         iso_size = subprocess.run(["du", "-h", str(iso)], capture_output=True, text=True).stdout.split("\t")[0]
         iso_path = f"output/{iso.name}" if paths.in_docker() else str(iso)

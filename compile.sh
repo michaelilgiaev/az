@@ -21,13 +21,19 @@
 #
 # Then it hands off to `python3 -m compiler`, which does the rest.
 #
-# Every run builds BOTH ISO variants: the base `azarch` medium and the
-# `azarch-sshd` medium (identical contents, but named azarch-sshd-<ver>-x86_64.iso
-# and auto-running `azarch --sshd-hypervisor` at boot, with the guest sshd
-# auto-setup service enabled). They share the same package cache, so the second is
-# only a second mkarchiso pass -- there is no flag to select one.
+# Every run builds the base `azarch` medium. The `azarch-sshd` medium is OPT-IN via
+# --ssh="<PASSWORD>" (see ARGS): identical contents, but named azarch-sshd-<ver>-x86_64.iso,
+# with `main`'s login password set from --ssh and the guest sshd auto-setup service
+# enabled (it auto-runs `azarch --sshd-hypervisor` at boot). It shares the same package
+# cache, so it is only a second mkarchiso pass. Without --ssh, ONLY the base ISO is built --
+# no default password is ever shipped (see data/PROMPT.md DECISION 2).
 #
 # ARGS: any args are passed straight through to the Python build driver.
+#   --ssh="<PASSWORD>"       ALSO build the opt-in `azarch-sshd` ISO, with <PASSWORD>
+#                            as the live `main` user's login password (hashed sha-512
+#                            into that ISO's /etc/shadow -- never blank, never
+#                            plaintext-in-image). An empty/missing value builds only
+#                            the base ISO.
 #   --full-compile           build Az'arch's own packages ENTIRELY from source
 #                            (incl. a multi-hour LibreWolf/Firefox compile) instead
 #                            of the default, which repackages LibreWolf's verified

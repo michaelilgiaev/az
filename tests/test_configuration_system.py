@@ -36,11 +36,53 @@ def test_passwd_lines_have_seven_colon_fields():
         assert len(line.split(":")) == 7, line
 
 
-def test_shadow_passwords_empty():
-    # Blank password field (index 1) == no password == the passwordless live login.
-    # A non-empty hash here would silently lock out autologin.
+def test_shadow_passwords_locked():
+    # SECURITY (DECISION 1): the base/default live session must ship a LOCKED
+    # password field (index 1), NOT a blank one. A blank field means "empty password
+    # accepted" -- if ANY service (an sshd the operator adds, a getty on a serial
+    # line) ever listens, a remote party logs in with no password. A locked field
+    # (`!` / `*`) cannot be authenticated by ANY input string, so password login is
+    # impossible while autologin (which bypasses password PAM) still works.
     for line in system.SHADOW.splitlines():
-        assert line.split(":")[1] == "", line
+        field = line.split(":")[1]
+        assert field in ("!", "*"), f"base shadow password field must be locked, got {field!r}: {line}"
+        # Explicitly NOT blank (the old vulnerable value) and NOT a real hash.
+        assert field != "", line
+        assert not field.startswith("$"), f"base shadow must never ship a real hash: {line}"
+
+
+def test_shadow_for_locks_by_default():
+    # shadow_for() with no hash reproduces the locked base SHADOW exactly -- the
+    # single source of truth for the base variant's shadow file.
+    assert system.shadow_for() == system.SHADOW
+    assert system.shadow_for(None) == system.SHADOW
+
+
+def test_shadow_for_sets_main_hash_for_sshd_variant():
+    # SECURITY (DECISION 2 + Method A): the sshd variant gets its `main` password
+    # from a real sha-512 hash supplied at build time -- never blank, never a shipped
+    # default. root stays LOCKED (only `main` is the login account sshd accepts).
+    fake_hash = "$6$abcdefghijklmnop$" + "x" * 86
+    txt = system.shadow_for(fake_hash)
+    rows = {l.split(":")[0]: l.split(":") for l in txt.splitlines()}
+    # main carries the supplied hash in the password field...
+    assert rows["main"][1] == fake_hash
+    # ...root stays locked (no remote root password login).
+    assert rows["root"][1] in ("!", "*")
+    # Field count is still a valid /etc/shadow (9 colon-separated fields).
+    for line in txt.splitlines():
+        assert len(line.split(":")) == 9, line
+
+
+def test_shadow_for_rejects_blank_or_nonhash_password():
+    # The flag "demands a string or it doesn't work": a blank/plaintext value must
+    # never silently become the shadow password. shadow_for accepts ONLY a crypt hash
+    # (starts with `$`), so an un-hashed value is a programming error, not a shipped
+    # weak credential.
+    import pytest
+    for bad in ("", "admin", "password", "hunter2"):
+        with pytest.raises(ValueError):
+            system.shadow_for(bad)
 
 
 def test_gid_coupling_autologin_matches_passwd_primary_gid():
