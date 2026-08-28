@@ -87,11 +87,30 @@ while :; do
         read -rp "Username [main]: " az_username
         az_username="${az_username:-main}"
     fi
-    if echo "$az_username" | grep -Eq '^[a-z_][a-z0-9_-]*$'; then
-        break
+    if ! echo "$az_username" | grep -Eq '^[a-z_][a-z0-9_-]*$'; then
+        echo "Invalid username '$az_username' (lower-case letters, digits, - and _; must not start with a digit)."
+        if [ -n "$AZ_INSTALL_USERNAME" ]; then echo "Aborting (pre-seeded username is invalid)."; exit 1; fi
+        continue
     fi
-    echo "Invalid username '$az_username' (lower-case letters, digits, - and _; must not start with a digit)."
-    if [ -n "$AZ_INSTALL_USERNAME" ]; then echo "Aborting (pre-seeded username is invalid)."; exit 1; fi
+    # RESERVED / EXISTING-ACCOUNT guard. The chroot renames the live `main` account to the
+    # chosen name ONLY when that name is free; a name that already exists on the pacstrapped
+    # target (root, bin, daemon, nobody, http, ...) would silently SKIP the rename yet still
+    # re-point tty1 autologin at that account -- which has no startx bootstrap, so the desktop
+    # never comes up (a bare root/nologin tty1). `main` itself is allowed: it is the live user
+    # we rename FROM, so "keep main" is a valid choice, not a collision. `root` is always
+    # rejected (autologin-as-root is explicitly unsupported). Any other already-present account
+    # is rejected so the install cannot land in the broken-autologin state.
+    if [ "$az_username" = "root" ]; then
+        echo "Username 'root' is not allowed (the desktop cannot autologin as root)."
+        if [ -n "$AZ_INSTALL_USERNAME" ]; then echo "Aborting (pre-seeded username is reserved)."; exit 1; fi
+        continue
+    fi
+    if [ "$az_username" != "main" ] && id "$az_username" >/dev/null 2>&1; then
+        echo "Username '$az_username' already exists as a system account; choose another."
+        if [ -n "$AZ_INSTALL_USERNAME" ]; then echo "Aborting (pre-seeded username collides with a system account)."; exit 1; fi
+        continue
+    fi
+    break
 done
 
 # User password (confirmed, hidden). AZ_INSTALL_PASSWORD pre-seeds it for unattended installs.
@@ -265,6 +284,18 @@ if [ -d /etc/install_info ]; then
             && sed -i "s#$az_fb_old#$az_fb_new#g" /etc/systemd/system/first-boot-setup.service
         [ -f "$az_fb_new/first-boot-setup.sh" ] \\
             && sed -i "s#$az_fb_old#$az_fb_new#g" "$az_fb_new/first-boot-setup.sh"
+
+        # GETTY AUTOLOGIN re-point. The scripted installer copies the live
+        # getty@tty1.service.d/autologin.conf drop-in onto the target, and it HARDCODES
+        # `--autologin {DEFAULT_USERNAME}` (see system.GETTY_TTY1_AUTOLOGIN). After the rename
+        # {DEFAULT_USERNAME} no longer exists, so agetty's `login -f {DEFAULT_USERNAME}` fails
+        # and tty1 respawns forever -- the installed system never autologins and drops to a bare
+        # login prompt (the exact "greeted with tty1" bug). Rewrite the drop-in to autologin the
+        # ACTUAL login so the desktop (getty -> ~/.bash_profile -> exec startx) comes up. No-op on
+        # the default install ({DEFAULT_USERNAME}) -- the copied drop-in is already correct.
+        az_getty=/etc/systemd/system/getty@tty1.service.d/autologin.conf
+        [ -f "$az_getty" ] \\
+            && sed -i "s/--autologin {DEFAULT_USERNAME}/--autologin $az_login/g" "$az_getty"
     fi
 fi
 """

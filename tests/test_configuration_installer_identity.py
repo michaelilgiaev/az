@@ -61,6 +61,25 @@ def test_collect_validates_username_and_timezone():
     assert "Aborting (pre-seeded username is invalid)." in s
 
 
+def test_collect_rejects_reserved_and_existing_usernames():
+    # An adversary case: the username regex alone accepts pre-existing system accounts (root,
+    # bin, nobody, ...). The chroot only RENAMES `main` to the chosen name when that name is
+    # FREE, so a colliding name silently skips the rename yet still re-points tty1 autologin at
+    # that account -> no startx bootstrap -> bare tty1 (the reported bug). The collect step must
+    # reject `root` outright and any OTHER already-existing account, while still allowing `main`
+    # (the live user we rename from).
+    s = idy.identity_collect_sh()
+    # root is always rejected.
+    assert '[ "$az_username" = "root" ]' in s
+    assert "not allowed" in s and "root" in s
+    # Any other pre-existing account is rejected (id lookup), but `main` is explicitly allowed.
+    assert '[ "$az_username" != "main" ] && id "$az_username"' in s
+    assert "already exists as a system account" in s
+    # Pre-seeded collisions abort (don't loop forever on non-interactive stdin).
+    assert "Aborting (pre-seeded username is reserved)." in s
+    assert "Aborting (pre-seeded username collides with a system account)." in s
+
+
 def test_collect_defaults_match_live_identity():
     s = idy.identity_collect_sh()
     assert 'az_hostname="${az_hostname:-azarch}"' in s
@@ -143,6 +162,22 @@ def test_chroot_repoints_first_boot_unit_after_home_move():
     assert "/home/main/.config/first-boot" in s          # the old path being rewritten
     # The rewrite targets the new home path (keyed on the resolved login).
     assert '/home/$az_login/.config/first-boot' in s
+
+
+def test_chroot_repoints_getty_autologin_after_rename():
+    # THE adversary-found boot-blocker: the scripted installer copies the live getty@tty1
+    # autologin drop-in onto the target, and it hardcodes `--autologin main`. After a rename to
+    # e.g. "alice", `main` no longer exists, so agetty's `login -f main` fails and tty1 respawns
+    # forever -- the installed system never autologins and drops to a bare login prompt (the
+    # "greeted with tty1" bug). The chroot MUST rewrite the drop-in to autologin the chosen user.
+    s = idy.identity_chroot_sh()
+    # The drop-in path is targeted...
+    assert "getty@tty1.service.d/autologin.conf" in s
+    # ...and the hardcoded `--autologin main` is rewritten to the resolved login.
+    assert "--autologin main" in s                 # the stale token being replaced
+    assert '--autologin $az_login' in s            # keyed on the chosen login
+    # It is inside the rename branch (only rewritten when the login actually differs from main).
+    assert 'if [ "$az_login" != "main" ]; then' in s
 
 
 def test_chroot_is_valid_bash():

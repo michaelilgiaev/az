@@ -53,9 +53,11 @@ def test_power_is_a_dispatch_branch_in_main():
     src = desktop.azarch_command_line_interface()
     assert 'cmd == "power"' in src
     assert "return cmd_power(argv[1:])" in src
-    # The convenience top-level verbs exist too.
-    for verb in ("shutdown", "restart", "sleep", "lock"):
-        assert f'cmd == "{verb}"' in src
+    # The convenience top-level verbs exist too. restart/reboot share one branch
+    # (cmd in ("restart", "reboot")), so assert each verb name appears rather than a
+    # specific `cmd == "<verb>"` spelling.
+    for verb in ("shutdown", "restart", "reboot", "sleep", "lock"):
+        assert f'"{verb}"' in src
 
 
 def test_power_help_exits_zero(capsys):
@@ -155,6 +157,45 @@ def test_power_now_calls_systemctl(verb, systemctl_verb, monkeypatch):
     assert (calls[-1] == ("systemctl", systemctl_verb)), calls
 
 
+def test_reboot_is_an_alias_for_restart(monkeypatch):
+    # `azarch power reboot` and `azarch reboot` must behave exactly like restart:
+    # immediate `systemctl reboot`, same as the `restart` verb.
+    cli = _cli()
+    _have(cli, monkeypatch, True)
+    calls = _capture_sudo(cli, monkeypatch)
+    assert cli.cmd_power(["reboot"]) == 0
+    assert calls[-1] == ("systemctl", "reboot"), calls
+
+
+def test_reboot_alias_wired_in_main_and_help():
+    # The top-level `reboot` verb is a real dispatch branch (shared with restart), and both
+    # help screens mention it.
+    src = desktop.azarch_command_line_interface()
+    assert '"reboot"' in src and 'cmd in ("restart", "reboot")' in src
+    cli = _cli()
+    for helped in (cli.cmd_power(["--help"]), cli._power_verb("restart", ["--help"])):
+        assert helped == 0
+    # cmd_power help lists reboot alongside restart.
+    import io
+    import contextlib
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        cli.cmd_power(["--help"])
+    assert "reboot" in buf.getvalue()
+
+
+def test_reboot_alias_schedules_the_restart_unit(monkeypatch):
+    # A timed reboot uses the SAME transient unit as restart (azarch-restart), so --status /
+    # --cancel of either verb see the same timer.
+    cli = _cli()
+    _have(cli, monkeypatch, True)
+    monkeypatch.setattr(cli, "_power_pending", lambda action: "")
+    calls = _capture_sudo(cli, monkeypatch)
+    assert cli.cmd_power(["reboot", "--in", "5m"]) == 0
+    run = [c for c in calls if c and c[0] == "systemd-run"]
+    assert run and "--unit=azarch-restart" in run[0], run
+
+
 # --- scheduling builds a systemd-run timer ----------------------------------
 
 def test_schedule_in_builds_on_active_timer(monkeypatch):
@@ -204,6 +245,45 @@ def test_schedule_bad_time_is_rc_two(monkeypatch, capsys):
     cli = _cli()
     _have(cli, monkeypatch, True)
     assert cli.cmd_power(["sleep", "--at", "25:99"]) == 2
+
+
+def test_at_bare_number_redirects_to_in(monkeypatch, capsys):
+    # The reported confusion: `--at 10` / `--at 0.1` -- a bare number is NOT a clock time.
+    # It must still be rc 2, but the error should point the user at --in (which DOES take a
+    # duration) rather than only saying "use HH:MM".
+    cli = _cli()
+    _have(cli, monkeypatch, True)
+    assert cli.cmd_power(["shutdown", "--at", "10"]) == 2
+    err = capsys.readouterr().err
+    assert "--in" in err and "10" in err, err
+
+
+def test_at_bare_decimal_redirects_to_in(monkeypatch, capsys):
+    cli = _cli()
+    _have(cli, monkeypatch, True)
+    assert cli.cmd_power(["sleep", "--at=0.1"]) == 2
+    err = capsys.readouterr().err
+    assert "--in" in err, err
+
+
+def test_at_malformed_time_keeps_hhmm_hint(monkeypatch, capsys):
+    # A genuinely malformed clock time (not a bare number) still gets the HH:MM guidance and
+    # does NOT falsely suggest --in.
+    cli = _cli()
+    _have(cli, monkeypatch, True)
+    assert cli.cmd_power(["restart", "--at", "25:99"]) == 2
+    err = capsys.readouterr().err
+    assert "HH:MM" in err, err
+
+
+def test_power_help_contrasts_in_and_at(capsys):
+    # Help must make the --in (delay from now) vs --at (wall-clock time) distinction explicit,
+    # since conflating them is the reported confusion.
+    cli = _cli()
+    assert cli.cmd_power(["--help"]) == 0
+    out = capsys.readouterr().out.lower()
+    assert "from now" in out  # --in is described as counting from now
+    assert "clock time" in out or "wall-clock" in out  # --at is a time of day
 
 
 # --- status + cancel --------------------------------------------------------

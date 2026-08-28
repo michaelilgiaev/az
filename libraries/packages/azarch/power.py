@@ -158,6 +158,18 @@ def _valid_hhmm(token: str) -> str | None:
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
+def _bad_at_message(action: str, value: str) -> str:
+    """Error string for a rejected --at value. The reported confusion is people typing a bare
+    number/duration into --at (e.g. `--at 10`, `--at 0.1`) expecting a delay -- so when the
+    value would have been a VALID --in duration, redirect them to --in instead of only saying
+    "use HH:MM". A genuinely malformed clock time (`25:99`, `ab:cd`) keeps the HH:MM hint."""
+    if parse_duration(value) is not None:
+        return (f"azarch power {action}: --at takes a CLOCK TIME like 23:30, not a duration. "
+                f"For a delay from now, use `--in {value}`.")
+    return (f"azarch power {action}: invalid time '{value}' "
+            "(use a 24-hour HH:MM or HH:MM:SS, e.g. 23:30).")
+
+
 def _schedule_power(action: str, when_args: list[str]) -> int:
     """Create the transient timer for a scheduled action from its --in/--at args.
 
@@ -192,16 +204,18 @@ def _schedule_power(action: str, when_args: list[str]) -> int:
             if i + 1 >= len(when_args):
                 _err(f"azarch power {action}: --at needs a time (HH:MM).")
                 return 2
-            on_calendar = _valid_hhmm(when_args[i + 1])
+            val = when_args[i + 1]
+            on_calendar = _valid_hhmm(val)
             if on_calendar is None:
-                _err(f"azarch power {action}: invalid time '{when_args[i + 1]}' (use HH:MM).")
+                _err(_bad_at_message(action, val))
                 return 2
             i += 2
             continue
         if a.startswith("--at="):
-            on_calendar = _valid_hhmm(a.split("=", 1)[1])
+            val = a.split("=", 1)[1]
+            on_calendar = _valid_hhmm(val)
             if on_calendar is None:
-                _err(f"azarch power {action}: invalid time in '{a}' (use HH:MM).")
+                _err(_bad_at_message(action, val))
                 return 2
             i += 1
             continue
@@ -315,21 +329,23 @@ def _power_verb(action: str, args: list[str]) -> int:
               "--status | --cancel]\n"
               "\n"
               f"  (no option)      {action.capitalize()} now (systemctl {verb}).\n"
-              "  --in <DURATION>  Schedule after a delay from now.\n"
-              "  --at <TIME>      Schedule at a wall-clock time today (tomorrow if past).\n"
+              "  --in <DURATION>  Schedule after a DELAY from now.\n"
+              "  --at <TIME>      Schedule at a CLOCK TIME of day (tomorrow if already past).\n"
               "  --status         Show any pending timer for this action.\n"
               "  --cancel         Cancel the pending timer for this action.\n"
               "\n"
-              "DURATION -- pick whichever reads best; combine units freely:\n"
+              "--in <DURATION> -- a delay from now; pick whichever reads best, combine units:\n"
               "  10s        10 seconds        90s / 30s   seconds\n"
               "  5m / 1.5m  minutes (decimals OK: 1.5m = 90s)\n"
               "  2h / 1d    hours / days      1h30m       combined\n"
               "  10         a BARE number is MINUTES (10 = 10m); 0.1 = 6s\n"
-              "TIME -- HH:MM or HH:MM:SS (24-hour), e.g. 23:30 or 06:05:42.\n"
+              "--at <TIME> -- a wall-clock time of day, HH:MM or HH:MM:SS (24-hour):\n"
+              "  23:30      half past eleven at night     06:05:42   to the second\n"
+              "  (a bare number is NOT a time here -- use --in for a delay)\n"
               "\n"
               f"Examples:\n"
-              f"  azarch power {action} --in 30s     {action} in 30 seconds\n"
-              f"  azarch power {action} --in 1.5m    {action} in 90 seconds\n"
+              f"  azarch power {action} --in 30s     {action} 30 seconds from now\n"
+              f"  azarch power {action} --in 10      {action} 10 minutes from now\n"
               f"  azarch power {action} --at 02:00   {action} at 2 AM\n"
               f"  azarch power {action} --status     is one scheduled?\n"
               f"  azarch power {action} --cancel     call it off")
@@ -377,32 +393,40 @@ def cmd_power(args: list[str]) -> int:
     point. The individual verbs are also exposed at the top level (azarch shutdown, etc.)
     by command_line_interface.main, which calls the same handlers."""
     if not args or args[0] in ("-h", "--help", "help"):
-        print("Usage: azarch power <shutdown|restart|sleep|lock> [options]\n"
+        print("Usage: azarch power <shutdown|restart|reboot|sleep|lock> [options]\n"
               "\n"
               "  shutdown [--in D|--at T|--status|--cancel]  Power off (optionally timed).\n"
               "  restart  [--in D|--at T|--status|--cancel]  Reboot (optionally timed).\n"
+              "  reboot   [--in D|--at T|--status|--cancel]  Same as restart (alias).\n"
               "  sleep    [--in D|--at T|--status|--cancel]  Suspend (optionally timed).\n"
               "  lock                                        Lock the screen now.\n"
               "\n"
-              "Timers (shutdown/restart/sleep):\n"
-              "  --in D     after a delay: 10s, 90s, 5m, 1.5m, 2h, 1d, 1h30m, or a bare\n"
-              "             number of MINUTES (10 = 10m, 0.1 = 6s).\n"
-              "  --at T     at a wall-clock time: HH:MM or HH:MM:SS (e.g. 23:30, 06:05:42).\n"
-              "  --status   show if/when one is scheduled.   --cancel  call it off.\n"
+              "Two ways to time it (shutdown/restart/reboot/sleep):\n"
+              "  --in D   a DELAY from now      -- 10s, 90s, 5m, 1.5m, 2h, 1d, 1h30m; a\n"
+              "                                    bare number is MINUTES (10 = 10m, 0.1 = 6s).\n"
+              "  --at T   a CLOCK TIME of day   -- HH:MM or HH:MM:SS (e.g. 23:30, 06:05:42);\n"
+              "                                    today, or tomorrow if that time already passed.\n"
+              "  --status  show if/when one is scheduled.    --cancel  call it off.\n"
+              "\n"
+              "Tip: `--in` counts forward from now; `--at` is a wall-clock time. So `--in 10`\n"
+              "is 10 minutes from now, while `--at 22:00` is 10 PM. `--at` will NOT take a\n"
+              "bare number -- use `--in` for a delay.\n"
               "\n"
               "See `azarch power <verb> --help` for per-verb examples. The verbs are also\n"
-              "available directly: `azarch shutdown --in 30s`, `azarch lock`, etc.")
+              "available directly: `azarch shutdown --in 30s`, `azarch reboot`, `azarch lock`.")
         return 0
     verb = args[0]
     rest = args[1:]
     if verb == "shutdown":
         return _power_verb("shutdown", rest)
-    if verb == "restart":
+    # `reboot` is an alias for `restart` -- both map to the same action (systemctl reboot,
+    # azarch-restart timer unit), so --status/--cancel of either see the same timer.
+    if verb in ("restart", "reboot"):
         return _power_verb("restart", rest)
     if verb == "sleep":
         return _power_verb("sleep", rest)
     if verb == "lock":
         return cmd_lock(rest)
     _err(f"azarch power: unknown command: {verb} "
-         "(use shutdown|restart|sleep|lock).")
+         "(use shutdown|restart|reboot|sleep|lock).")
     return 2

@@ -223,6 +223,32 @@ echo "[*] Preparing home directory..."
 mkdir -p /mnt/home/main
 chown -R 1000:998 /mnt/home/main
 
+# CARRY THE DESKTOP ONTO THE TARGET. This scripted installer pacstraps a fresh system, so --
+# unlike the Calamares `unpackfs` verbatim rootfs copy -- nothing lays down the graphical
+# session unless we do it here. Without this the installed system boots to a bare tty1 root
+# login with an empty home. The live /etc/skel already holds the FULL desktop: the build
+# mirrors every openbox/librewolf home file into it (compiler _emit_desktop), so it contains
+# .bash_profile (execs startx), .xinitrc, .config/openbox/*, .themes/*, GTK settings, etc.
+# We (1) copy that skel to the target /etc/skel so future users get the desktop, (2) SEED the
+# installed `main` home from the same skel, and (3) install the getty@tty1 autologin drop-in
+# so tty1 autologins `main` -> .bash_profile -> exec startx (matching the live session and the
+# Calamares install). Each copy is guarded so a variant lacking a path degrades, not aborts.
+if [ -d /etc/skel ]; then
+    echo "[*] Copying desktop skeleton (/etc/skel) to the installed system..."
+    mkdir -p /mnt/etc/skel
+    cp -a /etc/skel/. /mnt/etc/skel/
+    # Seed the installed `main` home from the skeleton. NO-CLOBBER (cp -an): the fastfetch and
+    # first-boot files this installer writes below must win over any skel copy of them.
+    cp -an /etc/skel/. /mnt/home/main/
+    chown -R 1000:998 /mnt/home/main
+fi
+if [ -d /etc/systemd/system/getty@tty1.service.d ]; then
+    echo "[*] Enabling tty1 autologin (main) on the installed system..."
+    mkdir -p /mnt/etc/systemd/system
+    cp -a /etc/systemd/system/getty@tty1.service.d \\
+        /mnt/etc/systemd/system/getty@tty1.service.d
+fi
+
 echo "[*] Copying azarch command line interface..."
 install -m 755 /usr/local/bin/azarch /mnt/usr/local/bin/azarch
 

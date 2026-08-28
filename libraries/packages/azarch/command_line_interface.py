@@ -185,7 +185,8 @@ def main(argv: list[str] | None = None) -> int:
     # azarch restart, azarch sleep, azarch lock), dispatching to the same handlers.
     if cmd == "shutdown":
         return _power_verb("shutdown", argv[1:])
-    if cmd == "restart":
+    # `reboot` is an alias for `restart` (see cmd_power) -- both run the same restart action.
+    if cmd in ("restart", "reboot"):
         return _power_verb("restart", argv[1:])
     if cmd == "sleep":
         return _power_verb("sleep", argv[1:])

@@ -197,6 +197,52 @@ def test_installer_sh_enables_sshd_on_target_for_ssh_variant():
     assert "cp /etc/shadow /mnt/etc/shadow" in s
 
 
+# --- installer_sh: the DESKTOP is carried onto the target (the tty1-only bug) -----
+#
+# The scripted installer does a fresh pacstrap, so (unlike the Calamares unpackfs verbatim
+# copy) it must EXPLICITLY carry the desktop-session chain onto the target, or the installed
+# system boots to a bare tty1 with an empty home. That chain is: the getty@tty1 autologin
+# drop-in (-> `main`), and `main`'s home dotfiles (.bash_profile -> exec startx, .xinitrc,
+# openbox config, themes) which live in the live /etc/skel.
+
+def test_installer_sh_copies_getty_autologin_dropin_to_target():
+    # Without the getty@tty1 autologin drop-in the installed box stops at a root login prompt
+    # on tty1 instead of autologin'ing `main` (whose .bash_profile execs startx).
+    s = installer.installer_sh()
+    assert "/etc/systemd/system/getty@tty1.service.d" in s
+    # Copied onto the mounted target root.
+    assert "/mnt/etc/systemd/system/getty@tty1.service.d" in s
+
+
+def test_installer_sh_seeds_home_and_skel_from_live_skel():
+    # The live /etc/skel already holds the full desktop (openbox/librewolf home files are
+    # mirrored there by the build). The installer must copy it to BOTH the target /etc/skel
+    # (future users) AND seed /home/main (the installed live user) so a graphical session
+    # appears. Copy is from the live /etc/skel onto /mnt.
+    s = installer.installer_sh()
+    assert "/etc/skel" in s
+    assert "/mnt/etc/skel" in s          # future users get the desktop skeleton
+    assert "/mnt/home/main" in s         # the installed `main` home is seeded from it
+
+
+def test_installer_sh_home_seed_does_not_clobber_installer_files():
+    # The installer already places fastfetch + first-boot files into /mnt/home/main BEFORE the
+    # skel seed; seeding must not overwrite them. We require the skel->home seed to be
+    # no-clobber (cp -n / --no-clobber) so those stay intact.
+    s = installer.installer_sh()
+    # A no-clobber copy into the home (either `cp -an`, `cp --no-clobber`, or `cp -rn`).
+    assert ("cp -an" in s or "cp -rn" in s or "--no-clobber" in s), \
+        "home seed from /etc/skel must be no-clobber so fastfetch/first-boot survive"
+
+
+def test_installer_sh_desktop_copies_are_guarded():
+    # A variant that somehow lacks one of these live paths must degrade to today's behaviour,
+    # not abort the install mid-run. Guard the skel + getty copies with existence tests.
+    s = installer.installer_sh()
+    assert "[ -d /etc/skel ]" in s
+    assert "[ -d /etc/systemd/system/getty@tty1.service.d ]" in s
+
+
 def test_installer_sh_preseed_choice_and_disk_for_ssh():
     # The scripted installer is the CLI/SSH install path (azarch-install --cli). For an
     # UNATTENDED SSH install it must accept a pre-seeded disk selection via env instead of
