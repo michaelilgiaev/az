@@ -16,6 +16,7 @@ back on later, not here.
 from __future__ import annotations
 
 import pacman
+import installer_identity
 from packages.calamares.locale import _detect_and_apply_locale_block
 
 
@@ -123,6 +124,22 @@ if [ -d "/sys/firmware/efi" ]; then
   is_uefi=1
 fi
 
+# Collect the account / hostname / timezone answers (Calamares Users + Location parity) NOW,
+# before anything destructive -- a mistyped answer costs nothing while the disk is untouched.
+%IDENTITY_COLLECT%
+
+# Final confirmation before the irreversible wipe (skipped when a disk was pre-seeded for an
+# unattended install -- AZ_INSTALL_CHOICE/DISK imply "proceed without asking").
+if [ -z "$AZ_INSTALL_CHOICE" ]; then
+    echo
+    echo -e "${RED}About to ERASE $largest_disk and install azarch as host '$az_hostname' (user '$az_username').${RESET}"
+    read -rp "Type YES to proceed: " az_confirm
+    if [ "$az_confirm" != "YES" ]; then
+        echo "Aborted; no changes were made."
+        exit 1
+    fi
+fi
+
 echo "Erasing $largest_disk with 'wipefs -a'..."
 wipefs -a "$largest_disk"
 
@@ -159,6 +176,9 @@ fi
 mkdir -p /mnt/etc/install_info
 echo "$largest_disk" > /mnt/etc/install_info/disk
 echo "$is_uefi" > /mnt/etc/install_info/is_uefi
+
+# Persist the collected identity answers for the chroot step to apply.
+%IDENTITY_WRITE%
 
 echo "Setting up local repository..."
 mkdir -p /mnt/pacstrap-azarch-repo
@@ -259,15 +279,17 @@ rm /mnt/chroot-setup.sh
 
 umount -R /mnt
 """
-    # Splice in the per-app override plant/remove lines (single source of truth in
-    # pacman.py, shared with the live customize hook). Prefix /mnt: the installer targets
-    # the mounted new root, not the live chroot.
+    # Splice in the identity collection/persist fragments (Calamares Users + Location parity)
+    # and the per-app override plant/remove lines (single source of truth in pacman.py, shared
+    # with the live customize hook). Prefix /mnt: the installer targets the mounted new root.
+    body = body.replace("%IDENTITY_COLLECT%", installer_identity.identity_collect_sh().strip("\n"))
+    body = body.replace("%IDENTITY_WRITE%", installer_identity.identity_write_sh().strip("\n"))
     return body.replace("%APP_OVERRIDES%", pacman.app_override_cp_sh("/mnt").rstrip("\n"))
 
 
 # --- Runs inside the arch-chroot after pacstrap -----------------------------
 def chroot_setup_sh() -> str:
-    return f"""\
+    chroot = f"""\
 #!/bin/bash
 
 {_detect_and_apply_locale_block()}
@@ -324,9 +346,14 @@ find /home/main -type f -exec chmod +x {{}} \\;
 chown -R main:main /home/main
 
 pacman -Sy
-
+%IDENTITY_CHROOT%
 echo -e "\\e[94mazarch disk installation complete, you can reboot now.\\e[0m"
 """
+    # Apply the collected identity (user/passwords/hostname/timezone) as the LAST step, AFTER
+    # the `main`-hardcoded home setup above (so those lines still see the original account and
+    # /home/main) and AFTER the static locale block (so the chosen timezone override wins).
+    # Spliced by name to avoid f-string brace-escaping the fragment's shell `${...}`/`{...}`.
+    return chroot.replace("%IDENTITY_CHROOT%", installer_identity.identity_chroot_sh().rstrip("\n"))
 
 
 # --- Live-ISO post-boot tweaks ----------------------------------------------

@@ -340,6 +340,46 @@ def test_base_airootfs_enables_no_ssh_unit(tmp_path):
         assert not any("ssh" in n for n in names), f"base must enable no ssh unit: {names}"
 
 
+# --- releng inherits an ENABLED sshd.service; _copy_releng MUST strip it ------
+# The stock archiso `releng` profile ships
+# airootfs/etc/systemd/system/multi-user.target.wants/sshd.service (upstream enables sshd on
+# the official Arch ISO). _copy_releng copies releng wholesale, so WITHOUT an explicit strip
+# that enable-link survives and the BASE desktop boots with sshd active on :22 -- exactly the
+# reported bug (`systemctl status sshd` -> enabled; active). These tests pin the strip.
+
+def _needs_releng():
+    from pathlib import Path
+    return pytest.mark.skipif(
+        not Path("/usr/share/archiso/configs/releng").is_dir(),
+        reason="archiso releng profile not installed on this host",
+    )
+
+
+@_needs_releng()
+def test_copy_releng_strips_inherited_sshd_want(tmp_path):
+    # After _copy_releng, the base profile must NOT carry the releng-inherited sshd.service
+    # enable-link -- so the default desktop ships sshd DISABLED.
+    W = tmp_path / "profile"
+    compiler._copy_releng(W)
+    want = W / "airootfs/etc/systemd/system/multi-user.target.wants/sshd.service"
+    assert not want.is_symlink() and not want.exists(), (
+        "releng's sshd.service want must be stripped so the base ISO ships sshd disabled"
+    )
+
+
+@_needs_releng()
+def test_copy_releng_leaves_other_wants_intact(tmp_path):
+    # The strip is surgical: it removes ONLY the sshd want, not the rest of the releng
+    # multi-user.target.wants tree (the directory itself and unrelated links stay).
+    W = tmp_path / "profile"
+    compiler._copy_releng(W)
+    wants = W / "airootfs/etc/systemd/system/multi-user.target.wants"
+    assert wants.is_dir(), "the wants directory itself must survive the strip"
+    names = {p.name for p in wants.iterdir()}
+    # A representative non-ssh releng want is still present (releng ships pacman-init).
+    assert "pacman-init.service" in names, f"unrelated wants must remain: {sorted(names)}"
+
+
 # --- firewall parity: base = no ports; ssh = 22/tcp --------------------------
 
 def test_base_firewall_opens_no_ports():

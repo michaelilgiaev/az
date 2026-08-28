@@ -169,6 +169,19 @@ def test_install_wrapper_auto_and_disk_preseed_the_installer():
     assert "--disk" in w
 
 
+def test_install_wrapper_forwards_identity_env_across_sudo():
+    # The CLI installer now also prompts for hostname/user/passwords/timezone (Calamares
+    # Users+Location parity). For an unattended SSH install those are pre-seeded via the
+    # AZ_INSTALL_* family, which run_cli must forward ACROSS the sudo boundary (env_reset in
+    # sudoers would otherwise drop them). Assert each identity var is explicitly forwarded.
+    w = desktop.install_wrapper_sh()
+    for var in ("AZ_INSTALL_HOSTNAME", "AZ_INSTALL_USERNAME", "AZ_INSTALL_FULLNAME",
+                "AZ_INSTALL_PASSWORD", "AZ_INSTALL_ROOT_PASSWORD", "AZ_INSTALL_TIMEZONE"):
+        assert f"{var}=${var}" in w, f"run_cli must forward {var} across sudo"
+    # The help documents the unattended env pre-seed so an SSH user can discover it.
+    assert "AZ_INSTALL_TIMEZONE" in w and "unattended" in w.lower()
+
+
 def test_install_wrapper_is_valid_sh():
     # It ships as /bin/sh and is exec'd directly; a syntax error would break the installer
     # launch entirely. Syntax-check with `sh -n`.

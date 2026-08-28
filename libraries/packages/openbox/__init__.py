@@ -1567,14 +1567,26 @@ Usage: azarch-install [--gui | --cli [--auto | --disk <dev>]] [--help]
                       available, otherwise falls back to the scripted terminal installer
                       (so `azarch-install` over SSH just works).
   --gui               Force the Calamares graphical installer.
-  --cli               Force the scripted terminal installer (asks auto vs manual disk).
-  --cli --auto        Non-interactive: install onto the largest FIXED disk (skips
-                      removable/USB), no prompts.
-  --cli --disk <dev>  Non-interactive: install onto /dev/<dev> (e.g. sda, nvme0n1).
+  --cli               Force the scripted terminal installer. Walks the SAME choices as the
+                      Calamares pages: disk (auto/manual), hostname, your name, username,
+                      user password, root password, and timezone -- then installs.
+  --cli --auto        Pick the largest FIXED disk (skips removable/USB) instead of asking
+                      which disk; the account/hostname/timezone are still asked unless
+                      pre-seeded (see below).
+  --cli --disk <dev>  Use /dev/<dev> (e.g. sda, nvme0n1) instead of asking which disk.
   --help, -h          Show this help.
 
-The CLI and GUI installers produce the same system (same packages, same chroot setup).
-Both ERASE the target disk. Run over SSH with --cli to install headlessly.
+The CLI and GUI installers produce the same system (same packages, same chroot setup, a
+real user account with a chosen password, a root password, a hostname, and a timezone).
+Both ERASE the target disk.
+
+Fully unattended over SSH: pre-seed any prompt via the environment, e.g.
+  AZ_INSTALL_DISK=sda AZ_INSTALL_HOSTNAME=box AZ_INSTALL_USERNAME=me \
+  AZ_INSTALL_PASSWORD=... AZ_INSTALL_ROOT_PASSWORD=... AZ_INSTALL_TIMEZONE=Europe/London \
+  azarch-install --cli
+Recognised: AZ_INSTALL_DISK, AZ_INSTALL_HOSTNAME, AZ_INSTALL_USERNAME, AZ_INSTALL_FULLNAME,
+AZ_INSTALL_PASSWORD, AZ_INSTALL_ROOT_PASSWORD, AZ_INSTALL_TIMEZONE (and AZ_INSTALL_CHOICE).
+Any prompt left un-seeded is asked interactively.
 EOF
 }}
 
@@ -1602,15 +1614,24 @@ run_gui() {{
 run_cli() {{
     # The scripted installer needs root and reads its payload from /root/azarch (mode 0750,
     # readable only by root -- so the existence check goes through sudo, not a bare test as
-    # `main`). It honours AZ_INSTALL_CHOICE (1=auto largest disk, 2=manual) and
-    # AZ_INSTALL_DISK to run without prompts; with neither set it prompts interactively
-    # (fine over SSH).
+    # `main`). It honours AZ_INSTALL_CHOICE (1=auto largest disk, 2=manual) and AZ_INSTALL_DISK
+    # for the disk step, and the AZ_INSTALL_{{HOSTNAME,USERNAME,FULLNAME,PASSWORD,ROOT_PASSWORD,
+    # TIMEZONE}} family for the account/hostname/timezone answers, to run without prompts; with
+    # none set it prompts interactively (fine over SSH). Each is forwarded ACROSS the sudo
+    # boundary explicitly (only when set) so a restrictive sudoers env_reset cannot drop it.
     if ! sudo test -r '{INSTALL_CLI_SCRIPT_PATH}'; then
         echo "azarch-install: CLI installer not found at {INSTALL_CLI_SCRIPT_PATH}" >&2
         exit 1
     fi
-    exec sudo -E env ${{AZ_INSTALL_CHOICE:+AZ_INSTALL_CHOICE=$AZ_INSTALL_CHOICE}} \\
+    exec sudo -E env \\
+        ${{AZ_INSTALL_CHOICE:+AZ_INSTALL_CHOICE=$AZ_INSTALL_CHOICE}} \\
         ${{AZ_INSTALL_DISK:+AZ_INSTALL_DISK=$AZ_INSTALL_DISK}} \\
+        ${{AZ_INSTALL_HOSTNAME:+AZ_INSTALL_HOSTNAME=$AZ_INSTALL_HOSTNAME}} \\
+        ${{AZ_INSTALL_USERNAME:+AZ_INSTALL_USERNAME=$AZ_INSTALL_USERNAME}} \\
+        ${{AZ_INSTALL_FULLNAME:+AZ_INSTALL_FULLNAME=$AZ_INSTALL_FULLNAME}} \\
+        ${{AZ_INSTALL_PASSWORD:+AZ_INSTALL_PASSWORD=$AZ_INSTALL_PASSWORD}} \\
+        ${{AZ_INSTALL_ROOT_PASSWORD:+AZ_INSTALL_ROOT_PASSWORD=$AZ_INSTALL_ROOT_PASSWORD}} \\
+        ${{AZ_INSTALL_TIMEZONE:+AZ_INSTALL_TIMEZONE=$AZ_INSTALL_TIMEZONE}} \\
         bash '{INSTALL_CLI_SCRIPT_PATH}'
 }}
 

@@ -1100,11 +1100,36 @@ def _check_host_deps(sudo, offline: bool) -> None:
         raise subprocess.CalledProcessError(rc, cmd)
 
 
+# Releng-inherited multi-user.target.wants enable-links Az'arch must NOT ship enabled.
+# The stock archiso `releng` profile enables sshd on the official Arch ISO by shipping
+# airootfs/etc/systemd/system/multi-user.target.wants/sshd.service. _copy_releng copies
+# releng verbatim (symlinks preserved), so that link survives onto BOTH Az'arch variants
+# unless stripped -- which is exactly why the DEFAULT desktop was booting with sshd active
+# on :22 (`systemctl status sshd` -> enabled; running). ssh must be OFF on the base ISO and
+# ON only on the ssh variant, where it is enabled at boot by sshd-hypervisor-setup.service
+# (see _apply_variant / packages/azarch/sshd.py), NOT by this inherited stock want. So we
+# delete the releng sshd want here, before any overlay; the ssh variant re-enables sshd
+# through its own mechanism, leaving the stock want permanently stripped.
+_RELENG_WANTS_TO_STRIP = ("sshd.service",)
+
+
+def _strip_releng_wants(W: Path) -> None:
+    """Remove releng-inherited multi-user.target.wants links Az'arch must not ship enabled
+    (currently the stock sshd.service want -- ssh is opt-in per variant, never a releng
+    default). Best-effort per name so a future releng that drops one is a no-op, not a break."""
+    wants = W / "airootfs/etc/systemd/system/multi-user.target.wants"
+    for name in _RELENG_WANTS_TO_STRIP:
+        (wants / name).unlink(missing_ok=True)
+
+
 def _copy_releng(W: Path) -> None:
     src = Path("/usr/share/archiso/configs/releng")
     if not src.is_dir():
         raise SystemExit(f"[x] archiso releng profile not found at {src}; is archiso installed?")
     emit.copy_tree(src, W)
+    # Strip releng's inherited sshd enable-link so the DEFAULT desktop ships sshd DISABLED
+    # (the ssh variant re-enables it per-variant). Without this the base ISO listens on :22.
+    _strip_releng_wants(W)
 
 
 def _brand_boot_menus(W: Path) -> None:

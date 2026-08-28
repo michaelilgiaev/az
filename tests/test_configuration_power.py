@@ -75,16 +75,54 @@ def test_power_unknown_verb_is_rc_two(capsys):
 @pytest.mark.parametrize("token,secs", [
     ("90s", 90), ("30m", 1800), ("2h", 7200), ("1d", 86400),
     ("1h30m", 5400), ("5", 300),  # bare number = minutes
+    # Sub-minute / fractional precision (the reported "give me seconds and easy control"):
+    ("10s", 10), ("45s", 45),
+    ("0.1", 6),        # bare DECIMAL = minutes -> 0.1 min = 6s (so `--in 0.1` works)
+    ("0.5", 30),       # 0.5 min = 30s
+    ("1.5m", 90),      # decimal WITH a unit -> 1.5 min = 90s
+    ("1.5h", 5400),    # 1.5 h = 5400s (decimals with units are now accepted)
+    ("0.5h", 1800),    # 0.5 h = 1800s
+    ("2.5s", 3),       # fractional seconds round to the nearest whole second (2.5 -> 3)
+    ("0.25m", 15),     # 0.25 min = 15s
 ])
 def test_parse_duration_valid(token, secs):
     cli = _cli()
     assert cli.parse_duration(token) == secs
 
 
-@pytest.mark.parametrize("token", ["", "0", "-5", "x", "10x", "1h30", "h", "1.5h"])
+@pytest.mark.parametrize("token", [
+    "", "0", "-5", "x", "10x", "1h30", "h",
+    "0", "0.0", "0s", "0m",   # zero (in any form) is never a valid future delay
+    "-0.5", "1.2.3", ".", "1.h", ".5h",  # malformed decimals
+    # Forms raw float() would MIS-accept -- the parser must reject them, not let a Python
+    # float quirk through: underscores (1_000 -> float 1000!), exponents, hex, a sign.
+    "1_000", "1e3", "0x10", "+5", "5.", ".5", "1..5", "1.5.h", "1.5hh", "5m5",
+    "0.001",  # 0.001 min = 0.06s rounds to 0s -> rejected (a timer must be in the future)
+])
 def test_parse_duration_invalid(token):
     cli = _cli()
     assert cli.parse_duration(token) is None
+
+
+@pytest.mark.parametrize("token", [
+    "9" * 400,          # bare number so huge float(token) overflows to inf
+    "9" * 400 + "h",    # same in the unit form
+    "1" * 320,
+])
+def test_parse_duration_huge_magnitude_returns_none_not_crash(token):
+    # A digit string long enough to overflow float() must be rejected cleanly (None), NOT
+    # crash with OverflowError from int(inf + 0.5) -- a user typing a silly number should get
+    # the normal "invalid duration" path (rc 2), never a Python traceback.
+    cli = _cli()
+    assert cli.parse_duration(token) is None
+
+
+def test_schedule_huge_duration_is_rc_two_not_crash(monkeypatch):
+    # End-to-end through the real dispatch: an overflowing --in must surface as rc 2, not a
+    # traceback out of _round_half_up.
+    cli = _cli()
+    monkeypatch.setattr(cli, "_have", lambda prog: True)
+    assert cli.cmd_power(["shutdown", "--in", "9" * 400]) == 2
 
 
 @pytest.mark.parametrize("token", ["²", "①", "²h", "②③"])
@@ -204,6 +242,49 @@ def test_cancel_stops_the_transient_unit(monkeypatch, capsys):
     assert cli.cmd_power(["shutdown", "--cancel"]) == 0
     stops = [c for c in calls if c[:2] == ("systemctl", "stop")]
     assert any("azarch-shutdown.timer" in c for c in stops), calls
+
+
+# --- noise suppression: no `Unit ... not loaded` wall when nothing is pending ---
+# The reported bug: every schedule (which first does an idempotent cancel) and every
+# --cancel-with-nothing-pending spewed "Failed to stop azarch-shutdown.timer: Unit not
+# loaded" x4 to the terminal. The fix gates the stop/reset-failed on _power_pending: when
+# no timer exists, we touch NO unit at all, so systemctl never prints the not-loaded lines.
+
+def test_cancel_when_nothing_pending_touches_no_unit(monkeypatch, capsys):
+    cli = _cli()
+    monkeypatch.setattr(cli, "_power_pending", lambda action: "")  # nothing scheduled
+    calls = _capture_sudo(cli, monkeypatch)
+    assert cli.cmd_power(["shutdown", "--cancel"]) == 0
+    # With nothing pending, NO systemctl stop/reset-failed is issued (that is what used to
+    # print the "Unit ... not loaded" noise). The user gets a clean "no pending" message.
+    assert not [c for c in calls if c[:2] == ("systemctl", "stop")], calls
+    assert not [c for c in calls if c[:2] == ("systemctl", "reset-failed")], calls
+    assert "no pending" in capsys.readouterr().out.lower()
+
+
+def test_schedule_when_nothing_pending_does_not_pre_stop(monkeypatch, capsys):
+    # Scheduling replaces any existing timer, but if there is none it must NOT issue the
+    # stop/reset-failed calls (whose stderr was the reported noise) before systemd-run.
+    cli = _cli()
+    _have(cli, monkeypatch, True)
+    monkeypatch.setattr(cli, "_power_pending", lambda action: "")
+    calls = _capture_sudo(cli, monkeypatch)
+    assert cli.cmd_power(["shutdown", "--in", "5m"]) == 0
+    assert not [c for c in calls if c[:2] == ("systemctl", "stop")], calls
+    assert not [c for c in calls if c[:2] == ("systemctl", "reset-failed")], calls
+    # ...but the actual schedule still happened.
+    assert [c for c in calls if c and c[0] == "systemd-run"], calls
+
+
+def test_schedule_at_accepts_seconds(monkeypatch):
+    # --at now also accepts HH:MM:SS for second-precise wall-clock scheduling.
+    cli = _cli()
+    _have(cli, monkeypatch, True)
+    monkeypatch.setattr(cli, "_power_pending", lambda action: "")
+    calls = _capture_sudo(cli, monkeypatch)
+    assert cli.cmd_power(["shutdown", "--at", "03:07:42"]) == 0
+    run = [c for c in calls if c and c[0] == "systemd-run"]
+    assert run and any(a == "--on-calendar=*-*-* 03:07:42" for a in run[0]), run
 
 
 # --- lock -------------------------------------------------------------------

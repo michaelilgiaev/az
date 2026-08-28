@@ -50,10 +50,15 @@ def _sudo_prefix() -> list[str]:
     return ["sudo"]
 
 
-def _sudo(*args: str, check: bool = True) -> int:
-    """Run a command under sudo (or directly if already root). Returns the exit
-    code; raises subprocess.CalledProcessError when check and the command fails."""
-    return subprocess.run([*_sudo_prefix(), *args], check=check).returncode
+def _sudo(*args: str, check: bool = True, quiet: bool = False) -> int:
+    """Run a command under sudo (or directly if already root). Returns the exit code; raises
+    subprocess.CalledProcessError when check and the command fails. `quiet` routes the child's
+    stderr to /dev/null -- used for best-effort teardown (e.g. stopping a maybe-absent transient
+    unit) whose "Unit ... not loaded" chatter would otherwise leak to the user's terminal."""
+    return subprocess.run(
+        [*_sudo_prefix(), *args], check=check,
+        stderr=subprocess.DEVNULL if quiet else None,
+    ).returncode
 
 
 def _have(prog: str) -> bool:
