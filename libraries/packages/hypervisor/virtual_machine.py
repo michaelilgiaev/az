@@ -356,6 +356,47 @@ def _make_snapshot(cfg: Config) -> "configuration_watcher.Snapshot":
     return configuration_watcher.Snapshot(values=values, text=text)
 
 
+def _tty_save() -> "tuple[int, list] | None":
+    """Snapshot the controlling terminal's attributes so teardown can restore them.
+    Returns (fd, saved_attrs) or None when stdin is not a tty (piped/headless runs
+    have no terminal to corrupt or restore). Best-effort: any termios failure -> None."""
+    try:
+        if not sys.stdin.isatty():
+            return None
+        import termios
+        fd = sys.stdin.fileno()
+        return fd, termios.tcgetattr(fd)
+    except (OSError, ValueError, ImportError):
+        return None
+
+
+def _tty_restore(saved: "tuple[int, list] | None") -> None:
+    """Put the controlling terminal back the way we found it. This is the fix for the
+    corrupted-tab bug: remote-viewer links libvte, which puts the shared controlling
+    tty into raw/no-echo mode; when it is killed on teardown (SIGKILL from cleanup, or
+    the terminal's own SIGINT on Ctrl-C) VTE never restores it, so the shell is left in
+    -echo/-icanon -- typing shows nothing and the prompt renders mangled. We restore the
+    snapshot on EVERY exit path (called from cleanup, which all paths funnel through).
+    Belt-and-braces `stty sane` re-cooks anything the snapshot did not cover (alt-screen,
+    bracketed paste). No-op when there was no tty to save."""
+    if saved is None:
+        return
+    fd, attrs = saved
+    try:
+        import termios
+        termios.tcsetattr(fd, termios.TCSADRAIN, attrs)
+    except Exception:  # never let terminal restore raise on a teardown path
+        pass
+    # `stty sane` re-cooks anything the snapshot did not cover (alt-screen, bracketed
+    # paste). Point it at the SAVED terminal fd (not sys.stdin, which may be a pseudo-file
+    # with no fileno on some stdins); best-effort and never allowed to raise on teardown.
+    try:
+        subprocess.run(["stty", "sane"], stdin=fd,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+
 def _launch(cfg: Config, qemu: list[str], port: "int | None") -> None:
     hcfg = cfg.hcfg
     """Boot QEMU, wait for the SPICE socket, launch the viewer; whichever dies
@@ -366,6 +407,9 @@ def _launch(cfg: Config, qemu: list[str], port: "int | None") -> None:
     viewer_proc: subprocess.Popen | None = None
     virtiofsd_proc: subprocess.Popen | None = None
     watcher: "configuration_watcher.ConfigWatcher | None" = None
+    # Snapshot the terminal BEFORE spawning any child, so teardown can undo a child
+    # (remote-viewer/VTE) leaving it raw. See _tty_restore.
+    saved_tty = _tty_save()
 
     def cleanup(*_a) -> None:
         if watcher is not None:
@@ -389,6 +433,9 @@ def _launch(cfg: Config, qemu: list[str], port: "int | None") -> None:
         )
         _rm(cfg.spice_sock)
         _rm_sock(cfg.virtiofs_sock)
+        # LAST: undo any terminal corruption a child (remote-viewer/VTE) left behind.
+        # Runs on every teardown path because they all funnel through cleanup().
+        _tty_restore(saved_tty)
 
     # Ctrl-C / TERM -> cleanup then exit, matching the bash trap.
     def _sig(_signum, _frame):
@@ -438,9 +485,15 @@ def _launch(cfg: Config, qemu: list[str], port: "int | None") -> None:
             viewer_env["DISPLAY"] = viewer_display
         if not hcfg.fullscreen:
             _maximize_window(title, display=viewer_display)
+        # stdin=DEVNULL is the source-side half of the tty fix: remote-viewer links
+        # libvte, which -- given a controlling tty on stdin -- puts it into raw mode and
+        # (when killed on teardown) leaves it -echo/-icanon, mangling the shell. Handing
+        # it /dev/null means it has no terminal to corrupt; _tty_restore in cleanup is the
+        # belt-and-braces second half for anything that still slips through.
         viewer_proc = subprocess.Popen(
             ["remote-viewer", *view_args, f"spice+unix://{cfg.spice_sock}"],
             env=viewer_env,
+            stdin=subprocess.DEVNULL,
         )
 
         # Watch hypervisor.cfg for live edits: valid ones are applied/logged,
