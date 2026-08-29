@@ -77,22 +77,88 @@ def test_first_boot_sh_greps_and_flips_the_same_token():
     assert "sed -i 's/^First_Boot=TRUE/First_Boot=FALSE/'" in sh
 
 
-# --- brace escaping in the f-string chroot script --------------------------
+# --- NO world-writable / blanket-executable home sweep (the security hole) ---
+#
+# The CLI installer USED to run, in chroot_setup_sh():
+#     find /home/main -type f -exec chmod 666 {} \;
+#     find /home/main -type d -exec chmod 777 {} \;
+#     find /home/main -type f -exec chmod +x {} \;
+# which made a CLI-installed $HOME world-writable (every dir 777, every file 666+x)
+# -- a real LOCAL security hole (any user can write any other user's files) and it
+# marked every regular file executable. Calamares does NOT do this: its unpackfs
+# rsync preserves the live perms (dirs 755, files their real modes), and the
+# identity rename uses usermod/mv which keep ownership. The sweep is DELETED, and
+# these tests FAIL if it (or any equivalent world-writable chmod over /home) ever
+# comes back -- this is the regression guard the handoff explicitly asked for.
 
-def test_chroot_setup_braces_emitted_singly():
-    # The `find ... -exec chmod {} \;` calls need literal single braces in the
-    # emitted bash. In the source these are doubled ({{}}) for the f-string; a
-    # missed doubling would either raise at call time or leak `{{`/`}}`.
+def test_chroot_setup_has_no_world_writable_home_chmod():
     s = installer.chroot_setup_sh()
-    assert "find /home/main -type f -exec chmod 666 {} \\;" in s
-    assert "find /home/main -type d -exec chmod 777 {} \\;" in s
-    assert "find /home/main -type f -exec chmod +x {} \\;" in s
+    # No blanket world-writable mode on any home path, in any form.
+    assert "chmod 777" not in s, "world-writable dir chmod must never return to the installer"
+    assert "chmod 666" not in s, "world-writable file chmod must never return to the installer"
+    # No blanket "make every home file executable" sweep.
+    assert "-type f -exec chmod +x" not in s, "blanket +x over home files must never return"
+    # And specifically none of the old /home sweeps in their exact shape.
+    for bad in (
+        "find /home/main -type f -exec chmod 666 {} \\;",
+        "find /home/main -type d -exec chmod 777 {} \\;",
+        "find /home/main -type f -exec chmod +x {} \\;",
+    ):
+        assert bad not in s, f"the removed world-writable sweep line is back: {bad!r}"
+
+
+def test_chroot_setup_no_blanket_chmod_over_any_home_path():
+    # Defence beyond the literal old lines: reject ANY find-based blanket chmod that
+    # targets a /home path (a renamed-login variant would be just as bad). Scan each
+    # emitted line for the (find /home ... -exec chmod) shape.
+    import re
+    s = installer.chroot_setup_sh()
+    for line in s.splitlines():
+        if "find" in line and "/home" in line and "-exec chmod" in line:
+            raise AssertionError(f"blanket chmod over a home path is forbidden: {line!r}")
+    # A recursive world-open chown-then-chmod combo would also be a smell; there must
+    # be no `chmod -R 777`/`chmod -R 666` anywhere either.
+    assert not re.search(r"chmod\s+-R\s+0*7[0-7][0-7]", s)
 
 
 def test_chroot_setup_has_no_leftover_double_braces():
     s = installer.chroot_setup_sh()
     assert "{{" not in s
     assert "}}" not in s
+
+
+# --- PARITY: the CLI chroot reuses Calamares' shared post-clone fixups -------
+#
+# The whole point of the unification: the CLI install must not RE-DERIVE the
+# post-clone fixups (mkinitcpio reset, installer-state cleanup) -- it must EMBED
+# the exact commands Calamares' shellprocess emits, by calling the SAME shared
+# producer functions. These tests fail if either path grows its own private copy,
+# so a future edit to the shared function changes BOTH paths and cannot silently
+# diverge them. That is the regression the handoff demanded a test for.
+
+def test_chroot_setup_embeds_shared_mkinitcpio_reset_verbatim():
+    from packages.calamares import calamares_shellprocess as csp
+    s = installer.chroot_setup_sh()
+    # The CLI chroot must contain the EXACT command block the shared function returns.
+    assert csp._mkinitcpio_reset_command() in s, \
+        "CLI chroot must embed the shared _csp._mkinitcpio_reset_command() verbatim"
+
+
+def test_chroot_setup_embeds_shared_installer_cleanup_for_renamed_home():
+    from packages.calamares import calamares_shellprocess as csp
+    s = installer.chroot_setup_sh()
+    # The CLI renames `main` to $az_login and moves the home first, so it must call
+    # the shared cleanup with the CHOSEN login's home (not a hardcoded /home/main).
+    assert csp.installer_cleanup_command("/home/$az_login") in s, \
+        "CLI chroot must embed the shared installer_cleanup_command for /home/$az_login"
+
+
+def test_calamares_and_cli_cleanup_come_from_the_same_function():
+    # PARITY PROOF: Calamares' own cleanup and the CLI's cleanup are the SAME function
+    # with different home args. Assert Calamares' literal-home variant equals the shared
+    # producer applied to /home/main, so the two call sites cannot drift.
+    from packages.calamares import calamares_shellprocess as csp
+    assert csp._installer_cleanup_command() == csp.installer_cleanup_command("/home/main")
 
 
 # --- chroot: the two archiso-clone fixups the CLI install shares with Calamares ----

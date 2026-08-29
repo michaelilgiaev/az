@@ -75,23 +75,42 @@ INSTALLER_MENU_DESKTOP = _openbox.INSTALL_MENU_DESKTOP_PATH
 INSTALLER_WRAPPER = _openbox.INSTALL_WRAPPER_PATH
 
 
-def _installer_cleanup_command() -> str:
-    """A single shellprocess command (target chroot) that makes the INSTALLED system's
+def installer_cleanup_command(home: str) -> str:
+    """A single command block (runs in the target chroot) that makes the INSTALLED system's
     OpenBox session correct: no "Az'arch Linux Installer" ANYWHERE (no Desktop icon, no
     application-menu entry, and no `azarch-install` wrapper), no first-run installer at login,
     and the region keyboard (not the live us,il) in effect.
 
-    Deletes the Desktop launcher from the reused /home/main AND /etc/skel, the system-wide
-    application-menu launcher, AND the /usr/local/bin/azarch-install wrapper those launchers
-    exec (dead on an installed system), then OVERWRITES the inherited OpenBox autostart
-    (home + skel) with the "installed" variant staged on the ISO -- which drops the two
-    live-only lines (the fixed us,il setxkbmap and the first-run Calamares launch) while
-    keeping wallpaper/xcape/menu-daemon. `set -e` with plain `rm -f`/`cp -f` (a `cp` of a
-    shipped file that always exists), and NO `$` (Calamares macro-expands $WORD and aborts on
-    an unknown one -- see _mkinitcpio_reset_command), so only fixed paths are used."""
+    `home` is the ACCOUNT HOME the installed OpenBox session reads (its Desktop launcher and
+    ~/.config/openbox/autostart). This is the ONE thing that differs between the two install
+    paths, so it is a parameter -- everything else is identical, which is exactly how the CLI
+    and GUI installers share ONE implementation of this step (see
+    data/docs/superpowers/specs/2026-08-29-unify-cli-gui-installer-design.md):
+
+      * Calamares removes the live `main` account and lets its `users` module recreate it,
+        keeping /home/main -> home is the literal "/home/main" (_installer_cleanup_command()).
+      * The CLI installer RENAMES `main` to the chosen login and MOVES the home first, so it
+        passes "/home/$az_login" (a shell variable resolved inside arch-chroot).
+
+    Deletes the Desktop launcher from `home` AND /etc/skel, the system-wide application-menu
+    launcher, AND the /usr/local/bin/azarch-install wrapper those launchers exec (dead on an
+    installed system), then OVERWRITES the inherited OpenBox autostart (home + skel) with the
+    "installed" variant staged on the ISO -- which drops the two live-only lines (the fixed
+    us,il setxkbmap and the first-run Calamares launch) while keeping wallpaper/xcape/
+    menu-daemon. `set -e` with plain `rm -f`/`cp -f` (a `cp` of a shipped file that always
+    exists).
+
+    The NO-`$` rule (Calamares macro-expands $WORD and aborts on an unknown one -- see
+    _mkinitcpio_reset_command) applies ONLY to the Calamares call site, which passes the
+    literal "/home/main" (no `$`). The CLI call site runs this text through `arch-chroot`
+    (a normal shell, no macro-expander), where a `$az_login` in `home` is a legitimate shell
+    variable. So the shared body is identical; only the caller's `home` string carries (or
+    does not carry) a `$`."""
+    desktop_launcher = f"{home}/Desktop/azarch-install.desktop"
+    autostart = f"{home}/.config/openbox/autostart"
     return (
         "set -e\n"
-        f"rm -f {INSTALLER_DESKTOP_LAUNCHER}\n"
+        f"rm -f {desktop_launcher}\n"
         f"rm -f {INSTALLER_SKEL_LAUNCHER}\n"
         # Remove the application-menu entry too, so the installer does not appear in the
         # menu on the installed system (calamares itself is also try_removed, so keeping it
@@ -104,9 +123,26 @@ def _installer_cleanup_command() -> str:
         # Replace the inherited live autostart (home + skel) with the installed variant
         # (no fixed keyboard, no first-run installer). The source is a root-owned file
         # unpackfs copied onto the target, so it is always present.
-        f"cp -f {INSTALLED_AUTOSTART_SRC} {INSTALLED_OPENBOX_AUTOSTART}\n"
-        f"cp -f {INSTALLED_AUTOSTART_SRC} {INSTALLED_SKEL_OPENBOX_AUTOSTART}"
+        f"cp -f {INSTALLED_AUTOSTART_SRC} {autostart}\n"
+        f"cp -f {INSTALLED_AUTOSTART_SRC} {INSTALLED_SKEL_OPENBOX_AUTOSTART}\n"
+        # `cp` ran as root, so the home autostart just landed root:root -- a user should own
+        # (and be able to edit) their own OpenBox autostart, and a root-owned file in $HOME is
+        # a papercut both install paths would otherwise ship. chown it back to the live user's
+        # NUMERIC uid:gid (1000:998, from system.py PASSWD/GROUP). Numeric on purpose: it needs
+        # no `$`/username lookup, so it is safe under Calamares' $WORD macro-expander (see the
+        # no-`$` note in _mkinitcpio_reset_command) AND correct for the CLI path, where the
+        # `main`->chosen-login rename via `usermod -l` PRESERVES uid/gid 1000:998. The /etc/skel
+        # copy stays root:root (skel is a system template, root-owned is correct there).
+        f"chown 1000:998 {autostart}"
     )
+
+
+def _installer_cleanup_command() -> str:
+    """Calamares' call site: the shared installer_cleanup_command() applied to the reused
+    live home (/home/main). Kept as a named wrapper so calamares.py's re-export and the
+    existing tests that pin `calamares._installer_cleanup_command` stay stable, and so the
+    Calamares path provably uses the SAME producer as the CLI path (only the home differs)."""
+    return installer_cleanup_command(f"/home/{LIVE_USER}")
 
 # The OFFLINE install copies the live archiso rootfs verbatim via unpackfs, which
 # leaves the target's /boot and mkinitcpio configuration in an ISO-only state that makes

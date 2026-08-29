@@ -440,6 +440,28 @@ def test_installer_cleanup_command_uses_no_shell_variables():
             assert line.startswith("cp -f "), line
 
 
+def test_installer_cleanup_chowns_autostart_back_to_the_user():
+    # The cleanup `cp`s the installed autostart into $HOME as ROOT, so it lands root:root --
+    # a user must own (and be able to edit) their own OpenBox autostart. The shared command
+    # must chown it back to the live user's NUMERIC uid:gid (1000:998, per system.py) -- numeric
+    # so it needs no `$` (Calamares macro-expander safe) and is correct for the CLI path too,
+    # where usermod -l preserves uid/gid. Assert both the parameterized producer AND the
+    # Calamares call site chown the home autostart (skel stays root-owned -- it is a template).
+    from packages.calamares import calamares_shellprocess as csp
+    for home in ("/home/main", "/home/$az_login"):
+        cmd = csp.installer_cleanup_command(home)
+        assert f"chown 1000:998 {home}/.config/openbox/autostart" in cmd, home
+        # The chown must come AFTER the cp that created the file, or it chowns nothing.
+        assert cmd.index(f"cp -f {csp.INSTALLED_AUTOSTART_SRC} {home}/.config/openbox/autostart") \
+            < cmd.index(f"chown 1000:998 {home}/.config/openbox/autostart"), home
+    # The Calamares literal-home call site carries it too, and still uses no `$`.
+    calamares_cmd = csp._installer_cleanup_command()
+    assert "chown 1000:998 /home/main/.config/openbox/autostart" in calamares_cmd
+    assert "$" not in calamares_cmd
+    # We do NOT chown the /etc/skel copy -- skel is a system template, root-owned is correct.
+    assert "chown 1000:998 /etc/skel" not in calamares_cmd
+
+
 def test_shellprocess_overwrites_openbox_autostart_so_region_keyboard_and_no_installer():
     # BUG classes fixed on the INSTALLED OpenBox session (the live rootfs is copied
     # verbatim via unpackfs/reuseHome): the live ~/.config/openbox/autostart carries two

@@ -278,21 +278,15 @@ touch /var/log/.locale_set
 
 # UNDO THE ARCHISO MKINITCPIO STATE BEFORE building the initramfs. The verbatim clone carries
 # archiso's mkinitcpio artifacts, and a plain `mkinitcpio -P` on them yields an UNBOOTABLE
-# installed system (this is the same reset the Calamares path runs post-unpackfs -- reused here
-# from packages/calamares so the two install paths never drift):
-#   A. /boot is EMPTY (mkarchiso wipes it before squashing); the kernel survives only as
-#      /usr/lib/modules/<kver>/vmlinuz. Reinstate /boot/vmlinuz-linux (what the `linux`
-#      package's install hook would do -- an offline clone never runs that pacman hook).
-#   B. /etc/mkinitcpio.d/linux.preset is the ARCHISO preset (PRESETS=('archiso') + an
-#      archiso.conf HOOKS drop-in that expects the live SquashFS/cow overlay). Replace it with
-#      the STOCK `linux` preset and drop archiso.conf so `mkinitcpio -P` builds a disk-bootable
-#      image against the installed /etc/mkinitcpio.conf.
-find {_csp._MODULES_DIR} -maxdepth 2 -name vmlinuz -exec install -Dm644 {{}} {_csp._TARGET_KERNEL} \\;
-test -r {_csp._TARGET_KERNEL}
-mkdir -p /etc/mkinitcpio.d
-cat > {_csp._PRESET_PATH} <<'EOF'
-{_csp.STOCK_LINUX_PRESET}EOF
-rm -f {_csp._ARCHISO_CONF_PATH}
+# installed system. This is the SAME reset the Calamares path runs post-unpackfs -- and to
+# guarantee the two install paths can never drift, the CLI does not re-derive it: it EMBEDS the
+# exact shared command block from packages/calamares (a single source of truth). That block:
+#   A. reinstates /boot/vmlinuz-linux from /usr/lib/modules/<kver>/vmlinuz (mkarchiso empties
+#      /boot; the `linux` package's install hook that would repopulate it never runs offline),
+#   B. replaces the ARCHISO preset (PRESETS=('archiso') + the archiso.conf HOOKS drop-in) with
+#      the STOCK `linux` preset and drops archiso.conf, so `mkinitcpio -P` below builds a
+#      disk-bootable image against the installed /etc/mkinitcpio.conf.
+{_csp._mkinitcpio_reset_command()}
 
 # Regenerate the initramfs for the INSTALLED system (now against the stock preset + the
 # installed /etc/mkinitcpio.conf, so it boots from the real disk).
@@ -341,13 +335,18 @@ cp /root/azarch/first-boot-setup.service /etc/systemd/system/first-boot-setup.se
 chown 1000:998 /home/main/.config
 chmod 755 /home/main/.config/first-boot/first-boot-setup.sh
 chmod 644 /etc/systemd/system/first-boot-setup.service
-chmod 666 /home/main/.config/first-boot/first-boot-setup.conf
+# 644, not world-writable: first-boot-setup.service runs as root (no User=), so root rewrites
+# First_Boot=TRUE->FALSE here just fine -- there is no reason to make this config world-writable.
+chmod 644 /home/main/.config/first-boot/first-boot-setup.conf
 systemctl enable first-boot-setup.service
 
-find /home/main -type f -exec chmod 666 {{}} \\;
-find /home/main -type d -exec chmod 777 {{}} \\;
-find /home/main -type f -exec chmod +x {{}} \\;
-chown -R main:main /home/main
+# NOTE: there is deliberately NO recursive world-open chmod sweep over /home here. The verbatim
+# rootfs clone (rsync -aAXH) already reproduced the live home's correct perms and ownership
+# (dirs 755, files their real modes, owned main:main); a blanket chmod would only RE-INTRODUCE
+# a world-writable $HOME (the local security hole this unification removed) and mark every file
+# executable. Calamares does not do it, so neither does the CLI path. If a post-rename chown is
+# ever needed it is handled per-account by the identity step below (usermod/mv preserve
+# ownership), not with a recursive world-open chmod.
 
 pacman -Sy
 %IDENTITY_CHROOT%
@@ -356,23 +355,18 @@ pacman -Sy
 # OpenBox autostart, whose live-only lines (a) RE-LAUNCH the disk-erasing installer at every
 # login and (b) force a fixed us,il keyboard over the chosen region layout -- and it inherited
 # the installer's Desktop icon / application-menu entry / privileged wrapper. Calamares deletes
-# all of this post-unpackfs; the CLI clone must too. Overwrite the installed user's autostart
-# (and /etc/skel) with the "installed" variant staged on the ISO, and remove the installer
-# launchers + wrapper. This runs AFTER the identity step so it targets the CHOSEN login's home
-# (main may have been renamed and /home/main moved to /home/$az_login). Re-derive the login
-# from install_info here so the block is self-contained even if the rename block was skipped.
+# all of this post-unpackfs; the CLI clone must too -- and to guarantee the two paths never
+# drift, the CLI does NOT re-derive the cleanup: it EMBEDS the SAME shared command block
+# Calamares' shellprocess emits (packages/calamares.installer_cleanup_command), just applied to
+# the CHOSEN login's home instead of the literal /home/main. This runs AFTER the identity step
+# so `main` may have been renamed and /home/main moved to /home/$az_login. Re-derive the login
+# from install_info here so the block is self-contained even if the rename block was skipped,
+# and ensure the target .config/openbox dir exists (it does after the clone+rename, but the
+# mkdir is a cheap guard) before the shared block's `cp` writes the installed autostart.
 az_login="$(cat /etc/install_info/username 2>/dev/null)"
 az_login="${{az_login:-main}}"
-if [ -f {_csp.INSTALLED_AUTOSTART_SRC} ]; then
-    mkdir -p "/home/$az_login/.config/openbox" /etc/skel/.config/openbox
-    cp -f {_csp.INSTALLED_AUTOSTART_SRC} "/home/$az_login/.config/openbox/autostart"
-    cp -f {_csp.INSTALLED_AUTOSTART_SRC} /etc/skel/.config/openbox/autostart
-    chown "$az_login:$az_login" "/home/$az_login/.config/openbox/autostart" 2>/dev/null || true
-fi
-rm -f "/home/$az_login/Desktop/azarch-install.desktop"
-rm -f {_csp.INSTALLER_SKEL_LAUNCHER}
-rm -f {_csp.INSTALLER_MENU_DESKTOP}
-rm -f {_csp.INSTALLER_WRAPPER}
+mkdir -p "/home/$az_login/.config/openbox" /etc/skel/.config/openbox
+{_csp.installer_cleanup_command("/home/$az_login")}
 
 echo -e "\\e[94mazarch disk installation complete, you can reboot now.\\e[0m"
 """
