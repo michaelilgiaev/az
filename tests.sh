@@ -122,12 +122,16 @@ export PYTHONDONTWRITEBYTECODE=1
 
 # Right-align the percentage and keep lines from wrapping. Below, pytest's stdout
 # is a PIPE (we tee it), so pytest cannot query the terminal width and falls back
-# to 80 -- long test ids then overflow and the [ NN%] column drifts. Export the
-# REAL width (tput, else COLUMNS, else 80) so pytest formats to the actual screen
-# exactly as it would on a bare tty.
-COLS="$(tput cols 2>/dev/null || true)"
-[ -n "${COLS:-}" ] || COLS="${COLUMNS:-80}"
-export COLUMNS="$COLS"
+# to 80 -- long test ids then overflow and the [ NN%] column drifts. Resolve the
+# REAL width once and export it so pytest formats to the actual screen exactly as
+# it would on a bare tty. Try the cheapest source that works: an already-set
+# COLUMNS, else the tty via stty, else tput, else 80. Each guarded so a headless
+# run (no tty) never errors under `set -o nounset`.
+WIDTH="${COLUMNS:-}"
+if [ -z "$WIDTH" ]; then WIDTH="$(stty size 2>/dev/null | cut -d' ' -f2)"; fi
+if [ -z "$WIDTH" ]; then WIDTH="$(tput cols 2>/dev/null || true)"; fi
+[ -n "$WIDTH" ] || WIDTH=80
+export COLUMNS="$WIDTH"
 
 # Leave a spotless tree on EXIT, however we exit (pass, fail, or Ctrl-C). Two
 # kinds of scratch get wiped, both gitignored and both treated as pollution here:
@@ -155,8 +159,8 @@ trap cleanup EXIT
 #   -rN (quiet/mixed) silences the trailing reason report; -rA (loud) shows all.
 # These lead so a user's own -k/path in PYTEST_ARGS still applies and can override.
 case "$MODE" in
-    mixed)  MODE_OPTS=(-o addopts= --no-header -rN --color=yes -p no:cacheprovider) ;;  # dots per file
-    quiet)  MODE_OPTS=(-o addopts= -q --no-header -rN --color=yes -p no:cacheprovider) ;;  # green dots
+    mixed)  MODE_OPTS=(-o addopts= -rN --color=yes -p no:cacheprovider) ;;  # dots per file
+    quiet)  MODE_OPTS=(-o addopts= -q -rN --color=yes -p no:cacheprovider) ;;  # green dots
     loud)   MODE_OPTS=(-o addopts= -vv -rA --tb=long --color=yes -p no:cacheprovider) ;;  # eyesore
 esac
 
@@ -166,35 +170,63 @@ esac
 mkdir -p "$LOGDIR"
 : > "$LOG"
 
-# Hard-clip every output line to the terminal width, WITHOUT counting the color
-# escapes. LOUD (-vv) prints each test's full node id, and a few parametrized
-# ids here are pathological (one carries a 300+ digit number) -- a single
-# unbreakable token far wider than the screen that NO pytest verbosity truncates.
-# So we clip ourselves: walk each line, copy ANSI escapes verbatim (zero width)
-# and keep only the first $COLUMNS VISIBLE characters, then re-emit a reset so a
-# clipped color never bleeds into the next line. mixed/quiet lines are already
-# within width, so this is a no-op for them -- one uniform filter guarantees ALL
-# three modes fit the screen. awk is used (not `cut`, which would slice through
-# an escape sequence and corrupt the color).
-clip_to_width() {
+# ALL terminal formatting in ONE awk pass. Three awk stages chained by pipes
+# re-buffer between each other (libc block-buffers an awk->awk pipe even with
+# fflush on the last one), which reintroduced the "frozen until the end" feel.
+# A single process with one fflush() per line stays live end to end AND spawns
+# fewer processes, so it is snappier too. Per line it does, in order:
+#
+#   1. GRAY HEADER -- pytest's environment lines are context, not result, so they
+#      recede to gray (\033[90m): platform/Python/pluggy, rootdir, configfile,
+#      testpaths, cachedir, plugins, and `collecting ... collected N items`.
+#      Matched on the DE-COLORED text (pytest paints "collecting" bold, so the raw
+#      line starts with an escape, not a letter) and anchored at line-start so a
+#      test id that merely contains "rootdir" is never caught.
+#
+#   2. FIT TO WIDTH -- keep every line within the terminal width WITHOUT counting
+#      color escapes and WITHOUT leaving a severed stub. LOUD (-vv) prints each
+#      test's full node id, and a few parametrized ids here are pathological (one
+#      carries a 300+ digit number): a single token far wider than the screen. A
+#      blind left-clip would chop it mid-number, dropping the trailing
+#      " PASSED [ NN%]" and leaving unreadable garbage. So when a line is too wide
+#      we MIDDLE-truncate -- head + one ellipsis + tail on the VISIBLE text --
+#      keeping a bit more tail so the PASSED/percentage always survives. Lines
+#      already within width keep their bytes (and their color) untouched.
+#
+#   3. BLANK BEFORE SUMMARY -- put exactly one blank line above pytest's final
+#      "N passed[, M skipped] in Xs" line. mixed/loud render that as a ==== rule
+#      pytest already pads, so we must not double it; quiet glues the bare count to
+#      the last row of dots. Rule: emit a blank first only when this IS the summary
+#      and the previous emitted line was not already blank.
+format_stream() {
     awk -v W="$COLUMNS" '
+    function strip(s) { gsub(/\033\[[0-9;]*[a-zA-Z]/, "", s); return s }
     {
-        line=$0; vis=0; out=""; i=1; n=length(line)
-        while (i<=n) {
-            c=substr(line,i,1)
-            if (c=="\033") {                       # copy a CSI escape verbatim, no width
-                j=i+1
-                while (j<=n && index("mGKHFABCDsu", substr(line,j,1))==0) j++
-                out=out substr(line,i,j-i+1); i=j+1; continue
-            }
-            if (vis<W) { out=out c; vis++ }        # keep visible chars up to the width
-            i++
+        bare = strip($0)
+
+        # (3) one blank line before the summary, never doubled.
+        if (bare ~ /(^| )[0-9]+ (passed|failed|error|errors|skipped|deselected|xfailed|xpassed).* in [0-9]/ \
+            && prev_nonblank) {
+            print ""
         }
-        # Re-emit a reset ONLY if we clipped mid-color (dropped visible chars past
-        # the width); when nothing was dropped, pytest already closed its own SGR,
-        # so adding another would just double it.
-        if (vis>=W && n>0) out=out "\033[0m"
-        print out
+        prev_nonblank = (bare != "")
+
+        # (1) recede the environment header to gray (repaint the clean text).
+        if (bare ~ /^(platform |rootdir:|configfile:|testpaths:|plugins:|cachedir:|collecting |collected )/) {
+            line = "\033[90m" bare "\033[0m"; visible = bare
+        } else {
+            line = $0; visible = bare
+        }
+
+        # (2) fit to width: pass thru if it fits, else middle-truncate the visible
+        # text (a middled line cannot keep balanced SGR, so it goes plain + reset).
+        if (length(visible) <= W) {
+            print line
+        } else {
+            keep = W - 1; head = int(keep * 0.55); tail = keep - head
+            print "\033[90m" substr(visible,1,head) "\342\200\246" substr(visible, length(visible)-tail+1) "\033[0m"
+        }
+        fflush()
     }'
 }
 
@@ -202,17 +234,31 @@ clip_to_width() {
 # `network`-marked tests ping real external hosts and skip themselves when
 # offline, so a plain `bash tests.sh` still passes without connectivity.
 #
-# One capture, clipped, two sinks: pytest's colored output is clipped to the
-# screen width, then `tee`d to the terminal (colored) AND, via process
-# substitution, into a sed that strips ANSI and appends the plain text to
-# logs/tests.log. `set -o errexit` is disabled around this so a test failure does
-# not abort the script before cleanup; we read pytest's TRUE exit code from
-# ${PIPESTATUS[0]} (the FIRST stage -- NOT clip's / tee's / sed's) and re-raise
-# it, so `bash tests.sh` still reports the real code.
+# Real-time output. pytest writes to a PIPE below (we filter + tee it), and off a
+# tty it lets its stream sit in a big block buffer -- so with plain piping nothing
+# appears until the run is nearly over and it FEELS frozen for the whole suite.
+# Two things fix that: `python -u` unbuffers the interpreter, and `stdbuf -oL`
+# forces pytest's stdout to flush per LINE, so each row of dots / each test line
+# reaches the screen the instant pytest emits it. Every downstream awk/sed fflushes
+# per line too, so the whole pipeline is live end to end. stdbuf is coreutils and
+# effectively always present; if it is somehow missing, fall back to plain (still
+# correct, just block-buffered) rather than fail.
+STDBUF=(stdbuf -oL)
+command -v stdbuf >/dev/null 2>&1 || STDBUF=()
+
+# The pipeline (three stages, all line-buffered -> live end to end):
+#   pytest (line-buffered stdout + unbuffered interp)  ->  format_stream (the one
+#   awk that grays the header, fits each line, and spaces the summary)  ->  tee to
+#   the terminal AND, via process substitution, to a sed that strips color into
+#   logs/tests.log.
+# `set -o errexit` is disabled around it so a test failure does not abort before
+# cleanup; pytest's TRUE exit code is read from ${PIPESTATUS[0]} (the FIRST stage
+# -- stdbuf execs pytest and propagates its status, so this stays pytest's own
+# code, not awk's / tee's) and re-raised, so `bash tests.sh` reports it.
 set +o errexit
-"$PY" -m pytest "${MODE_OPTS[@]}" "${PYTEST_ARGS[@]}" 2>&1 \
-    | clip_to_width \
-    | tee >(sed -E 's/\x1b\[[0-9;]*[a-zA-Z]//g' >> "$LOG")
+"${STDBUF[@]}" "$PY" -u -m pytest "${MODE_OPTS[@]}" "${PYTEST_ARGS[@]}" 2>&1 \
+    | format_stream \
+    | tee >(sed -u -E 's/\x1b\[[0-9;]*[a-zA-Z]//g' >> "$LOG")
 status="${PIPESTATUS[0]}"
 set -o errexit
 
