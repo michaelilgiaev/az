@@ -93,7 +93,7 @@ while :; do
         continue
     fi
     # RESERVED / EXISTING-ACCOUNT guard. The chroot renames the live `main` account to the
-    # chosen name ONLY when that name is free; a name that already exists on the pacstrapped
+    # chosen name ONLY when that name is free; a name that already exists on the cloned
     # target (root, bin, daemon, nobody, http, ...) would silently SKIP the rename yet still
     # re-point tty1 autologin at that account -- which has no startx bootstrap, so the desktop
     # never comes up (a bare root/nologin tty1). `main` itself is allowed: it is the live user

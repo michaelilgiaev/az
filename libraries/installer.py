@@ -1,23 +1,45 @@
 """The on-disk install pipeline scripts, authored in Python and emitted as the
 real .sh/.conf/.service files the ISO ships.
 
-  installer_sh()             azarch-iso-installer.sh: partition, pacstrap from
-                             the offline repo, copy configuration, run chroot-setup
+  installer_sh()             azarch-iso-installer.sh: partition, CLONE the live rootfs
+                             verbatim into the target, run chroot-setup
   chroot_setup_sh()          runs inside arch-chroot: locale, bootloader, services
   setup_pkgs_sh()            live-ISO oneshot: firewall tweaks
   first_boot_sh/service/conf first-boot-once mechanism on the installed system
 
-The KDE/Plasma desktop was removed in the overhaul: the ISO now boots to a bare
-console (like plain archiso), so these scripts no longer copy any desktop theme,
-plasmoid QML, session file, or display-manager configuration. A desktop/WM is layered
-back on later, not here.
+WHY A VERBATIM ROOTFS CLONE (not pacstrap): the Az'arch desktop shell is a set of
+COMPILED C daemons + generated helper binaries (the application-menu daemon, the
+window-switcher daemon, the terminal UI, the OSD, the /usr/local/bin launchers, the
+wallpapers, /etc/xdg/azarch-picom.conf, the timedate app, ...). The compiler emits
+them as root-owned files straight into the ISO airootfs; NONE are owned by a pacman
+package. So a fresh `pacstrap` of packages.x86_64 + a hand-copy of a few files (the
+old approach) left every one of those binaries ABSENT on the installed system: X and
+OpenBox came up to a gray root window, but the autostart's guarded daemon launches
+silently no-op'd and the Super-key menu launcher failed ("Openbox error"). The
+Calamares GUI never had this bug because its `unpackfs` module rsyncs the ENTIRE live
+squashfs rootfs verbatim into the target. This scripted installer now does the same
+thing -- rsync the live running `/` into `/mnt` -- so the CLI/SSH install reaches the
+exact same end-state as Calamares by construction (same binaries, same desktop, same
+config), instead of trying to re-enumerate every root-owned artifact by hand.
 """
 
 from __future__ import annotations
 
-import pacman
 import installer_identity
+from packages.calamares import calamares_shellprocess as _csp
 from packages.calamares.locale import _detect_and_apply_locale_block
+
+
+# Paths excluded from the live-rootfs -> target rsync. The kernel/virtual filesystems
+# (/proc, /sys, /dev) hold no real files; the runtime trees (/run -- which on archiso
+# holds the cow/bootmnt SquashFS overlay under /run/archiso -- and /tmp, /var/tmp) are
+# transient; /mnt is the TARGET itself (excluding it prevents the rsync from recursing
+# into its own destination); /media and /lost+found are irrelevant. This is the same set
+# archiso/Calamares' unpackfs skip for a faithful clone. Kept as a constant so the bash
+# generator stays readable and the exclude set is unit-testable in one place.
+LIVE_ROOTFS_RSYNC_EXCLUDES = (
+    "/proc", "/sys", "/dev", "/run", "/mnt", "/media", "/tmp", "/var/tmp", "/lost+found",
+)
 
 
 # --- The disk installer (runs in the live session) --------------------------
@@ -173,131 +195,43 @@ if [ $is_uefi -eq 1 ]; then
   mount "$part1" /mnt/boot/EFI
 fi
 
+echo "Cloning the live system onto the target (this is the whole desktop)..."
+# CLONE THE LIVE ROOTFS VERBATIM into the mounted target -- the Calamares `unpackfs` path,
+# done with rsync. The live running `/` is the SquashFS root plus the live overlay: it already
+# contains EVERYTHING the installed system needs -- every compiled Az'arch daemon/binary under
+# /usr/local, the wallpapers, /etc/xdg/azarch-picom.conf, the branded /usr/lib/os-release, the
+# planted per-app overrides (kitty icon, gedit launcher), the fastfetch config, the first-boot
+# unit + script, the /home/main desktop dotfiles (.bash_profile -> exec startx, .xinitrc,
+# .config/openbox/*, themes), the getty@tty1 autologin drop-in, the /etc/{passwd,shadow,group}
+# accounts (so `main` exists with the --ssh password hash on the ssh variant), the sudoers
+# drop-ins, AND -- on the ssh variant -- the sshd-hypervisor-setup enable-link under
+# /etc/systemd/system/multi-user.target.wants. So there is NO per-file hand-copy here anymore:
+# the single rsync supersedes all of it, which is exactly why the installed CLI system now
+# matches the live desktop instead of booting to a gray screen. -aAXH preserves perms/owners,
+# ACLs, xattrs and hardlinks; --exclude keeps the virtual/runtime trees and the target itself
+# out (see LIVE_ROOTFS_RSYNC_EXCLUDES).
+rsync -aAXH %RSYNC_EXCLUDES% / /mnt/
+
+echo "Regenerating fstab for the installed disk..."
+# The cloned /etc/fstab is the archiso live one (its root is the SquashFS/cow overlay, wrong
+# for a real disk). Regenerate it for the ACTUAL target partitions, or the installed system
+# cannot mount its own root. genfstab appends; the clone's fstab is emptied first so we do not
+# stack a stale archiso entry under the real ones.
+: > /mnt/etc/fstab
+genfstab -U /mnt >> /mnt/etc/fstab
+
+# Drop the install_info markers AFTER the clone so they sit ON TOP of the copied /etc (the
+# chroot step reads disk / is_uefi / the identity answers from here). /etc/install_info does
+# not exist on the live medium, so the rsync above never touches it -- writing it here keeps
+# it robust regardless of rsync flags.
 mkdir -p /mnt/etc/install_info
 echo "$largest_disk" > /mnt/etc/install_info/disk
 echo "$is_uefi" > /mnt/etc/install_info/is_uefi
-
-# Persist the collected identity answers for the chroot step to apply.
 %IDENTITY_WRITE%
 
-echo "Setting up local repository..."
-mkdir -p /mnt/pacstrap-azarch-repo
-mkdir -p /tmp/pacstrap-azarch-db
-cp -r /root/azarch/pacstrap-azarch-repo/. /mnt/pacstrap-azarch-repo/
-cp -r /root/azarch/pacstrap-azarch-db/. /tmp/pacstrap-azarch-db/
-cp /etc/pacman.conf /etc/pacman.bak
-cp /root/azarch/pacstrap-azarch-conf/pacman.conf /etc/pacman.conf
-
-echo "Running pacstrap..."
-# Strip comments (full-line and trailing) and blank lines the SAME way mkarchiso
-# parses packages.x86_64, so the on-disk installer pacstraps the identical set the
-# live medium was built from -- the manifest carries a Stock/Az'arch delimiter and
-# a header, none of which are package names.
-pacstrap /mnt $(sed '/^[[:blank:]]*#.*/d;s/#.*//;/^[[:blank:]]*$/d' /root/azarch/packages.x86_64)
-
-mv /etc/pacman.bak /etc/pacman.conf
-
-echo "Generating fstab..."
-genfstab -U /mnt >> /mnt/etc/fstab
-
 echo "Copying chroot setup..."
-mkdir -p /mnt
 cp /root/azarch/chroot-setup.sh /mnt/chroot-setup.sh
 chmod +x /mnt/chroot-setup.sh
-
-echo "Setting up users and sudo configuration..."
-mkdir -p /mnt/etc
-mkdir -p /mnt/etc/sudoers.d
-cp /etc/passwd /mnt/etc/passwd
-cp /etc/shadow /mnt/etc/shadow
-cp /etc/gshadow /mnt/etc/gshadow
-cp /etc/group /mnt/etc/group
-cp /etc/sudoers.d/00-rootpw /mnt/etc/sudoers.d/00-rootpw
-cp /etc/sudoers.d/00-main /mnt/etc/sudoers.d/00-main
-cp /etc/sudoers.d/00-secure-path /mnt/etc/sudoers.d/00-secure-path
-chmod 440 /mnt/etc/sudoers.d/00-rootpw
-chmod 440 /mnt/etc/sudoers.d/00-main
-chmod 440 /mnt/etc/sudoers.d/00-secure-path
-
-echo "[*] Preparing home directory..."
-mkdir -p /mnt/home/main
-chown -R 1000:998 /mnt/home/main
-
-# CARRY THE DESKTOP ONTO THE TARGET. This scripted installer pacstraps a fresh system, so --
-# unlike the Calamares `unpackfs` verbatim rootfs copy -- nothing lays down the graphical
-# session unless we do it here. Without this the installed system boots to a bare tty1 root
-# login with an empty home. The live /etc/skel already holds the FULL desktop: the build
-# mirrors every openbox/librewolf home file into it (compiler _emit_desktop), so it contains
-# .bash_profile (execs startx), .xinitrc, .config/openbox/*, .themes/*, GTK settings, etc.
-# We (1) copy that skel to the target /etc/skel so future users get the desktop, (2) SEED the
-# installed `main` home from the same skel, and (3) install the getty@tty1 autologin drop-in
-# so tty1 autologins `main` -> .bash_profile -> exec startx (matching the live session and the
-# Calamares install). Each copy is guarded so a variant lacking a path degrades, not aborts.
-if [ -d /etc/skel ]; then
-    echo "[*] Copying desktop skeleton (/etc/skel) to the installed system..."
-    mkdir -p /mnt/etc/skel
-    cp -a /etc/skel/. /mnt/etc/skel/
-    # Seed the installed `main` home from the skeleton. NO-CLOBBER (cp -an): the fastfetch and
-    # first-boot files this installer writes below must win over any skel copy of them.
-    cp -an /etc/skel/. /mnt/home/main/
-    chown -R 1000:998 /mnt/home/main
-fi
-if [ -d /etc/systemd/system/getty@tty1.service.d ]; then
-    echo "[*] Enabling tty1 autologin (main) on the installed system..."
-    mkdir -p /mnt/etc/systemd/system
-    cp -a /etc/systemd/system/getty@tty1.service.d \\
-        /mnt/etc/systemd/system/getty@tty1.service.d
-fi
-
-echo "[*] Copying azarch command line interface..."
-install -m 755 /usr/local/bin/azarch /mnt/usr/local/bin/azarch
-
-echo "[*] Copying azarch fastfetch configuration..."
-mkdir -p /mnt/home/main/.config/fastfetch
-cp /root/azarch/fastfetch/config.jsonc /mnt/home/main/.config/fastfetch/config.jsonc
-cp /root/azarch/fastfetch/azarch.ansi /mnt/home/main/.config/fastfetch/azarch.ansi
-
-echo "[*] Branding os-release as Az'arch Linux..."
-# The installed-system pacstrap NoExtracts usr/lib/os-release (see pacman.py), so
-# the `filesystem` package never lays one down -- plant ours so the installed
-# system is "Az'arch Linux" and fastfetch's OS line matches the live ISO.
-cp /root/azarch/os-release /mnt/usr/lib/os-release
-
-echo "[*] Planting per-app overrides (kitty icon, gedit launcher)..."
-# The installed-system pacstrap NoExtracts these package-owned paths too (see pacman.py),
-# so the kitty/gedit packages never lay down their stock icon/.desktop -- plant our
-# versions from /root/azarch/apps/ (staged into the ISO alongside os-release) and remove
-# the suppressed cat PNGs, exactly as the live customize hook does.
-%APP_OVERRIDES%
-
-echo "[*] Copying first boot configuration files..."
-mkdir -p /mnt/home/main/.config/first-boot
-mkdir -p /mnt/etc/systemd/system
-mkdir -p /mnt/etc/profile.d
-cp /root/azarch/first-boot-setup.sh /mnt/home/main/.config/first-boot/first-boot-setup.sh
-cp /root/azarch/first-boot-setup.service /mnt/etc/systemd/system/first-boot-setup.service
-cp /root/azarch/first-boot-setup.conf /mnt/home/main/.config/first-boot/first-boot-setup.conf
-
-# SSH VARIANT -> carry ssh onto the INSTALLED system. The GUI (Calamares) install copies
-# the whole live rootfs verbatim (enable-link included), but this SCRIPTED installer does a
-# fresh pacstrap, so the sshd auto-setup unit would NOT be enabled on the target unless we
-# copy it here. We do it ONLY when the LIVE medium is the ssh variant (its enable-link is
-# present) -- so a CLI/SSH install of azarch-desktop-ssh gives an installed system that
-# ALSO enables sshd on first boot (matching the live session). The `main` account already
-# carries the --ssh password hash via the /etc/shadow copy above, so the installed system
-# is reachable with that password. On the base variant this block is a no-op (no link ->
-# nothing copied), so the base install stays ssh-disabled.
-if [ -e /etc/systemd/system/multi-user.target.wants/sshd-hypervisor-setup.service ]; then
-    echo "[*] SSH variant: enabling sshd auto-setup on the installed system..."
-    cp /etc/systemd/system/sshd-hypervisor-setup.service /mnt/etc/systemd/system/sshd-hypervisor-setup.service
-    mkdir -p /mnt/etc/systemd/system/multi-user.target.wants
-    ln -sf /etc/systemd/system/sshd-hypervisor-setup.service \\
-        /mnt/etc/systemd/system/multi-user.target.wants/sshd-hypervisor-setup.service
-fi
-
-echo "[*] Copying pacman configuration..."
-mkdir -p /mnt/etc
-cp /root/azarch/pacman-base-conf/pacman.conf /mnt/etc/pacman.conf
 
 echo "Running chroot setup..."
 arch-chroot /mnt /bin/bash /chroot-setup.sh
@@ -306,19 +240,26 @@ rm /mnt/chroot-setup.sh
 umount -R /mnt
 """
     # Splice in the identity collection/persist fragments (Calamares Users + Location parity)
-    # and the per-app override plant/remove lines (single source of truth in pacman.py, shared
-    # with the live customize hook). Prefix /mnt: the installer targets the mounted new root.
+    # and the rsync exclude flags. Prefix /mnt: the installer targets the mounted new root.
     body = body.replace("%IDENTITY_COLLECT%", installer_identity.identity_collect_sh().strip("\n"))
     body = body.replace("%IDENTITY_WRITE%", installer_identity.identity_write_sh().strip("\n"))
-    return body.replace("%APP_OVERRIDES%", pacman.app_override_cp_sh("/mnt").rstrip("\n"))
+    excludes = " ".join(f"--exclude={p}" for p in LIVE_ROOTFS_RSYNC_EXCLUDES)
+    return body.replace("%RSYNC_EXCLUDES%", excludes)
 
 
-# --- Runs inside the arch-chroot after pacstrap -----------------------------
+# --- Runs inside the arch-chroot after the rootfs clone ---------------------
 def chroot_setup_sh() -> str:
     chroot = f"""\
 #!/bin/bash
 
 {_detect_and_apply_locale_block()}
+
+# FRESH MACHINE-ID. The rootfs clone copied the LIVE /etc/machine-id verbatim, so every
+# system installed from this ISO would otherwise share one id -- breaking DHCP leases,
+# systemd journal ids and anything keyed on machine-id. Empty the file so systemd
+# regenerates a unique id on the installed system's first boot (the documented reset:
+# `systemd-machine-id-setup` reads an empty/absent file and mints a new one).
+: > /etc/machine-id
 
 pacman-key --init
 pacman-key --populate archlinux
@@ -326,7 +267,26 @@ pacman-key --populate archlinux
 # Mark setup complete
 touch /var/log/.locale_set
 
-# Generate initramfs
+# UNDO THE ARCHISO MKINITCPIO STATE BEFORE building the initramfs. The verbatim clone carries
+# archiso's mkinitcpio artifacts, and a plain `mkinitcpio -P` on them yields an UNBOOTABLE
+# installed system (this is the same reset the Calamares path runs post-unpackfs -- reused here
+# from packages/calamares so the two install paths never drift):
+#   A. /boot is EMPTY (mkarchiso wipes it before squashing); the kernel survives only as
+#      /usr/lib/modules/<kver>/vmlinuz. Reinstate /boot/vmlinuz-linux (what the `linux`
+#      package's install hook would do -- an offline clone never runs that pacman hook).
+#   B. /etc/mkinitcpio.d/linux.preset is the ARCHISO preset (PRESETS=('archiso') + an
+#      archiso.conf HOOKS drop-in that expects the live SquashFS/cow overlay). Replace it with
+#      the STOCK `linux` preset and drop archiso.conf so `mkinitcpio -P` builds a disk-bootable
+#      image against the installed /etc/mkinitcpio.conf.
+find {_csp._MODULES_DIR} -maxdepth 2 -name vmlinuz -exec install -Dm644 {{}} {_csp._TARGET_KERNEL} \\;
+test -r {_csp._TARGET_KERNEL}
+mkdir -p /etc/mkinitcpio.d
+cat > {_csp._PRESET_PATH} <<'EOF'
+{_csp.STOCK_LINUX_PRESET}EOF
+rm -f {_csp._ARCHISO_CONF_PATH}
+
+# Regenerate the initramfs for the INSTALLED system (now against the stock preset + the
+# installed /etc/mkinitcpio.conf, so it boots from the real disk).
 mkinitcpio -P
 
 is_uefi=$(cat /etc/install_info/is_uefi)
@@ -359,7 +319,16 @@ grub-mkconfig -o /boot/grub/grub.cfg
 
 systemctl enable NetworkManager
 
-mkdir -p /home/main/.config
+# FIRST-BOOT ONESHOT (NTP-on-first-boot). The compiler stages these three files ONLY under
+# /root/azarch on the ISO (never at their runtime paths), so the verbatim clone does NOT place
+# them -- we must install them from /root/azarch here (the old pacstrap installer hand-copied
+# them the same way). Home paths use /home/main because this runs BEFORE the identity rename;
+# the identity step below re-points the unit's ExecStart + the script's CONFIG_FILE to
+# /home/$az_login if the account was renamed (see installer_identity.identity_chroot_sh).
+mkdir -p /home/main/.config/first-boot
+cp /root/azarch/first-boot-setup.sh /home/main/.config/first-boot/first-boot-setup.sh
+cp /root/azarch/first-boot-setup.conf /home/main/.config/first-boot/first-boot-setup.conf
+cp /root/azarch/first-boot-setup.service /etc/systemd/system/first-boot-setup.service
 chown 1000:998 /home/main/.config
 chmod 755 /home/main/.config/first-boot/first-boot-setup.sh
 chmod 644 /etc/systemd/system/first-boot-setup.service
@@ -373,6 +342,29 @@ chown -R main:main /home/main
 
 pacman -Sy
 %IDENTITY_CHROOT%
+
+# STRIP THE LIVE-ONLY INSTALLER STATE FROM THE CLONE. The verbatim clone inherited the LIVE
+# OpenBox autostart, whose live-only lines (a) RE-LAUNCH the disk-erasing installer at every
+# login and (b) force a fixed us,il keyboard over the chosen region layout -- and it inherited
+# the installer's Desktop icon / application-menu entry / privileged wrapper. Calamares deletes
+# all of this post-unpackfs; the CLI clone must too. Overwrite the installed user's autostart
+# (and /etc/skel) with the "installed" variant staged on the ISO, and remove the installer
+# launchers + wrapper. This runs AFTER the identity step so it targets the CHOSEN login's home
+# (main may have been renamed and /home/main moved to /home/$az_login). Re-derive the login
+# from install_info here so the block is self-contained even if the rename block was skipped.
+az_login="$(cat /etc/install_info/username 2>/dev/null)"
+az_login="${{az_login:-main}}"
+if [ -f {_csp.INSTALLED_AUTOSTART_SRC} ]; then
+    mkdir -p "/home/$az_login/.config/openbox" /etc/skel/.config/openbox
+    cp -f {_csp.INSTALLED_AUTOSTART_SRC} "/home/$az_login/.config/openbox/autostart"
+    cp -f {_csp.INSTALLED_AUTOSTART_SRC} /etc/skel/.config/openbox/autostart
+    chown "$az_login:$az_login" "/home/$az_login/.config/openbox/autostart" 2>/dev/null || true
+fi
+rm -f "/home/$az_login/Desktop/azarch-install.desktop"
+rm -f {_csp.INSTALLER_SKEL_LAUNCHER}
+rm -f {_csp.INSTALLER_MENU_DESKTOP}
+rm -f {_csp.INSTALLER_WRAPPER}
+
 echo -e "\\e[94mazarch disk installation complete, you can reboot now.\\e[0m"
 """
     # Apply the collected identity (user/passwords/hostname/timezone) as the LAST step, AFTER

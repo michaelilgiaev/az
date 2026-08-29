@@ -95,6 +95,64 @@ def test_chroot_setup_has_no_leftover_double_braces():
     assert "}}" not in s
 
 
+# --- chroot: the two archiso-clone fixups the CLI install shares with Calamares ----
+#
+# Because the CLI installer now CLONES the live archiso rootfs verbatim (like Calamares
+# unpackfs), it inherits the SAME two live-only artifacts Calamares' shellprocess must undo,
+# and the CLI chroot must undo them too or the installed system is (1) UNBOOTABLE (archiso
+# mkinitcpio preset + empty /boot) and (2) re-launches the disk-erasing installer at every
+# login (live OpenBox autostart). We reuse the Calamares single-source-of-truth constants.
+
+def test_chroot_setup_resets_archiso_mkinitcpio_before_building():
+    # The clone carries archiso's mkinitcpio state: /etc/mkinitcpio.d/linux.preset =
+    # PRESETS=('archiso'), an archiso.conf HOOKS drop-in, and an EMPTY /boot (mkarchiso wipes
+    # it; the kernel survives only under /usr/lib/modules/<kver>/vmlinuz). A plain `mkinitcpio
+    # -P` on that state fails ("/boot/vmlinuz-linux must be readable") or builds an unbootable
+    # archiso-hooked image. The chroot must, BEFORE mkinitcpio -P: reinstate the kernel from the
+    # modules tree, install the STOCK linux preset, and drop archiso.conf.
+    from packages.calamares import calamares_shellprocess as csp
+    s = installer.chroot_setup_sh()
+    # Kernel reinstated from the modules tree to /boot/vmlinuz-linux.
+    assert "/usr/lib/modules" in s
+    assert "-name vmlinuz" in s
+    assert "/boot/vmlinuz-linux" in s
+    # Stock preset content installed over the archiso one (single source of truth).
+    assert "PRESETS=('default' 'fallback')" in s
+    assert "/etc/mkinitcpio.d/linux.preset" in s
+    # archiso conf.d drop-in removed.
+    assert "/etc/mkinitcpio.conf.d/archiso.conf" in s
+    # ALL of this must happen BEFORE the initramfs is generated, or it is useless. Anchor on the
+    # actual `mkinitcpio -P` COMMAND (the last occurrence -- earlier ones are comment mentions).
+    run_idx = s.rindex("\nmkinitcpio -P")
+    assert s.index("PRESETS=('default' 'fallback')") < run_idx
+    assert s.index("/etc/mkinitcpio.conf.d/archiso.conf") < run_idx
+
+
+def test_chroot_setup_strips_live_only_installer_autostart():
+    # The clone inherits the LIVE OpenBox autostart, whose live-only lines (a) re-launch the
+    # Calamares installer at every login and (b) force a fixed us,il keyboard. Calamares
+    # overwrites the autostart with the "installed" variant staged on the ISO and deletes the
+    # installer launchers/wrapper; the CLI chroot must do the SAME. Reuse the staged-path and
+    # installer-path constants so the two paths never drift.
+    from packages.calamares import calamares_shellprocess as csp
+    s = installer.chroot_setup_sh()
+    # The staged "installed" autostart is copied over the inherited live one.
+    assert csp.INSTALLED_AUTOSTART_SRC in s
+    # The installer wrapper + menu entry are removed so the installed system never re-opens it.
+    assert csp.INSTALLER_WRAPPER in s          # /usr/local/bin/azarch-install removed
+    assert csp.INSTALLER_MENU_DESKTOP in s     # menu launcher removed
+
+
+def test_chroot_setup_autostart_fixup_targets_the_renamed_home():
+    # Unlike Calamares (which removes `main` and lets the users module recreate the account),
+    # the CLI installer RENAMES `main` to the chosen login and moves /home/main -> /home/$login.
+    # So the autostart overwrite must target the CHOSEN login's home, not a hardcoded
+    # /home/main, or the fixup writes to a dead path and the live installer-relaunch survives.
+    # The identity fragment exports $az_login; assert the autostart cleanup references it.
+    s = installer.chroot_setup_sh()
+    assert "/home/$az_login/.config/openbox/autostart" in s
+
+
 # --- grub-install: both firmware branches present --------------------------
 
 def test_grub_install_both_branches():
@@ -180,67 +238,79 @@ def test_installer_sh_ansi_escape_sequences():
     assert s.count("\\033") == 3
 
 
-def test_installer_sh_enables_sshd_on_target_for_ssh_variant():
-    # The scripted (CLI/SSH) installer does a FRESH pacstrap, so unlike the Calamares
-    # verbatim copy it must EXPLICITLY carry the ssh auto-setup unit onto the target when
-    # installing from the ssh variant -- otherwise a CLI/SSH install of azarch-desktop-ssh
-    # would end up with sshd DISABLED (the user wants ssh in BOTH live and installed). It is
-    # gated on the live enable-link's presence, so the BASE variant install stays a no-op.
+def test_installer_sh_ssh_variant_carried_by_verbatim_rootfs_copy():
+    # The scripted (CLI/SSH) installer CLONES the live rootfs verbatim (like Calamares
+    # unpackfs), so the sshd auto-setup enable-link -- which lives under the live
+    # /etc/systemd/system/multi-user.target.wants/ on the ssh medium -- is carried
+    # automatically with everything else. There is NO longer a separate hand-copy of that
+    # unit/link (the rsync is a superset). The --ssh password hash rides along in the live
+    # /etc/shadow, also copied by the rsync. So: no explicit sshd unit copy remains, and the
+    # rsync of / is what guarantees ssh parity between live and installed.
     s = installer.installer_sh()
-    # gated on the live ssh enable-link (only the ssh variant has it)
-    assert "/etc/systemd/system/multi-user.target.wants/sshd-hypervisor-setup.service" in s
-    # copies the unit + creates the enable-link on the target
-    assert "cp /etc/systemd/system/sshd-hypervisor-setup.service /mnt/etc/systemd/system/sshd-hypervisor-setup.service" in s
-    assert "ln -sf /etc/systemd/system/sshd-hypervisor-setup.service" in s
-    # and the shadow (with the --ssh hash on the ssh variant) is copied so the account has a
-    # login credential on the installed system.
-    assert "cp /etc/shadow /mnt/etc/shadow" in s
+    # The old brittle hand-copy of the ssh unit is GONE (the verbatim copy supersedes it).
+    assert "cp /etc/systemd/system/sshd-hypervisor-setup.service" not in s
+    # The whole-rootfs clone is what carries it (rsync of the live root into the target).
+    assert "rsync" in s
+    assert "/mnt" in s
 
 
-# --- installer_sh: the DESKTOP is carried onto the target (the tty1-only bug) -----
+# --- installer_sh: the DESKTOP is carried onto the target (the gray-screen bug) ----
 #
-# The scripted installer does a fresh pacstrap, so (unlike the Calamares unpackfs verbatim
-# copy) it must EXPLICITLY carry the desktop-session chain onto the target, or the installed
-# system boots to a bare tty1 with an empty home. That chain is: the getty@tty1 autologin
-# drop-in (-> `main`), and `main`'s home dotfiles (.bash_profile -> exec startx, .xinitrc,
-# openbox config, themes) which live in the live /etc/skel.
+# ROOT CAUSE of the gray-screen/Openbox-error install: the Az'arch desktop shell is a set of
+# COMPILED C daemons + generated helper binaries emitted as root-owned files into the ISO
+# airootfs (menu daemon, window-switcher daemon, terminal UI, OSD, /usr/local/bin launchers,
+# wallpapers, picom config, ...). None are owned by a pacman package, so the OLD pacstrap +
+# hand-copy-a-few-files installer left them ABSENT on the installed system -> the autostart's
+# guarded launches silently no-op and the Super-key menu launcher fails ("Openbox error").
+# Calamares works because unpackfs rsyncs the whole live squashfs verbatim. The FIX makes the
+# scripted installer do the same: rsync the live running / into the target. These tests pin
+# that new contract.
 
-def test_installer_sh_copies_getty_autologin_dropin_to_target():
-    # Without the getty@tty1 autologin drop-in the installed box stops at a root login prompt
-    # on tty1 instead of autologin'ing `main` (whose .bash_profile execs startx).
+def test_installer_sh_clones_live_rootfs_into_target():
+    # The core fix: instead of pacstrap + hand-copy, the installer rsyncs the ENTIRE live root
+    # into the mounted target, so every compiled desktop daemon/binary lands on the installed
+    # system by construction (matching Calamares unpackfs). Assert an archive-mode rsync of /
+    # into /mnt with the attribute-preserving flags a rootfs clone needs.
     s = installer.installer_sh()
-    assert "/etc/systemd/system/getty@tty1.service.d" in s
-    # Copied onto the mounted target root.
-    assert "/mnt/etc/systemd/system/getty@tty1.service.d" in s
+    assert "rsync" in s
+    # Archive + ACLs + xattrs + hardlinks: the flags Calamares/archiso use for a faithful clone.
+    assert "-aAXH" in s or ("-a" in s and "-A" in s and "-X" in s and "-H" in s)
+    # Source is the live root, destination is the mounted target root.
+    assert "/mnt" in s
 
 
-def test_installer_sh_seeds_home_and_skel_from_live_skel():
-    # The live /etc/skel already holds the full desktop (openbox/librewolf home files are
-    # mirrored there by the build). The installer must copy it to BOTH the target /etc/skel
-    # (future users) AND seed /home/main (the installed live user) so a graphical session
-    # appears. Copy is from the live /etc/skel onto /mnt.
+def test_installer_sh_rsync_excludes_virtual_filesystems():
+    # A rootfs rsync MUST exclude the kernel/virtual and runtime trees or it will try to copy
+    # /proc, /sys, /dev, /run (the archiso cow/bootmnt overlay lives under /run/archiso) and
+    # /mnt (the target itself -> infinite recursion). /tmp is transient. Assert each is excluded.
     s = installer.installer_sh()
-    assert "/etc/skel" in s
-    assert "/mnt/etc/skel" in s          # future users get the desktop skeleton
-    assert "/mnt/home/main" in s         # the installed `main` home is seeded from it
+    for virt in ("/proc", "/sys", "/dev", "/run", "/mnt", "/tmp"):
+        assert f"--exclude={virt}" in s or f'--exclude="{virt}' in s or f"--exclude='{virt}" in s, \
+            f"rootfs rsync must exclude {virt}"
 
 
-def test_installer_sh_home_seed_does_not_clobber_installer_files():
-    # The installer already places fastfetch + first-boot files into /mnt/home/main BEFORE the
-    # skel seed; seeding must not overwrite them. We require the skel->home seed to be
-    # no-clobber (cp -n / --no-clobber) so those stay intact.
+def test_installer_sh_regenerates_fstab_for_target_disk():
+    # The live fstab is the archiso one (wrong root for the installed disk). After cloning the
+    # rootfs the installer MUST regenerate fstab for the REAL partitions with genfstab, or the
+    # installed system cannot mount its own root.
     s = installer.installer_sh()
-    # A no-clobber copy into the home (either `cp -an`, `cp --no-clobber`, or `cp -rn`).
-    assert ("cp -an" in s or "cp -rn" in s or "--no-clobber" in s), \
-        "home seed from /etc/skel must be no-clobber so fastfetch/first-boot survive"
+    assert "genfstab -U /mnt >> /mnt/etc/fstab" in s
 
 
-def test_installer_sh_desktop_copies_are_guarded():
-    # A variant that somehow lacks one of these live paths must degrade to today's behaviour,
-    # not abort the install mid-run. Guard the skel + getty copies with existence tests.
+def test_installer_sh_still_writes_install_info_for_chroot():
+    # The chroot step reads disk / is_uefi (and the identity answers) from /mnt/etc/install_info.
+    # The rootfs-clone rewrite must still persist these markers.
     s = installer.installer_sh()
-    assert "[ -d /etc/skel ]" in s
-    assert "[ -d /etc/systemd/system/getty@tty1.service.d ]" in s
+    assert "/mnt/etc/install_info/disk" in s
+    assert "/mnt/etc/install_info/is_uefi" in s
+
+
+def test_installer_sh_no_longer_pacstraps():
+    # The verbatim-clone approach REPLACES the fresh pacstrap; a lingering pacstrap would both
+    # double the work and re-introduce the "packages only, no compiled binaries" gap. Assert the
+    # pacstrap call is gone.
+    s = installer.installer_sh()
+    assert "pacstrap" not in s
 
 
 def test_installer_sh_preseed_choice_and_disk_for_ssh():
@@ -278,15 +348,20 @@ def test_installer_sh_nvme_vs_sata_partition_suffix():
     assert 'part2="${largest_disk}2"' in s
 
 
-def test_installer_sh_pacstrap_sed_matches_manifest_parsing():
-    # The on-disk installer must pacstrap the SAME package set mkarchiso built
-    # from, so it strips comments/blanks from packages.x86_64 with the identical
-    # sed program. A drift here installs a different set than the live medium.
-    s = installer.installer_sh()
+def test_chroot_setup_resets_machine_id_for_the_clone():
+    # The rootfs clone copies the LIVE /etc/machine-id verbatim. Shipping a fixed machine-id on
+    # every installed system is a real bug (duplicate ids across machines break DHCP leases,
+    # systemd journal ids, etc.). The chroot step must reset it (empty file) so systemd
+    # regenerates a unique id on first boot.
+    s = installer.chroot_setup_sh()
+    # An emptied /etc/machine-id (truncate/`: >`/`echo -n`/`rm`+recreate all read as "reset").
+    assert "/etc/machine-id" in s
     assert (
-        "pacstrap /mnt $(sed '/^[[:blank:]]*#.*/d;s/#.*//;/^[[:blank:]]*$/d' "
-        "/root/azarch/packages.x86_64)" in s
-    )
+        ": > /etc/machine-id" in s
+        or "rm -f /etc/machine-id" in s
+        or "truncate -s 0 /etc/machine-id" in s
+        or 'echo -n > /etc/machine-id' in s
+    ), "chroot must reset /etc/machine-id so the clone gets a fresh unique id"
 
 
 # --- setup_pkgs: firewall direction ----------------------------------------
@@ -318,12 +393,29 @@ def test_first_boot_service_execstart_and_type():
     assert "WantedBy=multi-user.target" in s
 
 
-def test_first_boot_service_execstart_path_matches_installer_copy():
-    # Cross-file: the path the service execs must be a path installer_sh actually
-    # populates. Assert the same absolute script path appears on both sides.
+def test_chroot_setup_installs_first_boot_files_from_payload():
+    # REGRESSION: the compiler stages first-boot-setup.{sh,service,conf} ONLY under /root/azarch
+    # (never at their runtime paths), so the verbatim rootfs clone does NOT place them. The
+    # chroot must install them from /root/azarch into their runtime locations BEFORE it chmods /
+    # enables the unit -- otherwise `systemctl enable first-boot-setup.service` silently fails and
+    # the first-boot NTP oneshot never runs. Assert the three copies exist and precede the enable.
+    s = installer.chroot_setup_sh()
+    assert "cp /root/azarch/first-boot-setup.sh /home/main/.config/first-boot/first-boot-setup.sh" in s
+    assert "cp /root/azarch/first-boot-setup.conf /home/main/.config/first-boot/first-boot-setup.conf" in s
+    assert "cp /root/azarch/first-boot-setup.service /etc/systemd/system/first-boot-setup.service" in s
+    # The install must come before the enable, or the enable has nothing to enable.
+    assert s.index("cp /root/azarch/first-boot-setup.service") < s.index("systemctl enable first-boot-setup.service")
+
+
+def test_first_boot_service_execstart_matches_chroot_perms_target():
+    # Cross-file: the path the service execs must be a path the installed system actually
+    # carries. Since the installer now CLONES the live rootfs verbatim, the first-boot script
+    # arrives with everything else (it lives on the live medium) -- so installer_sh no longer
+    # hand-copies it. The chroot step still `chmod`s that exact path to make it executable, so
+    # the ExecStart<->on-disk agreement is now asserted against the chroot setup instead.
     script = "/home/main/.config/first-boot/first-boot-setup.sh"
     assert f"ExecStart={script}" in installer.first_boot_service()
-    assert script in installer.installer_sh()
+    assert script in installer.chroot_setup_sh()
 
 
 # --- locale block splice (single-seam isolation) ---------------------------
