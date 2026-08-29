@@ -77,6 +77,7 @@ LINKS: tuple[tuple[str, str], ...] = (
     ("Config", ".config"),
     ("Bashrc", ".bashrc"),
     ("Local", ".local"),
+    ("SSH", ".ssh"),
 )
 
 # The Trash shortcut's name. It is itself a symlink but the spec pins it to the very END of the
