@@ -313,6 +313,50 @@ def test_installer_sh_no_longer_pacstraps():
     assert "pacstrap" not in s
 
 
+def test_installer_sh_recreates_chroot_mount_points_before_arch_chroot():
+    # REGRESSION (install died at "mount: /mnt/proc: mount point does not exist"): the rootfs
+    # rsync EXCLUDES /proc /sys /dev /run /tmp, which drops not just their CONTENTS but the
+    # DIRECTORY NODES. On a fresh ext4 target these dirs then do not exist, and `arch-chroot`
+    # -- which bind-mounts /proc onto /mnt/proc, /sys onto /mnt/sys, etc. -- fails immediately.
+    # The installer MUST recreate the empty mount points AFTER the clone and BEFORE arch-chroot.
+    s = installer.installer_sh()
+    for mp in ("/mnt/proc", "/mnt/sys", "/mnt/dev", "/mnt/run", "/mnt/tmp"):
+        assert mp in s, f"installer must recreate the {mp} mount point before arch-chroot"
+    # /tmp is world-writable+sticky; a chroot that runs anything expecting a usable /tmp needs it.
+    assert "chmod 1777 /mnt/tmp" in s
+    # Ordering matters: the mkdir must come BEFORE the arch-chroot line or it cannot help.
+    mkdir_idx = s.index("mkdir -p /mnt/proc")
+    chroot_idx = s.index("arch-chroot /mnt")
+    assert mkdir_idx < chroot_idx, "mount points must be created before arch-chroot"
+
+
+def test_installer_sh_mount_point_block_actually_creates_dirs(tmp_path):
+    # BEHAVIORAL (string-match is necessary but NOT sufficient -- prior installs shipped green
+    # tests over a broken run). Extract the real mkdir+chmod block from the emitted installer,
+    # retarget /mnt at a throwaway dir, EXECUTE it, and assert the four bind-mount points that
+    # arch-chroot needs now exist and /tmp is sticky-world-writable (1777). This reproduces, in
+    # miniature, the exact state arch-chroot requires -- so a regression that drops the block (or
+    # gets the perms wrong) fails here, not just in a grep.
+    import re
+    import subprocess
+
+    s = installer.installer_sh()
+    start = s.index("mkdir -p /mnt/proc")
+    end = s.index("\n", s.index("chmod 1777 /mnt/tmp"))
+    block = s[start:end]
+    target = tmp_path / "mnt"
+    target.mkdir()
+    sandboxed = block.replace("/mnt/", str(target) + "/")
+    res = subprocess.run(["bash", "-c", "set -e\n" + sandboxed],
+                         capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+    for mp in ("proc", "sys", "dev", "run", "tmp"):
+        assert (target / mp).is_dir(), f"{mp} mount point was not created by the block"
+    # /tmp must be world-writable + sticky (mode 1777) -- the octal perms of the created dir.
+    mode = oct((target / "tmp").stat().st_mode & 0o7777)
+    assert mode == "0o1777", f"/tmp mount point should be 1777, got {mode}"
+
+
 def test_installer_sh_preseed_choice_and_disk_for_ssh():
     # The scripted installer is the CLI/SSH install path (azarch-install --cli). For an
     # UNATTENDED SSH install it must accept a pre-seeded disk selection via env instead of

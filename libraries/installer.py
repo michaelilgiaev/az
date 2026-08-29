@@ -229,6 +229,15 @@ echo "$largest_disk" > /mnt/etc/install_info/disk
 echo "$is_uefi" > /mnt/etc/install_info/is_uefi
 %IDENTITY_WRITE%
 
+# RECREATE THE VIRTUAL/RUNTIME MOUNT POINTS the rsync excluded. --exclude drops not just the
+# CONTENTS of /proc /sys /dev /run /tmp but the DIRECTORY NODES themselves, so on the fresh ext4
+# target these dirs do not exist. arch-chroot bind-mounts /proc onto /mnt/proc (and /sys, /dev,
+# /run likewise); without the mount points it dies with "mount: /mnt/proc: mount point does not
+# exist" and the whole install aborts. Recreate them empty (Calamares' mount module makes the
+# same nodes). /tmp gets the world-writable sticky mode any chrooted tool expects.
+mkdir -p /mnt/proc /mnt/sys /mnt/dev /mnt/run /mnt/tmp
+chmod 1777 /mnt/tmp
+
 echo "Copying chroot setup..."
 cp /root/azarch/chroot-setup.sh /mnt/chroot-setup.sh
 chmod +x /mnt/chroot-setup.sh
