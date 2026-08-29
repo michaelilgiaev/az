@@ -42,23 +42,6 @@ else:  # loaded flat (run by absolute path via the launcher) -- no parent packag
     from graphics import select_render_node  # noqa: E402
     from qemu_command import build_qemu_argv  # noqa: E402  re-exported
 
-_README = """\
-This host folder is shared into the guest over virtiofs with mount tag "shared".
-virtiofsd exports it with the host uid/gid preserved, so when the host user and
-guest user share uid 1000 ownership lines up; otherwise files appear owned by
-whichever uid matches.
-
-An Az'arch guest auto-mounts it at ~/shared on every boot via a systemd mount unit
-shipped in the ISO (home-main-shared.mount), on ANY variant -- desktop or ssh -- so
---shared just works with no per-guest setup. If you share into a foreign or
-hand-installed guest, run the commands printed by:  hypervisor share  (or, for a
-powered-off Btrfs guest, bake the fstab entry in with:  hypervisor share --offline)
-
-To mount by hand once, inside the VM (any modern Linux guest -- the virtiofs
-driver is in-tree, no module or package needed):
-    sudo mkdir -p ~/shared
-    sudo mount -t virtiofs shared ~/shared
-"""
 
 
 def _envflag(name: str, default: str = "0") -> bool:
@@ -181,10 +164,6 @@ def do_install(cfg: Config, iso_arg: str,
     if shared:
         os.makedirs(cfg.shared, exist_ok=True)
         os.chmod(cfg.shared, 0o755)
-        readme = os.path.join(cfg.shared, "README-mount.txt")
-        if not os.path.isfile(readme):
-            with open(readme, "w", encoding="utf-8") as fh:
-                fh.write(_README)
         print(f"Shared folder ready: {cfg.shared}")
 
         # drop host pubkey for the guest's ssh setup to consume
