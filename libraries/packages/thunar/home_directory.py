@@ -14,6 +14,7 @@ convenience SYMLINKS that surface otherwise-hidden dot locations as plain top-le
     Config -> .config
     Bashrc -> .bashrc
     Local  -> .local
+    SSH    -> .ssh
 
 WHY THIS IS A MODULE AND NOT JUST COMPILER CODE. The SAME list drives two things: the
 directories/symlinks created on disk, AND Thunar's sidebar shortcuts (the shortcuts pane

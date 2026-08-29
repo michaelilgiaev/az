@@ -31,13 +31,14 @@ def test_directory_set_is_exactly_the_spec():
 
 
 def test_link_set_is_exactly_the_spec():
-    # PROMPT task 1: these five convenience symlinks, name -> RELATIVE target.
+    # PROMPT task 1: these six convenience symlinks, name -> RELATIVE target.
     assert hd.LINKS == (
         ("Trash", ".local/share/Trash/files"),
         ("Cache", ".cache"),
         ("Config", ".config"),
         ("Bashrc", ".bashrc"),
         ("Local", ".local"),
+        ("SSH", ".ssh"),
     )
 
 
@@ -84,7 +85,7 @@ def test_sidebar_entries_are_directories_then_links_resolved():
     assert labels == [
         "Desktop", "Downloads", "Vault", "Documents", "Ignore",
         "Music", "Pictures", "Projects", "Videos",
-        "Cache", "Config", "Bashrc", "Local",
+        "Cache", "Config", "Bashrc", "Local", "SSH",
         "Trash",
     ]
     targets = dict(entries)
@@ -98,6 +99,8 @@ def test_sidebar_entries_are_directories_then_links_resolved():
     assert targets["Local"] == "/home/main/.local"
     # Bashrc is a FILE target (.bashrc); still resolved under HOME.
     assert targets["Bashrc"] == "/home/main/.bashrc"
+    # SSH points at the resolved .ssh dir (a symlink shortcut, after Local, before Trash).
+    assert targets["SSH"] == "/home/main/.ssh"
 
 
 def test_no_home_directory_bookmark_machinery():

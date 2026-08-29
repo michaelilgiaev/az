@@ -8,7 +8,7 @@ references `.gtk-bookmarks` / the gtk-3.0 bookmarks path). Each line is:
 
 We generate ONE bookmark per home_directory sidebar entry, so the sidebar lists EXACTLY the
 Az'arch layout set (Desktop, Downloads, Vault, Documents, Ignore, Music, Pictures, Projects,
-Videos, Trash, Cache, Config, Bashrc, Local) in that order -- the SAME set as the on-disk
+Videos, Trash, Cache, Config, Bashrc, Local, SSH) in that order -- the SAME set as the on-disk
 home layout, because both come from packages/thunar/home_directory (its single source of truth).
 Add a folder there and it appears both on disk and here.
 
