@@ -139,6 +139,11 @@ def test_enable_links_mirror_the_recipe_curated_set():
         "NetworkManager.service", "org.cups.cupsd.service", "spice-vdagentd.service",
         "locale-setup.service", "pkgs-setup.service",
         "azarch-sleep-policy.service", "azarch-timedate.service",
+        # The virtiofs shared-folder auto-mount -- enabled on BOTH variants so the
+        # host ./shared folder appears at /home/main/shared regardless of --ssh
+        # (the fix for the desktop-variant coupling). It is a .mount unit, not a
+        # .service, but the enable-link mechanism is unit-type agnostic.
+        "home-main-shared.mount",
     }
     # The stock sshd is NOT auto-enabled here -- the sshd variant's controlled auto-setup is
     # the sshd-hypervisor-setup.service added by _overlay_sshd_variant, not stock sshd.
@@ -154,7 +159,7 @@ def test_rsync_excludes_pseudo_and_volatile_filesystems():
     # Volatile / privacy-sensitive trees under the overlaid roots.
     for p in ("*/.cache/*", "/root/.cache/*", "/tmp/*", "/var/tmp/*"):
         assert p in ex, f"{p} should be excluded"
-    # The mounted 9p `shared` folder (host keys) must not ship.
+    # The mounted virtiofs `shared` folder (host keys) must not ship.
     assert any("shared" in p for p in ex)
 
 
@@ -258,6 +263,29 @@ def test_sshd_service_matches_the_baked_variant():
     assert "ExecStart=/usr/local/bin/azarch --sshd-hypervisor" in svc
     assert "Environment=SUDO_USER=main" in svc
     assert "WantedBy=multi-user.target" in svc
+
+
+def test_shared_mount_unit_is_virtiofs_at_home_main_shared():
+    # The virtiofs auto-mount unit baked into EVERY variant. Its name must encode the
+    # mount path (systemd requirement: home-main-shared.mount <-> /home/main/shared),
+    # it mounts the "shared" virtiofs tag, and it is WantedBy multi-user.target so it
+    # comes up on boot on the desktop variant too (no ssh service involved).
+    unit = mk.HOME_MAIN_SHARED_MOUNT
+    assert "[Mount]" in unit
+    assert "What=shared" in unit               # the virtiofs mount tag
+    assert "Where=/home/main/shared" in unit
+    assert "Type=virtiofs" in unit
+    assert "WantedBy=multi-user.target" in unit
+    assert "9p" not in unit
+    # It must be overlaid as a real unit file AND enabled.
+    assert "/etc/systemd/system/home-main-shared.mount" in mk.OVERLAY_ETC_FILES
+
+
+def test_shared_mount_unit_bodies_match_across_build_paths():
+    # Method B's inline copy must be byte-identical to the recipe's system.py body, so a
+    # live-generated ISO mounts the share exactly like a recipe-built one.
+    import system
+    assert mk.HOME_MAIN_SHARED_MOUNT == system.HOME_MAIN_SHARED_MOUNT
 
 
 # --- mkarchiso argv -----------------------------------------------------------

@@ -15,8 +15,8 @@ The accept/revert decision is the PURE function evaluate_save(); it does no I/O
 and is fully unit-tested. ConfigWatcher is the thin thread that reads the file,
 calls evaluate_save(), and either writes the revert or logs+applies the diff.
 
-WHY so few keys apply live: ram/cpus/-m/-smp, the netdev/NIC, virtio-9p and USB
-host devices are fixed at QEMU launch and cannot be re-plugged safely from a
+WHY so few keys apply live: ram/cpus/-m/-smp, the netdev/NIC, the virtiofs share
+and USB host devices are fixed at QEMU launch and cannot be re-plugged safely from a
 config poke; changing them needs a fresh boot. The viewer-side flags
 (fullscreen / ask-before-quit) and audio are host/viewer concerns rather than
 guest device topology, so fullscreen and ask-before-quit are treated as live

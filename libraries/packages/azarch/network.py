@@ -599,8 +599,8 @@ def cmd_ip(args: list[str]) -> int:
 def cmd_ssh(args: list[str]) -> int:
     """`azarch network ssh <start|stop|status>` -- the SSH SERVER front-end.
 
-    start  -> `azarch --sshd-hypervisor` bring-up: install the host pubkey (if the 9p
-              shared folder is present), generate host keys, OPEN port 22/tcp in the
+    start  -> `azarch --sshd-hypervisor` bring-up: install the host pubkey (if the
+              virtiofs shared folder is present), generate host keys, OPEN port 22/tcp in the
               firewall, then enable+start sshd. So one command makes the box reachable
               over ssh with the firewall opened for it.
     stop   -> disable+stop sshd and CLOSE port 22 again (sshd_stop).

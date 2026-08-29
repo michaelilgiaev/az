@@ -514,7 +514,7 @@ SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_TYPE}=="Mains", ACTION=="change", RU
 # /home/main/.ssh (the account sshd accepts) exactly as an interactive
 # `sudo azarch --sshd-hypervisor` would. Running the UNIT as root avoids the PAM
 # session a `User=main` unit would need for the command line interface's internal `sudo` calls (mount
-# the 9p share, ssh-keygen -A, ufw, systemctl enable --now sshd): as root those
+# the virtiofs share, ssh-keygen -A, ufw, systemctl enable --now sshd): as root those
 # `sudo` invocations are trivial no-op elevations and the `install -o main` calls
 # still hand the key files to `main`.
 #
@@ -544,6 +544,39 @@ ExecStart=/usr/local/bin/azarch --sshd-hypervisor
 RemainAfterExit=true
 StandardOutput=journal
 StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+# The virtiofs shared-folder auto-mount, baked into EVERY variant (desktop + ssh).
+# This is the fix for the old --shared/--ssh coupling: the share used to appear only
+# because the ssh bring-up mounted it as a side effect, so the desktop variant never
+# got it. Now a plain systemd .mount unit mounts the host ./shared folder at
+# /home/main/shared on boot, independent of ssh, on whichever variant is running.
+#
+# systemd requires a .mount unit's filename to encode its Where= (/home/main/shared
+# -> home-main-shared.mount). What=shared is the virtiofs mount TAG the hypervisor's
+# vhost-user-fs device advertises (NOT a block device). No 9p, no trans=/version=
+# options, and no modules-load entry: the virtiofs driver is in-tree in modern
+# kernels, so the unit alone is enough.
+#
+# It is deliberately NON-FATAL when no share is attached: a VM booted without
+# --shared has no virtiofs tag, so the mount fails and stays failed -- but nothing is
+# ordered After/Requires it, so boot proceeds to the desktop unaffected. The mount
+# succeeds the moment a --shared VM boots. x-systemd.automount is NOT used (a plain
+# mount is simpler and the share is present from boot when it is present at all).
+HOME_MAIN_SHARED_MOUNT = """\
+[Unit]
+Description=Az'arch host<->guest shared folder (virtiofs)
+DefaultDependencies=no
+After=local-fs-pre.target
+Before=local-fs.target
+
+[Mount]
+What=shared
+Where=/home/main/shared
+Type=virtiofs
 
 [Install]
 WantedBy=multi-user.target

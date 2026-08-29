@@ -54,6 +54,30 @@ def require_viewer() -> None:
         die("remote-viewer missing -- sudo pacman -S virt-viewer")
 
 
+# The standalone Rust virtiofsd ships its binary here, NOT on PATH (it is a
+# libexec-style daemon). We accept either PATH or this well-known location.
+_VIRTIOFSD_PATHS = ("/usr/lib/virtiofsd", "/usr/libexec/virtiofsd")
+
+
+def virtiofsd_binary() -> str:
+    """Path to the virtiofsd daemon binary, or '' if none is installed. Checks PATH
+    first, then the well-known libexec locations the `virtiofsd` package uses."""
+    on_path = shutil.which("virtiofsd")
+    if on_path:
+        return on_path
+    for p in _VIRTIOFSD_PATHS:
+        if os.path.exists(p):
+            return p
+    return ""
+
+
+def require_virtiofsd() -> None:
+    """The shared folder now rides virtiofs, which needs the virtiofsd daemon. Fail
+    cleanly (not a crash) when --shared is requested but the daemon is absent."""
+    if not virtiofsd_binary():
+        die("virtiofsd missing (needed for the shared folder) -- sudo pacman -S virtiofsd")
+
+
 def is_running(cfg) -> bool:
     """True if a process whose comm matches the VM's PROC name is alive.
 

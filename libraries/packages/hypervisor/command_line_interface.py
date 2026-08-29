@@ -70,7 +70,7 @@ edits live where it can, and reverts a file with an invalid value):
   network                         user (NAT) | none | a host interface to bridge
                                   (list interfaces: ip -br addr)
   shared                          false | empty (this dir) | an absolute host path
-                                  to share into the guest via virtio-9p
+                                  to share into the guest via virtiofs
   ssh                             forward the guest's SSH port to the host
   ssh_guest_to_host_port_forward  host port that maps to guest :22 (default {DEFAULT_SSH_FORWARD_PORT})
   usb                             empty | absolute device path(s) to pass through

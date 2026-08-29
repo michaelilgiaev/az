@@ -130,6 +130,35 @@ def test_link_services_enables_spice_vdagentd(tmp_path):
     assert os.readlink(link) == "/usr/lib/systemd/system/spice-vdagentd.service"
 
 
+def test_link_services_enables_shared_virtiofs_mount(tmp_path):
+    # BEHAVIORAL: _link_services must enable the virtiofs shared-folder mount on BOTH
+    # variants (this is the fix for the desktop-variant coupling -- the share must
+    # appear without the ssh bring-up). A .mount enable-link is a symlink named after
+    # the unit, exactly like a .service one.
+    import os
+    airootfs = tmp_path / "airootfs"
+    (airootfs / "etc/systemd/system").mkdir(parents=True)
+    compiler._link_services(airootfs)
+    link = (airootfs / "etc/systemd/system/multi-user.target.wants"
+            / "home-main-shared.mount")
+    assert link.is_symlink()
+    assert os.readlink(link) == "/etc/systemd/system/home-main-shared.mount"
+
+
+def test_emit_shared_mount_writes_unit_and_mountpoint(tmp_path):
+    # BEHAVIORAL: the emitter writes the virtiofs .mount unit body and creates the
+    # /home/main/shared mountpoint so systemd has somewhere to mount onto.
+    import system
+    airootfs = tmp_path / "airootfs"
+    (airootfs / "etc/systemd/system").mkdir(parents=True)
+    (airootfs / "home/main").mkdir(parents=True)
+    compiler._emit_shared_mount(airootfs)
+    unit = airootfs / "etc/systemd/system/home-main-shared.mount"
+    assert unit.is_file()
+    assert unit.read_text() == system.HOME_MAIN_SHARED_MOUNT
+    assert (airootfs / "home/main/shared").is_dir()
+
+
 def test_run_calls_emit_homedir():
     # run() must create the home-directory layout (folders + convenience symlinks) between
     # the desktop overlay and the app overlay, so _emit_apps's closing chown covers it.

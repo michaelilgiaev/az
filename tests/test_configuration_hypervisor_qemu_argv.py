@@ -7,8 +7,8 @@ ssh port) and returns the argv list. No process launch, no filesystem mutation.
 That purity is what lets us pin the command here without a real host.
 
 These tests pin the STRUCTURE that matters (identity, the pflash + disk drives,
-and the cfg/port-gated blocks: iso, audio, shared 9p, networking, USB, and the
-ssh hostfwd), not the exact byte-for-byte flag soup -- so a deliberate device
+and the cfg/port-gated blocks: iso, audio, shared virtiofs, networking, USB, and
+the ssh hostfwd), not the exact byte-for-byte flag soup -- so a deliberate device
 tweak does not force a rewrite, but a dropped disk drive or a mis-gated block is
 caught.
 """
@@ -78,23 +78,54 @@ def test_audio_present_when_on_absent_when_off(tmp_path):
     assert not any("pipewire" in a for a in _pairs(argv_off, "-audiodev"))
 
 
-def test_shared_9p_present_only_when_shared_enabled(tmp_path):
+def test_shared_virtiofs_present_only_when_shared_enabled(tmp_path):
     off = _cfg(tmp_path, shared=False)
     on = _cfg(tmp_path, shared=True)   # True == the working ./shared dir
     argv_off = vm.build_qemu_argv(off, disk=off.disk, gpu_args=[], iso_args=[], port=None)
     argv_on = vm.build_qemu_argv(on, disk=on.disk, gpu_args=[], iso_args=[], port=None)
+    # OFF: no virtiofs device, and (crucially) no leftover 9p transport either.
+    assert not any("vhost-user-fs" in d for d in _pairs(argv_off, "-device"))
     assert not any("virtio-9p" in d for d in _pairs(argv_off, "-device"))
-    assert any("virtio-9p" in d for d in _pairs(argv_on, "-device"))
-    assert any(on.shared in f for f in _pairs(argv_on, "-fsdev"))
+    # ON: exactly one vhost-user-fs device advertising the stable "shared" tag.
+    vfs = [d for d in _pairs(argv_on, "-device") if "vhost-user-fs-pci" in d]
+    assert len(vfs) == 1
+    assert "tag=shared" in vfs[0]
+    # ...backed by a vhost-user chardev socket at cfg.virtiofs_sock.
+    assert any(f"path={on.virtiofs_sock}" in c and "socket" in c
+               for c in _pairs(argv_on, "-chardev"))
+    # ...and never the old 9p transport.
+    assert not any("virtio-9p" in d for d in _pairs(argv_on, "-device"))
 
 
-def test_shared_custom_path_is_exported(tmp_path):
+def test_shared_virtiofs_needs_shared_memfd_backend(tmp_path):
+    # virtiofs REQUIRES a shared memory-backend the guest and daemon map together.
+    # It is present ONLY when shared is on, sized to guest RAM, and wired to a NUMA
+    # node; with shared off the command must be byte-identical to today (no memdev,
+    # no -numa) so non-shared VMs are untouched.
+    off = _cfg(tmp_path, shared=False, ram="8192")
+    on = _cfg(tmp_path, shared=True, ram="8192")
+    argv_off = vm.build_qemu_argv(off, disk=off.disk, gpu_args=[], iso_args=[], port=None)
+    argv_on = vm.build_qemu_argv(on, disk=on.disk, gpu_args=[], iso_args=[], port=None)
+    assert "-numa" not in argv_off
+    assert not any("memory-backend-memfd" in o for o in _pairs(argv_off, "-object"))
+    memfd = [o for o in _pairs(argv_on, "-object") if "memory-backend-memfd" in o]
+    assert len(memfd) == 1
+    assert "share=on" in memfd[0] and "size=8192M" in memfd[0]
+    assert any("memdev=mem" in n for n in _pairs(argv_on, "-numa"))
+
+
+def test_shared_custom_path_points_daemon_not_qemu(tmp_path):
+    # With virtiofs the HOST path is exported by the virtiofsd daemon, not named in
+    # the QEMU argv (QEMU only sees the vhost-user socket). So the custom path must
+    # NOT leak into the QEMU command; it belongs to the daemon argv instead.
     custom = "/mnt/host/project"
     cfg = _cfg(tmp_path, shared=custom)
     argv = vm.build_qemu_argv(cfg, disk=cfg.disk, gpu_args=[], iso_args=[], port=None)
-    # the custom path is exported, NOT the default ./shared dir.
-    assert any(f"path={custom}," in f for f in _pairs(argv, "-fsdev"))
-    assert not any(cfg.shared in f for f in _pairs(argv, "-fsdev"))
+    assert not any(custom in a for a in argv)
+    # the daemon, however, IS pointed at the custom path.
+    daemon = vm.virtiofsd_argv(cfg)
+    assert f"--shared-dir={custom}" in daemon or ("--shared-dir" in daemon
+           and custom in daemon)
 
 
 def test_hostfwd_present_iff_port_given(tmp_path):

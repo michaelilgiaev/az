@@ -7,7 +7,7 @@ purity is what lets the command be pinned in tests without a real host.
 
 virtual_machine.do_run decides the host-dependent inputs (render node, whether an
 ISO is attached) and keeps the checks + launch; this module just assembles. The
-audio, shared-folder (virtio-9p), networking, and USB blocks are gated on the
+audio, shared-folder (virtiofs), networking, and USB blocks are gated on the
 config here so the whole command lives in one place.
 
 Extracted from virtual_machine.py to keep that module under the 750-line limit
@@ -41,16 +41,39 @@ def _audio_args(cfg: Config) -> list[str]:
 
 
 def _shared_args(cfg: Config) -> list[str]:
-    """virtio-9p export of the host share dir, or nothing when shared is off.
+    """virtiofs export of the host share dir, or nothing when shared is off.
+
+    The QEMU side is just the vhost-user FRONTEND: a chardev pointing at the
+    virtiofsd daemon's UNIX socket, and a vhost-user-fs device advertising the
+    stable mount tag "shared" (the guest fstab source). The host directory itself
+    is NOT named here -- virtiofsd (spawned by virtual_machine._spawn_virtiofsd)
+    exports it; QEMU only sees the socket. The required shared memory-backend is
+    added separately in build_qemu_argv (it replaces the plain -m allocation).
 
     cfg.shared_path resolves the union type: True -> the working ./shared dir, a
     string -> that host path, False -> '' (disabled)."""
-    path = cfg.shared_path
-    if not path:
+    if not cfg.shared_path:
         return []
     return [
-        "-fsdev", f"local,id=fsdev0,path={path},security_model=none",
-        "-device", "virtio-9p-pci,fsdev=fsdev0,mount_tag=shared",
+        "-chardev", f"socket,id=virtiofs0,path={cfg.virtiofs_sock}",
+        "-device", "vhost-user-fs-pci,queue-size=1024,chardev=virtiofs0,tag=shared",
+    ]
+
+
+def _memory_args(cfg: Config) -> list[str]:
+    """RAM wiring. Normally a plain '-m <ram>'. But virtiofs (vhost-user) needs the
+    guest RAM to live in a SHARED memory-backend the daemon can map, so when shared
+    is on we swap the plain allocation for a memory-backend-memfd (share=on) hung on
+    a single NUMA node. The memfd size must EXACTLY equal -m (one node covering all
+    guest RAM; QEMU rejects the boot if the node total != -m), so both use the same
+    cfg.ram value. With shared OFF this is exactly '-m <ram>', byte-identical to
+    before -- non-shared VMs are untouched."""
+    if not cfg.shared_path:
+        return ["-m", cfg.ram]
+    return [
+        "-m", cfg.ram,
+        "-object", f"memory-backend-memfd,id=mem,size={cfg.ram}M,share=on",
+        "-numa", "node,memdev=mem",
     ]
 
 
@@ -101,7 +124,7 @@ def build_qemu_argv(cfg: Config, *, disk: str, gpu_args: list[str],
         "-machine", "q35,accel=kvm,vmport=off",
         "-cpu", "host",
         "-smp", f"{cfg.cpus},sockets=1,cores={cfg.cpus},threads=1",
-        "-m", cfg.ram,
+        *_memory_args(cfg),
         "-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={cfg.code}",
         "-drive", f"if=pflash,format=raw,unit=1,file={cfg.vars}",
         "-drive", f"if=none,id=disk0,file={disk},format=qcow2,cache=writeback,discard=unmap,aio=threads",

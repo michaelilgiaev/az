@@ -23,12 +23,12 @@ SSHD_HARDENING_CONF = (
 
 
 def _install_hypervisor_pubkey(target_user: str, target_home: str) -> None:
-    """BEST-EFFORT: if the 9p `shared` folder carries a host pubkey, install it into the
-    TARGET user's ~/.ssh/authorized_keys so the hypervisor can log in by KEY.
+    """BEST-EFFORT: if the virtiofs `shared` folder carries a host pubkey, install it into
+    the TARGET user's ~/.ssh/authorized_keys so the hypervisor can log in by KEY.
 
-    This is the HYPERVISOR nicety and is deliberately NON-FATAL: under QEMU/9p the host
-    stages ~/shared/authorized_keys and we install it; on BARE-METAL (an installed ssh
-    variant) there is no 9p share, so we simply skip it and rely on PASSWORD auth (the
+    This is the HYPERVISOR nicety and is deliberately NON-FATAL: under QEMU/virtiofs the
+    host stages ~/shared/authorized_keys and we install it; on BARE-METAL (an installed ssh
+    variant) there is no virtiofs share, so we simply skip it and rely on PASSWORD auth (the
     operator's --ssh password, baked into /etc/shadow). Enabling sshd itself must NOT
     depend on this -- otherwise the installed ssh desktop would never start sshd. Any
     failure here is reported and swallowed; the caller proceeds to bring sshd up regardless.
@@ -38,14 +38,15 @@ def _install_hypervisor_pubkey(target_user: str, target_home: str) -> None:
     shared = os.path.join(target_home, "shared")
     key = os.path.join(shared, "authorized_keys")
     if not _is_mountpoint(shared):
-        # Try to mount the 9p share; if it is not there (bare metal), give up quietly.
+        # Try to mount the virtiofs share; if it is not there (bare metal, or the
+        # home-main-shared.mount unit already covers it), give up quietly. This is a
+        # FALLBACK: normally the systemd .mount unit has already mounted ~/shared, but
+        # mounting here too makes the pubkey install work even before that unit runs.
         os.makedirs(shared, exist_ok=True)
-        rc = _sudo("mount", "-t", "9p", "-o",
-                   "trans=virtio,version=9p2000.L,msize=104857600",
-                   "shared", shared, check=False)
+        rc = _sudo("mount", "-t", "virtiofs", "shared", shared, check=False)
         if rc != 0:
-            print("azarch --sshd-hypervisor: no 9p shared folder; skipping host-key "
-                  "install (password login still works).")
+            print("azarch --sshd-hypervisor: no virtiofs shared folder; skipping "
+                  "host-key install (password login still works).")
             return
     if not os.path.isfile(key):
         print(f"azarch --sshd-hypervisor: {key} not found; skipping host-key install "
@@ -74,7 +75,7 @@ def sshd_hypervisor() -> int:
     bare-root target.
 
     Works in BOTH environments: under the hypervisor it also installs the host pubkey from
-    the 9p share (key login); on bare metal (an installed ssh desktop) it skips the pubkey
+    the virtiofs share (key login); on bare metal (an installed ssh desktop) it skips the pubkey
     step and relies on PASSWORD login (the --ssh password in /etc/shadow). Only the pubkey
     step is optional -- host-key generation, the firewall open, and enabling sshd are
     FAIL-FAST (a failure bails with that step's code and does NOT print the success line, so

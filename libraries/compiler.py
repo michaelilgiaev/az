@@ -387,6 +387,11 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # added in _link_services alongside the other multi-user oneshots.
     _emit_power(airootfs)
 
+    # The virtiofs shared-folder .mount unit + its mountpoint, enabled on both
+    # variants (enable-link in _link_services). Makes --shared appear on the desktop
+    # variant, not just the ssh one.
+    _emit_shared_mount(airootfs)
+
     # 10 -- Emit installer payload.
     # The first-boot script/service/conf. profiledef.sh (archiso metadata at the
     # PROFILE ROOT) is NOT emitted here: its iso_name is the one thing that differs
@@ -909,6 +914,22 @@ def _emit_power(airootfs: Path) -> None:
     )
 
 
+def _emit_shared_mount(airootfs: Path) -> None:
+    """Write the virtiofs shared-folder .mount unit and create its mountpoint.
+
+    The hypervisor exports the host ./shared folder over virtiofs (mount tag
+    "shared"); this unit mounts it at /home/main/shared on boot for BOTH variants,
+    so --shared works on the desktop variant too (it no longer rides on the ssh
+    bring-up). The mountpoint dir must exist for systemd to mount onto it; it is
+    owned by `main` (uid 1000) via the closing chown in _emit_provision/_emit_apps
+    that covers all of /home/main. The enable-link is added in _link_services."""
+    emit.write_text(
+        airootfs / "etc/systemd/system/home-main-shared.mount",
+        system.HOME_MAIN_SHARED_MOUNT,
+    )
+    emit.mkdir(airootfs / "home/main/shared")
+
+
 def _emit_tty1_autologin(airootfs: Path) -> None:
     """Override the releng getty@tty1 autologin so it logs in `main` (not root).
     The graphical session runs X as the unprivileged live user; `main`'s
@@ -1227,6 +1248,13 @@ def _link_services(airootfs: Path) -> None:
     # so the home page is listening at boot. See timedate.service_unit() / _emit_desktop.
     emit.link(timedate.SERVICE_SYSTEM_PATH,
               base / f"multi-user.target.wants/{timedate.SERVICE_NAME}")
+    # The virtiofs shared-folder auto-mount: enabled on BOTH ISOs (and, via unpackfs,
+    # the installed system) so the host ./shared folder appears at /home/main/shared
+    # on boot regardless of --ssh. This is the fix for the desktop-variant coupling;
+    # the unit body + mountpoint come from _emit_shared_mount. A .mount enable-link is
+    # a symlink named after the unit, same mechanism as the .service links above.
+    emit.link("/etc/systemd/system/home-main-shared.mount",
+              base / "multi-user.target.wants/home-main-shared.mount")
 
 
 def _switch_offline(W: Path, conf: str, localrepo: Path) -> None:

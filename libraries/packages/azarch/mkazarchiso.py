@@ -81,6 +81,7 @@ OVERLAY_ETC_FILES = [
     "/etc/systemd/system/pkgs-setup.service",
     "/etc/systemd/system/azarch-sleep-policy.service",
     "/etc/systemd/system/azarch-timedate.service",
+    "/etc/systemd/system/home-main-shared.mount",
     "/etc/systemd/system/getty@tty1.service.d/autologin.conf",
     "/etc/systemd/logind.conf.d/10-azarch-power.conf",
     "/etc/udev/rules.d/99-azarch-sleep-policy.rules",
@@ -106,10 +107,14 @@ ENABLE_LINKS = [
     ("/etc/systemd/system/pkgs-setup.service", "pkgs-setup.service"),
     ("/etc/systemd/system/azarch-sleep-policy.service", "azarch-sleep-policy.service"),
     ("/etc/systemd/system/azarch-timedate.service", "azarch-timedate.service"),
+    # The virtiofs shared-folder auto-mount, enabled on BOTH variants so --shared appears at
+    # /home/main/shared regardless of --ssh (the desktop-variant coupling fix). It is a .mount
+    # unit, but the enable-link is a symlink named after the unit like any .service.
+    ("/etc/systemd/system/home-main-shared.mount", "home-main-shared.mount"),
 ]
 
 # Volatile / privacy-sensitive / self paths the overlay rsync must never copy. Patterns are
-# matched by rsync against the overlaid source roots. The mounted 9p `shared` folder holds
+# matched by rsync against the overlaid source roots. The mounted virtiofs `shared` folder holds
 # HOST material (authorized_keys) and must never be baked in; caches and tmp are noise; the
 # machine-id is reset by mkarchiso anyway.
 # SECRET / CREDENTIAL stores under the overlaid home + config trees that must NEVER be baked
@@ -185,6 +190,28 @@ ExecStart=/usr/local/bin/azarch --sshd-hypervisor
 RemainAfterExit=true
 StandardOutput=journal
 StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+# The virtiofs shared-folder auto-mount -- byte-identical to
+# libraries/system.HOME_MAIN_SHARED_MOUNT (kept inline for the same bundling reason).
+# A test (test_shared_mount_unit_bodies_match_across_build_paths) pins the two copies
+# equal. Mounts the host ./shared folder (virtiofs tag "shared") at /home/main/shared
+# on boot, enabled on BOTH variants -- so --shared works on the desktop variant too,
+# not just the ssh one (the old coupling fix).
+HOME_MAIN_SHARED_MOUNT = """\
+[Unit]
+Description=Az'arch host<->guest shared folder (virtiofs)
+DefaultDependencies=no
+After=local-fs-pre.target
+Before=local-fs.target
+
+[Mount]
+What=shared
+Where=/home/main/shared
+Type=virtiofs
 
 [Install]
 WantedBy=multi-user.target

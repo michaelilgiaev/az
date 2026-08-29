@@ -66,7 +66,7 @@ _CFG_COMMENTS: dict = {
     "network":
         "user (NAT) | none | a host interface to bridge (list them: ip -br addr)",
     "shared":
-        "false | empty = share this dir | an absolute host path to share (virtio-9p)",
+        "false | empty = share this dir | an absolute host path to share (virtiofs)",
     "ssh":
         "forward the guest's SSH port to the host",
     "ssh_guest_to_host_port_forward":
@@ -275,6 +275,14 @@ class Config:
         if isinstance(s, str) and s:
             return s
         return ""
+
+    @property
+    def virtiofs_sock(self) -> str:
+        """The vhost-user UNIX socket the virtiofsd daemon listens on and QEMU
+        connects to for the shared folder. Lives beside .spice.sock in the VM dir
+        (a dotfile so it does not clutter the share); one per VM dir, so two VMs
+        never collide. Derived, not a stored field -- like the spice socket."""
+        return os.path.join(self.dir, ".virtiofs.sock")
 
     @classmethod
     def from_cwd(cls) -> "Config":

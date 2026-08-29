@@ -43,22 +43,57 @@ else:  # loaded flat (run by absolute path via the launcher) -- no parent packag
     from qemu_command import build_qemu_argv  # noqa: E402  re-exported
 
 _README = """\
-This host folder is shared into the guest over virtio-9p with mount tag "shared".
-The host exports it with security_model=none, so files keep the same numeric
-uid/gid on both sides. When the host user and guest user share uid 1000,
-ownership lines up; otherwise files appear owned by whichever uid matches.
+This host folder is shared into the guest over virtiofs with mount tag "shared".
+virtiofsd exports it with the host uid/gid preserved, so when the host user and
+guest user share uid 1000 ownership lines up; otherwise files appear owned by
+whichever uid matches.
 
-Mount it inside the guest with the commands printed by:  hypervisor share
-(that adds an /etc/fstab entry so it auto-mounts at ~/shared on every boot).
+An Az'arch guest auto-mounts it at ~/shared on every boot via a systemd mount unit
+shipped in the ISO (home-main-shared.mount), on ANY variant -- desktop or ssh -- so
+--shared just works with no per-guest setup. If you share into a foreign or
+hand-installed guest, run the commands printed by:  hypervisor share  (or, for a
+powered-off Btrfs guest, bake the fstab entry in with:  hypervisor share --offline)
 
-To mount by hand once, inside the VM:
+To mount by hand once, inside the VM (any modern Linux guest -- the virtiofs
+driver is in-tree, no module or package needed):
     sudo mkdir -p ~/shared
-    sudo mount -t 9p -o trans=virtio,version=9p2000.L,msize=104857600 shared ~/shared
+    sudo mount -t virtiofs shared ~/shared
 """
 
 
 def _envflag(name: str, default: str = "0") -> bool:
     return os.environ.get(name, default) == "1"
+
+
+# --- virtiofs shared folder --------------------------------------------------
+def virtiofsd_argv(cfg: Config) -> list[str]:
+    """The virtiofsd daemon command that exports the host share dir on the VM's
+    vhost-user socket, or [] when shared is off. PURE (no spawn) so it can be pinned
+    in tests. Depends ONLY on cfg.shared_path -- NOT on ssh -- which is the whole
+    fix: the share works on every variant because the daemon runs whenever shared
+    is set, not as a side effect of the ssh bring-up.
+
+    --sandbox=none keeps the daemon in the host mount namespace (it runs as the
+    invoking user, so the namespace/chroot sandbox buys nothing and would need
+    extra privileges); the socket is a per-VM dotfile so two VMs never collide."""
+    path = cfg.shared_path
+    if not path:
+        return []
+    return [
+        checks.virtiofsd_binary(),
+        f"--socket-path={cfg.virtiofs_sock}",
+        f"--shared-dir={path}",
+        "--sandbox=none",
+    ]
+
+
+def _guest_fstab_line(guest_user: str) -> str:
+    """The /etc/fstab line that auto-mounts the share inside the guest, via virtiofs.
+    PURE. virtiofs needs no trans=/version= options and no modules-load entry (the
+    driver is in-tree in modern kernels), so this is a plain virtiofs entry with
+    'nofail' so a VM booted without the share still boots. The source field is the
+    mount tag "shared" advertised by the vhost-user-fs device."""
+    return f"shared  /home/{guest_user}/shared  virtiofs  nofail  0 0"
 
 
 # --- install -----------------------------------------------------------------
@@ -201,6 +236,10 @@ def do_run(cfg: Config, install_iso: str = "") -> None:
     if hcfg.shared is True:
         os.makedirs(cfg.shared, exist_ok=True)
         os.chmod(cfg.shared, 0o755)
+    # The shared folder rides virtiofs -> we need the virtiofsd daemon. Gate it here
+    # (only when shared is on) so a plain non-shared VM never demands it.
+    if cfg.shared_path:
+        checks.require_virtiofsd()
 
     # --- GPU: shared host GPU (3D) vs a generic software-rendered GPU --------
     gpu_args = _gpu_args(cfg)
@@ -300,12 +339,16 @@ def _launch(cfg: Config, qemu: list[str], port: "int | None") -> None:
     invalid ones."""
     qemu_proc: subprocess.Popen | None = None
     viewer_proc: subprocess.Popen | None = None
+    virtiofsd_proc: subprocess.Popen | None = None
     watcher: "configuration_watcher.ConfigWatcher | None" = None
 
     def cleanup(*_a) -> None:
         if watcher is not None:
             watcher.stop()
-        for p in (viewer_proc, qemu_proc):
+        # Order matters only loosely; kill viewer + QEMU + the virtiofsd daemon that
+        # backed the share so nothing outlives the VM (a stray virtiofsd would hold
+        # the socket and the share dir open).
+        for p in (viewer_proc, qemu_proc, virtiofsd_proc):
             if p and p.poll() is None:
                 try:
                     p.kill()
@@ -314,6 +357,7 @@ def _launch(cfg: Config, qemu: list[str], port: "int | None") -> None:
         subprocess.run(["pkill", "-9", "-x", cfg.proc],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         _rm(cfg.spice_sock)
+        _rm(cfg.virtiofs_sock)
 
     # Ctrl-C / TERM -> cleanup then exit, matching the bash trap.
     def _sig(_signum, _frame):
@@ -330,6 +374,12 @@ def _launch(cfg: Config, qemu: list[str], port: "int | None") -> None:
     )
 
     try:
+        # Spawn the virtiofsd daemon FIRST (when shared is on): QEMU's vhost-user
+        # chardev connects to its socket at startup, so the socket must already be
+        # listening. Depends only on shared -- never on ssh -- so the share appears
+        # on every variant. Killed in cleanup() with the rest of the VM.
+        virtiofsd_proc = _spawn_virtiofsd(cfg)
+
         qemu_proc = subprocess.Popen(qemu)
 
         # wait for the SPICE socket, then launch our own viewer against it
@@ -381,6 +431,27 @@ def _wait_any(a: subprocess.Popen, b: subprocess.Popen) -> None:
         if a.poll() is not None or b.poll() is not None:
             return
         time.sleep(0.2)
+
+
+def _spawn_virtiofsd(cfg: Config) -> "subprocess.Popen | None":
+    """Start the virtiofsd daemon that backs the shared folder, or None when shared
+    is off. Removes any stale socket, launches the daemon (argv from the pure
+    virtiofsd_argv), then waits for the socket to appear so QEMU's vhost-user
+    chardev can connect. Dies if the daemon exits before the socket shows up."""
+    argv = virtiofsd_argv(cfg)
+    if not argv:
+        return None
+    _rm(cfg.virtiofs_sock)
+    print(f"Starting virtiofsd for shared folder: {cfg.shared_path}", file=sys.stderr)
+    proc = subprocess.Popen(argv)
+    for _ in range(100):  # up to ~10s for the socket to appear
+        if os.path.exists(cfg.virtiofs_sock):
+            return proc
+        if proc.poll() is not None:
+            die("virtiofsd exited before its socket appeared -- shared folder "
+                "cannot be mounted (see errors above)")
+        time.sleep(0.1)
+    return proc
 
 
 def _maximize_window(title: str, display: "str | None" = None) -> None:
@@ -456,17 +527,17 @@ def do_share_print() -> None:
 
 _SHARE_TEXT = """\
 Run THESE commands ONCE INSIDE THE GUEST to auto-mount the host ./shared folder
-at ~/shared on every boot:
+at ~/shared on every boot (any modern Linux guest -- the virtiofs driver is
+in-tree, so no module or package is needed):
 
   sudo mkdir -p ~/shared
-  echo "shared  $HOME/shared  9p  trans=virtio,version=9p2000.L,msize=104857600,nofail  0 0" \\
-    | sudo tee -a /etc/fstab
-  printf '9p\\n9pnet\\n9pnet_virtio\\n' | sudo tee /etc/modules-load.d/9p.conf
+  echo "shared  $HOME/shared  virtiofs  nofail  0 0" | sudo tee -a /etc/fstab
   sudo mount -a
 
 After that it appears at ~/shared on every boot, owned by your guest user.
-(The host exports it with security_model=none, so files keep their numeric
-uid/gid; when host and guest both use uid 1000, ownership lines up.)
+(virtiofsd preserves the host uid/gid; when host and guest both use uid 1000,
+ownership lines up. An Az'arch guest already auto-mounts it via the shipped
+home-main-shared.mount systemd unit -- no need to run the above.)
 
 ----------------------------------------------------------------------------
 For a SMOOTH, auto-1920x1080 desktop, the GUEST also needs (once):
@@ -497,10 +568,7 @@ def do_share_offline(cfg: Config) -> None:
     # inside its own disk, mirroring the adjacent GUEST_UID/GID overrides).
     guest_user = os.environ.get("GUEST_USER", "main")
     mountpoint = f"/home/{guest_user}/shared"
-    fstab_line = (
-        f"shared  {mountpoint}  9p  "
-        "trans=virtio,version=9p2000.L,msize=104857600,nofail  0 0"
-    )
+    fstab_line = _guest_fstab_line(guest_user)
 
     disk = cfg.disk
     if not os.path.isfile(disk):
@@ -539,28 +607,20 @@ def do_share_offline(cfg: Config) -> None:
             ["mktemp", "-d"], check=True, capture_output=True, text=True
         ).stdout.strip()
 
-        # 1. /etc/fstab + modules-load (root subvolume @)
+        # 1. /etc/fstab (root subvolume @). virtiofs needs NO modules-load entry --
+        # the virtiofs driver is in-tree in modern kernels, so unlike 9p there is
+        # nothing to force-load at boot; the fstab line alone makes it mount.
         _sudo(["mount", "-o", "subvol=@", rootpart, mnt])
         fstab = os.path.join(mnt, "etc/fstab")
         if _grep_mount(fstab, mountpoint):
             print(f"fstab: entry for {mountpoint} already present.")
         else:
-            print("fstab: adding shared-folder mount.")
+            print("fstab: adding shared-folder mount (virtiofs).")
             _sudo_append(
                 fstab,
-                '\n# host<->guest shared folder (virtio-9p, mount tag "shared")\n'
+                '\n# host<->guest shared folder (virtiofs, mount tag "shared")\n'
                 + fstab_line
                 + "\n",
-            )
-        modconf = os.path.join(mnt, "etc/modules-load.d/9p.conf")
-        if os.path.isfile(modconf):
-            print("modules-load: 9p.conf already present.")
-        else:
-            print("modules-load: adding 9p modules so the mount works at boot.")
-            _sudo_write(
-                modconf,
-                '# load virtio-9p so the "shared" folder mounts at boot\n'
-                "9p\n9pnet\n9pnet_virtio\n",
             )
         _sudo(["umount", mnt])
 

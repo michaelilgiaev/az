@@ -22,3 +22,16 @@ def test_share_offline_missing_disk_raises_cleanly(tmp_path):
     cfg = make_cfg(str(tmp_path))  # no testvm.qcow2 on disk
     with pytest.raises(HypervisorError):
         vm.do_share_offline(cfg)
+
+
+def test_guest_fstab_line_is_virtiofs_not_9p():
+    # The baked-in guest mount uses virtiofs (mount tag "shared"), NOT 9p. virtiofs
+    # needs no trans=/version= options and no modules-load entry (the driver is
+    # in-tree in modern kernels), so the line is a plain virtiofs fstab entry.
+    line = vm._guest_fstab_line("main")
+    fields = line.split()
+    assert fields[0] == "shared"                 # source == the virtiofs mount tag
+    assert fields[1] == "/home/main/shared"      # target
+    assert fields[2] == "virtiofs"               # fstype
+    assert "nofail" in fields[3].split(",")      # never blocks boot if absent
+    assert "9p" not in line and "trans=virtio" not in line
