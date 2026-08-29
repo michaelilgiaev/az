@@ -11,9 +11,11 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 pythonpath = ["libraries", "scripts/libraries"]
-# -v makes verbose output the DEFAULT: every test's node id and PASSED/FAILED is
-# printed on its own line, no flag required. There is no quiet mode to opt out of
-# and no --verbose flag to pass -- `bash tests.sh` is verbose out of the box.
+# -v here is the baseline for a BARE `pytest` run (from an activated venv): every
+# test's node id and PASSED/FAILED on its own line. tests.sh OVERRIDES it per
+# output mode via `-o addopts=` (its mixed/quiet modes want grouped dots, its
+# loud mode wants -vv) -- see tests.sh OUTPUT MODES. So `pytest` alone is verbose,
+# while `bash tests.sh` picks the mode.
 # -p no:cacheprovider disables pytest's cache plugin so .pytest_cache is NEVER
 # created -- not even by a bare `pytest` run outside tests.sh. This repo treats
 # that dir as pollution; killing it at the source beats deleting it afterwards.
