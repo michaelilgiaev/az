@@ -72,9 +72,17 @@ def virtiofsd_argv(cfg: Config, socket_group: "str | None" = None) -> list[str]:
     path = cfg.shared_path
     if not path:
         return []
+    # Resolve the binary, but fall back to the bare name so this stays a PURE,
+    # host-independent builder: on a machine without virtiofsd installed (a CI
+    # runner, say) checks.virtiofsd_binary() returns '' and would otherwise emit
+    # ["sudo", "", ...] -- an invalid command with an empty argv slot. The bare
+    # "virtiofsd" keeps the command well-formed for pinning; whether the daemon
+    # is actually present is enforced separately by require_virtiofsd() before
+    # any real spawn.
+    binary = checks.virtiofsd_binary() or "virtiofsd"
     argv = [
         "sudo",
-        checks.virtiofsd_binary(),
+        binary,
         f"--socket-path={cfg.virtiofs_sock}",
         f"--shared-dir={path}",
         "--sandbox=none",

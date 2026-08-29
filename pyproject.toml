@@ -11,10 +11,13 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 pythonpath = ["libraries", "scripts/libraries"]
+# -v makes verbose output the DEFAULT: every test's node id and PASSED/FAILED is
+# printed on its own line, no flag required. There is no quiet mode to opt out of
+# and no --verbose flag to pass -- `bash tests.sh` is verbose out of the box.
 # -p no:cacheprovider disables pytest's cache plugin so .pytest_cache is NEVER
 # created -- not even by a bare `pytest` run outside tests.sh. This repo treats
 # that dir as pollution; killing it at the source beats deleting it afterwards.
-addopts = "-ra -q --strict-markers --import-mode=importlib -p no:cacheprovider"
+addopts = "-ra -v --strict-markers --import-mode=importlib -p no:cacheprovider"
 markers = [
     "network: test really pings external hosts; skips itself when offline (the default `bash tests.sh` run is pure/offline). Deselect with `-m 'not network'`.",
 ]
