@@ -36,9 +36,23 @@ Plain-text raw dump of every component.
 ## Install
 
 1. **Download the ISO (or [compile the ISO yourself](#compile))**  
-   The ISO is hosted on Google Drive (GitHub does not allow files larger than 2 GB).
-   
-   **Link: [https://drive.google.com/file/d/18nclTLo05_KU7uOfYd_WTnI0LK--mGE6/view?usp=sharing](https://drive.google.com/file/d/18nclTLo05_KU7uOfYd_WTnI0LK--mGE6/view?usp=sharing)**
+
+     <table width="100%">
+     <thead>
+     <tr><th align="left">🚧 UNDER CONSTRUCTION</th></tr>
+     </thead>
+     <tbody>
+     <tr><td>
+
+     The new ISO links will be made once project reaches release...
+
+     </td></tr>
+     </tbody>
+     </table>
+
+   ~The ISO is hosted on Google Drive (GitHub does not allow files larger than 2 GB).~
+
+   ~**Link:** [https://drive.google.com/file/d/18nclTLo05_KU7uOfYd_WTnI0LK--mGE6/view?usp=sharing](https://drive.google.com/file/d/18nclTLo05_KU7uOfYd_WTnI0LK--mGE6/view?usp=sharing)~
 
 2. **Create a Bootable USB**  
 
@@ -62,20 +76,40 @@ Plain-text raw dump of every component.
 
      <table width="100%">
      <thead>
-     <tr><th align="left">ℹ️ NOTE</th></tr>
+     <tr><th align="left">ℹ️ SIDE NOTE</th></tr>
      </thead>
      <tbody>
      <tr><td>
 
-     - Replace `<DEVICE>` with your USB device. 
-     - Replace `<ISO_TYPE>` with the desired ISO.
+     - Replace `<DEVICE>` with the USB device. 
+     - Replace `<ISO>` with the ISO file.
+
+     </td></tr>
+     </tbody>
+     </table>
+
+     <table width="100%">
+     <thead>
+     <tr><th align="left">ℹ️ SIDE NOTE</th></tr>
+     </thead>
+     <tbody>
+     <tr><td>
+
+     Run `lsblk` to find `<DEVICE>`:
+
+     ```bash
+     lsblk -o NAME,SIZE,TYPE,TRAN,MOUNTPOINTS
+     ```
+
+     The USB is the whole-disk entry (such as `sdb`) whose size matches the stick,
+     so use `/dev/sdb`, not a partition like `/dev/sdb1`.
 
      </td></tr>
      </tbody>
      </table>
 
      ```bash
-     sudo dd if=azarch-<ISO_TYPE>-x86_64.iso of=/dev/<DEVICE> bs=4M status=progress && sync
+     sudo dd if=<ISO> of=/dev/<DEVICE> bs=4M status=progress && sync
      ```
 
 3. **Boot from USB**  
@@ -84,7 +118,7 @@ Plain-text raw dump of every component.
 4. **Live Session and Installation**  
    <table width="100%">
    <thead>
-   <tr><th align="left">ℹ️ NOTE</th></tr>
+   <tr><th align="left">ℹ️ SIDE NOTE</th></tr>
    </thead>
    <tbody>
    <tr><td>
@@ -146,7 +180,7 @@ You can clone this repository and compile the ISO yourself. The first compile ne
 
    <table width="100%">
    <thead>
-   <tr><th align="left">ℹ️ NOTE</th></tr>
+   <tr><th align="left">ℹ️ SIDE NOTE</th></tr>
    </thead>
    <tbody>
    <tr><td>
@@ -207,7 +241,7 @@ You can clone this repository and compile the ISO yourself. The first compile ne
 
   <table width="100%">
   <thead>
-  <tr><th align="left">ℹ️ NOTE</th></tr>
+  <tr><th align="left">ℹ️ SIDE NOTE</th></tr>
   </thead>
   <tbody>
   <tr><td>
@@ -235,7 +269,7 @@ You can clone this repository and compile the ISO yourself. The first compile ne
 
   <table width="100%">
   <thead>
-  <tr><th align="left">ℹ️ NOTE</th></tr>
+  <tr><th align="left">ℹ️ SIDE NOTE</th></tr>
   </thead>
   <tbody>
   <tr><td>
