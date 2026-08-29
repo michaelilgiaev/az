@@ -66,25 +66,50 @@ def _envflag(name: str, default: str = "0") -> bool:
 
 
 # --- virtiofs shared folder --------------------------------------------------
-def virtiofsd_argv(cfg: Config) -> list[str]:
+def virtiofsd_argv(cfg: Config, socket_group: "str | None" = None) -> list[str]:
     """The virtiofsd daemon command that exports the host share dir on the VM's
     vhost-user socket, or [] when shared is off. PURE (no spawn) so it can be pinned
-    in tests. Depends ONLY on cfg.shared_path -- NOT on ssh -- which is the whole
+    in tests. Depends ONLY on cfg.shared_path -- NOT on ssh -- which is half the
     fix: the share works on every variant because the daemon runs whenever shared
     is set, not as a side effect of the ssh bring-up.
 
-    --sandbox=none keeps the daemon in the host mount namespace (it runs as the
-    invoking user, so the namespace/chroot sandbox buys nothing and would need
-    extra privileges); the socket is a per-VM dotfile so two VMs never collide."""
+    Run as ROOT via sudo. This is the OTHER half of the fix. virtiofsd creates host
+    files on the guest's behalf by setfsuid()/setfsgid()-ing to the guest's
+    credentials first; only root may do that, so an UNPRIVILEGED daemon lets the
+    guest READ the share but silently EPERMs every create/mkdir -- a regression from
+    the old 9p share (9p ran inside QEMU as the user and needed no daemon). Running
+    root fixes creation; files land on the host owned by the invoking user.
+
+    --sandbox=none keeps the daemon in the host mount namespace (the default sandbox
+    would pivot_root INTO the shared dir); the socket is a per-VM dotfile so two VMs
+    never collide. --socket-group hands the root-owned socket to the invoking user's
+    primary group so the (non-root) QEMU can still open it (a root-owned socket is
+    srwx------ root -- unreachable otherwise); omitted when the group is unknown, and
+    the caller then chmods the socket instead."""
     path = cfg.shared_path
     if not path:
         return []
-    return [
+    argv = [
+        "sudo",
         checks.virtiofsd_binary(),
         f"--socket-path={cfg.virtiofs_sock}",
         f"--shared-dir={path}",
         "--sandbox=none",
     ]
+    if socket_group:
+        argv.append(f"--socket-group={socket_group}")
+    return argv
+
+
+def _primary_group() -> "str | None":
+    """The invoking user's primary group NAME, for virtiofsd --socket-group. None if
+    it cannot be resolved (a bare uid with no /etc/group entry) -- the caller then
+    falls back to chmod-ing the socket after the daemon creates it."""
+    try:
+        import grp
+        return grp.getgrgid(os.getgid()).gr_name
+    except (KeyError, OSError):
+        return None
 
 
 def _guest_fstab_line(guest_user: str) -> str:
@@ -345,10 +370,8 @@ def _launch(cfg: Config, qemu: list[str], port: "int | None") -> None:
     def cleanup(*_a) -> None:
         if watcher is not None:
             watcher.stop()
-        # Order matters only loosely; kill viewer + QEMU + the virtiofsd daemon that
-        # backed the share so nothing outlives the VM (a stray virtiofsd would hold
-        # the socket and the share dir open).
-        for p in (viewer_proc, qemu_proc, virtiofsd_proc):
+        # Order matters only loosely; kill viewer + QEMU so nothing outlives the VM.
+        for p in (viewer_proc, qemu_proc):
             if p and p.poll() is None:
                 try:
                     p.kill()
@@ -356,8 +379,16 @@ def _launch(cfg: Config, qemu: list[str], port: "int | None") -> None:
                     pass
         subprocess.run(["pkill", "-9", "-x", cfg.proc],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # The virtiofsd daemon runs as ROOT (sudo), and sudo forks -- killing our
+        # child sudo does NOT reap the root daemon, and a non-root kill() could not
+        # touch it anyway. Reap it by socket path via sudo pkill so no root daemon (and
+        # no held-open share dir) outlives the VM, then remove the root-owned socket.
+        subprocess.run(
+            ["sudo", "pkill", "-9", "-f", f"virtiofsd.*{cfg.virtiofs_sock}"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
         _rm(cfg.spice_sock)
-        _rm(cfg.virtiofs_sock)
+        _rm_sock(cfg.virtiofs_sock)
 
     # Ctrl-C / TERM -> cleanup then exit, matching the bash trap.
     def _sig(_signum, _frame):
@@ -435,23 +466,50 @@ def _wait_any(a: subprocess.Popen, b: subprocess.Popen) -> None:
 
 def _spawn_virtiofsd(cfg: Config) -> "subprocess.Popen | None":
     """Start the virtiofsd daemon that backs the shared folder, or None when shared
-    is off. Removes any stale socket, launches the daemon (argv from the pure
-    virtiofsd_argv), then waits for the socket to appear so QEMU's vhost-user
-    chardev can connect. Dies if the daemon exits before the socket shows up."""
-    argv = virtiofsd_argv(cfg)
+    is off. Removes any stale socket, launches the daemon as root (argv from the pure
+    virtiofsd_argv -- see there for why root), then waits for the socket to appear so
+    QEMU's vhost-user chardev can connect. Dies if the daemon exits before the socket
+    shows up.
+
+    sudo may prompt for a password once here (same as the offline-share path); the
+    daemon then runs as root for the life of the VM. When the primary group cannot be
+    resolved (so no --socket-group was emitted) the root-owned socket is chmod-ed
+    world-accessible via sudo once it appears, so the non-root QEMU can still open it."""
+    group = _primary_group()
+    argv = virtiofsd_argv(cfg, socket_group=group)
     if not argv:
         return None
-    _rm(cfg.virtiofs_sock)
-    print(f"Starting virtiofsd for shared folder: {cfg.shared_path}", file=sys.stderr)
+    _rm_sock(cfg.virtiofs_sock)
+    print(f"Starting virtiofsd (as root) for shared folder: {cfg.shared_path}",
+          file=sys.stderr)
     proc = subprocess.Popen(argv)
     for _ in range(100):  # up to ~10s for the socket to appear
         if os.path.exists(cfg.virtiofs_sock):
+            if not group:
+                # No group handed to virtiofsd -> the root-owned socket is srwx------;
+                # open it up so QEMU (non-root) can connect.
+                subprocess.run(["sudo", "chmod", "0666", cfg.virtiofs_sock],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return proc
         if proc.poll() is not None:
             die("virtiofsd exited before its socket appeared -- shared folder "
                 "cannot be mounted (see errors above)")
         time.sleep(0.1)
     return proc
+
+
+def _rm_sock(path: str) -> None:
+    """Remove a possibly ROOT-owned vhost-user socket. A prior run's virtiofsd ran as
+    root, so its leftover socket is root-owned and a plain unlink EPERMs; fall back to
+    sudo. Best-effort -- a stale socket only matters if it still exists when virtiofsd
+    tries to bind."""
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        return
+    except PermissionError:
+        subprocess.run(["sudo", "rm", "-f", path],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def _maximize_window(title: str, display: "str | None" = None) -> None:

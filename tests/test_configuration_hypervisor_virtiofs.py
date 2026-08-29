@@ -39,10 +39,42 @@ def test_daemon_spawned_when_shared_on_regardless_of_ssh(tmp_path):
         cfg = _cfg(tmp_path, shared=True, ssh=ssh)
         argv = vm.virtiofsd_argv(cfg)
         assert argv, f"expected a virtiofsd command with ssh={ssh}"
-        assert argv[0].endswith("virtiofsd")
         joined = " ".join(argv)
+        assert "virtiofsd" in joined                # the daemon binary is invoked
         assert cfg.shared_path in joined            # exports the host share dir
         assert cfg.virtiofs_sock in joined          # on the vhost-user socket QEMU reads
+
+
+def test_daemon_runs_as_root_via_sudo(tmp_path):
+    # THE writable-share guard. virtiofsd must run as ROOT: only root can setfsuid()
+    # to the guest's credentials before a host create, so an UNPRIVILEGED daemon lets
+    # the guest read but NOT create files -- a silent regression from the old 9p share.
+    # The daemon is therefore spawned through sudo. `sudo` must be argv[0] (nothing may
+    # precede it) and the real virtiofsd binary must come straight after.
+    cfg = _cfg(tmp_path, shared=True)
+    argv = vm.virtiofsd_argv(cfg)
+    assert argv[0] == "sudo", f"virtiofsd must run via sudo (as root); got {argv[0]!r}"
+    # the token right after sudo (skipping any sudo flags) is the virtiofsd binary
+    binary = next(a for a in argv[1:] if not a.startswith("-"))
+    assert binary.endswith("virtiofsd")
+
+
+def test_daemon_sets_socket_group_so_nonroot_qemu_can_connect(tmp_path):
+    # A root-owned vhost-user socket is srwx------ root and the (non-root) QEMU cannot
+    # open it. --socket-group hands the socket to the invoking user's primary group so
+    # QEMU connects with no post-hoc chmod. The group is passed in (keeps the builder
+    # PURE and testable); a concrete group name must reach the flag.
+    cfg = _cfg(tmp_path, shared=True)
+    argv = vm.virtiofsd_argv(cfg, socket_group="staff")
+    assert "--socket-group=staff" in argv
+
+
+def test_no_socket_group_flag_when_group_unknown(tmp_path):
+    # If the primary group cannot be resolved, emit no --socket-group (virtiofsd rejects
+    # an empty group); the daemon still runs as root and the caller falls back to chmod.
+    cfg = _cfg(tmp_path, shared=True)
+    argv = vm.virtiofsd_argv(cfg, socket_group=None)
+    assert not any(a.startswith("--socket-group") for a in argv)
 
 
 def test_daemon_exports_custom_path(tmp_path):
