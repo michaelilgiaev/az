@@ -15,10 +15,30 @@
 # exact code where a silent regression turns into whack-a-mole. If a test needs
 # a real build tool, it does not belong here.
 #
-# Any arguments are passed straight through to pytest, e.g.:
-#   bash tests.sh -k pacman             # run only tests matching "pacman"
-#   bash tests.sh tests/test_paths.py   # run one file
-#   bash tests.sh -x -q                 # stop at first failure, quiet
+# --- OUTPUT MODES ------------------------------------------------------------
+# Exactly one of three verbosity modes, chosen by a flag CONSUMED here (never
+# forwarded to pytest). All three are COLORED on the terminal, all three fit an
+# 80-column screen, and all three write a full color-stripped transcript to
+# logs/tests.log.
+#
+#   (no flag)   MIXED  -- dots grouped per file. Each line is a general
+#                         category (the test file's path) followed by one dot
+#                         per test in it: `tests/test_paths.py ..........`.
+#                         Colored (green dot pass, red F/E fail). The default.
+#   -q, --quiet QUIET  -- green dots. Just the dots, nothing else to read.
+#   -l, --loud  LOUD   -- an eyesore. Loudest pytest has: -vv, one bright
+#                         colored line per test, full long tracebacks and the
+#                         full reason report.
+#
+# -q and -l are mutually exclusive; passing both is a hard error.
+#
+# --- PASS-THROUGH ------------------------------------------------------------
+# Any OTHER arguments are passed straight through to pytest (only the mode flags
+# above are stripped), e.g.:
+#   bash tests.sh -k pacman                # run only tests matching "pacman"
+#   bash tests.sh tests/test_paths.py      # run one file
+#   bash tests.sh -q -k pacman             # green dots, only "pacman" tests
+#   bash tests.sh -l tests/test_emit.py    # eyesore, one file
 
 set -o errexit
 set -o nounset
@@ -31,6 +51,37 @@ VENV="$REPODIR/venv"
 PY="$VENV/bin/python"
 REQ="$REPODIR/requirements.txt"
 STAMP="$VENV/.requirements.installed"
+LOGDIR="$REPODIR/logs"
+LOG="$LOGDIR/tests.log"
+
+# --- 0. Pick the output mode. -----------------------------------------------
+# Walk the args ONCE: pull out the (at most one) mode flag and keep everything
+# else in PYTEST_ARGS to forward. `--` ends flag parsing -- anything after it is
+# forwarded verbatim. Two mode flags (e.g. `-q -l`) is a hard error, not a
+# silent last-one-wins.
+MODE="mixed"
+MODE_FLAG_SEEN=""
+PYTEST_ARGS=()
+seen_ddash=0
+set_mode() {                            # set_mode <name> <flag-as-typed>
+    if [ -n "$MODE_FLAG_SEEN" ] && [ "$MODE" != "$1" ]; then
+        echo "[tests] error: '$MODE_FLAG_SEEN' and '$2' are mutually exclusive -- pick one output mode" >&2
+        exit 2
+    fi
+    MODE="$1"
+    MODE_FLAG_SEEN="$2"
+}
+for arg in "$@"; do
+    if [ "$seen_ddash" -eq 1 ]; then
+        PYTEST_ARGS+=("$arg"); continue
+    fi
+    case "$arg" in
+        --)              seen_ddash=1 ;;
+        -q|--quiet)      set_mode quiet "$arg" ;;
+        -l|--loud)       set_mode loud  "$arg" ;;
+        *)               PYTEST_ARGS+=("$arg") ;;
+    esac
+done
 
 # --- 1. Ensure the venv exists. ---------------------------------------------
 if [ ! -x "$PY" ]; then
@@ -69,32 +120,100 @@ export PYTHONPATH="$REPODIR/libraries:$REPODIR/scripts/libraries${PYTHONPATH:+:$
 # few ms on this tiny codebase and removes that whole class of confusion.
 export PYTHONDONTWRITEBYTECODE=1
 
+# Right-align the percentage and keep lines from wrapping. Below, pytest's stdout
+# is a PIPE (we tee it), so pytest cannot query the terminal width and falls back
+# to 80 -- long test ids then overflow and the [ NN%] column drifts. Export the
+# REAL width (tput, else COLUMNS, else 80) so pytest formats to the actual screen
+# exactly as it would on a bare tty.
+COLS="$(tput cols 2>/dev/null || true)"
+[ -n "${COLS:-}" ] || COLS="${COLUMNS:-80}"
+export COLUMNS="$COLS"
+
 # Leave a spotless tree on EXIT, however we exit (pass, fail, or Ctrl-C). Two
 # kinds of scratch get wiped, both gitignored and both treated as pollution here:
 #   - .pytest_cache in the rootdir (pytest's scratch). We ALSO run pytest with
-#     -p no:cacheprovider (pyproject) so it is never written in the first place;
-#     this rm is the belt to that suspenders.
+#     -p no:cacheprovider (below) so it is never written in the first place; this
+#     rm is the belt to that suspenders.
 #   - every __pycache__ in the tree. PYTHONDONTWRITEBYTECODE=1 above stops this
 #     run from writing any, but a stray one from some other tool must not survive
 #     a test run either -- so sweep them all. venv/ is pruned so we don't churn
 #     its thousands of cached stdlib entries (matches clear.sh).
-# The trap runs on EXIT, so we can no longer `exec` pytest -- that would replace
-# this shell and the trap would never fire. Instead we run pytest, capture its
-# status, and re-exit with it so `bash tests.sh` still reports the true code.
+# logs/ is NOT swept here: it is this script's own output (logs/tests.log below);
+# clearing it is clear.sh's job (clear.sh -l).
 cleanup() {
     rm -rf "$REPODIR/.pytest_cache"
     find "$REPODIR" -type d -name venv -prune -o -type d -name __pycache__ -exec rm -rf {} +
 }
 trap cleanup EXIT
 
-echo "[tests] running pytest"
+# Per-mode pytest options.
+#   -o addopts="" wipes the -v that pyproject bakes into addopts, so EACH mode
+#      owns its own verbosity (without it every mode is stuck at -v -- one line
+#      per test -- and mixed/quiet could not show grouped dots).
+#   --color=yes FORCES color even though stdout is the tee pipe below.
+#   -p no:cacheprovider keeps .pytest_cache from ever being written.
+#   -rN (quiet/mixed) silences the trailing reason report; -rA (loud) shows all.
+# These lead so a user's own -k/path in PYTEST_ARGS still applies and can override.
+case "$MODE" in
+    mixed)  MODE_OPTS=(-o addopts= --no-header -rN --color=yes -p no:cacheprovider) ;;  # dots per file
+    quiet)  MODE_OPTS=(-o addopts= -q --no-header -rN --color=yes -p no:cacheprovider) ;;  # green dots
+    loud)   MODE_OPTS=(-o addopts= -vv -rA --tb=long --color=yes -p no:cacheprovider) ;;  # eyesore
+esac
+
+# Fresh log every run: truncate logs/tests.log so it holds exactly THIS run's
+# transcript (color-stripped), mirroring compile.sh which truncates logs/*.log
+# per launch. mkdir -p because logs/ is gitignored and may not exist yet.
+mkdir -p "$LOGDIR"
+: > "$LOG"
+
+# Hard-clip every output line to the terminal width, WITHOUT counting the color
+# escapes. LOUD (-vv) prints each test's full node id, and a few parametrized
+# ids here are pathological (one carries a 300+ digit number) -- a single
+# unbreakable token far wider than the screen that NO pytest verbosity truncates.
+# So we clip ourselves: walk each line, copy ANSI escapes verbatim (zero width)
+# and keep only the first $COLUMNS VISIBLE characters, then re-emit a reset so a
+# clipped color never bleeds into the next line. mixed/quiet lines are already
+# within width, so this is a no-op for them -- one uniform filter guarantees ALL
+# three modes fit the screen. awk is used (not `cut`, which would slice through
+# an escape sequence and corrupt the color).
+clip_to_width() {
+    awk -v W="$COLUMNS" '
+    {
+        line=$0; vis=0; out=""; i=1; n=length(line)
+        while (i<=n) {
+            c=substr(line,i,1)
+            if (c=="\033") {                       # copy a CSI escape verbatim, no width
+                j=i+1
+                while (j<=n && index("mGKHFABCDsu", substr(line,j,1))==0) j++
+                out=out substr(line,i,j-i+1); i=j+1; continue
+            }
+            if (vis<W) { out=out c; vis++ }        # keep visible chars up to the width
+            i++
+        }
+        # Re-emit a reset ONLY if we clipped mid-color (dropped visible chars past
+        # the width); when nothing was dropped, pytest already closed its own SGR,
+        # so adding another would just double it.
+        if (vis>=W && n>0) out=out "\033[0m"
+        print out
+    }'
+}
+
 # The default run includes EVERYTHING, network-marked live tests included. The
 # `network`-marked tests ping real external hosts and skip themselves when
 # offline, so a plain `bash tests.sh` still passes without connectivity.
-# `set -o errexit` is disabled around pytest so a test failure does not abort the
-# script before cleanup; we capture and re-raise the exit code ourselves.
+#
+# One capture, clipped, two sinks: pytest's colored output is clipped to the
+# screen width, then `tee`d to the terminal (colored) AND, via process
+# substitution, into a sed that strips ANSI and appends the plain text to
+# logs/tests.log. `set -o errexit` is disabled around this so a test failure does
+# not abort the script before cleanup; we read pytest's TRUE exit code from
+# ${PIPESTATUS[0]} (the FIRST stage -- NOT clip's / tee's / sed's) and re-raise
+# it, so `bash tests.sh` still reports the real code.
 set +o errexit
-"$PY" -m pytest "$@"
-status=$?
+"$PY" -m pytest "${MODE_OPTS[@]}" "${PYTEST_ARGS[@]}" 2>&1 \
+    | clip_to_width \
+    | tee >(sed -E 's/\x1b\[[0-9;]*[a-zA-Z]//g' >> "$LOG")
+status="${PIPESTATUS[0]}"
 set -o errexit
+
 exit "$status"
