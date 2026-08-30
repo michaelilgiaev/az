@@ -31,10 +31,14 @@
 #
 # -q and -l are mutually exclusive; passing both is a hard error.
 #
-# LOGS: independent of the mode on screen, EVERY run writes all three renders to
+# LOGS: independent of the mode on screen, EVERY run writes all three views to
 # logs/ (color-stripped): tests.log (mixed), tests-loud.log (loud), tests-quiet.log
-# (quiet). Pytest runs ONCE at -vv and every render -- terminal and all three logs
-# -- is reconstructed from that single capture (keeps startup snappy: no 3x collect).
+# (quiet). Each view is produced by its OWN native pytest run: the TERMINAL run (the
+# selected mode) writes its own log as it prints, and the OTHER TWO modes each run
+# in a throwaway COPY of the repo, concurrently, feeding their logs. Native-per-mode
+# means pytest emits exactly the right layout for each view, so no `-vv` artifact
+# (wrapped skip reasons, digit walls) ever leaks into the leaner mixed/quiet views.
+# A small awk only fits lines to the terminal WIDTH; it never reconstructs dots.
 #
 # --- PASS-THROUGH ------------------------------------------------------------
 # Any OTHER arguments are passed straight through to pytest (only the mode flags
@@ -56,9 +60,10 @@ PY="$VENV/bin/python"
 REQ="$REPODIR/requirements.txt"
 STAMP="$VENV/.requirements.installed"
 LOGDIR="$REPODIR/logs"
-# Every run writes ALL THREE renders to logs/, no matter which mode the terminal
+# Every run writes ALL THREE views to logs/, no matter which mode the terminal
 # shows: tests.log (mixed / default), tests-loud.log (loud), tests-quiet.log
-# (quiet). The terminal shows only the selected mode; logs/ always gets all three.
+# (quiet). The terminal shows only the selected mode; logs/ always gets all three
+# (the shown mode from the terminal run, the other two from isolated copies).
 LOG_MIXED="$LOGDIR/tests.log"
 LOG_LOUD="$LOGDIR/tests-loud.log"
 LOG_QUIET="$LOGDIR/tests-quiet.log"
@@ -153,32 +158,45 @@ export COLUMNS="$WIDTH"
 #     its thousands of cached stdlib entries (matches clear.sh).
 # logs/ is NOT swept here: it is this script's own output (logs/tests.log below);
 # clearing it is clear.sh's job (clear.sh -l).
-# FIFODIR (set just before the run) holds the three named pipes feeding the log
-# renderers; remove it too. Empty until then, so the guard is safe under nounset.
-FIFODIR=""
+# The two off-screen log runs are children of this shell, each working inside a
+# throwaway repo COPY under /tmp. On any exit (pass, fail, Ctrl-C) the trap kills
+# any still-running child and removes every copy so nothing lingers after we go.
 cleanup() {
     rm -rf "$REPODIR/.pytest_cache"
-    [ -n "$FIFODIR" ] && rm -rf "$FIFODIR"
+    kill "$P_LOG1" "$P_LOG2" 2>/dev/null || true
+    for d in "${LOGCOPIES[@]}"; do [ -n "$d" ] && rm -rf "$d"; done
     find "$REPODIR" -type d -name venv -prune -o -type d -name __pycache__ -exec rm -rf {} +
 }
+# P_* are the off-screen log PIDs and LOGCOPIES the temp copy dirs, all set just
+# before the run. Default them empty/empty-array so the trap is safe under nounset
+# if we exit before they are populated.
+P_LOG1=""; P_LOG2=""
+LOGCOPIES=()
 trap cleanup EXIT
 
-# ONE fixed pytest invocation feeds EVERY render. pytest cannot natively produce
-# all three layouts (mixed/quiet/loud need different verbosity) in a single run,
-# so we run it ONCE at the RICHEST view -- `-vv`, one line per test -- and
-# reconstruct the leaner mixed/quiet layouts from that stream in awk (render()
-# below). One pytest process keeps startup snappy (no 3x collect) and lets every
-# log + the terminal derive from the same authoritative capture.
-#   -o addopts= wipes the -v pyproject bakes in (so OUR -vv is the only verbosity).
-#   -vv         one bright line per test -- the source detail every render needs.
-#   -rfE        trailing reason report lists ONLY failures/errors: a green run has
-#               NO trailing wall of PASSED lines (that "changes when done" report,
-#               and its middled huge-number ids, are gone). Failures still report.
-#   --tb=long   full tracebacks (loud is an eyesore; leaner renders drop them).
-#   --color=yes forces color through the pipes (stdout is not a tty below).
+# --- Per-mode pytest options -------------------------------------------------
+# Each output mode runs pytest in its OWN native verbosity, so pytest emits the
+# right layout directly -- no reconstruction, so no `-vv` artifact (wrapped skip
+# reasons, digit walls) can leak into the leaner views.
+#   -o addopts= wipes the -v pyproject bakes in, so OUR verbosity is the only one.
+#   --color=yes forces color through the pipe (stdout is not a tty below).
 #   -p no:cacheprovider keeps .pytest_cache from ever being written.
+# Mode-specific:
+#   mixed -> -ra              : pytest's own per-file grouped dots
+#            (`tests/test_x.py .....`), gray-able header, short summary. The file
+#            label prints in the terminal's default fg (white); dots green. Default.
+#   quiet -> -q              : bare dots only, `s`/`F` inline. `-q` never prints an
+#            inline skip REASON, so long reasons cannot wrap into junk lines.
+#   loud  -> -vv -rfE --tb=long : one bright line per test, failures reported, full
+#            tracebacks. The eyesore.
 # These lead so a user's own -k/path in PYTEST_ARGS still applies and can override.
-PYTEST_OPTS=(-o addopts= -vv -rfE --tb=long --color=yes -p no:cacheprovider)
+opts_for_mode() {                          # opts_for_mode <mode> -> echoes flags
+    case "$1" in
+        quiet) echo "-o addopts= -q --color=yes -p no:cacheprovider" ;;
+        loud)  echo "-o addopts= -vv -rfE --tb=long --color=yes -p no:cacheprovider" ;;
+        *)     echo "-o addopts= -ra --color=yes -p no:cacheprovider" ;;   # mixed
+    esac
+}
 
 # Fresh logs every run: truncate all three so each holds exactly THIS run's
 # transcript (color-stripped), mirroring compile.sh which truncates logs/*.log
@@ -186,182 +204,173 @@ PYTEST_OPTS=(-o addopts= -vv -rfE --tb=long --color=yes -p no:cacheprovider)
 mkdir -p "$LOGDIR"
 : > "$LOG_MIXED"; : > "$LOG_LOUD"; : > "$LOG_QUIET"
 
-# render <mode> -- reformat a pytest -vv stream into one of the three layouts,
-# in ONE awk pass (fflush per line -> live end to end; chained awks re-buffer and
-# freeze, so everything stays in this single process). -vv gives, per test, a line
-#   <file>::<node> <VERDICT> [ NN%]   (VERDICT colored)
-# plus a gray-able header block and a final "N passed ... in Xs" summary. Per mode:
-#
-#   loud  -- the -vv line VERBATIM (its color kept), just width-fitted. The eyesore.
-#   mixed -- per FILE a row  "<file> ....."  : the file path (the general category)
-#            in gray, then one colored glyph per test in it. Rows wrap to width.
-#   quiet -- bare colored glyphs only, no labels, wrapped to width.
-#
-# Cross-cutting, all modes:
-#   * HEADER to gray (\033[90m): platform/rootdir/configfile/testpaths/plugins/
-#     cachedir/collecting/collected -- context, not result. Matched on de-colored
-#     text, anchored at line start (a node id containing "rootdir" is never caught).
-#   * FIT TO WIDTH by MIDDLE-truncation with an ellipsis. A -vv node id can be a
-#     single unbreakable token far wider than the screen (one param id here carries
-#     a 300+ digit number). A left-clip would sever the trailing " PASSED [ NN%]"
-#     into garbage; middling keeps head + `…` + tail so the verdict/percentage
-#     always survives. Lines that already fit keep their exact bytes and color.
-#   * ONE blank line above the final "N passed ... in Xs", never doubled.
-# Glyph+color mirror pytest's own dot view: PASSED/XPASS -> "." green;
-# FAILED/ERROR -> "F"/"E" red; SKIPPED -> "s" yellow; XFAIL -> "x" yellow.
-render() {
-    awk -v W="$COLUMNS" -v MODE="$1" '
-    BEGIN { GRN="\033[32m"; RED="\033[31m"; YEL="\033[33m"; GRY="\033[90m"; RST="\033[0m" }
+# fit <mode> -- reformat a NATIVE pytest stream to the terminal WIDTH, in ONE awk
+# pass (fflush per line -> live end to end). This is the ONLY reformatting: pytest
+# already produced the correct layout for the mode, so awk never reconstructs dots.
+# It does exactly three things, all width/color cosmetics:
+#   * HEADER block (platform/rootdir:/configfile:/testpaths:/plugins:/collected ...)
+#     -> gray. Context, not result. Anchored at line start on de-colored text so a
+#     node id that merely CONTAINS "rootdir" is never caught. (The mixed per-file
+#     LABEL is NOT a header line, so it keeps pytest's default white fg.)
+#   * A per-test `::...VERDICT [ NN%]` line wider than the screen (loud, where a
+#     param id can be a 500-char digit wall pytest does not truncate): cut at the
+#     `[` that opens the param id, insert an ellipsis, keep the trailing
+#     ` VERDICT [ NN%]`. The unreadable digits are DROPPED, not sampled. If the id
+#     has no `[` (a long plain node name), fall back to a generic middle-truncate
+#     that still preserves the tail verdict.
+#   * Any OTHER over-wide line (a long traceback line, a wide summary) -> generic
+#     middle-truncate (head + ellipsis + tail) so both ends survive.
+# Lines that already fit keep their exact bytes and color. Blank lines and pytest's
+# own spacing pass through untouched -- no synthesized or collapsed blanks.
+fit() {
+    awk -v W="$COLUMNS" '
+    BEGIN { GRY="\033[90m"; RST="\033[0m" }
     function strip(s) { gsub(/\033\[[0-9;]*[a-zA-Z]/, "", s); return s }
-    # middle-truncate a plain string to width W (head + ellipsis + tail). Balanced
-    # head/tail -- for generic lines where both ends may matter.
-    function fit(v,   keep,head,tail) {
+    # generic middle-truncate of a PLAIN string to width W (head + ellipsis + tail).
+    function mid(v,   keep,head,tail) {
         if (length(v) <= W) return v
         keep = W - 1; head = int(keep*0.55); tail = keep - head
         return substr(v,1,head) "\342\200\246" substr(v, length(v)-tail+1)
     }
-    # fit a -vv RESULT line (loud). Here the head -- "file::test_name" -- is the
-    # readable part and the tail is often a pathological digit wall; keep only a
-    # SHORT tail, just enough for the trailing " VERDICT [ NN%]", so the ellipsis
-    # eats the garbage middle instead of showing a screenful of 9s.
-    function fit_result(v,   tail,head) {
-        if (length(v) <= W) return v
-        tail = 14                                   # "] PASSED [ 99%]" ~ 14 visible chars
-        if (tail > W - 2) tail = int(W/2)
-        head = W - 1 - tail
-        return substr(v,1,head) "\342\200\246" substr(v, length(v)-tail+1)
-    }
-    # fit a possibly-colored line: keep bytes+color if it fits, else strip+middle (gray).
-    function fit_line(raw, bare) { return (length(bare) <= W) ? raw : GRY fit(bare) RST }
-    # normalize a -vv header line into what the leaner (non -vv) views show:
-    #   drop the " -- /path/to/python" suffix -vv tacks onto the platform line,
-    #   and turn "collecting ... collected N items" into plain "collected N items".
-    function norm_header(b) {
-        sub(/ -- \/.*/, "", b)                      # strip the -vv python-path suffix
-        sub(/^collecting \.\.\. /, "", b)           # "collecting ... collected N" -> "collected N"
-        return b
-    }
-    # close an open dot row (mixed/quiet) with a newline before any non-dot output.
-    function close_row() { if (col_open) { printf "\n"; col_open=0; cur_file=""; rowlen=0 } }
-    # append one colored glyph to the wrapped dot stream.
-    #   mixed -- one labeled row per file: "<file> ....."; if a file has more dots
-    #            than fit the width, wrap and HANG-INDENT the continuation under the
-    #            first dot (aligned to the label width) so it plainly reads as the
-    #            SAME file, not an orphaned fragment.
-    #   quiet -- bare glyphs, wrapped at the width, no labels.
-    function put_glyph(file, glyph, color,   label) {
-        if (MODE == "mixed") {
-            if (file != cur_file) {                 # new category: end old row, start labeled row
-                close_row()
-                label = file " "
-                if (length(label) >= W) label = fit(label) " "   # even the label overflows -> middle it
-                printf "%s%s%s", GRY, label, RST
-                rowlen = length(label); cur_file=file; col_open=1
-                # hang-indent for wrapped rows = label width, but bounded so a very
-                # narrow terminal still leaves room for several dots per row (never
-                # an indent so wide the continuation can not fit even one dot).
-                indent = length(label); if (indent > W-4) indent = (W>8) ? W-4 : 0
-            }
-            if (rowlen + 1 > W) { printf "\n%*s", indent, ""; rowlen=indent }  # wrap, hang-indent
-            printf "%s%s%s", color, glyph, RST; rowlen++
-        } else {                                    # quiet: bare glyphs, wrap at width
-            if (rowlen + 1 > W) { printf "\n"; rowlen=0 }
-            printf "%s%s%s", color, glyph, RST; rowlen++; col_open=1
+    # a possibly-colored line: keep bytes+color if it fits, else strip+middle (gray).
+    function fit_line(raw, bare) { return (length(bare) <= W) ? raw : GRY mid(bare) RST }
+    # fit an over-wide per-test RESULT line by cutting at the param-id `[`. bare is
+    # the de-colored text, shaped "file::name[HUGE_ID] VERDICT [ NN%]". Keep
+    # everything up to and including "name[", an ellipsis, then the trailing
+    # " VERDICT [ NN%]" -- anchored on the VERDICT WORD (from the space just before
+    # it), so both the verdict and the percentage survive and the whole unreadable
+    # id is DROPPED, not sampled. No `[` (a long plain node name) -> generic
+    # middle-truncate. Colors are dropped on a truncated line (partial escapes would
+    # corrupt); a fitting line never reaches here.
+    function fit_result(bare,   lb, vpos, tail_start, headstr, tailstr, rest, off) {
+        lb = index(bare, "[")                       # first "[" opens the param id
+        if (lb == 0) return GRY mid(bare) RST       # no param id: generic middle
+        # Find the LAST VERDICT word (the id itself can contain letters, so scan
+        # from where the id opens and keep the rightmost match).
+        vpos = 0; off = lb
+        while (match(substr(bare, off), /(PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)/)) {
+            vpos = off + RSTART - 1                  # absolute index of this verdict
+            off  = vpos + RLENGTH                    # continue past it for a later one
         }
+        if (vpos == 0) return GRY mid(bare) RST      # no verdict found: generic middle
+        tail_start = (vpos > 1 && substr(bare, vpos-1, 1) == " ") ? vpos-1 : vpos
+        headstr = substr(bare, 1, lb)               # readable "file::name[" up to "["
+        tailstr = substr(bare, tail_start)          # " VERDICT [ NN%]"
+        # The verdict tail is non-negotiable; the head gets the rest. If the head
+        # (a long path + long function name) itself overruns that budget, clip its
+        # END -- keep the START, which is the readable name -- so we never spill the
+        # digit wall back in via a balanced middle-truncate. Budget = W-1 for the
+        # ellipsis. If even the tail alone will not fit (pathologically narrow
+        # terminal), fall back to a generic middle so at least the percentage shows.
+        if (length(tailstr) + 1 >= W) return GRY mid(bare) RST
+        if (length(headstr) + 1 + length(tailstr) > W)
+            headstr = substr(headstr, 1, W - 1 - length(tailstr))
+        return GRY headstr "\342\200\246" tailstr RST
     }
     {
         bare = strip($0)
-
-        # header block -> normalize away -vv-only noise, then gray + width-fit.
+        # header block -> gray + width-fit.
         if (bare ~ /^(platform |rootdir:|configfile:|testpaths:|plugins:|cachedir:|collecting |collected )/) {
-            close_row(); print GRY fit(norm_header(bare)) RST; prev_nonblank=1
-
-        # the "=== test session starts ===" banner: keep as-is (fit only).
-        } else if (bare ~ /test session starts/) {
-            close_row(); print fit_line($0,bare); prev_nonblank=1
-
-        # a -vv per-test result line?  file::node VERDICT [ NN%]
-        } else if (bare ~ /::/ && bare ~ / (PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)([ ]|$)/) {
-            file = bare; sub(/::.*/, "", file)          # category = path before ::
-            if      (bare ~ / PASSED/)  { g="."; c=GRN }
-            else if (bare ~ / XPASS/)   { g="."; c=GRN }
-            else if (bare ~ / FAILED/)  { g="F"; c=RED }
-            else if (bare ~ / ERROR/)   { g="E"; c=RED }
-            else if (bare ~ / SKIPPED/) { g="s"; c=YEL }
-            else                        { g="x"; c=YEL }   # XFAIL
-            if (MODE == "loud") {
-                # loud: verbatim -vv line, but width-fit a pathological id so the
-                # tail keeps the VERDICT/percentage (not a wall of digits).
-                print (length(bare) <= W) ? $0 : GRY fit_result(bare) RST
-            } else put_glyph(file, g, c)
-            prev_nonblank=1
-
-        # summary line -> close any open dot row, one blank above, never doubled.
-        } else if (bare ~ /(^| )[0-9]+ (passed|failed|error|errors|skipped|deselected|xfailed|xpassed).* in [0-9]/) {
-            close_row()
-            if (prev_nonblank) print ""
-            print fit_line($0, bare); prev_nonblank=(bare!="")
-
-        # everything else (loud tracebacks, blank lines, the failure reason report).
-        } else if (bare == "") {
-            close_row(); print ""; prev_nonblank=0
+            print GRY mid(bare) RST
+        # an over-wide per-test result line -> cut the param-id digit wall at "[".
+        } else if (length(bare) > W && bare ~ /::/ && bare ~ / (PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)([ ]|\[|$)/) {
+            print fit_result(bare)
+        # everything else: keep verbatim if it fits, else generic middle-truncate.
         } else {
-            close_row(); print fit_line($0, bare); prev_nonblank=1
+            print fit_line($0, bare)
         }
         fflush()
-    }
-    END { close_row() }'
+    }'
 }
 
 # The default run includes EVERYTHING, network-marked live tests included. The
 # `network`-marked tests ping real external hosts and skip themselves when
 # offline, so a plain `bash tests.sh` still passes without connectivity.
 #
-# Real-time output. pytest writes to a PIPE below (we filter + tee it), and off a
-# tty it lets its stream sit in a big block buffer -- so with plain piping nothing
-# appears until the run is nearly over and it FEELS frozen for the whole suite.
-# Two things fix that: `python -u` unbuffers the interpreter, and `stdbuf -oL`
-# forces pytest's stdout to flush per LINE, so each row of dots / each test line
-# reaches the screen the instant pytest emits it. Every downstream awk/sed fflushes
-# per line too, so the whole pipeline is live end to end. stdbuf is coreutils and
-# effectively always present; if it is somehow missing, fall back to plain (still
-# correct, just block-buffered) rather than fail.
+# Real-time output. pytest writes to a PIPE below (we filter it), and off a tty it
+# lets its stream sit in a big block buffer -- so with plain piping nothing appears
+# until the run is nearly over and it FEELS frozen. Two things fix that: `python -u`
+# unbuffers the interpreter, and `stdbuf -oL` forces pytest's stdout to flush per
+# LINE, so each row of dots / each test line reaches the screen the instant pytest
+# emits it. The downstream awk fflushes per line too, so the pipeline is live end
+# to end. stdbuf is coreutils and effectively always present; if it is somehow
+# missing, fall back to plain (still correct, just block-buffered) rather than fail.
 STDBUF=(stdbuf -oL)
 command -v stdbuf >/dev/null 2>&1 || STDBUF=()
 
-# The pipeline. ONE pytest process, its -vv stream FANNED OUT to three log
-# renderers AND the terminal (all stages line-buffered -> live end to end):
-#
-#   pytest (-vv) | tee <3 FIFOs> | render "$MODE"   (terminal, colored)
-#        the 3 FIFOs each feed:  render <mode> | strip-color >> logs/<file>
-#
-# Why FIFOs + real background jobs instead of `tee >(...)` process substitutions:
-# `tee` does NOT wait for its process-substitution sinks, and neither does the
-# shell -- so when the terminal side of the pipe drains and the script hits
-# `exit`, the log renderers can be KILLED mid-write, TRUNCATING the logs (a real,
-# reproducible race, worse the larger the log). Feeding named pipes from explicit
-# background jobs gives each sink a PID we can `wait` on, so every log is complete
-# before we exit. The FIFO dir is wiped by the EXIT trap (FIFODIR above).
-#
-# pytest's TRUE exit code is ${PIPESTATUS[0]} (stdbuf execs pytest and propagates
-# its status, so this is pytest's own code, not tee's / render's); errexit is off
-# around the run so a failure does not abort before we read it and wait on sinks.
-STRIP='s/\x1b\[[0-9;]*[a-zA-Z]//g'
-FIFODIR="$(mktemp -d "${TMPDIR:-/tmp}/azarch-tests.XXXXXX")"
-mkfifo "$FIFODIR/mixed" "$FIFODIR/loud" "$FIFODIR/quiet"
+STRIP='s/\x1b\[[0-9;]*[a-zA-Z]//g'   # ANSI-color scrubber for the plain-text logs
 
-# Log renderers: real background jobs reading each FIFO, reformatting to their
-# layout, stripping color, into the log. Capture PIDs so we can wait on them.
-render mixed < "$FIFODIR/mixed" | sed -u -E "$STRIP" >> "$LOG_MIXED" & P_MIXED=$!
-render loud  < "$FIFODIR/loud"  | sed -u -E "$STRIP" >> "$LOG_LOUD"  & P_LOUD=$!
-render quiet < "$FIFODIR/quiet" | sed -u -E "$STRIP" >> "$LOG_QUIET" & P_QUIET=$!
+# The mode shown on the terminal writes its OWN log directly from the terminal run
+# (no extra pytest process). The OTHER TWO modes each need their own pytest run for
+# a faithful log -- and those runs must NOT share this working directory with the
+# terminal run: a few tests build C binaries INTO the source tree and rmtree them
+# in teardown (test_*_does_not_pollute_the_repo_tree), so two runs of the suite in
+# the same dir race on those paths (a real FileNotFoundError mid-copy, reproduced).
+# So each background log run executes in its OWN throwaway COPY of the repo (12M,
+# copied in well under a second), cwd + PYTHONPATH pointed at the copy, leaving the
+# real tree untouched and the runs fully independent -- they run CONCURRENTLY with
+# the terminal (wall time ~= one run) yet cannot collide. errexit is off around the
+# whole block so a test failure never aborts before we read status + wait on sinks.
+#
+# other_modes <shown> -- echo the two modes that are NOT the one on screen.
+other_modes() {
+    case "$1" in
+        quiet) echo "mixed loud" ;;
+        loud)  echo "mixed quiet" ;;
+        *)     echo "loud quiet" ;;   # mixed shown
+    esac
+}
+log_path_for() {                           # log_path_for <mode> -> its logfile
+    case "$1" in quiet) echo "$LOG_QUIET" ;; loud) echo "$LOG_LOUD" ;; *) echo "$LOG_MIXED" ;; esac
+}
+
+# run_log_isolated <mode> <logfile> <dir> -- mirror the repo into <dir> and run
+# pytest there in <mode>, writing the fitted, color-stripped transcript to
+# <logfile>. <dir> is created and recorded by the PARENT (below) so the EXIT trap
+# can remove it -- a `LOGCOPIES+=` here would be lost, since this runs backgrounded
+# in a subshell whose variable writes never reach the parent. Its pytest exit code
+# is irrelevant (the terminal run is authoritative), so it is not propagated.
+run_log_isolated() {                       # run_log_isolated <mode> <logfile> <dir>
+    local mode="$1" logfile="$2" dir="$3" o
+    # Mirror the repo minus the bits a run does not need (venv is reused via $PY;
+    # .git and logs are irrelevant to a test run) -- keeps the copy tiny and fast.
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -a --exclude venv --exclude .git --exclude logs "$REPODIR"/ "$dir"/ 2>/dev/null || return 0
+    else
+        cp -a "$REPODIR"/. "$dir"/ 2>/dev/null || return 0
+        rm -rf "$dir/venv" "$dir/.git" "$dir/logs"
+    fi
+    read -r -a o <<< "$(opts_for_mode "$mode")"
+    # cwd = copy so repo-relative test paths resolve inside it; PYTHONPATH -> the
+    # COPY's import roots so imported modules also write into the copy, never the
+    # real tree. Reuse the real venv interpreter ($PY) -- the venv is not copied.
+    ( cd "$dir" \
+        && PYTHONPATH="$dir/libraries:$dir/scripts/libraries" \
+           "${STDBUF[@]}" "$PY" -u -m pytest "${o[@]}" "${PYTEST_ARGS[@]}" 2>&1 ) \
+        | fit "$mode" | sed -u -E "$STRIP" >> "$logfile"
+}
 
 set +o errexit
-"${STDBUF[@]}" "$PY" -u -m pytest "${PYTEST_OPTS[@]}" "${PYTEST_ARGS[@]}" 2>&1 \
-    | tee "$FIFODIR/mixed" "$FIFODIR/loud" "$FIFODIR/quiet" \
-    | render "$MODE"
+# Launch the two OFF-SCREEN log runs (isolated copies), concurrently. Create + record
+# each copy dir HERE in the parent so the EXIT trap (via LOGCOPIES) always removes it,
+# even though the run itself is backgrounded.
+read -r -a OTHER <<< "$(other_modes "$MODE")"
+DIR1="$(mktemp -d "${TMPDIR:-/tmp}/azarch-testlog.XXXXXX")"; LOGCOPIES+=("$DIR1")
+DIR2="$(mktemp -d "${TMPDIR:-/tmp}/azarch-testlog.XXXXXX")"; LOGCOPIES+=("$DIR2")
+run_log_isolated "${OTHER[0]}" "$(log_path_for "${OTHER[0]}")" "$DIR1" & P_LOG1=$!
+run_log_isolated "${OTHER[1]}" "$(log_path_for "${OTHER[1]}")" "$DIR2" & P_LOG2=$!
+
+# The TERMINAL run: pytest natively in the SELECTED mode, IN PLACE. Its fitted,
+# colored stream goes to the screen AND (color-stripped) to that mode's own log --
+# one process serves both. This is the authoritative run: its TRUE exit code is
+# ${PIPESTATUS[0]} (stdbuf execs pytest and propagates its status, so this is
+# pytest's own code, not tee's / awk's / sed's).
+read -r -a TERM_OPTS <<< "$(opts_for_mode "$MODE")"
+"${STDBUF[@]}" "$PY" -u -m pytest "${TERM_OPTS[@]}" "${PYTEST_ARGS[@]}" 2>&1 \
+    | fit "$MODE" \
+    | tee >(sed -u -E "$STRIP" >> "$(log_path_for "$MODE")")
 status="${PIPESTATUS[0]}"
-wait "$P_MIXED" "$P_LOUD" "$P_QUIET"    # ensure all three logs are fully written
+wait "$P_LOG1" "$P_LOG2"               # ensure both off-screen logs are fully written
 set -o errexit
 
 exit "$status"
