@@ -29,10 +29,6 @@ Easy-to-use interactive graph of every component (render is hosted by GitHub Pag
 - [https://michaelilgiaev.github.io/azarch/documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html](https://michaelilgiaev.github.io/azarch/documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)  
   (documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
 
-Plain-text raw dump of every component.
-- [documentations/SPECIFICATIONS_COMPONENTS_FULL.txt](documentations/SPECIFICATIONS_COMPONENTS_FULL.txt)
-
-
 ## Install
 
 1. **Download the ISO (or [compile the ISO yourself](#compile))**  
