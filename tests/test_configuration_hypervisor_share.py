@@ -10,6 +10,8 @@ missing-disk case into an uncaught TypeError; this pins it shut.
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from hypervisor_helpers import make_cfg
@@ -22,6 +24,27 @@ def test_share_offline_missing_disk_raises_cleanly(tmp_path):
     cfg = make_cfg(str(tmp_path))  # no testvm.qcow2 on disk
     with pytest.raises(HypervisorError):
         vm.do_share_offline(cfg)
+
+
+def test_install_shared_ssh_makes_an_empty_share_no_authorized_keys(tmp_path, monkeypatch):
+    # `install --shared --ssh` must create the share as an EMPTY directory. It must
+    # NOT stage the host's public key into shared/authorized_keys -- the guest owns
+    # its own key setup, and a leftover authorized_keys survived `rm -rf shared/*`
+    # re-installs, silently re-injecting a stale host key. Pin the share empty.
+    (tmp_path / "os.iso").write_bytes(b"")  # a resolvable, readable ISO in-dir
+    monkeypatch.setattr(vm.checks, "require_qemu", lambda: None)
+    monkeypatch.setattr(vm.checks, "require_ovmf", lambda cfg: None)
+    monkeypatch.setattr(vm.checks, "require_free_space", lambda cfg: None)
+    monkeypatch.setattr(vm, "_qemu_img_create", lambda cfg: open(cfg.disk, "wb").close())
+    # NVRAM copy would read a host template that isn't present under tmp; skip it.
+    monkeypatch.setattr(vm.shutil, "copyfile", lambda src, dst: open(dst, "wb").close())
+
+    cfg = make_cfg(str(tmp_path))
+    vm.do_install(cfg, "os.iso", shared=True, ssh=True)
+
+    assert os.path.isdir(cfg.shared)                                  # share created
+    assert os.listdir(cfg.shared) == []                              # and it is empty
+    assert not os.path.exists(os.path.join(cfg.shared, "authorized_keys"))
 
 
 def test_guest_fstab_line_is_virtiofs_not_9p():

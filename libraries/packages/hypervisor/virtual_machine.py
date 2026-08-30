@@ -174,15 +174,6 @@ def do_install(cfg: Config, iso_arg: str,
         os.chmod(cfg.shared, 0o755)
         print(f"Shared folder ready: {cfg.shared}")
 
-        # drop host pubkey for the guest's ssh setup to consume
-        if ssh:
-            auth_dst = os.path.join(cfg.shared, "authorized_keys")
-            pubkey = _find_host_pubkey()
-            if pubkey and not os.path.isfile(auth_dst):
-                shutil.copyfile(pubkey, auth_dst)
-                os.chmod(auth_dst, 0o644)
-                print(f"Host pubkey staged: {auth_dst}")
-
     print()
     print(f"Ready. Boot the installer with:  "
           f"hypervisor run {os.path.basename(cfg.disk)} --iso {os.path.basename(iso)}")
@@ -785,15 +776,6 @@ def do_stop(cfg: Config) -> None:
 
 
 # --- small shell/OS helpers --------------------------------------------------
-def _find_host_pubkey() -> str:
-    """Return path to the first available host public key, or ''."""
-    for name in ("id_ed25519", "id_ecdsa", "id_rsa"):
-        p = os.path.expanduser(f"~/.ssh/{name}.pub")
-        if os.path.isfile(p):
-            return p
-    return ""
-
-
 def _rm(path: str) -> None:
     try:
         os.remove(path)
