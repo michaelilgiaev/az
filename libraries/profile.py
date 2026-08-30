@@ -12,37 +12,33 @@ down shadow/gshadow/sudoers in the ISO.
 
 from __future__ import annotations
 
-# ISO base names per build variant. mkarchiso names the artifact
-# <iso_name>-<version>-<arch>.iso, so these drive the two output filenames:
+import variants as _variants
+
+# ISO base names. mkarchiso names the artifact <iso_name>-<version>-<arch>.iso, so the
+# iso_name is the filename stem. The NAMES themselves now live in variants.Variant (the
+# single source of truth for the whole {desktop,server} x {plain,instant} x {plain,ssh}
+# matrix); this module only forwards to it. ISO_NAME / ISO_NAME_SSHD stay as named
+# constants for the two legacy cells because tests and a few call sites reference them:
 #   base -> azarch-desktop-<ver>-x86_64.iso      (the normal live/install medium)
 #   sshd -> azarch-desktop-ssh-<ver>-x86_64.iso  (same, but ssh is ENABLED and `main`
 #                                                 has the operator's --ssh password)
-#
-# "desktop" is the product LINE and "-ssh" its sub-flavour. This leaves room for a future
-# "server" line (azarch-server) without disturbing the base/sshd variant KEYS the build
-# branches on -- those stay `base`/`sshd`; only the artifact NAME carries the product line.
-# The two ISOs are separated in output/ by the digit-anchored glob "{iso_name}-[0-9]*.iso":
-# "azarch-desktop-2026..." matches base, "azarch-desktop-ssh-..." does not (the char after
-# "azarch-desktop-" is 's', not a digit), exactly as before the rename.
-ISO_NAME = "azarch-desktop"
-ISO_NAME_SSHD = "azarch-desktop-ssh"
-
-# The set of recognized build variants -> iso_name. compiler.run loops over the
-# runtime-selected variants (compiler._variants_for), calling iso_name_for per variant
-# to name each ISO. The base ISO is always built; the sshd ISO is opt-in via --ssh.
-ISO_NAMES = {
-    "base": ISO_NAME,
-    "sshd": ISO_NAME_SSHD,
-}
+# The ISOs are separated in output/ by the digit-anchored glob "{iso_name}-[0-9]*.iso":
+# "azarch-desktop-2026..." matches azarch-desktop, "azarch-desktop-ssh-..." does not (the
+# char after "azarch-desktop-" is 's', not a digit). The server/instant names extend the
+# same scheme (azarch-server, azarch-desktop-instant, ...); see variants.Variant.iso_name.
+ISO_NAME = _variants.from_legacy_key("base").iso_name       # "azarch-desktop"
+ISO_NAME_SSHD = _variants.from_legacy_key("sshd").iso_name  # "azarch-desktop-ssh"
 
 ISO_PUBLISHER = "michaelilgiaev <https://github.com/michaelilgiaev/azarch>"
 ISO_APPLICATION = "Az'arch Installer/Az'arch Linux Live/Rescue DVD"
 INSTALL_DIR = "arch"
 
 
-def iso_name_for(variant: str = "base") -> str:
-    """The mkarchiso iso_name for a build variant (unknown -> base 'azarch-desktop')."""
-    return ISO_NAMES.get(variant, ISO_NAME)
+def iso_name_for(variant: "_variants.Variant | str" = "base") -> str:
+    """The mkarchiso iso_name for a build variant. Accepts a variants.Variant OR a legacy
+    key string ("base"/"sshd"); an unknown string falls back to the desktop base point
+    ('azarch-desktop'), preserving the old behaviour."""
+    return _variants.coerce(variant).iso_name
 
 BOOTMODES = (
     "bios.syslinux.mbr",
@@ -183,7 +179,7 @@ FILE_PERMISSIONS = {
 }
 
 
-def profiledef_sh(variant: str = "base") -> str:
+def profiledef_sh(variant: "_variants.Variant | str" = "base") -> str:
     bootmodes = " ".join(f"'{m}'" for m in BOOTMODES)
     perms = "\n".join(f'  ["{p}"]="{v}"' for p, v in FILE_PERMISSIONS.items())
     iso_name = iso_name_for(variant)

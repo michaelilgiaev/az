@@ -21,22 +21,40 @@
 #
 # Then it hands off to `python3 -m compiler`, which does the rest.
 #
-# Every run builds the base `azarch-desktop` medium (ssh DISABLED). The
-# `azarch-desktop-ssh` medium is OPT-IN via --ssh="<PASSWORD>" (see ARGS): identical
-# contents, but named azarch-desktop-ssh-<ver>-x86_64.iso, with `main`'s login password
-# set from --ssh, sshd ENABLED, and port 22 opened -- in BOTH the live session and the
-# installed system. It shares the same package cache, so it is only a second mkarchiso
-# pass. Without --ssh, ONLY the base ISO is built -- no default password is ever shipped
-# (see data/PROMPT.md DECISION 2).
+# Every run builds the base `azarch-desktop` medium (ssh DISABLED, GUI desktop). Three
+# ORTHOGONAL axis flags ADD variants, and the build is the Cartesian product of what is
+# requested (up to eight ISOs). All variants share the same package cache, so each extra
+# one is only an additional mkarchiso pass (a second product LINE also rebuilds the
+# airootfs overlay, since the server strips the GUI). Artifact names are
+# azarch-<line>[-instant][-ssh]-<ver>-x86_64.iso:
+#   line     desktop (default) | server   -- server is headless (no X/OpenBox/Calamares/
+#                                             apps); it installs via the headless CLI
+#                                             installer and its live console is a login shell.
+#   instant  off (default) | on           -- boots straight into an unattended install to
+#                                             the largest non-USB disk (user `main`, tz from
+#                                             --timezone), then reboots into the installed box.
+#   ssh      off (default) | on           -- sshd ENABLED and `main`'s login password set
+#                                             from --ssh (DECISION 2: no default password is
+#                                             ever shipped -- it comes from the operator).
+# The instant password follows the ssh axis: instant-ssh keeps the --ssh password; a
+# non-ssh instant install leaves the account LOCKED (!*, Ubuntu-style: no password login).
 #
 # ARGS: any args are passed straight through to the Python build driver.
-#   --ssh="<PASSWORD>"       ALSO build the opt-in `azarch-desktop-ssh` ISO, with
-#                            <PASSWORD> as the live `main` user's login password (hashed
-#                            sha-512 into that ISO's /etc/shadow -- never blank, never
-#                            plaintext-in-image). The flag DEMANDS a password: a bare
-#                            `--ssh` or an empty `--ssh=` is a hard error (it stops the
-#                            build and explains why -- no ssh ISO is silently skipped).
-#                            Omit --ssh entirely to build just the base desktop ISO.
+#   --server                 ALSO build the headless `azarch-server` line (+ its
+#                            instant/ssh flavours if those flags are also given).
+#   --instant                ALSO build the `-instant` variants (auto-install at boot).
+#   --ssh="<PASSWORD>"       ALSO build the `-ssh` variants, with <PASSWORD> as the live
+#                            `main` user's login password (hashed sha-512 into that ISO's
+#                            /etc/shadow -- never blank, never plaintext-in-image). The flag
+#                            DEMANDS a password: a bare `--ssh` or an empty `--ssh=` is a hard
+#                            error (it stops the build and explains why -- no ssh ISO is
+#                            silently skipped). Omit --ssh to build just the no-ssh variants.
+#   --timezone="<TZ>"        the instant-install timezone (default Asia/Jerusalem). Validated
+#                            against the build host's /usr/share/zoneinfo; an unknown zone is a
+#                            hard error. Only affects `-instant` variants (a warning is printed
+#                            if given without --instant).
+#   --all                    shorthand for --server --instant (the ssh half still needs
+#                            --ssh="<PASSWORD>"); with --ssh it builds the full 8-ISO matrix.
 #   --full-compile           build Az'arch's own packages ENTIRELY from source
 #                            (incl. a multi-hour LibreWolf/Firefox compile) instead
 #                            of the default, which repackages LibreWolf's verified

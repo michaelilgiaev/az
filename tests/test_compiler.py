@@ -36,30 +36,38 @@ import compiler
 
 # --- STEP_WEIGHTS <-> bar.step() count invariant ---------------------------
 
-def test_step_weights_length_and_shape():
-    # 13 lightweight setup/emit steps (index 0 unused sentinel + 12 real "8"s) then
-    # the four giants. Total 17 entries. The extra giant vs. before is the SECOND
-    # mkarchiso pass: one build now assembles BOTH ISO variants (base + sshd).
-    assert len(compiler.STEP_WEIGHTS) == 17
-    assert compiler.STEP_WEIGHTS[0] == 0
-    assert compiler.STEP_WEIGHTS[1:13] == [8] * 12
-    # Final four, in order: package-cache giant, makepkg stage, and the TWO
-    # mkarchiso giants (one per ISO variant).
-    assert compiler.STEP_WEIGHTS[-4:] == [250, 120, 270, 270]
+def test_default_step_weights_shape():
+    # The default STEP_WEIGHTS describes the no-flags build: ONE product line (desktop),
+    # ONE ISO. Shape: index-0 sentinel, then the 2 prelude + 10 per-line light steps (all
+    # weight 8), then this line's cache (250) + makepkg (120) giants, then the single
+    # mkarchiso giant (270). 12 light "8"s + 3 giants + sentinel = 16 entries.
+    w = compiler.STEP_WEIGHTS
+    assert len(w) == 16
+    assert w[0] == 0
+    assert w[1:13] == [8] * 12                 # 2 prelude + 10 per-line light steps
+    assert w[-3:] == [250, 120, 270]           # one line's giants + one ISO's mkarchiso
+
+
+def test_default_step_weights_light_count():
+    # 12 light steps for the single-desktop build: 2 prelude (reset + toolchain) + 10 per-line.
+    w = compiler.STEP_WEIGHTS
+    assert w.count(8) == compiler._PRELUDE_LIGHT_STEPS + compiler._PER_LINE_LIGHT_STEPS
 
 
 def test_step_weights_matches_executed_step_count():
-    # The invariant the module comment stresses: len(STEP_WEIGHTS) - 1 MUST equal the
-    # number of milestones run() EXECUTES. run() makes 15 literal bar.step() calls, but
-    # the last one lives inside the per-variant finalize loop and executes once per
-    # variant -- so the number of executed milestones is (15 - 1 loop call) + one call
-    # per variant = 14 + len(VARIANTS). The weights list must carry exactly that many
-    # real entries (plus the index-0 sentinel), so a step added/removed OR a variant
-    # added/removed without matching STEP_WEIGHTS fails here.
-    src = inspect.getsource(compiler.run)
-    n_literal = src.count("bar.step(")
-    assert n_literal == 15
-    executed = (n_literal - 1) + len(compiler.VARIANTS)  # loop's single call runs per variant
+    # len(weights_for(sel)) - 1 MUST equal the milestones the build executes for that
+    # selection. run() makes the prelude bar.step() calls once; _build_line() makes its
+    # calls once per LINE, but its final (mkarchiso) call is in the per-variant loop, so it
+    # runs once per VARIANT. Verify for the default single-desktop selection here (the wider
+    # matrix is covered in test_compiler_driver.test_step_weights_match_number_of_steps).
+    import variants
+
+    prelude = inspect.getsource(compiler.run).count("bar.step(")
+    line = inspect.getsource(compiler._build_line).count("bar.step(")
+    sel = variants.selected_variants()                      # 1 desktop ISO
+    n_lines = len(compiler._lines_in(sel))
+    n_variants = len(sel)
+    executed = prelude + n_lines * (line - 1) + n_variants  # -1: mkarchiso call runs per variant
     assert executed == len(compiler.STEP_WEIGHTS) - 1
 
 

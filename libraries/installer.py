@@ -42,6 +42,66 @@ LIVE_ROOTFS_RSYNC_EXCLUDES = (
 )
 
 
+# --- The instant (unattended auto-install) autorun --------------------------
+# The `instant` variants boot straight into an automatic install: target the
+# largest non-USB disk, user `main`, hostname `azarch`, timezone from the compile
+# flag (default Asia/Jerusalem), and either the ssh password (ssh variants) or a
+# LOCKED `!*` account (non-ssh -- Ubuntu-style: the account exists, no password
+# login). It is the SAME scripted installer the CLI/SSH path runs, just driven by
+# the AZ_INSTALL_* pre-seed env the installer + identity steps already honour -- so
+# instant reuses all of that (largest-disk detection, the rootfs clone, chroot
+# setup) rather than reimplementing any of it. It is console-only (no X), so it
+# works identically on the desktop AND the server line.
+
+def instant_install_sh(timezone: str = "Asia/Jerusalem", ssh: bool = False) -> str:
+    """The instant autorun script (staged under /root/azarch, ExecStart'd by
+    system.INSTANT_INSTALL_SERVICE on the live medium). It exports the AZ_INSTALL_*
+    pre-seed and execs the CLI installer unattended.
+
+    timezone: the installed system's timezone (compile-time --timezone; validated on
+    the build host before it reaches here). Baked into AZ_INSTALL_TIMEZONE, which the
+    identity chroot step re-points /etc/localtime to.
+
+    ssh: True for the *-instant-ssh variants. The ssh variant already baked the
+    operator's --ssh password hash into the LIVE `main` shadow, and the verbatim
+    rootfs clone copies that hash onto the target -- so the installed `main` inherits
+    the ssh password with NO password pre-seed here (we must NOT pass a lock
+    sentinel, or we would relock the account the operator wants to log into). For a
+    NON-ssh instant variant we pass AZ_INSTALL_LOCK=1 so the identity chroot step
+    LOCKS `main` (and root) to `!` instead of setting any password -- the Ubuntu `!*`
+    default the prompt asks for. Root is locked in BOTH cases.
+
+    The largest-disk auto-target + skip-confirmation come from AZ_INSTALL_CHOICE=1
+    (installer.installer_sh honours it), so the whole run is non-interactive."""
+    # Password posture. Non-ssh -> LOCK the account (`!*`, no password login). ssh -> KEEP the
+    # password already cloned from the live medium (the operator's --ssh hash was baked into
+    # `main`'s shadow and the verbatim rootfs clone carried it onto the target), so we neither
+    # prompt nor change it. Exactly one sentinel is set, so the identity step never falls into
+    # an interactive password read under this TTY-less service.
+    password_line = "export AZ_INSTALL_KEEP_PASSWORD=1\n" if ssh else "export AZ_INSTALL_LOCK=1\n"
+    return f"""\
+#!/bin/bash
+# Az'arch INSTANT unattended install. Runs once, on the live medium, from
+# system.INSTANT_INSTALL_SERVICE. Non-interactive: every answer is pre-seeded.
+set -o pipefail
+
+echo
+echo "=== Az'arch instant install ==="
+echo "Targeting the largest non-USB disk and installing automatically."
+echo "User 'main', hostname 'azarch', timezone '{timezone}'."
+echo
+
+# Largest non-USB disk, no confirmation prompt (installer.installer_sh honours these).
+export AZ_INSTALL_CHOICE=1
+# Identity defaults (installer_identity honours these; unset fields would prompt).
+export AZ_INSTALL_USERNAME=main
+export AZ_INSTALL_HOSTNAME=azarch
+export AZ_INSTALL_TIMEZONE={timezone!r}
+{password_line}# Hand off to the SAME scripted installer the CLI/SSH path uses.
+exec bash /root/azarch/azarch-install-cli.sh
+"""
+
+
 # --- The disk installer (runs in the live session) --------------------------
 def installer_sh() -> str:
     body = """\
@@ -257,7 +317,19 @@ umount -R /mnt
 
 
 # --- Runs inside the arch-chroot after the rootfs clone ---------------------
-def chroot_setup_sh() -> str:
+def chroot_setup_sh(is_gui: bool = True) -> str:
+    """The chroot-setup script the on-disk installer runs inside arch-chroot.
+
+    is_gui: True for the desktop line, False for the headless server line. The ONE
+    difference is the OpenBox live-installer-state cleanup at the end: it strips the live
+    OpenBox autostart's installer-relaunch lines and swaps in the installed-system
+    autostart (openbox-autostart-installed). That staged file and that whole desktop
+    cleanup exist ONLY on the desktop line (compiler._emit_desktop stages the source; the
+    server line skips it). Running the cleanup on a server would `cp` a file that was never
+    staged and, under the block's `set -e`, ABORT the whole install. So the server chroot
+    omits the desktop cleanup entirely -- there is no OpenBox autostart to fix on a headless
+    system, and the live-only installer .desktop/wrapper it also removed never existed on
+    the server either."""
     chroot = f"""\
 #!/bin/bash
 
@@ -350,26 +422,31 @@ systemctl enable first-boot-setup.service
 
 pacman -Sy
 %IDENTITY_CHROOT%
-
-# STRIP THE LIVE-ONLY INSTALLER STATE FROM THE CLONE. The verbatim clone inherited the LIVE
-# OpenBox autostart, whose live-only lines (a) RE-LAUNCH the disk-erasing installer at every
-# login and (b) force a fixed us,il keyboard over the chosen region layout -- and it inherited
-# the installer's Desktop icon / application-menu entry / privileged wrapper. Calamares deletes
-# all of this post-unpackfs; the CLI clone must too -- and to guarantee the two paths never
-# drift, the CLI does NOT re-derive the cleanup: it EMBEDS the SAME shared command block
-# Calamares' shellprocess emits (packages/calamares.installer_cleanup_command), just applied to
-# the CHOSEN login's home instead of the literal /home/main. This runs AFTER the identity step
-# so `main` may have been renamed and /home/main moved to /home/$az_login. Re-derive the login
-# from install_info here so the block is self-contained even if the rename block was skipped,
-# and ensure the target .config/openbox dir exists (it does after the clone+rename, but the
-# mkdir is a cheap guard) before the shared block's `cp` writes the installed autostart.
-az_login="$(cat /etc/install_info/username 2>/dev/null)"
-az_login="${{az_login:-main}}"
-mkdir -p "/home/$az_login/.config/openbox" /etc/skel/.config/openbox
-{_csp.installer_cleanup_command("/home/$az_login")}
-
+%DESKTOP_CLEANUP%
 echo -e "\\e[94mazarch disk installation complete, you can reboot now.\\e[0m"
 """
+    # DESKTOP-ONLY cleanup block. Strips the LIVE-ONLY OpenBox installer state from the clone
+    # (the autostart lines that RE-LAUNCH the disk-erasing installer at every login + force a
+    # fixed us,il keyboard, plus the installer's Desktop icon / app-menu entry / privileged
+    # wrapper), then swaps in the installed-system OpenBox autostart. It EMBEDS the SAME shared
+    # command block Calamares' shellprocess emits so the two install paths never drift. This is
+    # entirely desktop-specific: openbox-autostart-installed is staged ONLY by _emit_desktop, and
+    # a server has no OpenBox autostart / installer .desktop to clean -- so on the server line we
+    # emit NOTHING here (running it would `cp` an unstaged file and, under its `set -e`, abort the
+    # whole install). Runs AFTER the identity step, so re-derive the (possibly renamed) login.
+    if is_gui:
+        desktop_cleanup = (
+            '\naz_login="$(cat /etc/install_info/username 2>/dev/null)"\n'
+            'az_login="${az_login:-main}"\n'
+            'mkdir -p "/home/$az_login/.config/openbox" /etc/skel/.config/openbox\n'
+            + _csp.installer_cleanup_command("/home/$az_login") + "\n"
+        )
+    else:
+        desktop_cleanup = (
+            "\n# (server line: no OpenBox autostart / installer desktop entry to strip -- "
+            "the desktop cleanup is intentionally omitted.)\n"
+        )
+    chroot = chroot.replace("%DESKTOP_CLEANUP%", desktop_cleanup)
     # Apply the collected identity (user/passwords/hostname/timezone) as the LAST step, AFTER
     # the `main`-hardcoded home setup above (so those lines still see the original account and
     # /home/main) and AFTER the static locale block (so the chosen timezone override wins).

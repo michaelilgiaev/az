@@ -191,11 +191,17 @@ def test_variants_for_includes_sshd_with_hash():
 
 
 def test_run_threads_ssh_hash_into_variant_selection():
-    # run() must build the runtime-selected variants (not the static VARIANTS tuple)
-    # and thread the ssh hash into the shadow it writes.
-    src = inspect.getsource(compiler.run)
-    assert "_variants_for(" in src, "run() must pick variants at runtime from the ssh hash"
-    assert "shadow_for(" in src, "run() must write the variant's shadow via system.shadow_for"
+    # The variant SELECTION happens in main() (variants.selected_variants over the
+    # --server/--instant/--ssh axes) and is passed into run() as build_variants; run() +
+    # _build_line thread the ssh hash through to the per-variant apply step, and
+    # _apply_variant writes the variant's shadow via system.shadow_for.
+    assert "selected_variants(" in inspect.getsource(compiler.main), \
+        "main() must select variants at runtime from the axis flags"
+    driver_src = inspect.getsource(compiler.run) + inspect.getsource(compiler._build_line)
+    assert "build_variants" in driver_src, "run() must build the selected variants"
+    assert "ssh_password_hash" in driver_src, "the ssh hash must be threaded into the passes"
+    assert "shadow_for(" in inspect.getsource(compiler._apply_variant), \
+        "_apply_variant must write the variant's shadow via system.shadow_for"
 
 
 def test_run_signature_takes_ssh_password_hash():
@@ -478,16 +484,17 @@ def test_run_signature_has_no_variant_param():
 
 
 def test_run_calls_mkarchiso_once_per_variant():
-    # run() must invoke _run_mkarchiso once per variant (both ISOs in one build), and
-    # append each returned ISO. Assert the finalize loop iterates VARIANTS and calls
-    # _run_mkarchiso inside it.
-    src = inspect.getsource(compiler.run)
-    # Iterates the RUNTIME-selected variants (base always; sshd only with --ssh), not
-    # the static VARIANTS tuple.
-    assert "for variant in " in src
-    assert "_variants_for(" in src
+    # Each selected variant gets one mkarchiso pass. The per-line build (_build_line)
+    # iterates that line's variants, applies each variant's differences (_apply_variant),
+    # and runs _run_mkarchiso once per variant, appending each returned ISO.
+    src = inspect.getsource(compiler._build_line)
+    assert "for variant in line_variants" in src
     assert "_run_mkarchiso(" in src
     assert "_apply_variant(" in src
+    # run() drives the lines (one airootfs per line) from the selected build_variants.
+    run_src = inspect.getsource(compiler.run)
+    assert "for line in " in run_src
+    assert "build_variants" in run_src
 
 
 def test_mkarchiso_pass_resets_work_dir_before_running():

@@ -18,6 +18,15 @@ import compiler
 import paths
 
 
+def _driver_src() -> str:
+    """The build-driver source that used to be one function. run() now does the
+    workspace reset + toolchain check + the per-line loop, and _build_line() does the
+    per-line profile emits (releng scaffold, manifest, accounts, branding, desktop,
+    installer payload, cache warm, own-package build, mkarchiso passes). Behavioural
+    source-inspection assertions look at BOTH so a step living in either is found."""
+    return inspect.getsource(compiler.run) + inspect.getsource(compiler._build_line)
+
+
 def test_ckbcomp_asset_is_vendored_python_script():
     # Calamares' keyboard preview shells out to `ckbcomp` to render key legends;
     # Arch does not package it, so we vendor it as a companion file of the calamares package
@@ -34,7 +43,7 @@ def test_ckbcomp_asset_is_vendored_python_script():
 def test_run_installs_ckbcomp_into_usr_bin():
     # run() must plant the vendored ckbcomp at /usr/bin/ckbcomp (executable) so the
     # keyboard preview finds it. Assert the copy_data call is present in run().
-    src = inspect.getsource(compiler.run)
+    src = _driver_src()
     assert 'copy_data("calamares/ckbcomp.py"' in src
     assert 'usr/bin/ckbcomp' in src
 
@@ -43,7 +52,7 @@ def test_run_emits_the_cli_installer_script():
     # The scripted (terminal/SSH) installer -- the CLI half of azarch-install -- must be
     # baked into the ISO under /root/azarch so `azarch-install --cli` can install over SSH.
     # Assert run() writes installer.installer_sh() to azarch-install-cli.sh (executable).
-    src = inspect.getsource(compiler.run)
+    src = _driver_src()
     assert 'installer.installer_sh()' in src
     assert 'azarch-install-cli.sh' in src
 
@@ -71,7 +80,7 @@ def test_emit_calamares_ships_the_window_icon_into_branding():
 
 def test_run_calls_emit_power():
     # run() must emit the power-management files (lid/button + PC/laptop idle sleep).
-    src = inspect.getsource(compiler.run)
+    src = _driver_src()
     assert "_emit_power(airootfs)" in src
 
 
@@ -162,7 +171,7 @@ def test_emit_shared_mount_writes_unit_and_mountpoint(tmp_path):
 def test_run_calls_emit_homedir():
     # run() must create the home-directory layout (folders + convenience symlinks) between
     # the desktop overlay and the app overlay, so _emit_apps's closing chown covers it.
-    src = inspect.getsource(compiler.run)
+    src = _driver_src()
     assert "_emit_homedir(airootfs, home)" in src
 
 
@@ -253,24 +262,49 @@ def test_brand_boot_menus_is_idempotent_without_memtest(tmp_path):
 def test_run_calls_brand_boot_menus():
     # run()'s step 4 must delegate to the helper (guards against the inline block
     # creeping back and diverging from the tested helper).
-    src = inspect.getsource(compiler.run)
+    src = _driver_src()
     assert "_brand_boot_menus(W)" in src
 
 
 def test_step_weights_match_number_of_steps():
-    # run() makes N literal bar.step() calls, but the final one is inside the
-    # per-variant finalize loop and executes once per variant (both ISOs are built in
-    # one run). So the number of EXECUTED milestones is (N - 1) + len(VARIANTS), and
-    # STEP_WEIGHTS must have exactly that many real entries (+ the index-0 sentinel).
-    src = inspect.getsource(compiler.run)
-    n_calls = src.count("bar.step(")
-    executed = (n_calls - 1) + len(compiler.VARIANTS)
-    assert len(compiler.STEP_WEIGHTS) - 1 == executed, (
-        f"STEP_WEIGHTS has {len(compiler.STEP_WEIGHTS)} entries "
-        f"(-> {len(compiler.STEP_WEIGHTS) - 1} steps) but run() executes {executed} "
-        f"milestones ({n_calls} literal bar.step() calls, the last once per "
-        f"{len(compiler.VARIANTS)} variants)"
-    )
+    # The bar is sized DYNAMICALLY per selection now (compiler.weights_for). The milestone
+    # budget is: run() makes the prelude's literal bar.step() calls ONCE, and _build_line()'s
+    # literal bar.step() calls run once PER LINE -- except its final mkarchiso step lives in
+    # the per-variant loop, so it executes once per variant, not once per line. For any
+    # selection, len(weights_for(sel)) - 1 must equal that executed-milestone count. Verify it
+    # by counting the literal calls in each function and reconstructing the total from the
+    # source, for a representative range of selections.
+    import variants
+
+    prelude_calls = inspect.getsource(compiler.run).count("bar.step(")
+    line_src = inspect.getsource(compiler._build_line)
+    line_calls = line_src.count("bar.step(")           # includes the 1 mkarchiso call
+    line_calls_non_mkarchiso = line_calls - 1          # the per-variant one runs in the loop
+
+    selections = [
+        variants.selected_variants(),                                   # 1 desktop
+        variants.selected_variants(ssh=True),                           # 2 desktop
+        variants.selected_variants(server=True),                        # desktop+server
+        variants.selected_variants(server=True, instant=True, ssh=True),  # all 8
+    ]
+    for sel in selections:
+        n_lines = len(compiler._lines_in(sel))
+        n_variants = len(sel)
+        executed = prelude_calls + n_lines * line_calls_non_mkarchiso + n_variants
+        weights = compiler.weights_for(sel)
+        assert len(weights) - 1 == executed, (
+            f"weights_for({[v.key for v in sel]}) has {len(weights)} entries "
+            f"(-> {len(weights) - 1} steps) but the build executes {executed} milestones "
+            f"(prelude {prelude_calls} + {n_lines} lines x {line_calls_non_mkarchiso} "
+            f"+ {n_variants} mkarchiso passes)"
+        )
+
+
+def test_default_step_weights_match_single_desktop_build():
+    # The module-level STEP_WEIGHTS constant describes the no-flags build (one desktop ISO).
+    import variants
+
+    assert compiler.STEP_WEIGHTS == compiler.weights_for((variants.Variant(),))
 
 
 def test_step_weights_leading_zero():
@@ -278,10 +312,17 @@ def test_step_weights_leading_zero():
     assert compiler.STEP_WEIGHTS[0] == 0
 
 
-def test_step_weights_giants_are_last_four():
-    # package cache, makepkg, and the TWO mkarchiso passes (one per ISO variant) --
-    # the four heavy tail weights. Both ISOs are assembled in a single compiler.
-    assert compiler.STEP_WEIGHTS[-4:] == [250, 120, 270, 270]
+def test_step_weights_giants_present_per_line_and_variant():
+    # Each line contributes a cache giant (250) + a makepkg giant (120); each variant a
+    # mkarchiso giant (270). For the full 8-ISO matrix (2 lines, 8 variants) that is two of
+    # each per-line giant and eight mkarchiso giants.
+    import variants
+
+    w = compiler.weights_for(variants.selected_variants(server=True, instant=True, ssh=True))
+    assert w.count(250) == 2 and w.count(120) == 2
+    assert w.count(270) == 8
+    # the mkarchiso giants are the tail (assembled after every line's emits)
+    assert w[-8:] == [270] * 8
 
 
 def test_cache_complete_false_when_index_missing(monkeypatch, tmp_path):

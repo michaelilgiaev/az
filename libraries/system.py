@@ -549,6 +549,47 @@ StandardError=journal
 WantedBy=multi-user.target
 """
 
+# The INSTANT auto-install service (emitted + enabled ONLY on the `instant` variants, per
+# compiler._apply_variant). It runs the unattended installer at boot on the LIVE medium and
+# nowhere else. Design points:
+#
+#   * LIVE-ONLY. ConditionPathExists=/run/archiso fires only on the archiso live system; the
+#     installed target (a verbatim clone of the live rootfs) has no /run/archiso, so even
+#     though the enable-symlink is cloned onto it, the unit is CONDITION-skipped there and can
+#     never re-wipe the freshly installed disk. Belt-and-braces, the installer itself also
+#     erases only the chosen disk and exits.
+#   * CONSOLE-VISIBLE, DESKTOP-INDEPENDENT. StandardOutput/Input=tty on /dev/tty1 so the
+#     install log is on screen and any (defensive) prompt could reach a keyboard. It needs no
+#     X, so the SAME unit drives the desktop-instant AND server-instant ISOs.
+#   * CONFLICTS WITH the tty1 autologin getty so the two do not fight over /dev/tty1 while the
+#     install runs. After multi-user basics; ordered after pkgs-setup like the other oneshots.
+#   * ExecStart is the staged instant script (installer.instant_install_sh), which pre-seeds
+#     the AZ_INSTALL_* environment and execs the shared CLI installer. Type=oneshot; failure
+#     is non-fatal to boot (the operator drops to the console and can retry by hand).
+INSTANT_INSTALL_SERVICE = """\
+[Unit]
+Description=Az'arch instant unattended install (largest disk, defaults)
+After=pkgs-setup.service systemd-user-sessions.service getty@tty1.service
+Wants=pkgs-setup.service
+Conflicts=getty@tty1.service
+ConditionPathExists=/run/archiso
+ConditionPathExists=/root/azarch/azarch-instant-install.sh
+
+[Service]
+Type=oneshot
+ExecStart=/root/azarch/azarch-instant-install.sh
+RemainAfterExit=true
+StandardInput=tty
+StandardOutput=tty
+StandardError=journal+console
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+
+[Install]
+WantedBy=multi-user.target
+"""
+
 # The virtiofs shared-folder auto-mount, baked into EVERY variant (desktop + ssh).
 # This is the fix for the old --shared/--ssh coupling: the share used to appear only
 # because the ssh bring-up mounted it as a side effect, so the desktop variant never
