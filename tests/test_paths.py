@@ -49,8 +49,8 @@ def test_package_stores_compose_correctly():
 
 
 def test_log_paths():
-    assert paths.FULL_LOG == paths.LOGDIR / "full.log"
-    assert paths.STEPS_LOG == paths.LOGDIR / "steps.log"
+    assert paths.FULL_LOG == paths.LOGDIR / "compile-full.log"
+    assert paths.STEPS_LOG == paths.LOGDIR / "compile-steps.log"
     assert paths.PACKAGES_FILE == paths.PACKAGESDIR / "packages.x86_64"
 
 

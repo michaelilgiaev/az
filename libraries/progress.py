@@ -61,12 +61,12 @@ class ProgressBar:
         self.subfrac = 0  # 0..1000 within the current step
         # The bar paints ONLY to the raw terminal (the pristine PTY stdout), never
         # through the stdout tee compiler.py installs -- so its ANSI escapes and █/░
-        # glyphs are seen live by the human but never written into full.log.
+        # glyphs are seen live by the human but never written into compile-full.log.
         self.term = sys.__stdout__
         if tty is None:
             tty = self.term.isatty()
         self.tty = tty
-        # steps.log gets each milestone/phase line in real time (compile.sh already
+        # compile-steps.log gets each milestone/phase line in real time (compile.sh already
         # truncated it at launch; append + flush so `tail -f` shows checkpoints live).
         self.steps_log = paths.STEPS_LOG.open("a", encoding="utf-8", errors="replace")
         self._armed = False
@@ -90,7 +90,7 @@ class ProgressBar:
         self._clock_thread: "threading.Thread | None" = None
 
     def _log_step(self, line: str) -> None:
-        """Append a milestone/phase line to steps.log in real time."""
+        """Append a milestone/phase line to compile-steps.log in real time."""
         try:
             self.steps_log.write(line + "\n")
             self.steps_log.flush()
@@ -100,7 +100,7 @@ class ProgressBar:
     def _emit(self, term_line: str, log_line: str, lead: str = "") -> None:
         """Scroll a milestone/phase line: the width-CLIPPED copy to the terminal (so
         a long label does not wrap and break the pinned bar's scroll region) and the
-        FULL copy to full.log. sys.stdout is the build's stdout tee, whose write_split
+        FULL copy to compile-full.log. sys.stdout is the build's stdout tee, whose write_split
         keeps the two independent -- writing the clipped copy through plain write (an
         earlier bug) truncated these lines in the log too. Fall back to a plain
         clipped write when stdout is not the tee (logging not installed)."""
@@ -292,8 +292,8 @@ class ProgressBar:
         self.subfrac = 0
         self._base_label = label  # phase() prefixes sub-phase labels with this
         self._arm()
-        # milestone line: full (unclipped) text to steps.log in real time; a
-        # width-clipped copy scrolls on the terminal (and into full.log via the
+        # milestone line: full (unclipped) text to compile-steps.log in real time; a
+        # width-clipped copy scrolls on the terminal (and into compile-full.log via the
         # stdout tee) so a long label does not wrap and break the scroll region.
         milestone = f"[ {self.current:2d}/{self.total_steps} ] {label}"
         self._log_step(milestone)
@@ -315,7 +315,7 @@ class ProgressBar:
         text = f"{self._base_label} › {sublabel}" if getattr(self, "_base_label", "") else sublabel
         self.label = text
         line = f"    -> {sublabel}"
-        self._log_step(line)   # sub-checkpoint to steps.log, real time
+        self._log_step(line)   # sub-checkpoint to compile-steps.log, real time
         self._emit(self._clip(line), line)
         self.draw()
 
@@ -341,7 +341,7 @@ class ProgressBar:
             self.term.flush()
         else:
             # Non-tty (piped / docker logs): a plain #/. bar, no escapes -> it is
-            # fine (and useful) for this completion line to land in full.log via
+            # fine (and useful) for this completion line to land in compile-full.log via
             # the stdout tee. Matches the pre-change non-tty behaviour.
             eff = self.done_weight * 1000 + self.cur_weight * 1000
             pct = min(eff // 10 // self.total_weight, 100)

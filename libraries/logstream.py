@@ -3,14 +3,14 @@
 Why this exists: compile.sh re-execs on a PTY so pacman/mkarchiso keep their live
 progress redraws and so the process is a real terminal (the progress bar only
 paints to a tty). Previously `script` also MIRRORED that whole PTY into
-logs/full.log -- which meant the pinned progress bar's ANSI escapes and █/░
+logs/compile-full.log -- which meant the pinned progress bar's ANSI escapes and █/░
 glyphs were copied straight into the log, where they do not belong (the bar is
 for the human watching the terminal, not the log).
 
 The fix: `script` now writes its capture to /dev/null (it is kept ONLY for the
-PTY), and Python owns full.log itself. Every `print()` / `sys.stderr.write` in
+PTY), and Python owns compile-full.log itself. Every `print()` / `sys.stderr.write` in
 the build funnels through the _Tee installed here, which writes to BOTH the real
-terminal AND full.log, flushing each write (real-time, tail-able). The progress
+terminal AND compile-full.log, flushing each write (real-time, tail-able). The progress
 bar deliberately bypasses this tee -- it writes to the raw terminal
 (`sys.__stdout__`) only, so its escape codes never reach the log. See
 progress.ProgressBar (self.term) and steps._drive_mkarchiso_progress.
@@ -54,7 +54,7 @@ class _Tee:
         pacstrap line does not wrap and desync the pinned progress bar's scroll
         region, but the log must keep the FULL untruncated line. Writing the clipped
         copy through plain write() (as a prior change did) silently cut the tail off
-        every wide mkarchiso line in full.log. This keeps them independent."""
+        every wide mkarchiso line in compile-full.log. This keeps them independent."""
         n = self._term.write(term_text)
         self._term.flush()
         try:
@@ -80,7 +80,7 @@ class _Tee:
 
 
 def run_teed(cmd: list[str], **kw) -> int:
-    """Run a child process and MIRROR its output into full.log in real time,
+    """Run a child process and MIRROR its output into compile-full.log in real time,
     returning the exit code.
 
     The problem this solves: install() swaps sys.stdout/sys.stderr to a _Tee at the
@@ -88,7 +88,7 @@ def run_teed(cmd: list[str], **kw) -> int:
     by subprocess.run without stdout=/stderr= inherits the numeric fds (under
     compile.sh those are the slave PTY, whose `script` capture goes to /dev/null),
     its bytes reach the terminal but NEVER traverse the _Tee, and so are permanently
-    absent from full.log -- the log looks frozen for the whole of a long child
+    absent from compile-full.log -- the log looks frozen for the whole of a long child
     (the makepkg compile, `pacman -Sw`'s download). mkarchiso already dodges this by
     piping its output and re-emitting it through the tee; this is that pattern made
     reusable for the other noisy children (makepkg, pacman -S/-Sy/-Sw).
@@ -98,7 +98,7 @@ def run_teed(cmd: list[str], **kw) -> int:
     carriage return, not a newline, so a plain readline() would swallow every partial
     frame into one giant line (or block until the phase ends). Each completed line is
     written through sys.stdout -- the _Tee -- so it lands on the terminal AND in
-    full.log with the tee's per-line flush, i.e. tail-able in real time.
+    compile-full.log with the tee's per-line flush, i.e. tail-able in real time.
 
     kwargs (cwd, env, ...) pass straight through to Popen -- EXCEPT ``heartbeat``,
     which is popped off here (see below). stdout/stderr/stdin are fixed here
@@ -112,7 +112,7 @@ def run_teed(cmd: list[str], **kw) -> int:
     terminal look frozen and the user can't tell "working" from "hung". A daemon
     thread here watches the wall-clock gap since the last emitted line and, once it
     exceeds ``heartbeat`` seconds, prints a '... still running (Ns elapsed)' line
-    through the same tee so BOTH the terminal and full.log keep ticking. Pass
+    through the same tee so BOTH the terminal and compile-full.log keep ticking. Pass
     ``heartbeat=0`` to disable (e.g. for a child that is expected to be brief and
     whose own progress redraws already prove liveness). Default is 20s."""
     heartbeat = kw.pop("heartbeat", 20)
@@ -136,7 +136,7 @@ def run_teed(cmd: list[str], **kw) -> int:
             quiet = time.monotonic() - last_line[0]
             if quiet >= heartbeat:
                 elapsed = int(time.monotonic() - start)
-                # Through sys.stdout (the _Tee) -> terminal AND full.log.
+                # Through sys.stdout (the _Tee) -> terminal AND compile-full.log.
                 sys.stdout.write(f"    ... still running ({elapsed}s elapsed, quiet {int(quiet)}s)\n")
 
     hb = threading.Thread(target=beat, name="run-teed-heartbeat", daemon=True)
@@ -150,7 +150,7 @@ def run_teed(cmd: list[str], **kw) -> int:
             if not ch:
                 break
             if ch in ("\n", "\r"):
-                sys.stdout.write(buf + "\n")  # sys.stdout is the _Tee -> terminal + full.log
+                sys.stdout.write(buf + "\n")  # sys.stdout is the _Tee -> terminal + compile-full.log
                 last_line[0] = time.monotonic()
                 buf = ""
             else:
@@ -163,7 +163,7 @@ def run_teed(cmd: list[str], **kw) -> int:
 
 
 def install() -> TextIO:
-    """Open full.log (append; compile.sh already truncated it at launch) and route
+    """Open compile-full.log (append; compile.sh already truncated it at launch) and route
     sys.stdout + sys.stderr through a _Tee so all build output is mirrored into the
     log in real time. Returns the open log file handle so the caller can keep a
     reference (closed implicitly at process exit; every write is already flushed).

@@ -1,4 +1,4 @@
-"""logstream -- the _Tee that mirrors build output into logs/full.log.
+"""logstream -- the _Tee that mirrors build output into logs/compile-full.log.
 
 Why these tests matter: every print() and sys.stderr.write in the build funnels
 through the _Tee installed here. Two behaviors are load-bearing and have each
@@ -6,7 +6,7 @@ regressed before:
 
   1. write_split() must send DIFFERENT bytes to the terminal and the log -- the
      terminal copy is width-clipped so a long pacstrap line does not wrap and
-     desync the pinned progress bar, but full.log must keep the FULL untruncated
+     desync the pinned progress bar, but compile-full.log must keep the FULL untruncated
      line. A prior change routed the clipped copy through plain write() and
      silently cut the tail off every wide mkarchiso line in the log. If
      write_split ever collapses back to writing the same text to both, or returns
@@ -182,7 +182,7 @@ def test_fileno_delegates_to_terminal():
     assert t.fileno() == 7
 
 
-# --- install(): swap sys.stdout/sys.stderr, append to full.log -------------
+# --- install(): swap sys.stdout/sys.stderr, append to compile-full.log -------------
 
 @pytest.fixture
 def restore_std_streams():
@@ -194,7 +194,7 @@ def restore_std_streams():
 
 
 def test_install_wraps_both_streams_in_tee(tmp_path, monkeypatch, restore_std_streams):
-    logpath = tmp_path / "full.log"
+    logpath = tmp_path / "compile-full.log"
     monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
     logfile = logstream.install()
     try:
@@ -209,7 +209,7 @@ def test_install_wraps_both_streams_in_tee(tmp_path, monkeypatch, restore_std_st
 
 
 def test_install_returns_open_appendable_handle(tmp_path, monkeypatch, restore_std_streams):
-    logpath = tmp_path / "full.log"
+    logpath = tmp_path / "compile-full.log"
     monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
     logfile = logstream.install()
     try:
@@ -219,9 +219,9 @@ def test_install_returns_open_appendable_handle(tmp_path, monkeypatch, restore_s
 
 
 def test_install_appends_does_not_truncate(tmp_path, monkeypatch, restore_std_streams):
-    # compile.sh truncates full.log at launch; install() opens in append mode, so a
+    # compile.sh truncates compile-full.log at launch; install() opens in append mode, so a
     # pre-existing "PRE" survives and the first write lands after it -> "PREPOST".
-    logpath = tmp_path / "full.log"
+    logpath = tmp_path / "compile-full.log"
     logpath.write_text("PRE")
     monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
     logfile = logstream.install()
@@ -236,7 +236,7 @@ def test_install_appends_does_not_truncate(tmp_path, monkeypatch, restore_std_st
 def test_install_write_reaches_log_file(tmp_path, monkeypatch, restore_std_streams):
     # A write through the swapped-in stdout is mirrored into the log file in real
     # time (each write is flushed), so tail -f sees it immediately.
-    logpath = tmp_path / "full.log"
+    logpath = tmp_path / "compile-full.log"
     monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
     logfile = logstream.install()
     try:
@@ -247,20 +247,20 @@ def test_install_write_reaches_log_file(tmp_path, monkeypatch, restore_std_strea
         logfile.close()
 
 
-# --- run_teed(): child output MUST reach full.log (the real-time bug fix) ----
+# --- run_teed(): child output MUST reach compile-full.log (the real-time bug fix) ----
 #
 # The bug: install() swaps sys.stdout/sys.stderr to a _Tee at the PYTHON-OBJECT
 # layer only -- it does NOT dup2 the real fds 1/2. So a child spawned by a bare
 # subprocess.run (no stdout=/stderr=) inherits the numeric fds and its output
-# NEVER traverses the _Tee -> permanently absent from full.log (the log looked
+# NEVER traverses the _Tee -> permanently absent from compile-full.log (the log looked
 # frozen for the whole makepkg compile / pacman -Sw download). run_teed pipes the
 # child and pumps its output through sys.stdout (the tee), so it lands in the log.
-# These run REAL short children (python3 -c ...) against a tmp full.log.
+# These run REAL short children (python3 -c ...) against a tmp compile-full.log.
 
 def test_run_teed_child_stdout_reaches_log(tmp_path, monkeypatch, restore_std_streams):
     # A child's stdout, which a bare subprocess.run would send to the inherited fd
-    # (bypassing the tee), must appear in full.log when run through run_teed.
-    logpath = tmp_path / "full.log"
+    # (bypassing the tee), must appear in compile-full.log when run through run_teed.
+    logpath = tmp_path / "compile-full.log"
     monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
     logfile = logstream.install()
     try:
@@ -278,8 +278,8 @@ def test_run_teed_child_stdout_reaches_log(tmp_path, monkeypatch, restore_std_st
 
 def test_run_teed_child_stderr_folded_into_log(tmp_path, monkeypatch, restore_std_streams):
     # stderr=STDOUT folds the child's stderr into the same stream, so an error the
-    # child prints to stderr also reaches full.log (not just its stdout).
-    logpath = tmp_path / "full.log"
+    # child prints to stderr also reaches compile-full.log (not just its stdout).
+    logpath = tmp_path / "compile-full.log"
     monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
     logfile = logstream.install()
     try:
@@ -295,7 +295,7 @@ def test_run_teed_child_stderr_folded_into_log(tmp_path, monkeypatch, restore_st
 def test_run_teed_returns_child_exit_code(tmp_path, monkeypatch, restore_std_streams):
     # The caller keeps its own returncode handling (raise / branch), so run_teed
     # must return the child's real exit code, not swallow it.
-    logpath = tmp_path / "full.log"
+    logpath = tmp_path / "compile-full.log"
     monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
     logfile = logstream.install()
     try:
@@ -310,7 +310,7 @@ def test_run_teed_splits_carriage_return_frames(tmp_path, monkeypatch, restore_s
     # the frames become separate log lines instead of collapsing into one giant
     # line (or being swallowed until the phase ends). A child that writes "a\rb\rc"
     # with no trailing newline must yield three lines in the log.
-    logpath = tmp_path / "full.log"
+    logpath = tmp_path / "compile-full.log"
     monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
     logfile = logstream.install()
     try:
@@ -327,7 +327,7 @@ def test_run_teed_splits_carriage_return_frames(tmp_path, monkeypatch, restore_s
 # --- run_teed(): heartbeat keeps the log ticking during a SILENT child --------
 #
 # The bug this guards: a long child (rustc/gcc link, a stalled keyserver, a big
-# `pacman -Sw` gap) emits NOTHING for minutes, so full.log and the terminal look
+# `pacman -Sw` gap) emits NOTHING for minutes, so compile-full.log and the terminal look
 # frozen -- the user can't tell "working" from "hung". A daemon thread prints a
 # '... still running' line once the gap since the last output exceeds `heartbeat`
 # seconds. These use a tiny interval and a child that sleeps to force the gap.
@@ -335,7 +335,7 @@ def test_run_teed_splits_carriage_return_frames(tmp_path, monkeypatch, restore_s
 def test_run_teed_heartbeat_fires_during_silence(tmp_path, monkeypatch, restore_std_streams):
     # A child that sleeps ~0.6s with NO output, heartbeat=0.2s -> at least one
     # '... still running' line must appear in the log even though the child was silent.
-    logpath = tmp_path / "full.log"
+    logpath = tmp_path / "compile-full.log"
     monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
     logfile = logstream.install()
     try:
@@ -353,7 +353,7 @@ def test_run_teed_heartbeat_disabled_with_zero(tmp_path, monkeypatch, restore_st
     # heartbeat=0 turns the thread into a no-op: a silent child produces NO
     # heartbeat line. (Also proves heartbeat is popped, not forwarded to Popen --
     # Popen would raise TypeError on an unknown kwarg.)
-    logpath = tmp_path / "full.log"
+    logpath = tmp_path / "compile-full.log"
     monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
     logfile = logstream.install()
     try:
@@ -370,7 +370,7 @@ def test_run_teed_heartbeat_disabled_with_zero(tmp_path, monkeypatch, restore_st
 def test_run_teed_heartbeat_quiet_when_child_is_chatty(tmp_path, monkeypatch, restore_std_streams):
     # A child that prints steadily (gap always < heartbeat) must NOT trigger a
     # heartbeat -- the liveness line is only for genuine silence.
-    logpath = tmp_path / "full.log"
+    logpath = tmp_path / "compile-full.log"
     monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
     logfile = logstream.install()
     try:
@@ -393,7 +393,7 @@ def test_run_teed_heartbeat_quiet_when_child_is_chatty(tmp_path, monkeypatch, re
 def test_run_teed_passes_cwd_kwarg(tmp_path, monkeypatch, restore_std_streams):
     # cwd/env/... pass straight through to Popen; verify the child actually runs in
     # the given cwd (makepkg relies on cwd=recipe_dir).
-    logpath = tmp_path / "full.log"
+    logpath = tmp_path / "compile-full.log"
     monkeypatch.setattr(logstream.paths, "FULL_LOG", logpath)
     logfile = logstream.install()
     workdir = tmp_path / "work"

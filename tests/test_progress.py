@@ -1,7 +1,7 @@
 """progress -- the weighted, pinned-to-bottom build progress bar.
 
 The bar's numbers are what the human watches for the whole multi-minute build,
-and its milestone lines are the only durable checkpoints written to steps.log.
+and its milestone lines are the only durable checkpoints written to compile-steps.log.
 Every value here is integer arithmetic over the step weights, so an off-by-one
 in the prefix sums, the width budget, or the clip boundary silently prints a
 wrong percentage or a wrapped line that unsticks the pinned scroll region --
@@ -28,7 +28,7 @@ from progress import ProgressBar
 @pytest.fixture
 def steps_log(tmp_path, monkeypatch):
     """Redirect paths.STEPS_LOG (opened in the ctor) into tmp_path and return it."""
-    p = tmp_path / "steps.log"
+    p = tmp_path / "compile-steps.log"
     monkeypatch.setattr(progress.paths, "STEPS_LOG", p)
     return p
 
@@ -308,7 +308,7 @@ def test_phase_without_base_label_uses_sublabel_only(steps_log):
 
 
 def test_phase_writes_indented_subcheckpoint(steps_log):
-    # The steps.log line for a phase is the indented "    -> <sublabel>" form.
+    # The compile-steps.log line for a phase is the indented "    -> <sublabel>" form.
     bar = make_bar(steps_log, [0, 10], tty=False)
     bar.step("Pkg cache")
     bar.phase("downloading")
@@ -427,7 +427,7 @@ def test_finalize_tty_scrolls_two_lines(steps_log):
 
 def test_finalize_ascii_bar(steps_log, monkeypatch):
     # Non-TTY finalize prints a plain 40-cell '#/.' bar with no escapes so it is
-    # safe in full.log. weights=[0,10] + one step -> 100%, all 40 cells filled.
+    # safe in compile-full.log. weights=[0,10] + one step -> 100%, all 40 cells filled.
     bar = make_bar(steps_log, [0, 10], tty=False)
     bar.step("Build")
     fake = io.StringIO()

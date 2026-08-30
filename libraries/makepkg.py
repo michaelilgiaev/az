@@ -293,7 +293,7 @@ def _install_host_build_deps(sudo: list[str], deps: list[str], offline: bool) ->
     if offline or not deps:
         return
     print(f"    [+] Installing {len(deps)} build-host dependencies for makepkg...")
-    # Teed so pacman's download/install lines reach full.log in real time.
+    # Teed so pacman's download/install lines reach compile-full.log in real time.
     rc = logstream.run_teed(sudo + ["pacman", "-S", "--needed", "--noconfirm", *deps])
     if rc != 0:
         # Non-fatal: makepkg will still try and fail clearly if something's truly
@@ -567,7 +567,7 @@ def _makepkg_one(builder: str, recipe_dir: Path, offline: bool = False) -> None:
         envargs = [f"{k}={env[k]}" for k in keys]
         full = ["sudo", "-u", builder, "env", *envargs, *cmd]
         # run_teed pumps the compile's stdout/stderr through the _Tee so the
-        # multi-hour gcc/rustc output lands in full.log in real time instead of
+        # multi-hour gcc/rustc output lands in compile-full.log in real time instead of
         # vanishing into the inherited PTY (whose `script` capture goes to /dev/null).
         rc = logstream.run_teed(full, cwd=str(recipe_dir))
     else:

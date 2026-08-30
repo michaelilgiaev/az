@@ -1113,7 +1113,7 @@ def _check_host_deps(sudo, offline: bool) -> None:
         )
         raise SystemExit(1)
     print("    [+] Installing missing build-host dependencies...")
-    # Teed so the install's output reaches full.log live. Preserve the old
+    # Teed so the install's output reaches compile-full.log live. Preserve the old
     # check=True raise-on-failure: run_teed returns the exit code, so raise here.
     cmd = sudo + ["pacman", "-Sy", "--noconfirm", "--needed", *host_pkgs]
     rc = logstream.run_teed(cmd)
@@ -1401,10 +1401,10 @@ def _drive_mkarchiso_progress(proc, bar: ProgressBar) -> None:
 
     Each line goes out two ways in ONE call via the stdout tee's write_split: a
     width-CLIPPED copy to the terminal (so a long line does not wrap and desync the
-    pinned bar's scroll region) and the FULL untruncated line to full.log. A prior
+    pinned bar's scroll region) and the FULL untruncated line to compile-full.log. A prior
     change wrote the clipped copy through plain stdout.write, which fed the SAME
     truncated text to the log too -- silently cutting the tail off every wide
-    mkarchiso line in full.log. write_split keeps the two independent so the log is
+    mkarchiso line in compile-full.log. write_split keeps the two independent so the log is
     complete while the terminal stays clip-safe."""
     import io
     import re
@@ -1439,7 +1439,7 @@ def _drive_mkarchiso_progress(proc, bar: ProgressBar) -> None:
         if not line:
             return
         # Terminal gets the width-clipped line (no wrap -> the pinned bar stays put);
-        # full.log gets the FULL line. write_split does both in one write via the tee.
+        # compile-full.log gets the FULL line. write_split does both in one write via the tee.
         # If stdout is not the tee (e.g. logging not installed), fall back to a plain
         # clipped write so the terminal still behaves.
         writer = getattr(sys.stdout, "write_split", None)
@@ -1602,7 +1602,7 @@ def main() -> int:
     # machine -- COMPUTE (compiling on this CPU/RAM) and/or NETWORK (downloading
     # the components over this connection) -- then exit. Pure query: no workspace
     # reset, no sudo, no build, and NOT routed through the build-log tee (it is a
-    # query, not a build, so its output belongs on the terminal, not logs/full.log
+    # query, not a build, so its output belongs on the terminal, not logs/compile-full.log
     # -- this branch returns before logstream.install() below). The network modes
     # DO open a client socket for a few-second bandwidth probe, but that needs no
     # privilege and writes no build file. compile.sh routes any --estimate* arg
@@ -1621,7 +1621,7 @@ def main() -> int:
 
     paths.CACHEDIR.mkdir(parents=True, exist_ok=True)
 
-    # Python owns full.log from here on: route stdout/stderr through a tee that
+    # Python owns compile-full.log from here on: route stdout/stderr through a tee that
     # mirrors every print/stderr line into the log in real time. `script` in
     # compile.sh now only provides the PTY (its capture goes to /dev/null), so the
     # progress bar -- which paints to the RAW terminal only -- never reaches the log.

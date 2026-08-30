@@ -214,7 +214,7 @@ def _sync_and_download(sudo, dlconf, gpgdir, pkg_db, pkg_repo, progress, phase=l
     phase("syncing package databases")
     print("[*] Syncing package databases...")
     # Teed (Popen+pipe pumped through the _Tee) so pacman's DB-sync lines land in
-    # full.log in real time; a bare subprocess.run would inherit the PTY and never
+    # compile-full.log in real time; a bare subprocess.run would inherit the PTY and never
     # reach the log.
     rc = logstream.run_teed(
         sudo + ["pacman", "-Sy", "--config", str(dlconf), "--gpgdir", str(gpgdir),
@@ -243,7 +243,7 @@ def _sync_and_download(sudo, dlconf, gpgdir, pkg_db, pkg_repo, progress, phase=l
     def _attempt(parallel: int) -> int:
         # Rewrite the SAME download conf with this rung's parallelism (pacman has no
         # CLI knob for it), then run one resumable `pacman -Sw`. Teed so the download's
-        # per-package lines reach full.log live (run_teed feeds stdin from /dev/null,
+        # per-package lines reach compile-full.log live (run_teed feeds stdin from /dev/null,
         # as this call did explicitly).
         _write_download_conf(dlconf, parallel_downloads=parallel)
         return logstream.run_teed(

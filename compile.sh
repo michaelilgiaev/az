@@ -16,7 +16,7 @@
 #      (piping through plain tee makes them buffer and appear frozen for minutes
 #      during big downloads), and the process being a real tty is what lets the
 #      progress bar paint. `script` here writes its capture to /dev/null -- it is
-#      kept ONLY for the PTY. Python (logstream) owns logs/full.log itself,
+#      kept ONLY for the PTY. Python (logstream) owns logs/compile-full.log itself,
 #      so the progress bar (painted to the raw terminal) never pollutes the log.
 #
 # Then it hands off to `python3 -m compiler`, which does the rest.
@@ -58,8 +58,8 @@ set -o pipefail
 
 REPODIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOGDIR="$REPODIR/logs"
-FULL_LOG="$LOGDIR/full.log"
-STEPS_LOG="$LOGDIR/steps.log"
+FULL_LOG="$LOGDIR/compile-full.log"
+STEPS_LOG="$LOGDIR/compile-steps.log"
 mkdir -p "$LOGDIR"
 
 # Never scatter __pycache__ around the source tree. This shim is the entry point;
@@ -120,12 +120,12 @@ if [ -z "$_COMPILE_LOGGING" ]; then
     : > "$STEPS_LOG"
     # Re-exec on a PTY. `script` flags: -q quiet, -e propagate child exit status,
     # -f flush after each write, -c run our command. Output goes to /dev/null:
-    # `script` is kept ONLY to provide the PTY (see note 2); Python owns full.log,
+    # `script` is kept ONLY to provide the PTY (see note 2); Python owns compile-full.log,
     # so the progress bar's escapes/glyphs never get captured into the log.
     if command -v script >/dev/null 2>&1; then
         exec script -qefc "_COMPILE_LOGGING=1 _COMPILE_ONPTY=1 bash '${BASH_SOURCE[0]}' $*" /dev/null
     else
-        # No `script` available: run without a PTY. Python still writes full.log
+        # No `script` available: run without a PTY. Python still writes compile-full.log
         # itself; child \r-progress bars degrade to plain lines but the build works.
         :
     fi
@@ -134,7 +134,7 @@ fi
 # --- Under the PTY now: hand off to the Python build driver. ----------------
 # PYTHONPATH points at libraries/ so the flat compiler modules (compiler, paths,
 # ...) and the modifications.* packages resolve. -u = unbuffered, so the bar and build
-# output interleave correctly on the PTY and in full.log.
+# output interleave correctly on the PTY and in compile-full.log.
 export PYTHONPATH="$REPODIR/libraries${PYTHONPATH:+:$PYTHONPATH}"
 export _COMPILE_ONPTY
 # NOT exec'd (unlike before): the shell must OUTLIVE the Python build so it can stop
@@ -153,6 +153,6 @@ else
     _line="[time] Compile FAILED after $(_format_duration "$_elapsed") (exit $_rc)."
 fi
 echo "$_line"
-# Mirror the timing line into steps.log so it is captured alongside the build log.
+# Mirror the timing line into compile-steps.log so it is captured alongside the build log.
 echo "$_line" >> "$STEPS_LOG" 2>/dev/null || true
 exit "$_rc"

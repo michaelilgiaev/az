@@ -22,7 +22,7 @@ Mirrors the directory scheme the old compile.sh used, so the Docker bind mounts
       pkgs/                persistent package repo + synced DBs (the offline store)
       pacman-pkg/          pacstrap CacheDir injected into the profile pacman.conf
     output/                BUILDDIR: the finished .iso lands here
-    logs/                  full.log + steps.log
+    logs/                  compile-full.log + compile-steps.log
 
 In DOCKER the disposable WORKDIR is moved OUT of the bind-mounted cache/ to a
 container-internal path (/tmp/azarch-build) so its root-owned mkarchiso scratch
@@ -106,8 +106,8 @@ LOCALREPO_INDEX_TAR = PKG_REPO / "pacstrap-azarch-repo.db.tar.gz"
 PACSTRAP_CACHE = CACHEDIR / "pacman-pkg"
 
 # Logs.
-FULL_LOG = LOGDIR / "full.log"
-STEPS_LOG = LOGDIR / "steps.log"
+FULL_LOG = LOGDIR / "compile-full.log"
+STEPS_LOG = LOGDIR / "compile-steps.log"
 
 # Verbatim data files.
 PACKAGES_FILE = PACKAGESDIR / "packages.x86_64"
