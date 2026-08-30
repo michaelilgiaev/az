@@ -6,19 +6,22 @@ usage() {
   cat <<'EOF'
 Usage: clear.sh [-o] [-l] [-c] [-h]
 
-Clears the build tree. With NO flags it clears everything (the default):
-output/, logs/, cache/, every __pycache__ in the project, and .pytest_cache/.
+Clears the build tree. Selected directories are REMOVED whole (the directory
+itself, not just its contents). With NO flags it removes everything (the
+default): output/, logs/, cache/, every __pycache__ in the project, and
+.pytest_cache/.
 
-Pass flags to clear only PART of the tree (flags combine):
-  -o, --output   clear only output/
-  -l, --logs     clear only logs/
-  -c, --cache    clear only cache/  (also sweeps __pycache__ and .pytest_cache/)
+Pass flags to remove only PART of the tree (flags combine); each still deletes
+the whole directory:
+  -o, --output   remove output/ entirely
+  -l, --logs     remove logs/ entirely
+  -c, --cache    remove cache/ entirely (also sweeps __pycache__ and .pytest_cache/)
   -h, --help     show this help and exit
 
 Examples:
-  clear.sh            clear output/, logs/, cache/, __pycache__, .pytest_cache (all)
-  clear.sh -o -l      clear output/ and logs/ only (leaves cache/, __pycache__, .pytest_cache)
-  clear.sh -c         clear cache/, __pycache__ and .pytest_cache only
+  clear.sh            remove output/, logs/, cache/, __pycache__, .pytest_cache (all)
+  clear.sh -o -l      remove output/ and logs/ dirs only (leaves cache/, __pycache__, .pytest_cache)
+  clear.sh -c         remove cache/ dir, __pycache__ and .pytest_cache only
 EOF
 }
 
@@ -65,10 +68,11 @@ else
 fi
 echo
 
-# Delete each build dir and SAY what happened to it. Without this the script was
+# Remove each selected build dir WHOLE (rm -rf deletes the directory itself, not
+# just its contents) and SAY what happened to it. Without this the script was
 # silent, so you could not tell an already-clean tree from a failed delete.
 #   - dir missing            -> nothing to do
-#   - dir present, rm works  -> report it was removed (with its prior size)
+#   - dir present, rm works  -> report the directory was removed (with its prior size)
 #   - dir present, rm fails  -> report it survived (root-owned leftovers: re-run
 #                               with sudo). rm's own stderr says which paths.
 # Only the selected build dirs (order preserved: logs, cache, output). With no flags all three
