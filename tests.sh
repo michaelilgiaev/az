@@ -113,9 +113,24 @@ if [ -f "$REQ" ]; then
 fi
 if [ ! -f "$STAMP" ] || [ "$(cat "$STAMP" 2>/dev/null)" != "$REQ_HASH" ]; then
     echo "[tests] installing requirements"
-    "$PY" -m pip install --quiet --upgrade pip
+    # pip runs quiet so a clean install stays silent, but a FAILING install must
+    # not vanish: capture its output and dump it before exiting non-zero. A bare
+    # `--quiet` swallows the real error (a yanked wheel, a version that dropped
+    # support for this Python), leaving CI with just "exit code 1" and nothing to
+    # diagnose. `pip_install` prints the captured log only on failure.
+    pip_install() {
+        local log
+        log="$("$PY" -m pip install --quiet "$@" 2>&1)"
+        local rc=$?
+        if [ "$rc" -ne 0 ]; then
+            echo "[tests] pip install failed (exit $rc):" >&2
+            printf '%s\n' "$log" >&2
+        fi
+        return "$rc"
+    }
+    pip_install --upgrade pip
     if [ -f "$REQ" ]; then
-        "$PY" -m pip install --quiet -r "$REQ"
+        pip_install -r "$REQ"
     fi
     echo "$REQ_HASH" > "$STAMP"
 fi
@@ -139,10 +154,14 @@ export PYTHONDONTWRITEBYTECODE=1
 # to 80 -- long test ids then overflow and the [ NN%] column drifts. Resolve the
 # REAL width once and export it so pytest formats to the actual screen exactly as
 # it would on a bare tty. Try the cheapest source that works: an already-set
-# COLUMNS, else the tty via stty, else tput, else 80. Each guarded so a headless
-# run (no tty) never errors under `set -o nounset`.
+# COLUMNS, else the tty via stty, else tput, else 80. Each source is guarded so a
+# headless run (no tty) never aborts the script: `nounset` is satisfied by the
+# `${COLUMNS:-}` default, and -- because `set -o pipefail` propagates a pipe's
+# failure and `errexit` would then kill us -- the stty/tput calls (which fail off
+# a tty) each swallow their own non-zero status (`|| true`) so the pipeline stays
+# zero and we simply fall through to the next source, ending at 80.
 WIDTH="${COLUMNS:-}"
-if [ -z "$WIDTH" ]; then WIDTH="$(stty size 2>/dev/null | cut -d' ' -f2)"; fi
+if [ -z "$WIDTH" ]; then WIDTH="$( { stty size 2>/dev/null || true; } | cut -d' ' -f2)"; fi
 if [ -z "$WIDTH" ]; then WIDTH="$(tput cols 2>/dev/null || true)"; fi
 [ -n "$WIDTH" ] || WIDTH=80
 export COLUMNS="$WIDTH"
