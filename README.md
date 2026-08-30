@@ -207,6 +207,44 @@ You can clone this repository and compile the ISO yourself. The first compile ne
    </tbody>
    </table>
 
+   <table width="100%">
+   <thead>
+   <tr><th align="left">ℹ️ SIDE NOTE</th></tr>
+   </thead>
+   <tbody>
+   <tr><td>
+
+   **Build flags.** A bare compile builds one ISO, `azarch-desktop` (GUI, ssh off). Three
+   orthogonal axes ADD variants and the build is their Cartesian product (up to eight ISOs),
+   named `azarch-<line>[-instant][-ssh]-<version>-x86_64.iso`. Pass flags after the image name.
+
+   | Flag | Effect |
+   | --- | --- |
+   | `--type=<desktop\|server\|all\|both>` | Which product line(s): `desktop` (default, GUI) / `server` (headless) / `all` or `both` (both lines). Replaces the old `--server`/`--all` flags. |
+   | `--instant` | Also build the `-instant` variants: boot straight into an unattended install to the largest non-USB disk, then reboot into the installed system. |
+   | `--ssh="<PASSWORD>"` | Also build the `-ssh` variants: enable sshd and set the login password. Demands a value (a bare/empty `--ssh` is a hard error). |
+   | `--password="<PASSWORD>"` | Set the login password WITHOUT enabling sshd. Mutually exclusive with `--ssh` (passing both is a hard error). |
+   | `--user="<name>"` | Login user name for `--ssh`/`--password` (default `main`). |
+   | `--encrypt` | LUKS-encrypt the `-instant` install's disk with the `--ssh`/`--password` value. Requires a password flag. |
+   | `--static-ip="<CIDR>"` | Bake a static IPv4 (e.g. `192.168.1.50/24`) as a NetworkManager connection for deterministic SSH to a deployed server. `--gateway="<IP>"` and `--dns="<IP[,IP]>"` refine it. |
+   | `--timezone="<TZ>"` | The `-instant` install timezone (default `Asia/Jerusalem`, validated). |
+
+   One password rules the whole system: the user account, root, and the btrfs LUKS
+   passphrase are all the same password (entered once in the installer). There is no
+   full-name field. No default password is ever shipped, an ssh/password/encrypt build
+   sets it from your flag. Example, both lines with SSH and an encrypted instant install:
+
+   ```
+   sudo docker run --rm -it --init --privileged \
+     -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+     -v "$PWD/cache:/build/cache" -v "$PWD/output:/build/output" -v "$PWD/logs:/build/logs" \
+     azarch --type=all --instant --encrypt --ssh="mysecret"
+   ```
+
+   </td></tr>
+   </tbody>
+   </table>
+
    **Default compile** (recommended). Compiles only what's necessary. Everything else is downloaded as trusted, verified binaries.
    ```
    sudo docker run --rm -it --init --privileged \

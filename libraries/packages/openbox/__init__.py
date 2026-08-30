@@ -1582,11 +1582,11 @@ Both ERASE the target disk.
 
 Fully unattended over SSH: pre-seed any prompt via the environment, e.g.
   AZ_INSTALL_DISK=sda AZ_INSTALL_HOSTNAME=box AZ_INSTALL_USERNAME=me \
-  AZ_INSTALL_PASSWORD=... AZ_INSTALL_ROOT_PASSWORD=... AZ_INSTALL_TIMEZONE=Europe/London \
+  AZ_INSTALL_PASSWORD=... AZ_INSTALL_TIMEZONE=Europe/London \
   azarch-install --cli
-Recognised: AZ_INSTALL_DISK, AZ_INSTALL_HOSTNAME, AZ_INSTALL_USERNAME, AZ_INSTALL_FULLNAME,
-AZ_INSTALL_PASSWORD, AZ_INSTALL_ROOT_PASSWORD, AZ_INSTALL_TIMEZONE (and AZ_INSTALL_CHOICE).
-Any prompt left un-seeded is asked interactively.
+Recognised: AZ_INSTALL_DISK, AZ_INSTALL_HOSTNAME, AZ_INSTALL_USERNAME,
+AZ_INSTALL_PASSWORD, AZ_INSTALL_TIMEZONE (and AZ_INSTALL_CHOICE). Root reuses the user
+password; there is no full-name field. Any prompt left un-seeded is asked interactively.
 EOF
 }}
 
@@ -1615,10 +1615,11 @@ run_cli() {{
     # The scripted installer needs root and reads its payload from /root/azarch (mode 0750,
     # readable only by root -- so the existence check goes through sudo, not a bare test as
     # `main`). It honours AZ_INSTALL_CHOICE (1=auto largest disk, 2=manual) and AZ_INSTALL_DISK
-    # for the disk step, and the AZ_INSTALL_{{HOSTNAME,USERNAME,FULLNAME,PASSWORD,ROOT_PASSWORD,
-    # TIMEZONE}} family for the account/hostname/timezone answers, to run without prompts; with
-    # none set it prompts interactively (fine over SSH). Each is forwarded ACROSS the sudo
-    # boundary explicitly (only when set) so a restrictive sudoers env_reset cannot drop it.
+    # for the disk step, and the AZ_INSTALL_{{HOSTNAME,USERNAME,PASSWORD,TIMEZONE}} family for
+    # the account/hostname/timezone answers, to run without prompts; with none set it prompts
+    # interactively (fine over SSH). Root reuses the user password (no separate root field) and
+    # there is no full name. Each var is forwarded ACROSS the sudo boundary explicitly (only when
+    # set) so a restrictive sudoers env_reset cannot drop it.
     if ! sudo test -r '{INSTALL_CLI_SCRIPT_PATH}'; then
         echo "azarch-install: CLI installer not found at {INSTALL_CLI_SCRIPT_PATH}" >&2
         exit 1
@@ -1628,9 +1629,7 @@ run_cli() {{
         ${{AZ_INSTALL_DISK:+AZ_INSTALL_DISK=$AZ_INSTALL_DISK}} \\
         ${{AZ_INSTALL_HOSTNAME:+AZ_INSTALL_HOSTNAME=$AZ_INSTALL_HOSTNAME}} \\
         ${{AZ_INSTALL_USERNAME:+AZ_INSTALL_USERNAME=$AZ_INSTALL_USERNAME}} \\
-        ${{AZ_INSTALL_FULLNAME:+AZ_INSTALL_FULLNAME=$AZ_INSTALL_FULLNAME}} \\
         ${{AZ_INSTALL_PASSWORD:+AZ_INSTALL_PASSWORD=$AZ_INSTALL_PASSWORD}} \\
-        ${{AZ_INSTALL_ROOT_PASSWORD:+AZ_INSTALL_ROOT_PASSWORD=$AZ_INSTALL_ROOT_PASSWORD}} \\
         ${{AZ_INSTALL_TIMEZONE:+AZ_INSTALL_TIMEZONE=$AZ_INSTALL_TIMEZONE}} \\
         bash '{INSTALL_CLI_SCRIPT_PATH}'
 }}

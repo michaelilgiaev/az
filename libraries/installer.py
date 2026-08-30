@@ -25,6 +25,8 @@ config), instead of trying to re-enumerate every root-owned artifact by hand.
 
 from __future__ import annotations
 
+import shlex
+
 import installer_identity
 from packages.calamares import calamares_shellprocess as _csp
 from packages.calamares.locale import _detect_and_apply_locale_block
@@ -53,7 +55,9 @@ LIVE_ROOTFS_RSYNC_EXCLUDES = (
 # setup) rather than reimplementing any of it. It is console-only (no X), so it
 # works identically on the desktop AND the server line.
 
-def instant_install_sh(timezone: str = "Asia/Jerusalem", ssh: bool = False) -> str:
+def instant_install_sh(timezone: str = "Asia/Jerusalem", ssh: bool = False,
+                       encrypt: bool = False, user: str = "main",
+                       passphrase: str | None = None) -> str:
     """The instant autorun script (staged under /root/azarch, ExecStart'd by
     system.INSTANT_INSTALL_SERVICE on the live medium). It exports the AZ_INSTALL_*
     pre-seed and execs the CLI installer unattended.
@@ -61,6 +65,9 @@ def instant_install_sh(timezone: str = "Asia/Jerusalem", ssh: bool = False) -> s
     timezone: the installed system's timezone (compile-time --timezone; validated on
     the build host before it reaches here). Baked into AZ_INSTALL_TIMEZONE, which the
     identity chroot step re-points /etc/localtime to.
+
+    user: the installed login name (compile-time --user, default `main`). Baked into
+    AZ_INSTALL_USERNAME so the identity chroot step renames the cloned `main` to it.
 
     ssh: True for the *-instant-ssh variants. The ssh variant already baked the
     operator's --ssh password hash into the LIVE `main` shadow, and the verbatim
@@ -71,6 +78,15 @@ def instant_install_sh(timezone: str = "Asia/Jerusalem", ssh: bool = False) -> s
     LOCKS `main` (and root) to `!` instead of setting any password -- the Ubuntu `!*`
     default the prompt asks for. Root is locked in BOTH cases.
 
+    encrypt: True for --encrypt builds. Exports AZ_INSTALL_ENCRYPT=1 so the disk step
+    LUKS-formats the target with the ONE password. For an ssh variant the passphrase is
+    the already-cloned account password (no plaintext needed here); for a NON-ssh
+    encrypted variant the account is LOCKED yet LUKS still needs the secret, so the
+    compiler threads the plaintext `passphrase` and it is exported as AZ_INSTALL_PASSWORD
+    (used ONLY for the LUKS passphrase -- login stays locked via AZ_INSTALL_LOCK). This
+    script is root-owned mode 0700 in the image; the passphrase is the unattended
+    install's secret and lives only there.
+
     The largest-disk auto-target + skip-confirmation come from AZ_INSTALL_CHOICE=1
     (installer.installer_sh honours it), so the whole run is non-interactive."""
     # Password posture. Non-ssh -> LOCK the account (`!*`, no password login). ssh -> KEEP the
@@ -79,6 +95,14 @@ def instant_install_sh(timezone: str = "Asia/Jerusalem", ssh: bool = False) -> s
     # prompt nor change it. Exactly one sentinel is set, so the identity step never falls into
     # an interactive password read under this TTY-less service.
     password_line = "export AZ_INSTALL_KEEP_PASSWORD=1\n" if ssh else "export AZ_INSTALL_LOCK=1\n"
+    # Encryption pre-seed. AZ_INSTALL_ENCRYPT drives the LUKS branch in installer_sh; a
+    # non-ssh encrypted variant also needs the passphrase (the locked account carries none),
+    # so export it here from the compile-time password. shlex.quote keeps an odd password safe.
+    encrypt_line = ""
+    if encrypt:
+        encrypt_line = "export AZ_INSTALL_ENCRYPT=1\n"
+        if passphrase:
+            encrypt_line += f"export AZ_INSTALL_PASSWORD={shlex.quote(passphrase)}\n"
     return f"""\
 #!/bin/bash
 # Az'arch INSTANT unattended install. Runs once, on the live medium, from
@@ -88,16 +112,16 @@ set -o pipefail
 echo
 echo "=== Az'arch instant install ==="
 echo "Targeting the largest non-USB disk and installing automatically."
-echo "User 'main', hostname 'azarch', timezone '{timezone}'."
+echo "User '{user}', hostname 'azarch', timezone '{timezone}'."
 echo
 
 # Largest non-USB disk, no confirmation prompt (installer.installer_sh honours these).
 export AZ_INSTALL_CHOICE=1
 # Identity defaults (installer_identity honours these; unset fields would prompt).
-export AZ_INSTALL_USERNAME=main
+export AZ_INSTALL_USERNAME={user}
 export AZ_INSTALL_HOSTNAME=azarch
 export AZ_INSTALL_TIMEZONE={timezone!r}
-{password_line}# Hand off to the SAME scripted installer the CLI/SSH path uses.
+{password_line}{encrypt_line}# Hand off to the SAME scripted installer the CLI/SSH path uses.
 exec bash /root/azarch/azarch-install-cli.sh
 """
 
@@ -241,15 +265,30 @@ else
     part2="${largest_disk}2"
 fi
 
+# Optional full-disk encryption (AZ_INSTALL_ENCRYPT=1, from the instant --encrypt path).
+# LUKS1 (not luks2) so GRUB can unlock /boot on the encrypted root, matching the Calamares
+# luksGeneration:luks1 choice. Format part2 as the container with the ONE password, open it,
+# and use the mapper device as the root target. az_root_dev is the device everything below
+# (mkfs, mount, crypttab) works against, so a non-encrypted install is unchanged.
+az_root_dev="$part2"
+az_crypt_uuid=""
+if [ "$AZ_INSTALL_ENCRYPT" = "1" ] && [ -n "$AZ_INSTALL_PASSWORD" ]; then
+    echo "Encrypting $part2 with LUKS1..."
+    printf '%s' "$AZ_INSTALL_PASSWORD" | cryptsetup luksFormat --type luks1 --batch-mode "$part2" -
+    printf '%s' "$AZ_INSTALL_PASSWORD" | cryptsetup open "$part2" azarch_root -
+    az_root_dev="/dev/mapper/azarch_root"
+    az_crypt_uuid="$(blkid -s UUID -o value "$part2")"
+fi
+
 echo "Formatting partitions..."
 if [ $is_uefi -eq 1 ]; then
   mkfs.fat -F32 "$part1"
 fi
-mkfs.ext4 "$part2"
+mkfs.ext4 "$az_root_dev"
 
 echo "Mounting partitions..."
 mkdir -p /mnt
-mount "$part2" /mnt
+mount "$az_root_dev" /mnt
 if [ $is_uefi -eq 1 ]; then
   mkdir -p /mnt/boot/EFI
   mount "$part1" /mnt/boot/EFI
@@ -287,6 +326,12 @@ genfstab -U /mnt >> /mnt/etc/fstab
 mkdir -p /mnt/etc/install_info
 echo "$largest_disk" > /mnt/etc/install_info/disk
 echo "$is_uefi" > /mnt/etc/install_info/is_uefi
+# Encryption markers for the chroot step (crypttab + GRUB cryptodisk). Only present when
+# the disk was actually LUKS-formatted above; az_crypt_uuid is the LUKS container's UUID.
+if [ -n "$az_crypt_uuid" ]; then
+    echo "1" > /mnt/etc/install_info/encrypt
+    echo "$az_crypt_uuid" > /mnt/etc/install_info/crypt_uuid
+fi
 %IDENTITY_WRITE%
 
 # RECREATE THE VIRTUAL/RUNTIME MOUNT POINTS the rsync excluded. --exclude drops not just the
@@ -360,6 +405,28 @@ touch /var/log/.locale_set
 #      disk-bootable image against the installed /etc/mkinitcpio.conf.
 {_csp._mkinitcpio_reset_command()}
 
+# ENCRYPTED ROOT (install_info/encrypt): teach the initramfs to unlock the LUKS container.
+# The cloned /etc/mkinitcpio.conf is the STOCK mkinitcpio default, whose HOOKS line is
+# systemd-based: `base systemd autodetect microcode modconf kms keyboard sd-vconsole block
+# filesystems fsck`. A systemd initramfs uses the `sd-encrypt` hook (NOT the busybox
+# `encrypt` hook), and it unlocks from /etc/crypttab.initramfs BAKED INTO the image (the
+# file sd-encrypt reads at boot) -- so insert sd-encrypt before `filesystems` and write both
+# crypttab.initramfs (for the initramfs unlock) and /etc/crypttab (for the booted system).
+# Guarded on the marker so a plain install is untouched.
+if [ "$(cat /etc/install_info/encrypt 2>/dev/null)" = "1" ]; then
+    az_cu="$(cat /etc/install_info/crypt_uuid 2>/dev/null)"
+    if ! grep -q '^HOOKS=.*\\bsd-encrypt\\b' /etc/mkinitcpio.conf; then
+        sed -i 's/\\(^HOOKS=.*\\)\\bfilesystems\\b/\\1sd-encrypt filesystems/' /etc/mkinitcpio.conf
+    fi
+    # crypttab.initramfs is embedded into the initramfs and consumed by sd-encrypt to open
+    # `azarch_root` from its UUID at boot (prompting for the passphrase). /etc/crypttab is the
+    # booted-system copy. `none` = prompt; `luks` = the type.
+    if [ -n "$az_cu" ]; then
+        echo "azarch_root UUID=$az_cu none luks" > /etc/crypttab.initramfs
+        echo "azarch_root UUID=$az_cu none luks" > /etc/crypttab
+    fi
+fi
+
 # Regenerate the initramfs for the INSTALLED system (now against the stock preset + the
 # installed /etc/mkinitcpio.conf, so it boots from the real disk).
 mkinitcpio -P
@@ -367,17 +434,14 @@ mkinitcpio -P
 is_uefi=$(cat /etc/install_info/is_uefi)
 disk=$(cat /etc/install_info/disk)
 
-if [ $is_uefi -eq 1 ]; then
-  grub-install --target=x86_64-efi --bootloader-id=grub_uefi --recheck --efi-directory=/boot/EFI
-else
-  grub-install --target=i386-pc "$disk"
-fi
-
-# Auto-boot the FIRST menu entry with no wait (matches the Calamares grubcfg path).
-# GRUB_DEFAULT=0 selects the first generated entry, GRUB_TIMEOUT=0 boots it
-# immediately, and GRUB_TIMEOUT_STYLE=hidden shows no menu (hold SHIFT/ESC to
-# reveal it). Rewrite the key if present, else append it, so this is idempotent
-# regardless of the stock /etc/default/grub the `grub` package shipped.
+# Write /etc/default/grub BEFORE grub-install. grub-install reads GRUB_ENABLE_CRYPTODISK
+# from this file at startup; on an encrypted root (where /boot lives inside the LUKS
+# container) it ABORTS with "attempt to install to encrypted disk without cryptodisk
+# enabled" unless the flag is already set -- so the flag MUST be written first, then
+# grub-install embeds the cryptodisk modules into core.img, then grub-mkconfig writes the
+# menu. GRUB_DEFAULT/TIMEOUT auto-boot the first entry with no menu (Calamares grubcfg parity).
+# Rewrite the key if present, else append it, so this is idempotent regardless of the stock
+# /etc/default/grub the `grub` package shipped.
 set_grub_default() {{
   key="$1"; val="$2"
   if grep -q "^#\\?${{key}}=" /etc/default/grub; then
@@ -389,6 +453,30 @@ set_grub_default() {{
 set_grub_default GRUB_DEFAULT 0
 set_grub_default GRUB_TIMEOUT 0
 set_grub_default GRUB_TIMEOUT_STYLE hidden
+
+# ENCRYPTED ROOT: enable cryptodisk in GRUB and pass the initramfs the cryptdevice + mapper
+# root on the kernel cmdline. This MUST precede grub-install (see above). Guarded on the
+# marker so a plain install keeps its stock GRUB defaults.
+if [ "$(cat /etc/install_info/encrypt 2>/dev/null)" = "1" ]; then
+    az_cu="$(cat /etc/install_info/crypt_uuid 2>/dev/null)"
+    set_grub_default GRUB_ENABLE_CRYPTODISK y
+    if [ -n "$az_cu" ]; then
+        # systemd initramfs: sd-encrypt opens the container from the embedded
+        # crypttab.initramfs, and rd.luks.name=<uuid>=azarch_root names it explicitly; the
+        # kernel then mounts the opened mapper as root. (cryptdevice=... is the busybox-hook
+        # syntax and is intentionally NOT used here -- this is an sd-encrypt initramfs.)
+        # OUTER real quotes keep the space-containing value ONE argument to set_grub_default
+        # (its `val="$2"` reads a single word) while $az_cu still expands; INNER \\" are the
+        # literal quotes written into /etc/default/grub around the multi-word cmdline value.
+        set_grub_default GRUB_CMDLINE_LINUX "\\"rd.luks.name=$az_cu=azarch_root root=/dev/mapper/azarch_root\\""
+    fi
+fi
+
+if [ $is_uefi -eq 1 ]; then
+  grub-install --target=x86_64-efi --bootloader-id=grub_uefi --recheck --efi-directory=/boot/EFI
+else
+  grub-install --target=i386-pc "$disk"
+fi
 
 grub-mkconfig -o /boot/grub/grub.cfg
 

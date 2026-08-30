@@ -85,6 +85,7 @@ _DESKTOP_MODIFICATIONS = ("openbox", "librewolf")
 # unless it is added here on purpose.
 _EXPLICIT_PACKAGES = ("openbox", "librewolf", "application_menu", "window_switcher", "passwords", "backup", "hypervisor", "calamares", "azarch")
 import installer
+import network_profile
 import packages_manifest
 import pacman
 import profile
@@ -253,33 +254,200 @@ def ssh_password_hash(password: str) -> str:
     return out
 
 
-# --- The --server / --instant / --timezone / --all axis flags ---------------
-# The build matrix has three orthogonal axes, each its own opt-in flag; the build is the
-# Cartesian product of what was requested (variants.selected_variants). A bare compile.sh
-# still builds exactly one ISO (azarch-desktop), and --ssh keeps its existing meaning.
-#   --server           ALSO build the headless server line (no GUI).
+# --- The --password / --user opt-in (a login password WITHOUT sshd) ----------
+# --password sets `main` (or --user)'s login password the SAME way --ssh does (hashed
+# into that ISO's /etc/shadow) but does NOT enable sshd. --ssh and --password are
+# MUTUALLY EXCLUSIVE: if the operator wants ssh, they set the password via --ssh.
+
+def parse_password_flag(argv: list[str]) -> str | None:
+    """The `--password=<PW>` value, or None if absent/empty. Mirrors parse_ssh_flag:
+    split('=', 1) so a '=' in the password is kept; a blank value opts out."""
+    for token in argv:
+        if token.startswith("--password="):
+            return token.split("=", 1)[1] or None
+    return None
+
+
+def password_flag_present(argv: list[str]) -> bool:
+    """True if `--password` appears at all (bare, empty, or with a value)."""
+    return any(t == "--password" or t.startswith("--password=") for t in argv)
+
+
+def check_password_flag(argv: list[str]) -> str | None:
+    """Blank/bare --password is a hard error (it demands a string), mirroring --ssh."""
+    if password_flag_present(argv) and parse_password_flag(argv) is None:
+        return (
+            'The --password flag needs a value: --password="<PASSWORD>". You passed '
+            "--password with no value, so there is nothing to set as the login password. "
+            "No default password is ever shipped, so nothing was changed. Re-run with a "
+            'real password, e.g. compile.sh --password="mysecret", or drop --password to '
+            "build the base (locked) ISO."
+        )
+    return None
+
+
+def check_ssh_password_conflict(argv: list[str]) -> str | None:
+    """--ssh and --password together is a hard error: they set the same credential two
+    different ways. If the operator wants ssh, the password goes on --ssh."""
+    if ssh_flag_present(argv) and password_flag_present(argv):
+        return (
+            "--ssh and --password conflict: both set the login password, but --ssh ALSO "
+            'enables sshd. Pick one -- use --ssh="<PW>" if you want remote SSH (it sets '
+            'the password too), or --password="<PW>" for a local login password with sshd '
+            "OFF. No ISO was built."
+        )
+    return None
+
+
+def parse_user_flag(argv: list[str]) -> str:
+    """The login user name for --password/--ssh: the `--user=` value, or "main"."""
+    for token in argv:
+        if token.startswith("--user="):
+            return token.split("=", 1)[1] or "main"
+    return "main"
+
+
+def user_without_password_warning(argv: list[str]) -> str | None:
+    """A WARNING when --user is given without --ssh/--password: the name only takes effect
+    together with a password flag (the live account stays `main`, locked, otherwise)."""
+    present = any(t == "--user" or t.startswith("--user=") for t in argv)
+    if present and not ssh_flag_present(argv) and not password_flag_present(argv):
+        return ("--user only takes effect with a password flag (--ssh or --password); "
+                "with neither, the live account stays `main` and locked. Add --password "
+                'or --ssh to set a login for the chosen user.')
+    return None
+
+
+# --- The --static-ip / --gateway / --dns opt-in (deterministic server IP) -----
+# When set, the compiler bakes a NetworkManager static keyfile into the airootfs so a
+# deployed machine has a fixed IPv4 (see network_profile). --gateway/--dns refine it.
+
+def _value_flag(argv: list[str], name: str) -> str | None:
+    for token in argv:
+        if token.startswith(name + "="):
+            return token.split("=", 1)[1] or None
+    return None
+
+
+def parse_static_ip_flag(argv: list[str]) -> str | None:
+    """The `--static-ip=<CIDR>` value (e.g. 192.168.1.50/24), or None."""
+    return _value_flag(argv, "--static-ip")
+
+
+def parse_gateway_flag(argv: list[str]) -> str | None:
+    """The `--gateway=<IP>` value, or None."""
+    return _value_flag(argv, "--gateway")
+
+
+def parse_dns_flag(argv: list[str]) -> str | None:
+    """The `--dns=<IP[,IP...]>` value (comma list), or None."""
+    return _value_flag(argv, "--dns")
+
+
+def check_static_ip_flag(argv: list[str]) -> str | None:
+    """Validate --static-ip's CIDR, returning an ERROR MESSAGE or None. Absent is fine."""
+    cidr = parse_static_ip_flag(argv)
+    if cidr is None:
+        return None
+    if not network_profile.is_valid_cidr(cidr):
+        return (
+            f'--static-ip="{cidr}" is not a valid IPv4 CIDR. Use A.B.C.D/NN, e.g. '
+            '--static-ip="192.168.1.50/24". No ISO was built.'
+        )
+    return None
+
+
+def gateway_dns_without_static_ip_warning(argv: list[str]) -> str | None:
+    """WARNING when --gateway/--dns are given without --static-ip (they are ignored)."""
+    has_gw = any(t == "--gateway" or t.startswith("--gateway=") for t in argv)
+    has_dns = any(t == "--dns" or t.startswith("--dns=") for t in argv)
+    if (has_gw or has_dns) and parse_static_ip_flag(argv) is None:
+        return ("--gateway/--dns only apply with --static-ip, which was not given, so they "
+                'will be ignored. Add --static-ip="<CIDR>" to set a static address.')
+    return None
+
+
+# --- The --encrypt opt-in (encrypt the INSTANT auto-install's target disk) ----
+# Encryption reuses the ONE password (--ssh/--password); there is no separate encryption
+# password. --encrypt is only meaningful for instant variants (unattended); interactive
+# installs choose encryption at install time.
+
+def wants_encrypt(argv: list[str]) -> bool:
+    """True if --encrypt was requested (encrypt the instant install's disk)."""
+    return _presence_flag(argv, "--encrypt")
+
+
+def check_encrypt_flag(argv: list[str]) -> str | None:
+    """--encrypt without a password (--ssh/--password) is a hard error: there is no
+    passphrase to encrypt with, and no default is ever shipped."""
+    if wants_encrypt(argv) and not ssh_flag_present(argv) and not password_flag_present(argv):
+        return (
+            "--encrypt needs a password to use as the disk passphrase, but neither --ssh "
+            'nor --password was given. Add --password="<PW>" (or --ssh="<PW>") so the '
+            "encrypted install has a passphrase. No ISO was built."
+        )
+    return None
+
+
+# --- The --type / --instant / --timezone axis flags -------------------------
+# The build matrix has three orthogonal axes; the build is the Cartesian product of what
+# was requested (variants.selected_variants). A bare compile.sh still builds exactly one
+# ISO (azarch-desktop), and --ssh keeps its existing meaning.
+#   --type=<desktop|server|all|both>  which product LINE(s): desktop (default) | server |
+#                      all/both (both). Replaces the old --server/--all flags.
 #   --instant          ALSO build the instant (auto-install) variants.
 #   --ssh="<PASSWORD>"  ALSO build the ssh variants (existing flag, unchanged).
 #   --timezone="<TZ>"   the instant-install timezone (default Asia/Jerusalem; validated).
-#   --all              shorthand for the two ARGUMENT-FREE axes: --server AND --instant. It
-#                      does NOT imply ssh (ssh needs a password), so `--all` builds the four
-#                      no-ssh variants and `--all --ssh="pw"` builds the full 8-ISO matrix.
 
 def _presence_flag(argv: list[str], name: str) -> bool:
-    """True if a bare presence flag (e.g. --server, --instant, --all) appears in argv, in
-    either the bare (`--server`) or value (`--server=anything`) spelling. These axes are
-    on/off, so any spelling means 'on'."""
+    """True if a bare presence flag (e.g. --instant, --encrypt) appears in argv, in either
+    the bare (`--instant`) or value (`--instant=anything`) spelling. These axes are on/off,
+    so any spelling means 'on'."""
     return any(t == name or t.startswith(name + "=") for t in argv)
 
 
-def wants_server(argv: list[str]) -> bool:
-    """True if the server line was requested (--server or --all)."""
-    return _presence_flag(argv, "--server") or _presence_flag(argv, "--all")
+_TYPE_VALUES = ("desktop", "server", "all", "both")
+
+
+def parse_type_flag(argv: list[str]) -> str:
+    """The product-line selection: the `--type=<desktop|server|all|both>` value,
+    normalized (both -> all), or "desktop" when the flag is absent or blank.
+    `all`/`both` mean 'build BOTH lines'. split('=', 1) so a value is never truncated;
+    a blank value falls back to the default."""
+    for token in argv:
+        if token.startswith("--type="):
+            value = token.split("=", 1)[1]
+            if not value:
+                return "desktop"
+            return "all" if value == "both" else value
+    return "desktop"
+
+
+def check_type_flag(argv: list[str]) -> str | None:
+    """Validate --type, returning an ERROR MESSAGE to abort on, or None to proceed.
+    Absent/blank is fine (defaults to desktop). A value outside desktop|server|all|both
+    is a hard error."""
+    for token in argv:
+        if token.startswith("--type="):
+            value = token.split("=", 1)[1]
+            if value and value not in _TYPE_VALUES:
+                return (
+                    f'--type="{value}" is not a valid product line. Use one of: '
+                    '--type="desktop" (default, the GUI line), --type="server" '
+                    '(headless), or --type="all" (both; --type="both" is an alias). '
+                    "No ISO was built."
+                )
+    return None
+
+
+def type_wants_server(type_value: str) -> bool:
+    """True when the selected --type builds the headless server line (server or all)."""
+    return type_value in ("server", "all")
 
 
 def wants_instant(argv: list[str]) -> bool:
-    """True if the instant variants were requested (--instant or --all)."""
-    return _presence_flag(argv, "--instant") or _presence_flag(argv, "--all")
+    """True if the instant variants were requested (--instant)."""
+    return _presence_flag(argv, "--instant")
 
 
 DEFAULT_INSTANT_TIMEZONE = "Asia/Jerusalem"
@@ -358,7 +526,9 @@ def kill_active_child(sudo: list[str]) -> None:
 
 def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
         full_compile: bool = False, ssh_password_hash: str | None = None,
-        build_variants: tuple = (), timezone: str = "Asia/Jerusalem") -> list[Path]:
+        build_variants: tuple = (), timezone: str = "Asia/Jerusalem",
+        login_user: str = "main", login_password: str | None = None,
+        encrypt: bool = False, static_ip_text: str | None = None) -> list[Path]:
     """Execute all steps; return the paths of the built ISOs. Raises on failure.
 
     full_compile: when True, Az'arch's own packages (librewolf) are compiled from
@@ -425,6 +595,8 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
             bar, line, line_variants, line_offline, reclaim_after_mkarchiso,
             full_compile=full_compile, ssh_password_hash=ssh_password_hash,
             timezone=timezone, own_packages_ready=own_packages_ready,
+            login_user=login_user, login_password=login_password,
+            encrypt=encrypt, static_ip_text=static_ip_text,
         )
         own_packages_ready = True  # built (or confirmed present) by the first line
     return isos
@@ -433,7 +605,9 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
 def _build_line(bar: ProgressBar, line: str, line_variants: tuple, offline: bool,
                 reclaim_after_mkarchiso, *, full_compile: bool,
                 ssh_password_hash: str | None, timezone: str,
-                own_packages_ready: bool = False) -> list[Path]:
+                own_packages_ready: bool = False, login_user: str = "main",
+                login_password: str | None = None, encrypt: bool = False,
+                static_ip_text: str | None = None) -> list[Path]:
     """Build ONE product line's profile tree and assemble its ISO(s).
 
     line: "desktop" or "server". is_gui below drives every difference between the two:
@@ -573,6 +747,13 @@ def _build_line(bar: ProgressBar, line: str, line_variants: tuple, offline: bool
     # The virtiofs shared-folder .mount unit + its mountpoint, enabled on every variant.
     _emit_shared_mount(airootfs)
 
+    # Static IPv4: bake ONE NetworkManager keyfile so a deployed machine has a fixed
+    # address (the rootfs clone / Calamares unpackfs carries it onto the install). 0600,
+    # root-owned (NetworkManager refuses world-readable keyfiles).
+    if static_ip_text is not None:
+        emit.write_text(airootfs / network_profile.CONNECTION_PATH.lstrip("/"),
+                        static_ip_text, mode=0o600)
+
     # 10 -- Emit installer payload.
     # The first-boot script/service/conf + the scripted (terminal/SSH/instant) installer.
     # profiledef.sh is written per-variant in the finalize loop (its iso_name differs).
@@ -637,7 +818,9 @@ def _build_line(bar: ProgressBar, line: str, line_variants: tuple, offline: bool
     line_isos: list[Path] = []
     for variant in line_variants:
         _apply_variant(W, airootfs, variant,
-                       ssh_password_hash=ssh_password_hash, timezone=timezone)
+                       ssh_password_hash=ssh_password_hash, timezone=timezone,
+                       login_user=login_user, login_password=login_password,
+                       encrypt=encrypt)
         bar.step(f"Assemble {variant.iso_name} ISO (mkarchiso)")
         line_isos.append(_run_mkarchiso(sudo, W, bar, reclaim_after_mkarchiso,
                                         iso_name=variant.iso_name))
@@ -648,7 +831,9 @@ def _build_line(bar: ProgressBar, line: str, line_variants: tuple, offline: bool
 
 def _apply_variant(W: Path, airootfs: Path, variant,
                    ssh_password_hash: str | None = None,
-                   timezone: str = "Asia/Jerusalem") -> None:
+                   timezone: str = "Asia/Jerusalem",
+                   login_user: str = "main", login_password: str | None = None,
+                   encrypt: bool = False) -> None:
     """Overlay the per-variant differences onto the shared (per-line) profile tree just
     before its mkarchiso pass. Accepts a variants.Variant (or a legacy "base"/"sshd"
     key, coerced) and toggles the two flavour axes -- ssh and instant -- independently.
@@ -706,7 +891,15 @@ def _apply_variant(W: Path, airootfs: Path, variant,
     if v.instant:
         # The script's password posture follows THIS variant's ssh flag: ssh -> keep the
         # cloned --ssh password; non-ssh -> lock the installed account (`!*`).
-        emit.write_exec(inst_script, installer.instant_install_sh(timezone, ssh=v.ssh))
+        # When --encrypt is set the target disk is LUKS-formatted with the ONE password.
+        # For an ssh variant that password was already cloned into the account, so LUKS
+        # reads it from AZ_INSTALL_PASSWORD only for the NON-ssh case (account stays locked,
+        # but LUKS still needs the secret) -- hence passphrase is threaded only then.
+        passphrase = login_password if (encrypt and not v.ssh) else None
+        emit.write_exec(inst_script,
+                        installer.instant_install_sh(timezone, ssh=v.ssh,
+                                                     encrypt=encrypt, user=login_user,
+                                                     passphrase=passphrase))
         emit.write_text(inst_svc, system.INSTANT_INSTALL_SERVICE)
         emit.link("/etc/systemd/system/azarch-instant-install.service", inst_link)
     else:
@@ -1817,22 +2010,22 @@ def main() -> int:
     if estimate.parse_estimate_flag(sys.argv[1:]) is not None:
         return estimate.run(sys.argv[1:])
 
-    # HARD STOP: `--ssh` present but with no password. The flag demands a string; a bare
-    # `--ssh` / `--ssh=` must ABORT with an explanation rather than silently building the
-    # base ISO only (the reported bug). Do this BEFORE any workspace/cache setup so it is a
-    # clean, side-effect-free early exit. (--all does NOT imply ssh -- ssh always needs a
-    # password -- so `--all` alone is fine and just builds the four no-ssh variants.)
-    ssh_flag_error = check_ssh_flag(sys.argv[1:])
-    if ssh_flag_error:
-        sys.stderr.write("[x] " + ssh_flag_error + "\n")
-        return 2
-
-    # HARD STOP: --timezone naming a zone this build host does not have. Fail fast rather
-    # than shipping an instant ISO that aborts mid-install on the bad zone. Side-effect-free.
-    tz_flag_error = check_timezone_flag(sys.argv[1:])
-    if tz_flag_error:
-        sys.stderr.write("[x] " + tz_flag_error + "\n")
-        return 2
+    # HARD STOPS (side-effect-free, before any workspace/cache setup). Each returns an
+    # error message to print + exit 2 on; None means proceed. A bare/empty --ssh or
+    # --password, an --ssh+--password conflict, --encrypt without a password, a bad --type,
+    # a malformed --static-ip, or an unknown --timezone all abort cleanly here.
+    for err in (
+        check_type_flag(sys.argv[1:]),
+        check_ssh_flag(sys.argv[1:]),
+        check_password_flag(sys.argv[1:]),
+        check_ssh_password_conflict(sys.argv[1:]),
+        check_encrypt_flag(sys.argv[1:]),
+        check_static_ip_flag(sys.argv[1:]),
+        check_timezone_flag(sys.argv[1:]),
+    ):
+        if err:
+            sys.stderr.write("[x] " + err + "\n")
+            return 2
 
     paths.CACHEDIR.mkdir(parents=True, exist_ok=True)
 
@@ -1850,24 +2043,46 @@ def main() -> int:
         print("[*] --full-compile: Az'arch's own packages will be built ENTIRELY from source.")
         print("    This includes a LibreWolf/Firefox compile that can take 1.5-3+ hours.")
 
-    # The desktop/plain/no-ssh ISO is ALWAYS built. The three axis flags ADD variants
-    # (variants.selected_variants -> the Cartesian product): --server the headless line,
-    # --instant the auto-install variants, --ssh the ssh variants. --all = --server
-    # --instant (+ the ssh half whenever --ssh is given). The --ssh password is hashed HERE
-    # (sha-512 crypt) and threaded into run(); the plaintext never leaves this process.
+    # ONE login password from EITHER --ssh (also enables sshd + the ssh variants) OR
+    # --password (sshd off); they are mutually exclusive (checked above). It is hashed HERE
+    # (sha-512 crypt) and threaded into run(); the plaintext stays in this process EXCEPT for
+    # a non-ssh encrypted instant, where the LUKS passphrase needs it (threaded as
+    # login_password and written only into that ISO's root-owned instant script).
     ssh_password = parse_ssh_flag(sys.argv[1:])
-    ssh_hash = ssh_password_hash(ssh_password) if ssh_password else None
-    server = wants_server(sys.argv[1:])
+    login_password = ssh_password if ssh_password else parse_password_flag(sys.argv[1:])
+    login_hash = ssh_password_hash(login_password) if login_password else None
+    login_user = parse_user_flag(sys.argv[1:])
+
+    # The desktop line is ALWAYS built; --type adds the server line, --instant adds the
+    # auto-install variants, --ssh adds the ssh variants (the Cartesian product via
+    # variants.selected_variants). --encrypt encrypts the instant install's disk.
+    type_value = parse_type_flag(sys.argv[1:])
+    server = type_wants_server(type_value)
     instant = wants_instant(sys.argv[1:])
+    encrypt = wants_encrypt(sys.argv[1:])
     timezone = parse_timezone_flag(sys.argv[1:])
     build_variants = _variants.selected_variants(
-        server=server, instant=instant, ssh=bool(ssh_hash),
+        server=server, instant=instant, ssh=bool(ssh_password),
     )
 
-    # A --timezone with no --instant is a no-op; warn so a forgotten --instant is visible.
-    tz_warn = timezone_without_instant_warning(sys.argv[1:])
-    if tz_warn:
-        print("[!] " + tz_warn)
+    # Static IP: build the NetworkManager keyfile text once (baked into every line's
+    # airootfs in run()). --gateway/--dns refine it; both validated/warn'd above.
+    static_ip = parse_static_ip_flag(sys.argv[1:])
+    static_ip_text = None
+    if static_ip:
+        static_ip_text = network_profile.nmconnection_text(
+            static_ip, gateway=parse_gateway_flag(sys.argv[1:]),
+            dns=parse_dns_flag(sys.argv[1:]),
+        )
+
+    # Warnings (non-fatal): a flag that will be silently ignored in this configuration.
+    for warn in (
+        timezone_without_instant_warning(sys.argv[1:]),
+        user_without_password_warning(sys.argv[1:]),
+        gateway_dns_without_static_ip_warning(sys.argv[1:]),
+    ):
+        if warn:
+            print("[!] " + warn)
 
     # Announce exactly what will be built (name every ISO), so the operator sees the matrix
     # the flags expanded to before the long build starts.
@@ -1876,14 +2091,15 @@ def main() -> int:
     for v in build_variants:
         notes = []
         if v.ssh:
-            notes.append("ssh: `main` gets the --ssh password, sshd on :22")
+            notes.append(f"ssh: `{login_user}` gets the --ssh password, sshd on :22")
         if v.instant:
-            notes.append(f"instant: auto-install to the largest disk, tz {timezone}")
+            enc = ", ENCRYPTED disk" if encrypt else ""
+            notes.append(f"instant: auto-install to the largest disk, tz {timezone}{enc}")
         suffix = ("  (" + "; ".join(notes) + ")") if notes else ""
         print(f"      - {v.iso_name}-<ver>-x86_64.iso{suffix}")
-    if not ssh_hash:
-        print('    (pass --ssh="<PASSWORD>" to add the ssh variants; --server for the '
-              "headless line; --instant for auto-install; --all for the full matrix.)")
+    if not login_hash:
+        print('    (pass --ssh="<PW>" for ssh; --password="<PW>" for a local login; '
+              '--type=server|all for the headless line; --instant for auto-install.)')
 
     offline = cache_is_complete()
     _stale_cache_notice(offline)
@@ -1926,7 +2142,9 @@ def main() -> int:
     bar.init()
     try:
         isos = run(bar, offline, full_compile=full_compile,
-                   ssh_password_hash=ssh_hash,
+                   ssh_password_hash=login_hash,
+                   login_user=login_user, login_password=login_password,
+                   encrypt=encrypt, static_ip_text=static_ip_text,
                    build_variants=build_variants, timezone=timezone,
                    reclaim_after_mkarchiso=own.reclaim_full)
     except SystemExit as e:

@@ -324,3 +324,136 @@ def test_kill_active_child_noop_when_no_child(monkeypatch):
     monkeypatch.setattr(compiler, "_ACTIVE_CHILD_PGID", 0, raising=False)
     compiler.kill_active_child(["sudo", "-n"])
     assert called == []
+
+
+# --- Task 1: --type flag, removal of --server/--all -------------------------
+def test_parse_type_defaults_to_desktop():
+    assert compiler.parse_type_flag([]) == "desktop"
+    assert compiler.parse_type_flag(["--type="]) == "desktop"
+
+
+def test_parse_type_reads_each_value():
+    assert compiler.parse_type_flag(["--type=server"]) == "server"
+    assert compiler.parse_type_flag(["--type=desktop"]) == "desktop"
+    assert compiler.parse_type_flag(["--type=all"]) == "all"
+
+
+def test_parse_type_both_is_alias_for_all():
+    assert compiler.parse_type_flag(["--type=both"]) == "all"
+
+
+def test_type_wants_server_true_only_for_server_and_all():
+    assert compiler.type_wants_server("server") is True
+    assert compiler.type_wants_server("all") is True
+    assert compiler.type_wants_server("desktop") is False
+
+
+def test_check_type_flag_rejects_unknown_value():
+    msg = compiler.check_type_flag(["--type=laptop"])
+    assert msg is not None
+    assert "laptop" in msg and "desktop" in msg and "server" in msg
+
+
+def test_check_type_flag_accepts_valid_and_absent():
+    assert compiler.check_type_flag([]) is None
+    for v in ("desktop", "server", "all", "both"):
+        assert compiler.check_type_flag([f"--type={v}"]) is None
+
+
+def test_server_and_all_flags_are_removed():
+    assert not hasattr(compiler, "wants_server")
+
+
+def test_wants_instant_no_longer_reads_all():
+    assert compiler.wants_instant(["--all"]) is False
+    assert compiler.wants_instant(["--instant"]) is True
+
+
+# --- Task 2: --password / --user parsers + conflict -------------------------
+def test_parse_password_flag_reads_value_and_handles_empty():
+    assert compiler.parse_password_flag(["--password=hunter2"]) == "hunter2"
+    assert compiler.parse_password_flag(["--password="]) is None
+    assert compiler.parse_password_flag([]) is None
+
+
+def test_parse_password_flag_keeps_equals_in_value():
+    assert compiler.parse_password_flag(["--password=a=b=c"]) == "a=b=c"
+
+
+def test_check_password_flag_blank_is_error():
+    assert compiler.check_password_flag(["--password"]) is not None
+    assert compiler.check_password_flag(["--password="]) is not None
+    assert compiler.check_password_flag(["--password=ok"]) is None
+    assert compiler.check_password_flag([]) is None
+
+
+def test_ssh_and_password_together_conflict():
+    msg = compiler.check_ssh_password_conflict(['--ssh=a', '--password=b'])
+    assert msg is not None
+    assert "--ssh" in msg and "--password" in msg
+    assert compiler.check_ssh_password_conflict(['--ssh=a']) is None
+    assert compiler.check_ssh_password_conflict(['--password=b']) is None
+    assert compiler.check_ssh_password_conflict([]) is None
+
+
+def test_parse_user_defaults_to_main():
+    assert compiler.parse_user_flag([]) == "main"
+    assert compiler.parse_user_flag(["--user="]) == "main"
+    assert compiler.parse_user_flag(["--user=alice"]) == "alice"
+
+
+def test_user_without_password_warns():
+    assert compiler.user_without_password_warning(["--user=alice"]) is not None
+    assert compiler.user_without_password_warning(["--user=alice", "--password=x"]) is None
+    assert compiler.user_without_password_warning(["--user=alice", "--ssh=x"]) is None
+    assert compiler.user_without_password_warning([]) is None
+
+
+# --- Task 4: --static-ip / --gateway / --dns --------------------------------
+def test_parse_static_ip_and_gateway_and_dns():
+    argv = ['--static-ip=192.168.1.50/24', '--gateway=192.168.1.1', '--dns=1.1.1.1,9.9.9.9']
+    assert compiler.parse_static_ip_flag(argv) == "192.168.1.50/24"
+    assert compiler.parse_gateway_flag(argv) == "192.168.1.1"
+    assert compiler.parse_dns_flag(argv) == "1.1.1.1,9.9.9.9"
+    assert compiler.parse_static_ip_flag([]) is None
+
+
+def test_check_static_ip_rejects_malformed():
+    assert compiler.check_static_ip_flag(['--static-ip=192.168.1.50']) is not None
+    assert compiler.check_static_ip_flag(['--static-ip=999.1.1.1/24']) is not None
+    assert compiler.check_static_ip_flag(['--static-ip=192.168.1.50/24']) is None
+    assert compiler.check_static_ip_flag([]) is None
+
+
+def test_gateway_dns_without_static_ip_warns():
+    assert compiler.gateway_dns_without_static_ip_warning(['--gateway=1.2.3.4']) is not None
+    assert compiler.gateway_dns_without_static_ip_warning(['--dns=1.1.1.1']) is not None
+    assert compiler.gateway_dns_without_static_ip_warning(
+        ['--static-ip=192.168.1.50/24', '--gateway=1.2.3.4']) is None
+    assert compiler.gateway_dns_without_static_ip_warning([]) is None
+
+
+# --- Task 5: --encrypt ------------------------------------------------------
+def test_wants_encrypt_presence():
+    assert compiler.wants_encrypt(["--encrypt"]) is True
+    assert compiler.wants_encrypt([]) is False
+
+
+def test_encrypt_requires_a_password_flag():
+    assert compiler.check_encrypt_flag(["--encrypt"]) is not None
+    assert compiler.check_encrypt_flag(["--encrypt", "--password=x"]) is None
+    assert compiler.check_encrypt_flag(["--encrypt", "--ssh=x"]) is None
+    assert compiler.check_encrypt_flag([]) is None
+
+
+# --- Task 7: pipeline signature threading -----------------------------------
+def test_run_accepts_new_kwargs():
+    sig = inspect.signature(compiler.run)
+    for p in ("login_user", "encrypt", "static_ip_text"):
+        assert p in sig.parameters
+
+
+def test_apply_variant_accepts_new_kwargs():
+    sig = inspect.signature(compiler._apply_variant)
+    for p in ("login_user", "encrypt"):
+        assert p in sig.parameters

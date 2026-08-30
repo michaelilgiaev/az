@@ -1076,6 +1076,14 @@ def test_users_reuse_home_true():
     assert d["doAutologin"] is False
 
 
+def test_users_root_reuses_user_password():
+    # ONE password for the whole system: root reuses the user password, so the GUI shows
+    # a single password field (Az'arch policy, matching the CLI/instant installers).
+    d = yaml.safe_load(calamares.users_conf())
+    assert d["doReusePassword"] is True
+    assert d["setRootPassword"] is True
+
+
 def test_users_hostname_template_is_literal_azarch():
     # "What is the name of this computer?" defaults to "azarch" and must NOT change
     # as the Full Name / Login fields change. Calamares reads the hostname suggestion

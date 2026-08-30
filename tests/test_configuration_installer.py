@@ -256,7 +256,13 @@ def test_chroot_setup_grub_default_helper_is_idempotent(tmp_path):
 
     s = installer.chroot_setup_sh()
     start = s.index("set_grub_default() {")
-    end = s.index("\n\ngrub-mkconfig -o /boot/grub/grub.cfg")
+    # The helper + its three unconditional calls now sit BEFORE grub-install (the encrypted-
+    # root fix moved GRUB_ENABLE_CRYPTODISK ahead of grub-install). Extract just up to the
+    # encrypted-root block so the sandbox runs only the helper + the three default calls,
+    # not grub-install (which would fail on a fake disk). The encrypt block is not present on
+    # this non-encrypted (marker-less) render anyway; anchor on the first `if [ "$(cat`
+    # /etc/install_info/encrypt guard that follows the three calls.
+    end = s.index('\nif [ "$(cat /etc/install_info/encrypt', start)
     block = s[start:end]                       # def + the three calls
     assert "set_grub_default GRUB_TIMEOUT_STYLE hidden" in block
 
@@ -542,3 +548,99 @@ def test_locale_block_spliced_between_shebang_and_pacman_key(monkeypatch):
     assert "SENTINEL_LOCALE_MARKER" in s
     assert s.index("#!/bin/bash") < s.index("SENTINEL_LOCALE_MARKER")
     assert s.index("SENTINEL_LOCALE_MARKER") < s.index("pacman-key --init")
+
+
+# --- Task 9: encrypted instant install --------------------------------------
+def test_instant_install_sh_signature_has_encrypt_and_user():
+    import inspect
+    sig = inspect.signature(installer.instant_install_sh)
+    assert "encrypt" in sig.parameters
+    assert "user" in sig.parameters
+    assert "passphrase" in sig.parameters
+
+
+def test_instant_encrypt_exports_flag():
+    text = installer.instant_install_sh("Asia/Jerusalem", ssh=False,
+                                        encrypt=True, user="main", passphrase="s3cret")
+    assert "AZ_INSTALL_ENCRYPT=1" in text
+    # Non-ssh encrypted instant must supply the passphrase for LUKS.
+    assert "AZ_INSTALL_PASSWORD=" in text
+
+
+def test_instant_no_encrypt_omits_flag():
+    text = installer.instant_install_sh("Asia/Jerusalem", ssh=False, encrypt=False)
+    assert "AZ_INSTALL_ENCRYPT" not in text
+
+
+def test_instant_user_is_threaded_into_username():
+    text = installer.instant_install_sh("Asia/Jerusalem", ssh=True, user="alice")
+    assert "AZ_INSTALL_USERNAME=alice" in text
+
+
+def test_installer_disk_step_luks_formats_when_encrypt_marker_set():
+    body = installer.installer_sh()
+    assert "cryptsetup" in body
+    assert "luksFormat" in body
+    assert "AZ_INSTALL_ENCRYPT" in body
+
+
+def test_chroot_setup_adds_encrypt_hook_when_marker_present():
+    body = installer.chroot_setup_sh(is_gui=True)
+    assert "install_info/encrypt" in body
+    assert "GRUB_ENABLE_CRYPTODISK" in body
+
+
+def test_chroot_setup_uses_systemd_sd_encrypt_hook_not_busybox():
+    # The cloned mkinitcpio.conf is the STOCK systemd-based default, so the encrypt hook
+    # must be `sd-encrypt` (busybox `encrypt` would not unlock in a systemd initramfs), and
+    # the unlock is driven by crypttab.initramfs + rd.luks.name (NOT the busybox cryptdevice=).
+    body = installer.chroot_setup_sh(is_gui=True)
+    assert "sd-encrypt filesystems" in body
+    assert "crypttab.initramfs" in body
+    assert "rd.luks.name=" in body
+    # cryptdevice= is the busybox-hook syntax; it must not appear as a real cmdline token
+    # (a mention in a comment explaining why it is avoided is fine, so match the arg form).
+    assert "cryptdevice=UUID" not in body
+    assert 'cryptdevice=$' not in body
+
+
+def test_chroot_setup_cmdline_keeps_root_arg_after_word_splitting():
+    # REGRESSION: set_grub_default reads only $2, so the multi-word GRUB_CMDLINE_LINUX value
+    # must be ONE shell argument. A prior version used bare \\"...\\" (literal quotes) which
+    # word-split on the space, dropping `root=/dev/mapper/azarch_root` into $3 -> unbootable.
+    # Run the actual helper + emitted call against a temp grub file and assert both the
+    # rd.luks.name token AND the root= token survive, with balanced quotes.
+    import subprocess
+    import tempfile
+    body = installer.chroot_setup_sh(is_gui=True)
+    helper_start = body.index("set_grub_default() {")
+    helper_end = body.index('\nset_grub_default GRUB_DEFAULT 0')
+    helper = body[helper_start:helper_end]
+    # the emitted GRUB_CMDLINE_LINUX call line
+    cmdline_call = next(l.strip() for l in body.splitlines()
+                        if "set_grub_default GRUB_CMDLINE_LINUX" in l)
+    with tempfile.TemporaryDirectory() as td:
+        gd = td + "/grub"
+        open(gd, "w").close()
+        script = (helper.replace("/etc/default/grub", gd)
+                  + '\naz_cu="ABCD-1234"\n'
+                  + cmdline_call.replace("/etc/default/grub", gd) + "\n")
+        r = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        out = open(gd).read()
+    assert "rd.luks.name=ABCD-1234=azarch_root" in out
+    assert "root=/dev/mapper/azarch_root" in out
+    # Balanced quotes: exactly two double-quotes on the GRUB_CMDLINE_LINUX line.
+    line = next(l for l in out.splitlines() if l.startswith("GRUB_CMDLINE_LINUX="))
+    assert line.count('"') == 2, line
+
+
+def test_chroot_setup_enables_cryptodisk_before_grub_install():
+    # grub-install reads GRUB_ENABLE_CRYPTODISK at startup and ABORTS on an encrypted root
+    # (where /boot lives inside the LUKS container) if it is not already set. So the flag
+    # MUST be written to /etc/default/grub BEFORE grub-install runs, else the installed
+    # system is unbootable. Assert the ordering of the actual COMMANDS in the generated script.
+    body = installer.chroot_setup_sh(is_gui=True)
+    enable_pos = body.index("set_grub_default GRUB_ENABLE_CRYPTODISK y")
+    install_pos = body.index("grub-install --target")
+    assert enable_pos < install_pos, "GRUB_ENABLE_CRYPTODISK must be set before grub-install"

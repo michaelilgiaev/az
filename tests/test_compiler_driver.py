@@ -487,3 +487,47 @@ def test_cache_complete_false_when_no_synced_db(monkeypatch, tmp_path):
     monkeypatch.setattr(compiler.paths, "PKG_REPO", repo)
     monkeypatch.setattr(compiler.paths, "PKG_SYNC_DB", sync)
     assert compiler.cache_is_complete() is False
+
+
+# --- Task 6: main() flag resolution & hard stops ----------------------------
+import sys as _sys
+
+
+def test_main_ssh_password_conflict_aborts(monkeypatch, capsys):
+    # --ssh + --password is a hard stop that returns BEFORE any build machinery.
+    monkeypatch.setattr(_sys, "argv", ["compiler", "--ssh=a", "--password=b"])
+    rc = compiler.main()
+    assert rc == 2
+    assert "conflict" in capsys.readouterr().err.lower()
+
+
+def test_main_encrypt_without_password_aborts(monkeypatch, capsys):
+    monkeypatch.setattr(_sys, "argv", ["compiler", "--encrypt"])
+    rc = compiler.main()
+    assert rc == 2
+    assert "encrypt" in capsys.readouterr().err.lower()
+
+
+def test_main_bad_type_aborts(monkeypatch, capsys):
+    monkeypatch.setattr(_sys, "argv", ["compiler", "--type=laptop"])
+    rc = compiler.main()
+    assert rc == 2
+    assert "type" in capsys.readouterr().err.lower()
+
+
+def test_main_bad_static_ip_aborts(monkeypatch, capsys):
+    monkeypatch.setattr(_sys, "argv", ["compiler", "--static-ip=nope"])
+    rc = compiler.main()
+    assert rc == 2
+    assert "static-ip" in capsys.readouterr().err.lower()
+
+
+def test_main_passes_new_kwargs_to_run():
+    # main() must thread the resolved login_user/login_password/encrypt/static_ip_text
+    # into run(). Source-level check (a full main() drive spins up threads/PTY machinery).
+    src = inspect.getsource(compiler.main)
+    assert "login_user=login_user" in src
+    assert "login_password=login_password" in src
+    assert "encrypt=encrypt" in src
+    assert "static_ip_text=static_ip_text" in src
+    assert "ssh_password_hash=login_hash" in src
