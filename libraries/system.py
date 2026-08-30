@@ -44,7 +44,7 @@ def shadow_for(main_password_hash: str | None = None) -> str:
     """Return the /etc/shadow contents for a build variant.
 
     * main_password_hash is None  -> the base/default SHADOW: BOTH accounts LOCKED.
-      This is what the always-built desktop ISO ships (DECISION 1): no password login
+      This is what the always-built headed ISO ships (DECISION 1): no password login
       is possible for anyone, autologin still works.
 
     * main_password_hash is a crypt hash (starts with `$`) -> the sshd variant's
@@ -558,9 +558,9 @@ WantedBy=multi-user.target
 #     though the enable-symlink is cloned onto it, the unit is CONDITION-skipped there and can
 #     never re-wipe the freshly installed disk. Belt-and-braces, the installer itself also
 #     erases only the chosen disk and exits.
-#   * CONSOLE-VISIBLE, DESKTOP-INDEPENDENT. StandardOutput/Input=tty on /dev/tty1 so the
+#   * CONSOLE-VISIBLE, LINE-INDEPENDENT. StandardOutput/Input=tty on /dev/tty1 so the
 #     install log is on screen and any (defensive) prompt could reach a keyboard. It needs no
-#     X, so the SAME unit drives the desktop-instant AND server-instant ISOs.
+#     X, so the SAME unit drives the headed-instant AND headless-instant ISOs.
 #   * CONFLICTS WITH the tty1 autologin getty so the two do not fight over /dev/tty1 while the
 #     install runs. After multi-user basics; ordered after pkgs-setup like the other oneshots.
 #   * ExecStart is the staged instant script (installer.instant_install_sh), which pre-seeds
@@ -590,9 +590,9 @@ TTYVHangup=yes
 WantedBy=multi-user.target
 """
 
-# The virtiofs shared-folder auto-mount, baked into EVERY variant (desktop + ssh).
+# The virtiofs shared-folder auto-mount, baked into EVERY variant (headed + ssh).
 # This is the fix for the old --shared/--ssh coupling: the share used to appear only
-# because the ssh bring-up mounted it as a side effect, so the desktop variant never
+# because the ssh bring-up mounted it as a side effect, so the headed variant never
 # got it. Now a plain systemd .mount unit mounts the host ./shared folder at
 # /home/main/shared on boot, independent of ssh, on whichever variant is running.
 #

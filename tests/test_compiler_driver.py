@@ -141,7 +141,7 @@ def test_link_services_enables_spice_vdagentd(tmp_path):
 
 def test_link_services_enables_shared_virtiofs_mount(tmp_path):
     # BEHAVIORAL: _link_services must enable the virtiofs shared-folder mount on BOTH
-    # variants (this is the fix for the desktop-variant coupling -- the share must
+    # variants (this is the fix for the headed-variant coupling -- the share must
     # appear without the ssh bring-up). A .mount enable-link is a symlink named after
     # the unit, exactly like a .service one.
     import os
@@ -284,8 +284,8 @@ def test_step_weights_match_number_of_steps():
     selections = [
         variants.selected_variants(),                                   # 1 desktop
         variants.selected_variants(ssh=True),                           # 2 desktop
-        variants.selected_variants(server=True),                        # desktop+server
-        variants.selected_variants(server=True, instant=True, ssh=True),  # all 8
+        variants.selected_variants(headless=True),                        # headed+headless
+        variants.selected_variants(headless=True, instant=True, ssh=True),  # all 8
     ]
     for sel in selections:
         n_lines = len(compiler._lines_in(sel))
@@ -301,7 +301,7 @@ def test_step_weights_match_number_of_steps():
 
 
 def test_default_step_weights_match_single_desktop_build():
-    # The module-level STEP_WEIGHTS constant describes the no-flags build (one desktop ISO).
+    # The module-level STEP_WEIGHTS constant describes the no-flags build (one headed ISO).
     import variants
 
     assert compiler.STEP_WEIGHTS == compiler.weights_for((variants.Variant(),))
@@ -318,7 +318,7 @@ def test_step_weights_giants_present_per_line_and_variant():
     # each per-line giant and eight mkarchiso giants.
     import variants
 
-    w = compiler.weights_for(variants.selected_variants(server=True, instant=True, ssh=True))
+    w = compiler.weights_for(variants.selected_variants(headless=True, instant=True, ssh=True))
     assert w.count(250) == 2 and w.count(120) == 2
     assert w.count(270) == 8
     # the mkarchiso giants are the tail (assembled after every line's emits)

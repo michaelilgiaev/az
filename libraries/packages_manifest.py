@@ -1,78 +1,60 @@
-"""Partition the package manifest by product line (desktop vs. server).
+"""Partition the package manifest by product line (headed vs. headless).
 
 ``packages/packages.x86_64`` stays the single, VERBATIM superset the build always
 warms into the offline cache -- the cache-completeness and download-coverage logic
 (downloader.py, compiler.cache_is_complete) is unchanged and keeps operating on
-that full list. What differs between the DESKTOP line and the headless SERVER line
-is only WHICH of those cached packages each one's pacstrap actually installs:
+that full list. What differs between the HEADED line and the HEADLESS line is only
+WHICH of those cached packages each one's pacstrap actually installs:
 
-    desktop  ->  the full manifest (base + the GUI stack)
-    server   ->  the full manifest MINUS DESKTOP_ONLY (console-only)
+    headed    ->  the full manifest (base + the GUI stack + Calamares)
+    headless  ->  the full manifest MINUS HEADLESS_EXCLUDED
 
 Keeping one physical manifest file (rather than splitting it in two) means the
 offline repo is a superset of BOTH airootfs needs -- always a valid cache for
 either line -- and none of the cache machinery has to learn about lines. Only the
 pacstrap manifest STAGED into a given airootfs is filtered, here, at emit time.
 
-DESKTOP_ONLY is the set of package NAMES that exist purely to serve the graphical
-session and have no place on a headless server: the X11 server + client libs, the
-OpenBox desktop, the Calamares GUI installer and its Qt6/KDE-Frameworks toolkit,
-and the shipped GUI applications. It is deliberately CONSERVATIVE -- anything
-dual-use (GPU/compute drivers, filesystem/partition tools, networking, gnupg) stays
-in the base set so the server keeps every non-graphical capability. A name here
-that is not in the manifest is simply inert (the filter is a set-difference), but a
-GUI package OMITTED here would wrongly ship on the server, so the set is derived
-directly from the AZ'ARCH ADDITIONS "desktop"/"Calamares"/"Thunar"/"xviewer"
-groupings in packages.x86_64.
+USER DECISION (final): the ONLY thing stripped from the headless line is the
+CALAMARES GRAPHICAL INSTALLER and its GUI-only toolkit. Headless installs via the
+CLI installer (`azarch-install --cli` / the staged azarch-install-cli.sh), so the
+Qt6/KDE-Frameworks Calamares stack has no purpose there. EVERYTHING ELSE STAYS on
+headless -- the X11 server, OpenBox, the GUI apps (LibreWolf/LibreOffice/GIMP/VLC/
+Thunar/...), themes/fonts, cups, bluez, spice-vdagent, AND the whole GPU/compute
+driver stack. The rationale: the headless machine may still want the scriptable
+apps' headless APIs (soffice --convert-to, gimp -i -b, cvlc) and X-based UI
+automation on demand, and it may be an AI/compute box needing CUDA/ROCm; only the
+interactive graphical INSTALLER is genuinely useless without a display.
+
+HEADLESS_EXCLUDED is therefore Calamares + the Qt6/KF6/GTK deps that exist ONLY to
+serve it. It is deliberately CONSERVATIVE: any package that is dual-use, or shared
+with a GUI app that STAYS, must NOT appear here. A name here that is not in the
+manifest is simply inert (the filter is a set-difference); the danger is the
+reverse -- listing a package the headed line also needs elsewhere would strip it
+from a still-shipped app. The Calamares set below is cross-checked against the
+manifest by a test (see tests/test_headless_line.py).
 """
 
 from __future__ import annotations
 
 import downloader
 
-# Package names that belong ONLY to the graphical desktop line. Grouped to mirror
-# the commented sections of packages.x86_64 so the two stay auditable side by side.
-DESKTOP_ONLY: frozenset[str] = frozenset({
-    # --- X11 server, session bootstrap, and the client libraries the desktop needs
-    "xorg-server",
-    "xorg-xinit",
-    "xorg-xrandr",
-    "xorg-xrdb",
-    "xorg-xsetroot",
-    "xorg-xset",
-    "libx11",
-    "libxrandr",
-    "libxft",
-    "libxcomposite",
-    "libxdamage",
-    "libxrender",
-    "picom",
-    "xcb-util-cursor",
-    "mesa",            # GL for the X session; server is headless (compute GPU stacks stay in base)
-    "feh",             # wallpaper painter (X only)
-    "xcape",           # lone-Super -> Super+Menu, OpenBox keybind helper (X only)
-    "xdotool",         # X11 automation CLI
-    "xclip",           # X11 clipboard (the desktop clip-it workflow)
-    # --- OpenBox desktop shell + its GTK theme/icon/cursor assets
-    "openbox",
-    "adwaita-icon-theme",
-    "gnome-themes-extra",
-    "xcursor-themes",
-    "webp-pixbuf-loader",   # GdkPixbuf webp loader for the GTK apps/thumbnails
-    # --- Fonts shipped for the GUI (a console needs only the kernel/terminus font in base)
-    "ttf-dejavu",
-    "ttf-liberation",
-    "noto-fonts",
-    # --- The terminal emulator (GUI); server uses the real VT console
-    "kitty",
-    # --- Calamares graphical installer + its Qt6 / KDE-Frameworks / GTK toolkit.
-    # The SERVER installs via the headless CLI installer (azarch-install-cli.sh), so the
-    # whole GUI installer toolkit is desktop-only. The partition/filesystem tools Calamares
-    # ALSO lists (parted, gptfdisk, cryptsetup, lvm2, dosfstools, e2fsprogs, btrfs-progs,
-    # ntfs-3g, exfatprogs, efibootmgr, grub, mkinitcpio, rsync, squashfs-tools) are NOT here:
-    # they are dual-use and the CLI installer needs them too, so they stay in the base set.
+# The GUI toolkit dependencies Calamares pulls in that ALSO back GUI apps the
+# headless line KEEPS (gtk3 -> Thunar/GIMP/gedit; nss -> LibreWolf; libnotify/
+# libpulse -> desktop apps; qt6-base can be pulled by other Qt software). These
+# must NOT be excluded -- stripping them would break a still-shipped app. Kept as a
+# named guard so the exclusion set below can be audited against it.
+_SHARED_WITH_KEPT_APPS: frozenset[str] = frozenset({
+    "gtk3", "nss", "libnotify", "libpulse",
+})
+
+# Package names stripped from the HEADLESS pacstrap: Calamares + the Qt6 / KDE-
+# Frameworks libraries that exist SOLELY to serve the graphical installer. Only
+# Calamares-exclusive deps are listed; anything dual-use (gtk3/nss/libnotify/
+# libpulse, and every partition/filesystem tool the CLI installer also needs) is
+# deliberately absent. polkit and mailcap STAY (base plumbing).
+HEADLESS_EXCLUDED: frozenset[str] = frozenset({
     "calamares",
-    "kpmcore",
+    "kpmcore",         # KDE Partition Manager core -- Calamares partition page only
     "qt6-base",
     "qt6-svg",
     "qt6-declarative",
@@ -84,54 +66,32 @@ DESKTOP_ONLY: frozenset[str] = frozenset({
     "kwidgetsaddons",
     "kiconthemes",
     "kpackage",
-    "yaml-cpp",
-    "polkit-qt6",
+    "yaml-cpp",        # Calamares config parser
+    "polkit-qt6",      # Qt6 polkit bindings -- Calamares privilege escalation UI
     "hwinfo",          # Calamares hardware page
-    "gtk3",
-    "nss",
-    "libnotify",
-    "libpulse",
-    # --- Shipped GUI applications (browser, office, media, editor, image tools)
-    "librewolf",
-    "libreoffice-fresh",
-    "vlc",
-    "vlc-plugin-ffmpeg",
-    "vlc-plugin-x264",
-    "vlc-plugin-x265",
-    "vlc-plugin-upnp",
-    "dotnet-sdk",
-    "dotnet-runtime",
-    "dotnet-host",
-    "gedit",
-    "gimp",
-    "xviewer",
-    "qalculate-gtk",
-    # --- Thunar file manager + its GUI helpers
-    "thunar",
-    "thunar-volman",
-    "thunar-archive-plugin",
-    "tumbler",
-    "zenity",
-    "exo",
-})
+}) - _SHARED_WITH_KEPT_APPS
+
+# Back-compat alias: the historical name for the exclusion set. Kept so any external
+# reference (or a test) that still imports DESKTOP_ONLY resolves to the same frozenset.
+DESKTOP_ONLY = HEADLESS_EXCLUDED
 
 
 def manifest_for(is_gui: bool) -> list[str]:
-    """The pacstrap package list for a line: the full manifest for the desktop
-    (is_gui True), or the manifest minus DESKTOP_ONLY for the headless server.
+    """The pacstrap package list for a line: the full manifest for the headed line
+    (is_gui True), or the manifest minus HEADLESS_EXCLUDED for the headless line.
     Order is preserved from the manifest so the emitted packages.x86_64 reads the
     same as the source for the packages it keeps."""
     pkgs = downloader.manifest_packages()
     if is_gui:
         return pkgs
-    return [p for p in pkgs if p not in DESKTOP_ONLY]
+    return [p for p in pkgs if p not in HEADLESS_EXCLUDED]
 
 
 def manifest_text_for(is_gui: bool) -> str:
     """The pacstrap packages.x86_64 CONTENTS for a line -- newline-joined names with
     a trailing newline, the plain one-name-per-line format mkarchiso and the on-disk
     installer parse. This is what compiler.py stages into the airootfs / installer
-    payload instead of copying packages.x86_64 verbatim, so a server airootfs never
-    pulls the GUI stack. The desktop text is byte-equivalent to the manifest's own
-    package lines (comments dropped), so the desktop build is unchanged."""
+    payload instead of copying packages.x86_64 verbatim, so a headless airootfs never
+    pulls the GUI stack. The headed text is byte-equivalent to the manifest's own
+    package lines (comments dropped), so the headed build is unchanged."""
     return "\n".join(manifest_for(is_gui)) + "\n"

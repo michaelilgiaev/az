@@ -16,18 +16,18 @@ import variants as _variants
 
 # ISO base names. mkarchiso names the artifact <iso_name>-<version>-<arch>.iso, so the
 # iso_name is the filename stem. The NAMES themselves now live in variants.Variant (the
-# single source of truth for the whole {desktop,server} x {plain,instant} x {plain,ssh}
+# single source of truth for the whole {headed,headless} x {plain,instant} x {plain,ssh}
 # matrix); this module only forwards to it. ISO_NAME / ISO_NAME_SSHD stay as named
 # constants for the two legacy cells because tests and a few call sites reference them:
-#   base -> azarch-desktop-<ver>-x86_64.iso      (the normal live/install medium)
-#   sshd -> azarch-desktop-ssh-<ver>-x86_64.iso  (same, but ssh is ENABLED and `main`
+#   base -> azarch-headed-<ver>-x86_64.iso      (the normal live/install medium)
+#   sshd -> azarch-headed-ssh-<ver>-x86_64.iso  (same, but ssh is ENABLED and `main`
 #                                                 has the operator's --ssh password)
 # The ISOs are separated in output/ by the digit-anchored glob "{iso_name}-[0-9]*.iso":
-# "azarch-desktop-2026..." matches azarch-desktop, "azarch-desktop-ssh-..." does not (the
-# char after "azarch-desktop-" is 's', not a digit). The server/instant names extend the
-# same scheme (azarch-server, azarch-desktop-instant, ...); see variants.Variant.iso_name.
-ISO_NAME = _variants.from_legacy_key("base").iso_name       # "azarch-desktop"
-ISO_NAME_SSHD = _variants.from_legacy_key("sshd").iso_name  # "azarch-desktop-ssh"
+# "azarch-headed-2026..." matches azarch-headed, "azarch-headed-ssh-..." does not (the
+# char after "azarch-headed-" is 's', not a digit). The headless/instant names extend the
+# same scheme (azarch-headless, azarch-headed-instant, ...); see variants.Variant.iso_name.
+ISO_NAME = _variants.from_legacy_key("base").iso_name       # "azarch-headed"
+ISO_NAME_SSHD = _variants.from_legacy_key("sshd").iso_name  # "azarch-headed-ssh"
 
 ISO_PUBLISHER = "michaelilgiaev <https://github.com/michaelilgiaev/azarch>"
 ISO_APPLICATION = "Az'arch Installer/Az'arch Linux Live/Rescue DVD"
@@ -36,8 +36,8 @@ INSTALL_DIR = "arch"
 
 def iso_name_for(variant: "_variants.Variant | str" = "base") -> str:
     """The mkarchiso iso_name for a build variant. Accepts a variants.Variant OR a legacy
-    key string ("base"/"sshd"); an unknown string falls back to the desktop base point
-    ('azarch-desktop'), preserving the old behaviour."""
+    key string ("base"/"sshd"); an unknown string falls back to the headed base point
+    ('azarch-headed'), preserving the old behaviour."""
     return _variants.coerce(variant).iso_name
 
 BOOTMODES = (
@@ -178,20 +178,20 @@ FILE_PERMISSIONS = {
     "/etc/systemd/system/pkgs-setup.service": "0:0:644",
 }
 
-# The DESKTOP-ONLY subset of FILE_PERMISSIONS: paths compiler.py plants into the
-# airootfs ONLY on the GUI (desktop) line, all inside its `if is_gui:` block
+# The HEADED-ONLY subset of FILE_PERMISSIONS: paths compiler.py plants into the
+# airootfs ONLY on the GUI (headed) line, all inside its `if is_gui:` block
 # (_emit_desktop / _emit_homedir / _emit_apps / _emit_calamares + the vendored
-# ckbcomp copy). The headless SERVER line ships no GUI, so none of these files
+# ckbcomp copy). The HEADLESS line ships no GUI, so none of these files
 # exist in its tree. mkarchiso's file_permissions pass chmods EVERY listed path and
 # aborts the whole build if one is missing ("Failed to set permissions on
-# .../usr/bin/ckbcomp. Outside of valid path." -- the exact server-build failure),
-# so the server profiledef must list ONLY paths it actually plants. These keys are
-# therefore filtered OUT of the server map by permissions_for(); the desktop map is
+# .../usr/bin/ckbcomp. Outside of valid path." -- the exact headless-build failure),
+# so the headless profiledef must list ONLY paths it actually plants. These keys are
+# therefore filtered OUT of the headless map by permissions_for(); the headed map is
 # the full FILE_PERMISSIONS above, unchanged. Anything NOT in this set is universal
 # (releng base + the always-run compiler steps: shadow/gshadow, the sudoers.d
 # drop-ins, /root*, choose-mirror/Installation_guide/livecd-sound, and the
 # locale/pkgs setup scripts and units) and stays in BOTH lines.
-_DESKTOP_ONLY_PERMISSION_PATHS = frozenset({
+_HEADED_ONLY_PERMISSION_PATHS = frozenset({
     # Calamares GUI installer launcher + its vendored ckbcomp keyboard-preview helper.
     "/usr/local/bin/azarch-install",
     "/usr/bin/ckbcomp",
@@ -223,17 +223,17 @@ _DESKTOP_ONLY_PERMISSION_PATHS = frozenset({
 
 
 def permissions_for(variant: "_variants.Variant | str" = "base") -> dict[str, str]:
-    """The file_permissions map for a build variant. The desktop (GUI) line gets the
-    full FILE_PERMISSIONS; the headless server line gets it MINUS the desktop-only
-    paths it never plants (see _DESKTOP_ONLY_PERMISSION_PATHS) so mkarchiso does not
-    abort trying to chmod files that are absent from the server airootfs. Insertion
+    """The file_permissions map for a build variant. The headed (GUI) line gets the
+    full FILE_PERMISSIONS; the headless line gets it MINUS the headed-only
+    paths it never plants (see _HEADED_ONLY_PERMISSION_PATHS) so mkarchiso does not
+    abort trying to chmod files that are absent from the headless airootfs. Insertion
     order is preserved for a stable, diffable profiledef."""
     if _variants.coerce(variant).is_gui:
         return dict(FILE_PERMISSIONS)
     return {
         p: v
         for p, v in FILE_PERMISSIONS.items()
-        if p not in _DESKTOP_ONLY_PERMISSION_PATHS
+        if p not in _HEADED_ONLY_PERMISSION_PATHS
     }
 
 

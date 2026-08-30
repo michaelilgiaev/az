@@ -54,19 +54,19 @@ def test_ckbcomp_stays_executable():
     assert '["/usr/bin/ckbcomp"]="0:0:755"' in profile.profiledef_sh()
 
 
-def test_server_profile_omits_desktop_only_permissions():
-    # THE SERVER-BUILD FIX: the server line ships no GUI, so it never plants Calamares'
+def test_headless_profile_omits_headed_only_permissions():
+    # THE HEADLESS-BUILD FIX: the headless line ships no GUI, so it never plants Calamares'
     # vendored ckbcomp (nor the OpenBox/desktop launchers). archiso's file_permissions
     # pass chmods every listed path and FAILS the whole build ("Failed to set permissions
     # on .../usr/bin/ckbcomp. Outside of valid path.") if a path is absent from the
-    # airootfs. So the server profiledef must NOT list any desktop-only path.
+    # airootfs. So the headless profiledef must NOT list any headed-only path.
     from variants import Variant
 
-    server = Variant(line="server")
-    sh = profile.profiledef_sh(server)
-    # The exact path that broke the server ISO must be gone from the server profile...
+    headless = Variant(line="headless")
+    sh = profile.profiledef_sh(headless)
+    # The exact path that broke the headless ISO must be gone from the headless profile...
     assert '["/usr/bin/ckbcomp"]' not in sh
-    # ...along with every other desktop-only launcher/daemon (a representative sample).
+    # ...along with every other headed-only launcher/daemon (a representative sample).
     for gone in (
         "/usr/bin/ckbcomp",
         "/usr/local/bin/azarch-install",
@@ -77,22 +77,22 @@ def test_server_profile_omits_desktop_only_permissions():
         "/home/main/Desktop/azarch-install.desktop",
     ):
         assert f'["{gone}"]' not in sh, gone
-    # But the universal, non-GUI entries the server DOES plant stay pinned.
+    # But the universal, non-GUI entries the headless line DOES plant stay pinned.
     assert '["/etc/shadow"]="0:0:400"' in sh
     assert '["/etc/sudoers.d/00-main"]="0:0:440"' in sh
     assert '["/usr/local/bin/choose-mirror"]="0:0:755"' in sh
     assert '["/root/azarch/setup-locale.sh"]="0:0:755"' in sh
 
 
-def test_permissions_for_server_line_string_drops_desktop_only():
-    # Footgun guard: permissions_for must key off the LINE, not fall back to desktop.
-    # variants.coerce("server") now maps the bare line name to Variant(line="server")
+def test_permissions_for_headless_line_string_drops_headed_only():
+    # Footgun guard: permissions_for must key off the LINE, not fall back to headed.
+    # variants.coerce("headless") now maps the bare line name to Variant(line="headless")
     # (is_gui=False). Before that hardening it slipped through from_legacy_key's
-    # unknown-key default to the desktop base point (is_gui=True), so permissions_for
-    # returned the FULL desktop map (with ckbcomp) and would resurrect the exact
-    # server-build abort. The server profile must omit ckbcomp whether it is asked for
-    # via Variant(line="server") OR the string "server".
-    perms = profile.permissions_for("server")
+    # unknown-key default to the headed base point (is_gui=True), so permissions_for
+    # returned the FULL headed map (with ckbcomp) and would resurrect the exact
+    # headless-build abort. The headless profile must omit ckbcomp whether it is asked for
+    # via Variant(line="headless") OR the string "headless".
+    perms = profile.permissions_for("headless")
     assert "/usr/bin/ckbcomp" not in perms
     assert "/usr/local/bin/azarch-install" not in perms
     # ...and the universal entries still survive.
@@ -100,14 +100,14 @@ def test_permissions_for_server_line_string_drops_desktop_only():
     assert perms["/usr/local/bin/choose-mirror"] == "0:0:755"
 
 
-def test_desktop_profile_keeps_desktop_only_permissions():
-    # The desktop line is unchanged by the server split: every desktop-only path it
+def test_headed_profile_keeps_headed_only_permissions():
+    # The headed line is unchanged by the headless split: every headed-only path it
     # actually plants must still be pinned (a regression guard so the split does not
-    # accidentally strip the GUI line too). No-arg profiledef_sh() defaults to desktop.
+    # accidentally strip the GUI line too). No-arg profiledef_sh() defaults to headed.
     from variants import Variant
 
-    desktop = Variant(line="desktop")
-    sh = profile.profiledef_sh(desktop)
+    headed = Variant(line="headed")
+    sh = profile.profiledef_sh(headed)
     for present in (
         "/usr/bin/ckbcomp",
         "/usr/local/bin/azarch-install",
@@ -116,7 +116,7 @@ def test_desktop_profile_keeps_desktop_only_permissions():
         "/home/main/.config/openbox/autostart",
     ):
         assert f'["{present}"]="' in sh, present
-    # The no-arg default and the explicit desktop variant agree.
+    # The no-arg default and the explicit headed variant agree.
     assert sh == profile.profiledef_sh()
 
 

@@ -53,7 +53,7 @@ LIVE_ROOTFS_RSYNC_EXCLUDES = (
 # the AZ_INSTALL_* pre-seed env the installer + identity steps already honour -- so
 # instant reuses all of that (largest-disk detection, the rootfs clone, chroot
 # setup) rather than reimplementing any of it. It is console-only (no X), so it
-# works identically on the desktop AND the server line.
+# works identically on the headed AND the headless line.
 
 def instant_install_sh(timezone: str = "Asia/Jerusalem", ssh: bool = False,
                        encrypt: bool = False, user: str = "main",
@@ -365,16 +365,16 @@ umount -R /mnt
 def chroot_setup_sh(is_gui: bool = True) -> str:
     """The chroot-setup script the on-disk installer runs inside arch-chroot.
 
-    is_gui: True for the desktop line, False for the headless server line. The ONE
+    is_gui: True for the headed line, False for the headless line. The ONE
     difference is the OpenBox live-installer-state cleanup at the end: it strips the live
     OpenBox autostart's installer-relaunch lines and swaps in the installed-system
-    autostart (openbox-autostart-installed). That staged file and that whole desktop
-    cleanup exist ONLY on the desktop line (compiler._emit_desktop stages the source; the
-    server line skips it). Running the cleanup on a server would `cp` a file that was never
-    staged and, under the block's `set -e`, ABORT the whole install. So the server chroot
-    omits the desktop cleanup entirely -- there is no OpenBox autostart to fix on a headless
-    system, and the live-only installer .desktop/wrapper it also removed never existed on
-    the server either."""
+    autostart (openbox-autostart-installed). That staged file and that whole GUI-session
+    cleanup exist ONLY on the headed line (compiler._emit_desktop stages the source; the
+    headless line skips it). Running the cleanup on a headless line would `cp` a file that
+    was never staged and, under the block's `set -e`, ABORT the whole install. So the
+    headless chroot omits the GUI-session cleanup entirely -- there is no OpenBox autostart
+    to fix on a headless system, and the live-only installer .desktop/wrapper it also
+    removed never existed on the headless line either."""
     chroot = f"""\
 #!/bin/bash
 
@@ -518,10 +518,10 @@ echo -e "\\e[94mazarch disk installation complete, you can reboot now.\\e[0m"
     # fixed us,il keyboard, plus the installer's Desktop icon / app-menu entry / privileged
     # wrapper), then swaps in the installed-system OpenBox autostart. It EMBEDS the SAME shared
     # command block Calamares' shellprocess emits so the two install paths never drift. This is
-    # entirely desktop-specific: openbox-autostart-installed is staged ONLY by _emit_desktop, and
-    # a server has no OpenBox autostart / installer .desktop to clean -- so on the server line we
-    # emit NOTHING here (running it would `cp` an unstaged file and, under its `set -e`, abort the
-    # whole install). Runs AFTER the identity step, so re-derive the (possibly renamed) login.
+    # entirely GUI-session-specific: openbox-autostart-installed is staged ONLY by _emit_desktop,
+    # and the headless line has no OpenBox autostart / installer .desktop to clean -- so on the
+    # headless line we emit NOTHING here (running it would `cp` an unstaged file and, under its
+    # `set -e`, abort the install). Runs AFTER the identity step, so re-derive the (possibly renamed) login.
     if is_gui:
         desktop_cleanup = (
             '\naz_login="$(cat /etc/install_info/username 2>/dev/null)"\n'
@@ -531,8 +531,8 @@ echo -e "\\e[94mazarch disk installation complete, you can reboot now.\\e[0m"
         )
     else:
         desktop_cleanup = (
-            "\n# (server line: no OpenBox autostart / installer desktop entry to strip -- "
-            "the desktop cleanup is intentionally omitted.)\n"
+            "\n# (headless line: no OpenBox autostart / installer desktop entry to strip -- "
+            "the GUI-session cleanup is intentionally omitted.)\n"
         )
     chroot = chroot.replace("%DESKTOP_CLEANUP%", desktop_cleanup)
     # Apply the collected identity (user/passwords/hostname/timezone) as the LAST step, AFTER

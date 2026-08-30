@@ -96,7 +96,7 @@ def _prep(tmp_path):
 
 def test_apply_variant_instant_emits_and_enables_the_unit(tmp_path):
     W, airootfs = _prep(tmp_path)
-    compiler._apply_variant(W, airootfs, Variant(line="desktop", instant=True),
+    compiler._apply_variant(W, airootfs, Variant(line="headed", instant=True),
                             ssh_password_hash=None, timezone="Asia/Jerusalem")
     svc = airootfs / "etc/systemd/system/azarch-instant-install.service"
     link = airootfs / "etc/systemd/system/multi-user.target.wants/azarch-instant-install.service"
@@ -111,7 +111,7 @@ def test_apply_variant_instant_emits_and_enables_the_unit(tmp_path):
 def test_apply_variant_instant_ssh_keeps_password(tmp_path):
     W, airootfs = _prep(tmp_path)
     fake_hash = "$6$salt$" + "d" * 86
-    compiler._apply_variant(W, airootfs, Variant(line="server", instant=True, ssh=True),
+    compiler._apply_variant(W, airootfs, Variant(line="headless", instant=True, ssh=True),
                             ssh_password_hash=fake_hash, timezone="Asia/Jerusalem")
     script = (airootfs / "root/azarch/azarch-instant-install.sh").read_text()
     assert "AZ_INSTALL_KEEP_PASSWORD=1" in script  # keep the cloned --ssh hash
@@ -125,9 +125,9 @@ def test_apply_variant_non_instant_removes_the_unit(tmp_path):
     # First make it instant, then re-apply a NON-instant variant on the same tree: the
     # instant unit/link/script must be affirmatively removed so a prior instant pass never
     # bleeds onto a plain ISO built from the shared airootfs.
-    compiler._apply_variant(W, airootfs, Variant(line="desktop", instant=True),
+    compiler._apply_variant(W, airootfs, Variant(line="headed", instant=True),
                             ssh_password_hash=None, timezone="Asia/Jerusalem")
-    compiler._apply_variant(W, airootfs, Variant(line="desktop", instant=False),
+    compiler._apply_variant(W, airootfs, Variant(line="headed", instant=False),
                             ssh_password_hash=None, timezone="Asia/Jerusalem")
     assert not (airootfs / "etc/systemd/system/azarch-instant-install.service").exists()
     assert not (airootfs / "etc/systemd/system/multi-user.target.wants"

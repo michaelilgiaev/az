@@ -37,7 +37,7 @@ import compiler
 # --- STEP_WEIGHTS <-> bar.step() count invariant ---------------------------
 
 def test_default_step_weights_shape():
-    # The default STEP_WEIGHTS describes the no-flags build: ONE product line (desktop),
+    # The default STEP_WEIGHTS describes the no-flags build: ONE product line (headed),
     # ONE ISO. Shape: index-0 sentinel, then the 2 prelude + 10 per-line light steps (all
     # weight 8), then this line's cache (250) + makepkg (120) giants, then the single
     # mkarchiso giant (270). 12 light "8"s + 3 giants + sentinel = 16 entries.
@@ -49,7 +49,7 @@ def test_default_step_weights_shape():
 
 
 def test_default_step_weights_light_count():
-    # 12 light steps for the single-desktop build: 2 prelude (reset + toolchain) + 10 per-line.
+    # 12 light steps for the single-headed build: 2 prelude (reset + toolchain) + 10 per-line.
     w = compiler.STEP_WEIGHTS
     assert w.count(8) == compiler._PRELUDE_LIGHT_STEPS + compiler._PER_LINE_LIGHT_STEPS
 
@@ -58,13 +58,13 @@ def test_step_weights_matches_executed_step_count():
     # len(weights_for(sel)) - 1 MUST equal the milestones the build executes for that
     # selection. run() makes the prelude bar.step() calls once; _build_line() makes its
     # calls once per LINE, but its final (mkarchiso) call is in the per-variant loop, so it
-    # runs once per VARIANT. Verify for the default single-desktop selection here (the wider
+    # runs once per VARIANT. Verify for the default single-headed selection here (the wider
     # matrix is covered in test_compiler_driver.test_step_weights_match_number_of_steps).
     import variants
 
     prelude = inspect.getsource(compiler.run).count("bar.step(")
     line = inspect.getsource(compiler._build_line).count("bar.step(")
-    sel = variants.selected_variants()                      # 1 desktop ISO
+    sel = variants.selected_variants()                      # 1 headed ISO
     n_lines = len(compiler._lines_in(sel))
     n_variants = len(sel)
     executed = prelude + n_lines * (line - 1) + n_variants  # -1: mkarchiso call runs per variant
@@ -327,14 +327,14 @@ def test_kill_active_child_noop_when_no_child(monkeypatch):
 
 
 # --- Task 1: --type flag, removal of --server/--all -------------------------
-def test_parse_type_defaults_to_desktop():
-    assert compiler.parse_type_flag([]) == "desktop"
-    assert compiler.parse_type_flag(["--type="]) == "desktop"
+def test_parse_type_defaults_to_headed():
+    assert compiler.parse_type_flag([]) == "headed"
+    assert compiler.parse_type_flag(["--type="]) == "headed"
 
 
 def test_parse_type_reads_each_value():
-    assert compiler.parse_type_flag(["--type=server"]) == "server"
-    assert compiler.parse_type_flag(["--type=desktop"]) == "desktop"
+    assert compiler.parse_type_flag(["--type=headless"]) == "headless"
+    assert compiler.parse_type_flag(["--type=headed"]) == "headed"
     assert compiler.parse_type_flag(["--type=all"]) == "all"
 
 
@@ -342,26 +342,35 @@ def test_parse_type_both_is_alias_for_all():
     assert compiler.parse_type_flag(["--type=both"]) == "all"
 
 
-def test_type_wants_server_true_only_for_server_and_all():
-    assert compiler.type_wants_server("server") is True
-    assert compiler.type_wants_server("all") is True
-    assert compiler.type_wants_server("desktop") is False
+def test_type_wants_headless_true_only_for_headless_and_all():
+    assert compiler.type_wants_headless("headless") is True
+    assert compiler.type_wants_headless("all") is True
+    assert compiler.type_wants_headless("headed") is False
 
 
 def test_check_type_flag_rejects_unknown_value():
     msg = compiler.check_type_flag(["--type=laptop"])
     assert msg is not None
-    assert "laptop" in msg and "desktop" in msg and "server" in msg
+    assert "laptop" in msg and "headed" in msg and "headless" in msg
+
+
+def test_check_type_flag_rejects_the_old_line_tokens():
+    # The pre-rename spellings must now be hard errors, not silent fallbacks.
+    for old in ("desktop", "server"):
+        assert compiler.check_type_flag([f"--type={old}"]) is not None
 
 
 def test_check_type_flag_accepts_valid_and_absent():
     assert compiler.check_type_flag([]) is None
-    for v in ("desktop", "server", "all", "both"):
+    for v in ("headed", "headless", "all", "both"):
         assert compiler.check_type_flag([f"--type={v}"]) is None
 
 
 def test_server_and_all_flags_are_removed():
     assert not hasattr(compiler, "wants_server")
+    # the old helper name is gone; the renamed one is present
+    assert not hasattr(compiler, "type_wants_server")
+    assert hasattr(compiler, "type_wants_headless")
 
 
 def test_wants_instant_no_longer_reads_all():
