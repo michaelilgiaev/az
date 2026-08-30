@@ -178,10 +178,68 @@ FILE_PERMISSIONS = {
     "/etc/systemd/system/pkgs-setup.service": "0:0:644",
 }
 
+# The DESKTOP-ONLY subset of FILE_PERMISSIONS: paths compiler.py plants into the
+# airootfs ONLY on the GUI (desktop) line, all inside its `if is_gui:` block
+# (_emit_desktop / _emit_homedir / _emit_apps / _emit_calamares + the vendored
+# ckbcomp copy). The headless SERVER line ships no GUI, so none of these files
+# exist in its tree. mkarchiso's file_permissions pass chmods EVERY listed path and
+# aborts the whole build if one is missing ("Failed to set permissions on
+# .../usr/bin/ckbcomp. Outside of valid path." -- the exact server-build failure),
+# so the server profiledef must list ONLY paths it actually plants. These keys are
+# therefore filtered OUT of the server map by permissions_for(); the desktop map is
+# the full FILE_PERMISSIONS above, unchanged. Anything NOT in this set is universal
+# (releng base + the always-run compiler steps: shadow/gshadow, the sudoers.d
+# drop-ins, /root*, choose-mirror/Installation_guide/livecd-sound, and the
+# locale/pkgs setup scripts and units) and stays in BOTH lines.
+_DESKTOP_ONLY_PERMISSION_PATHS = frozenset({
+    # Calamares GUI installer launcher + its vendored ckbcomp keyboard-preview helper.
+    "/usr/local/bin/azarch-install",
+    "/usr/bin/ckbcomp",
+    # The `azarch` CLI + terminal-UI/OSD/sidebar binaries (openbox.emit_plan /
+    # terminal_user_interface_build, emitted in _emit_desktop).
+    "/usr/local/bin/azarch",
+    "/usr/local/lib/azarch/azarch",
+    "/usr/local/lib/azarch/azarch-osd",
+    "/usr/local/lib/azarch/azarch-sidebar-sync",
+    # The GUI-shell launchers + compiled daemons (application menu, window switcher,
+    # timedate Flask home page) -- all _emit_desktop.
+    "/usr/local/bin/azarch-application-menu",
+    "/usr/local/lib/azarch-application-menu/azarch-application-menu-daemon",
+    "/usr/local/bin/azarch-window-switcher",
+    "/usr/local/lib/azarch-window-switcher/azarch-window-switcher-daemon",
+    "/usr/local/bin/azarch-timedate",
+    # The interactive Az'arch commands staged by _emit_apps (GUI line only).
+    "/usr/local/bin/passwords",
+    "/usr/local/bin/backup",
+    "/usr/local/bin/unpack",
+    "/usr/local/bin/hypervisor",
+    # The OpenBox session autostart (live user + /etc/skel) -- _emit_desktop.
+    "/home/main/.config/openbox/autostart",
+    "/etc/skel/.config/openbox/autostart",
+    # The Desktop "Az'arch Linux Installer" launcher (live user + /etc/skel).
+    "/home/main/Desktop/azarch-install.desktop",
+    "/etc/skel/Desktop/azarch-install.desktop",
+})
+
+
+def permissions_for(variant: "_variants.Variant | str" = "base") -> dict[str, str]:
+    """The file_permissions map for a build variant. The desktop (GUI) line gets the
+    full FILE_PERMISSIONS; the headless server line gets it MINUS the desktop-only
+    paths it never plants (see _DESKTOP_ONLY_PERMISSION_PATHS) so mkarchiso does not
+    abort trying to chmod files that are absent from the server airootfs. Insertion
+    order is preserved for a stable, diffable profiledef."""
+    if _variants.coerce(variant).is_gui:
+        return dict(FILE_PERMISSIONS)
+    return {
+        p: v
+        for p, v in FILE_PERMISSIONS.items()
+        if p not in _DESKTOP_ONLY_PERMISSION_PATHS
+    }
+
 
 def profiledef_sh(variant: "_variants.Variant | str" = "base") -> str:
     bootmodes = " ".join(f"'{m}'" for m in BOOTMODES)
-    perms = "\n".join(f'  ["{p}"]="{v}"' for p, v in FILE_PERMISSIONS.items())
+    perms = "\n".join(f'  ["{p}"]="{v}"' for p, v in permissions_for(variant).items())
     iso_name = iso_name_for(variant)
     return f"""\
 #!/usr/bin/env bash

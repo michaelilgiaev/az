@@ -160,8 +160,19 @@ def from_legacy_key(key: str) -> Variant:
 
 
 def coerce(variant: "Variant | str") -> Variant:
-    """Accept either a Variant or a legacy key string and return a Variant, so
-    callers (profile.iso_name_for, tests) can pass whichever they have."""
+    """Accept either a Variant or a string and return a Variant, so callers
+    (profile.iso_name_for / permissions_for, tests) can pass whichever they have.
+
+    A bare LINE NAME ("desktop"/"server") maps to that line's plain, no-ssh base
+    Variant -- so `coerce("server")` is the headless line (is_gui False), NOT a
+    desktop fallback. This matters for permissions_for, which keys the desktop-only
+    file_permissions split off is_gui: without this, the valid string "server" would
+    slip through from_legacy_key's unknown-key default to the desktop base and
+    re-list the GUI-only paths (e.g. /usr/bin/ckbcomp) that abort the server ISO.
+    Any OTHER string (the legacy "base"/"sshd", or an unrecognised token) still goes
+    through from_legacy_key, preserving the old default-to-desktop-base behaviour."""
     if isinstance(variant, Variant):
         return variant
+    if variant in LINES:
+        return Variant(line=variant)
     return from_legacy_key(variant)
