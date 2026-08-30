@@ -45,7 +45,6 @@
 # ARGS: any args are passed straight through to the Python build driver.
 #   --type=<desktop|server|all|both>  which product LINE(s) to build. desktop (default,
 #                            the GUI line) | server (headless) | all/both (both lines).
-#                            Replaces the old --server/--all flags.
 #   --instant                ALSO build the `-instant` variants (auto-install at boot).
 #   --ssh="<PASSWORD>"       ALSO build the `-ssh` variants, with <PASSWORD> as the login
 #                            user's password (hashed sha-512 into that ISO's /etc/shadow --

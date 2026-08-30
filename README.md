@@ -220,7 +220,7 @@ You can clone this repository and compile the ISO yourself. The first compile ne
 
    | Flag | Effect |
    | --- | --- |
-   | `--type=<desktop\|server\|all\|both>` | Which product line(s): `desktop` (default, GUI) / `server` (headless) / `all` or `both` (both lines). Replaces the old `--server`/`--all` flags. |
+   | `--type=<desktop\|server\|all\|both>` | Which product line(s): `desktop` (default, GUI) / `server` (headless) / `all` or `both` (both lines). |
    | `--instant` | Also build the `-instant` variants: boot straight into an unattended install to the largest non-USB disk, then reboot into the installed system. |
    | `--ssh="<PASSWORD>"` | Also build the `-ssh` variants: enable sshd and set the login password. Demands a value (a bare/empty `--ssh` is a hard error). |
    | `--password="<PASSWORD>"` | Set the login password WITHOUT enabling sshd. Mutually exclusive with `--ssh` (passing both is a hard error). |

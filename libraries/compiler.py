@@ -394,7 +394,7 @@ def check_encrypt_flag(argv: list[str]) -> str | None:
 # was requested (variants.selected_variants). A bare compile.sh still builds exactly one
 # ISO (azarch-desktop), and --ssh keeps its existing meaning.
 #   --type=<desktop|server|all|both>  which product LINE(s): desktop (default) | server |
-#                      all/both (both). Replaces the old --server/--all flags.
+#                      all/both (both).
 #   --instant          ALSO build the instant (auto-install) variants.
 #   --ssh="<PASSWORD>"  ALSO build the ssh variants (existing flag, unchanged).
 #   --timezone="<TZ>"   the instant-install timezone (default Asia/Jerusalem; validated).
