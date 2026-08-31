@@ -1853,6 +1853,23 @@ PLAN = [
         "mode": _EXEC,
         "owner": "home",
     },
+    # NOTE: the media OSD indicator (/usr/local/lib/azarch/azarch-osd) is NOT emitted here as a
+    # text file anymore -- it is a COMPILED C program (on_screen_display.c). compiler.py builds and installs it
+    # via terminal_user_interface_build.build_osd(), exactly like the terminal UI binary. It is
+    # still pinned 0755 in FILE_PERMISSIONS so archiso ships it executable.
+]
+
+# The two `azarch`/`azarch-install` COMMAND wrappers. These are the ONLY entries in the
+# openbox package that are NOT part of the graphical session -- they are the guest command
+# line interface (`/usr/local/bin/azarch`) and the installer launcher
+# (`/usr/local/bin/azarch-install`), both of which the HEADLESS line needs too: the sshd
+# auto-setup unit runs `azarch --sshd-hypervisor` (and self-skips via ConditionPathExists if
+# the binary is absent -- which was why headless-ssh shipped no sshd), and `azarch-install`
+# is how you install a plain headless ISO (it prints the headless-CLI guidance when run
+# without a display). They are kept OUT of PLAN and returned by command_line_plan() so
+# compiler.py can emit them on BOTH lines while the rest of PLAN (X11/OpenBox/themes/
+# autostart) stays headed-only. Root-owned, executable.
+COMMAND_LINE_PLAN = [
     {
         "builder": install_wrapper_sh,
         "dest": INSTALL_WRAPPER_PATH,
@@ -1865,10 +1882,6 @@ PLAN = [
         "mode": _EXEC,
         "owner": "root",
     },
-    # NOTE: the media OSD indicator (/usr/local/lib/azarch/azarch-osd) is NOT emitted here as a
-    # text file anymore -- it is a COMPILED C program (on_screen_display.c). compiler.py builds and installs it
-    # via terminal_user_interface_build.build_osd(), exactly like the terminal UI binary. It is
-    # still pinned 0755 in FILE_PERMISSIONS so archiso ships it executable.
 ]
 
 # The .bash_profile snippet is handled separately from PLAN because it is not a
@@ -1879,10 +1892,13 @@ BASH_PROFILE_DEST = f"{HOME}/.bash_profile"
 
 
 def emit_plan() -> list[dict]:
-    """Return the PLAN list (builder/dest/mode/owner) plus the .bash_profile entry, so
-    compiler.py can iterate a single sequence. Kept as a function (not just the module
-    constant) to mirror the builder-function style of the other configuration modules
-    and to keep the .bash_profile special-case in one place."""
+    """Return the GRAPHICAL-SESSION plan (builder/dest/mode/owner) plus the .bash_profile
+    entry, so compiler.py can iterate a single sequence. This is the HEADED-ONLY payload:
+    the X11/OpenBox session, themes, picom, autostart and the login bootstrap. The two
+    `azarch`/`azarch-install` command wrappers are NOT here -- they live in
+    command_line_plan() so the headless line gets them too. Kept as a function (not just
+    the module constant) to mirror the builder-function style of the other configuration
+    modules and to keep the .bash_profile special-case in one place."""
     return PLAN + [
         {
             "builder": bash_profile_startx,
@@ -1891,3 +1907,11 @@ def emit_plan() -> list[dict]:
             "owner": "home",
         },
     ]
+
+
+def command_line_plan() -> list[dict]:
+    """The `azarch` + `azarch-install` command wrappers (see COMMAND_LINE_PLAN). Emitted on
+    BOTH the headed and headless lines -- these are guest COMMANDS, not part of the graphical
+    session. Returned separately from emit_plan() so compiler.py stages them universally
+    while the X11 session in PLAN stays headed-only."""
+    return list(COMMAND_LINE_PLAN)

@@ -66,18 +66,36 @@ def test_headless_profile_omits_headed_only_permissions():
     sh = profile.profiledef_sh(headless)
     # The exact path that broke the headless ISO must be gone from the headless profile...
     assert '["/usr/bin/ckbcomp"]' not in sh
-    # ...along with every other headed-only launcher/daemon (a representative sample).
+    # ...along with every other headed-only launcher/daemon (a representative sample). NOTE:
+    # azarch-install and passwords are NOT here anymore -- they are part of the `azarch`
+    # COMMAND core, emitted on BOTH lines, so they MUST stay pinned on headless (see below).
     for gone in (
         "/usr/bin/ckbcomp",
-        "/usr/local/bin/azarch-install",
         "/usr/local/bin/azarch-application-menu",
         "/usr/local/bin/azarch-timedate",
-        "/usr/local/bin/passwords",
+        "/usr/local/bin/azarch-window-switcher",
         "/home/main/.config/openbox/autostart",
         "/home/main/Desktop/azarch-install.desktop",
     ):
         assert f'["{gone}"]' not in sh, gone
-    # But the universal, non-GUI entries the headless line DOES plant stay pinned.
+    # THE COMMAND-CORE FIX: the azarch command family ships on the headless line too, so its
+    # paths MUST be pinned 0755 in the headless permission map. mkarchiso copies the overlay
+    # with `cp -af --no-preserve=mode` (strips the on-disk 0755) and re-chmods ONLY mapped
+    # paths, so if these were dropped they would ship 0644 -- `azarch` would be "Permission
+    # denied" and the sshd auto-setup unit would fail 203/EXEC (the "headless-ssh has no ssh"
+    # bug). Assert they stay executable on headless.
+    for pinned in (
+        "/usr/local/bin/azarch",
+        "/usr/local/bin/azarch-install",
+        "/usr/local/lib/azarch/azarch",
+        "/usr/local/lib/azarch/azarch-osd",
+        "/usr/local/bin/passwords",
+        "/usr/local/bin/backup",
+        "/usr/local/bin/unpack",
+        "/usr/local/bin/hypervisor",
+    ):
+        assert f'["{pinned}"]="0:0:755"' in sh, pinned
+    # And the universal, non-GUI entries the headless line DOES plant stay pinned.
     assert '["/etc/shadow"]="0:0:400"' in sh
     assert '["/etc/sudoers.d/00-main"]="0:0:440"' in sh
     assert '["/usr/local/bin/choose-mirror"]="0:0:755"' in sh
@@ -94,7 +112,10 @@ def test_permissions_for_headless_line_string_drops_headed_only():
     # via Variant(line="headless") OR the string "headless".
     perms = profile.permissions_for("headless")
     assert "/usr/bin/ckbcomp" not in perms
-    assert "/usr/local/bin/azarch-install" not in perms
+    # azarch-install is COMMAND core now (both lines) -- it must survive on headless, pinned
+    # executable, or the sshd auto-setup unit fails at exec (see the omit test above).
+    assert perms["/usr/local/bin/azarch-install"] == "0:0:755"
+    assert perms["/usr/local/bin/azarch"] == "0:0:755"
     # ...and the universal entries still survive.
     assert perms["/etc/shadow"] == "0:0:400"
     assert perms["/usr/local/bin/choose-mirror"] == "0:0:755"

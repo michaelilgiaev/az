@@ -54,9 +54,10 @@ def _load_azarch_command_line_interface():
 
 # --- PLAN mode/owner/dest table --------------------------------------------
 
-def test_plan_has_exactly_nineteen_entries():
-    # compiler.py iterates PLAN; a dropped/extra entry silently un-emits a file. The
-    # panel-less OpenBox session ships exactly nineteen files via PLAN:
+def test_plan_has_exactly_seventeen_entries():
+    # compiler.py iterates PLAN; a dropped/extra entry silently un-emits a file. PLAN is now
+    # the HEADED GRAPHICAL SESSION ONLY (the two /usr/local/bin command wrappers moved to
+    # command_line_plan() so the headless line gets them too). It ships exactly seventeen files:
     #   1. ~/.xinitrc                               (startx -> openbox-session)
     #   2. ~/.config/openbox/rc.xml                 (keybinds, theme, titlebar-button binds)
     #   3. ~/.themes/Azarch-Dark/openbox-3/themerc  (DARK Az'arch theme -- the default)
@@ -74,16 +75,31 @@ def test_plan_has_exactly_nineteen_entries():
     #  15. ~/.local/share menu usage seed            (default menu ordering)
     #  16. /usr/share/applications/azarch-install.desktop (menu re-open entry, system)
     #  17. ~/Desktop/azarch-install.desktop          (double-clickable installer launcher)
-    #  18. /usr/local/bin/azarch-install             (privileged Calamares wrapper)
-    #  19. /usr/local/bin/azarch                      (guest-side command line interface)
     # (entries 3-9 are the system theme: dark is the default; `azarch theme` toggles it; entry
     # 10 is the compositor config that kills the picom fade + transparent-titlebar defaults;
     # entry 11 is the GLOBAL SCALE, PROMPT Display/scale task.)
-    # NOTE: the media OSD (/usr/local/lib/azarch/azarch-osd) is NO LONGER a PLAN entry -- it is a
-    # COMPILED C binary now (on_screen_display.c), built + installed by terminal_user_interface_build.build_osd()
-    # like the terminal UI binary, so it is not emitted as a text file here.
+    # NOTE: /usr/local/bin/azarch-install and /usr/local/bin/azarch are NO LONGER PLAN entries --
+    # they are the guest COMMAND wrappers, emitted on BOTH lines via command_line_plan() (see
+    # test_command_line_plan_holds_the_two_wrappers). The media OSD
+    # (/usr/local/lib/azarch/azarch-osd) is also not here -- it is a COMPILED C binary built by
+    # terminal_user_interface_build.build_osd().
     # The .bash_profile snippet is appended by emit_plan(), NOT part of PLAN.
-    assert len(desktop.PLAN) == 19
+    assert len(desktop.PLAN) == 17
+    # and the two wrappers are genuinely OUT of PLAN (they belong to command_line_plan()).
+    plan_dests = {e["dest"] for e in desktop.PLAN}
+    assert desktop.AZARCH_BIN_PATH not in plan_dests
+    assert desktop.INSTALL_WRAPPER_PATH not in plan_dests
+
+
+def test_command_line_plan_holds_the_two_wrappers():
+    # The two command wrappers (azarch + azarch-install) live in command_line_plan(), which
+    # compiler.py emits on BOTH the headed and headless lines. Exactly two entries, both
+    # root-owned executables at their fixed /usr/local/bin paths.
+    cli = desktop.command_line_plan()
+    assert [e["dest"] for e in cli] == [desktop.INSTALL_WRAPPER_PATH, desktop.AZARCH_BIN_PATH]
+    for e in cli:
+        assert e["owner"] == "root"
+        assert e["mode"] == 0o755
 
 
 def test_plan_entries_have_the_four_declared_keys():
@@ -130,8 +146,9 @@ def test_scripts_are_exec_configs_are_conf():
 def test_install_wrapper_entry_is_root_owned_exec():
     # The privileged launcher lives in /usr/local/bin and must stay root-owned
     # (0:0) and executable; chowning it to the live user would let uid 1000 rewrite
-    # the thing that runs `sudo -E calamares`.
-    entry = next(e for e in desktop.PLAN if e["dest"] == desktop.INSTALL_WRAPPER_PATH)
+    # the thing that runs `sudo -E calamares`. It is now in command_line_plan() (emitted on
+    # both lines), not PLAN.
+    entry = next(e for e in desktop.command_line_plan() if e["dest"] == desktop.INSTALL_WRAPPER_PATH)
     assert entry["mode"] == 0o755
     assert entry["owner"] == "root"
     assert entry["builder"] is desktop.install_wrapper_sh
@@ -268,26 +285,27 @@ def test_openbox_rc_xml_entry_is_home_owned_conf():
     assert entry["builder"] is desktop.openbox_rc_xml
 
 
-def test_root_owned_dests_are_wrapper_cli_menu_entry_installed_autostart_dconf_and_picom():
-    # Exactly seven PLAN entries are root-owned: the azarch command line interface (/usr/local/bin),
-    # the installer wrapper (/usr/local/bin), the system-wide installer menu .desktop
-    # (/usr/share/applications), the STAGED "installed" OpenBox autostart the Calamares install
-    # copies onto the target, the TWO dconf system-theme files (the color-scheme=prefer-dark
-    # keyfile + the dconf profile) under /etc, and OUR picom compositor config under /etc/xdg
-    # (fading OFF, opaque frames -- shared by the live + installed autostart). Everything else is a
-    # /home/main dotfile handed to the live user (uid 1000, gid 998). The media OSD is root-owned
-    # too but is installed by the C build (build_osd), not as a PLAN text entry -- so it is not in
-    # this set.
+def test_root_owned_dests_are_menu_entry_installed_autostart_dconf_and_picom():
+    # Exactly five PLAN entries are root-owned (PLAN is the headed graphical session only now):
+    # the system-wide installer menu .desktop (/usr/share/applications), the STAGED "installed"
+    # OpenBox autostart the Calamares install copies onto the target, the TWO dconf system-theme
+    # files (the color-scheme=prefer-dark keyfile + the dconf profile) under /etc, and OUR picom
+    # compositor config under /etc/xdg (fading OFF, opaque frames -- shared by the live +
+    # installed autostart). Everything else in PLAN is a /home/main dotfile handed to the live
+    # user (uid 1000, gid 998). The two /usr/local/bin command wrappers are ALSO root-owned but
+    # now live in command_line_plan() (both lines), not PLAN. The media OSD is root-owned too but
+    # is installed by the C build (build_osd), not as a PLAN text entry.
     root_dests = [e["dest"] for e in desktop.PLAN if e["owner"] == "root"]
     assert set(root_dests) == {
-        desktop.INSTALL_WRAPPER_PATH,
-        desktop.AZARCH_BIN_PATH,
         "/usr/share/applications/azarch-install.desktop",
         desktop.INSTALLED_AUTOSTART_STAGING_PATH,
         desktop.DCONF_THEME_KEYFILE_PATH,
         desktop.DCONF_PROFILE_USER_PATH,
         desktop.PICOM_CONFIG_PATH,
     }
+    # the two command wrappers are root-owned in command_line_plan(), not PLAN.
+    cli_root = {e["dest"] for e in desktop.command_line_plan() if e["owner"] == "root"}
+    assert cli_root == {desktop.INSTALL_WRAPPER_PATH, desktop.AZARCH_BIN_PATH}
 
 
 def test_desktop_launcher_is_on_the_desktop_executable_and_home_owned():
@@ -355,11 +373,11 @@ def test_home_owner_gid_is_autologin_group():
 
 # --- emit_plan(): PLAN + bash_profile, without mutating PLAN ----------------
 
-def test_emit_plan_length_is_nineteen_plus_bash_profile():
-    # 19 PLAN entries + the appended .bash_profile snippet = 20. emit_plan() is the
-    # single sequence compiler.py iterates. (19 = 18 + the new /etc/xdg/azarch-picom.conf
-    # compositor config that disables the picom fade + transparent-titlebar defaults.)
-    assert len(desktop.emit_plan()) == 20
+def test_emit_plan_length_is_seventeen_plus_bash_profile():
+    # 17 PLAN entries (the headed graphical session; the two /usr/local/bin command wrappers
+    # moved to command_line_plan()) + the appended .bash_profile snippet = 18. emit_plan() is
+    # the graphical-session sequence compiler.py iterates under `if is_gui:`.
+    assert len(desktop.emit_plan()) == 18
 
 
 def test_emit_plan_prefix_is_plan():
@@ -386,7 +404,7 @@ def test_emit_plan_does_not_mutate_module_plan():
     before = len(desktop.PLAN)
     desktop.emit_plan()
     desktop.emit_plan()
-    assert len(desktop.PLAN) == before == 19
+    assert len(desktop.PLAN) == before == 17
 
 
 # --- xinitrc: OpenBox X11 session, no flash ---------------------------------

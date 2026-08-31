@@ -160,15 +160,18 @@ def test_shipped_modules_parse_as_python():
 # --- the compiler actually WIRES the package in (seam coverage) -------------
 def test_compiler_emit_desktop_wires_backup_in():
     """Guard the compiler-to-package SEAM: the package's contract can be perfect while
-    compiler.py forgets to invoke it, shipping an ISO where `backup` is missing entirely."""
-    src = inspect.getsource(compiler._emit_desktop)
-    assert "backup.emit_plan()" in src
+    compiler.py forgets to invoke it, shipping an ISO where `backup` is missing entirely.
+    `backup` is a CLI command, emitted by _emit_azarch_commands (BOTH lines), not the
+    headed-only _emit_desktop."""
+    src = inspect.getsource(compiler._emit_azarch_commands)
+    assert "backup" in src and "emit_plan()" in src
     assert "from packages.backup import packaging as backup" in inspect.getsource(compiler)
 
 
 def test_backup_is_excluded_from_auto_app_discovery():
-    """`backup` is emitted BY NAME in _emit_desktop, so it must be in _EXPLICIT_PACKAGES or
-    the app-loop discovery would emit it a SECOND time (duplicate writes)."""
+    """`backup` is emitted BY NAME in _emit_azarch_commands, so it must be in
+    _EXPLICIT_PACKAGES or the app-loop discovery would emit it a SECOND time (duplicate
+    writes)."""
     assert "backup" in compiler._EXPLICIT_PACKAGES
 
 

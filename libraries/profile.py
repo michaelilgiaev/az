@@ -192,27 +192,17 @@ FILE_PERMISSIONS = {
 # drop-ins, /root*, choose-mirror/Installation_guide/livecd-sound, and the
 # locale/pkgs setup scripts and units) and stays in BOTH lines.
 _HEADED_ONLY_PERMISSION_PATHS = frozenset({
-    # Calamares GUI installer launcher + its vendored ckbcomp keyboard-preview helper.
-    "/usr/local/bin/azarch-install",
+    # Calamares' vendored ckbcomp keyboard-preview helper (its keyboard page shells out to
+    # it) -- emitted in _emit_desktop only, alongside the Calamares GUI.
     "/usr/bin/ckbcomp",
-    # The `azarch` CLI + terminal-UI/OSD/sidebar binaries (openbox.emit_plan /
-    # terminal_user_interface_build, emitted in _emit_desktop).
-    "/usr/local/bin/azarch",
-    "/usr/local/lib/azarch/azarch",
-    "/usr/local/lib/azarch/azarch-osd",
+    # The GUI-shell launchers + compiled daemons (application menu, window switcher, sidebar
+    # sync, timedate Flask home page) -- all emitted in _emit_desktop (headed line only).
     "/usr/local/lib/azarch/azarch-sidebar-sync",
-    # The GUI-shell launchers + compiled daemons (application menu, window switcher,
-    # timedate Flask home page) -- all _emit_desktop.
     "/usr/local/bin/azarch-application-menu",
     "/usr/local/lib/azarch-application-menu/azarch-application-menu-daemon",
     "/usr/local/bin/azarch-window-switcher",
     "/usr/local/lib/azarch-window-switcher/azarch-window-switcher-daemon",
     "/usr/local/bin/azarch-timedate",
-    # The interactive Az'arch commands staged by _emit_apps (GUI line only).
-    "/usr/local/bin/passwords",
-    "/usr/local/bin/backup",
-    "/usr/local/bin/unpack",
-    "/usr/local/bin/hypervisor",
     # The OpenBox session autostart (live user + /etc/skel) -- _emit_desktop.
     "/home/main/.config/openbox/autostart",
     "/etc/skel/.config/openbox/autostart",
@@ -220,6 +210,20 @@ _HEADED_ONLY_PERMISSION_PATHS = frozenset({
     "/home/main/Desktop/azarch-install.desktop",
     "/etc/skel/Desktop/azarch-install.desktop",
 })
+
+# CAUTION -- the `azarch` COMMAND core is UNIVERSAL and must NOT be listed above. These paths
+# (the azarch + azarch-install wrappers, the compiled azarch terminal UI + OSD binaries, and
+# the passwords/backup/unpack/hypervisor commands) are emitted on BOTH lines by
+# _emit_azarch_commands in compiler.py. mkarchiso copies the airootfs overlay with
+# `cp -af --no-preserve=ownership,mode` (it DISCARDS the on-disk 0755 mode) and re-applies
+# executability ONLY to paths present in this FILE_PERMISSIONS map. So if any of these were
+# filtered out of the headless map they would ship 0644 (non-executable) on the headless line:
+# `azarch` (a python3 script) would die "Permission denied", and worse, the sshd auto-setup
+# unit -- whose ExecStart=/usr/local/bin/azarch --sshd-hypervisor now PASSES its
+# ConditionPathExists (the file exists) -- would fail 203/EXEC and never enable sshd. That is
+# the exact "headless-ssh has no ssh" bug, so these deliberately STAY universal:
+#   /usr/local/bin/azarch, /usr/local/bin/azarch-install, /usr/local/lib/azarch/azarch,
+#   /usr/local/lib/azarch/azarch-osd, /usr/local/bin/{passwords,backup,unpack,hypervisor}.
 
 
 def permissions_for(variant: "_variants.Variant | str" = "base") -> dict[str, str]:

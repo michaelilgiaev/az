@@ -419,9 +419,10 @@ def test_shellprocess_removes_installer_wrapper_post_install():
     # Single source of truth: the path this removes is exactly the one openbox.py ships.
     assert csp.INSTALLER_WRAPPER == desktop.INSTALL_WRAPPER_PATH
     assert csp.INSTALLER_WRAPPER == "/usr/local/bin/azarch-install"
-    # The LIVE medium still ships the wrapper (an emit_plan entry writes it to that path):
-    # the cleanup only strips it from the TARGET chroot, not from the live ISO.
-    plan_dests = {e["dest"] for e in desktop.emit_plan()}
+    # The LIVE medium still ships the wrapper (a command_line_plan entry writes it to that
+    # path -- the wrapper moved out of the graphical emit_plan so both lines get it): the
+    # cleanup only strips it from the TARGET chroot, not from the live ISO.
+    plan_dests = {e["dest"] for e in desktop.command_line_plan()}
     assert desktop.INSTALL_WRAPPER_PATH in plan_dests
 
 

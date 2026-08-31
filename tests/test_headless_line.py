@@ -167,6 +167,55 @@ def test_tty1_autologin_is_universal_not_gui_gated():
     assert autologin_at < guard_at, "tty1 autologin must be emitted for both lines (pre-guard)"
 
 
+def test_azarch_command_core_is_universal_not_gui_gated():
+    # REGRESSION (the "headless-ssh has no ssh and no azarch command" bug): the `azarch`
+    # command core (the azarch + azarch-install wrappers, the compiled TUI/OSD binaries, and
+    # the passwords/backup/hypervisor commands) MUST be emitted on BOTH lines. It used to live
+    # inside _emit_desktop (headed-only), so a headless ISO shipped no `azarch` -- and its sshd
+    # auto-setup unit (ExecStart=/usr/local/bin/azarch --sshd-hypervisor, guarded by
+    # ConditionPathExists=/usr/local/bin/azarch) then SILENTLY SELF-SKIPPED, leaving sshd off.
+    # Assert the call sits OUTSIDE (before) the is_gui guard.
+    src = inspect.getsource(compiler._build_line)
+    core_at = src.index("_emit_azarch_commands(")
+    guard_at = src.index("if is_gui:")
+    assert core_at < guard_at, "the azarch command core must be emitted for both lines (pre-guard)"
+
+
+def test_emit_azarch_commands_stages_the_wrappers_and_cli_tools():
+    # _emit_azarch_commands is the shared (both-line) emit. Assert it stages the two
+    # /usr/local/bin wrappers (via openbox.command_line_plan), the compiled TUI + OSD binaries,
+    # and the passwords/backup/hypervisor commands -- none of which may depend on a display.
+    src = inspect.getsource(compiler._emit_azarch_commands)
+    assert "openbox.command_line_plan()" in src
+    assert "build_terminal_user_interface(" in src
+    assert "build_osd(" in src
+    assert "(passwords, backup, hypervisor)" in src
+
+
+def test_emit_desktop_no_longer_stages_the_azarch_command_core():
+    # The command core moved OUT of _emit_desktop; _emit_desktop is now the headed graphical
+    # session ONLY. Guard against a regression that re-adds the wrappers / CLI tools there
+    # (which would leave them headed-only again).
+    src = inspect.getsource(compiler._emit_desktop)
+    assert "command_line_plan()" not in src
+    assert "build_terminal_user_interface(" not in src
+    assert "build_osd(" not in src
+    for tool in ("passwords.emit_plan()", "backup.emit_plan()", "hypervisor.emit_plan()"):
+        assert tool not in src, f"{tool} must move to _emit_azarch_commands (both lines)"
+
+
+def test_azarch_wrappers_come_from_command_line_plan_not_the_graphical_plan():
+    # The openbox package must expose the two command wrappers via command_line_plan() and
+    # KEEP them out of the graphical emit_plan() (else the headless split re-couples them to X).
+    from packages import openbox
+    cli_dests = {e["dest"] for e in openbox.command_line_plan()}
+    assert openbox.AZARCH_BIN_PATH in cli_dests
+    assert openbox.INSTALL_WRAPPER_PATH in cli_dests
+    gui_dests = {e["dest"] for e in openbox.emit_plan()}
+    assert openbox.AZARCH_BIN_PATH not in gui_dests
+    assert openbox.INSTALL_WRAPPER_PATH not in gui_dests
+
+
 def test_link_services_drops_only_the_timedate_unit_on_headless():
     # _link_services(is_gui=False) keeps every universal daemon and drops ONLY the ONE GUI-only
     # unit: the timedate Flask home-page service, whose unit is emitted by _emit_desktop (which

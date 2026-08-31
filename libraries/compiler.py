@@ -709,12 +709,17 @@ def _build_line(bar: ProgressBar, line: str, line_variants: tuple, offline: bool
     # execs startx into OpenBox; on the headless line there is no such bash_profile, so `main`
     # simply lands on a plain console login shell -- the correct headless behaviour, and
     # consistent with the identity re-point the installer runs (which expects an
-    # `--autologin main` drop-in to rewrite after a rename). Everything ELSE here is the
-    # graphical stack (OpenBox/X11 session, the per-app tweaks, the home-dir layout, the
-    # Calamares GUI installer + its vendored ckbcomp) and is HEADED-ONLY: the headless line has no
-    # X and installs via the headless CLI installer staged in step 10.
+    # `--autologin main` drop-in to rewrite after a rename). The `azarch` COMMAND core
+    # (_emit_azarch_commands: the azarch + azarch-install wrappers, the compiled azarch TUI/OSD
+    # binaries, and the passwords/backup/hypervisor commands) is ALSO universal -- the headless
+    # line needs the `azarch` command (its sshd auto-setup runs `azarch --sshd-hypervisor`, and
+    # `azarch-install` is its installer). Everything gated by is_gui below is the GRAPHICAL
+    # stack ONLY (OpenBox/X11 session, per-app tweaks, home-dir layout, the Calamares GUI
+    # installer + its vendored ckbcomp): HEADED-ONLY, since the headless line has no X and
+    # installs via the headless CLI installer staged in step 10.
     bar.step(f"[{line}] Overlay live session and installer configuration")
     _emit_tty1_autologin(airootfs)   # autologin `main` to tty1 on both lines
+    _emit_azarch_commands(airootfs, home)   # the azarch command core -- BOTH lines
     if is_gui:
         _emit_desktop(airootfs, home)
         _emit_homedir(airootfs, home)
@@ -910,6 +915,55 @@ def _apply_variant(W: Path, airootfs: Path, variant,
         inst_script.unlink(missing_ok=True)
 
 
+def _emit_azarch_commands(airootfs: Path, home: Path) -> None:
+    """Emit the `azarch` COMMAND core -- the part of the guest tooling that is NOT the
+    graphical session and therefore ships on BOTH the headed and headless lines.
+
+    This is the fix for the headless line arriving with "no azarch command, and no ssh": the
+    whole payload below used to live inside _emit_desktop() (headed-only), so a headless ISO
+    got none of it. Concretely it means the sshd-hypervisor auto-setup unit
+    (ExecStart=/usr/local/bin/azarch --sshd-hypervisor, guarded by
+    ConditionPathExists=/usr/local/bin/azarch) SILENTLY SELF-SKIPPED on headless-ssh -- so
+    sshd was never enabled -- and `azarch-install` was absent, leaving no installer command.
+
+    What ships here (all root-owned system paths; the OFFLINE install rsyncs them onto the
+    installed system with no extra step):
+      * the /usr/local/bin/azarch and /usr/local/bin/azarch-install wrappers
+        (openbox.command_line_plan()),
+      * the COMPILED `azarch` terminal UI binary + its theme-preview screenshots, and the
+        COMPILED media OSD binary (built from the azarch package's C sources; harmless on a
+        headless box -- they are only launched by `azarch` subcommands a headless user would
+        not run, but keeping them makes the `azarch` command whole),
+      * the passwords / backup / hypervisor interactive CLI commands (pure-Python, no
+        graphical dependency).
+    Kept OUT of _emit_desktop so the split is explicit: _emit_desktop is now the headed
+    graphical session ONLY. Called from _build_line on every line (see is_gui usage there)."""
+    # 1 -- the two /usr/local/bin command wrappers (azarch + azarch-install).
+    for entry in openbox.command_line_plan():
+        emit.write_text(airootfs / entry["dest"].lstrip("/"),
+                        entry["builder"](), mode=entry["mode"])
+    # 2 -- the compiled `azarch` terminal UI + its previews, and the compiled media OSD.
+    # These are C programs built with `make` against the azarch package's private sources.
+    terminal_user_interface_build.build_terminal_user_interface(
+        airootfs / terminal_user_interface_build.TERMINAL_USER_INTERFACE_BIN_SYSTEM_PATH.lstrip("/")
+    )
+    terminal_user_interface_build.install_previews(
+        airootfs / terminal_user_interface_build.TERMINAL_USER_INTERFACE_PREVIEW_SYSTEM_DIR.lstrip("/")
+    )
+    terminal_user_interface_build.build_osd(
+        airootfs / terminal_user_interface_build.OSD_BIN_SYSTEM_PATH.lstrip("/")
+    )
+    # 3 -- passwords / backup / hypervisor: pure-Python interactive commands, one flat plan
+    # each. Their runtime deps (gnupg, xclip, qemu-full, edk2-ovmf, virt-viewer) are in the
+    # manifest on both lines. See packages/{passwords,backup,hypervisor}/packaging.py.
+    for module in (passwords, backup, hypervisor):
+        for entry in module.emit_plan():
+            emit.write_text(airootfs / entry["dest"].lstrip("/"),
+                            entry["builder"](), mode=entry["mode"])
+    # re-assert ownership of the live user's tree (new files may have been added under it).
+    subprocess.run(_sudo() + ["chown", "-R", "1000:998", str(home)], check=False)
+
+
 def _emit_desktop(airootfs: Path, home: Path) -> None:
     """Emit the OpenBox live-session files. Each PLAN entry has an absolute dest
     (either under /home/main for the live user -- e.g. ~/.config/openbox/* -- or an
@@ -994,29 +1048,11 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
             entry["builder"](),
             mode=entry["mode"],
         )
-    # The bare-`azarch` TERMINAL UI (OUR C settings UI: Theme / Wallpaper / Network, opened
-    # by running `azarch` with no arguments). It is part of the `azarch` package now (one
-    # program, C for speed); like the menu it is a COMPILED C program: build_terminal_user_interface() runs
-    # `make` against a private copy of the package's C sources and installs the resulting
-    # binary under /usr/local/lib/azarch. The `azarch` command line interface (installed by openbox.PLAN
-    # below) execs this binary for the no-argument case. Then install_previews() ships the
-    # theme-preview screenshots (verbatim) into the sibling previews dir the UI reads at
-    # runtime with kitty. Root-owned; the OFFLINE Calamares install rsyncs both onto the
-    # installed system with no separate step.
-    terminal_user_interface_build.build_terminal_user_interface(
-        airootfs / terminal_user_interface_build.TERMINAL_USER_INTERFACE_BIN_SYSTEM_PATH.lstrip("/")
-    )
-    terminal_user_interface_build.install_previews(
-        airootfs / terminal_user_interface_build.TERMINAL_USER_INTERFACE_PREVIEW_SYSTEM_DIR.lstrip("/")
-    )
-    # The media OSD indicator (bottom-middle cyan volume/brightness bar). Like the terminal UI it
-    # is a COMPILED C program (on_screen_display.c -> azarch-osd), built from the SAME Makefile and installed
-    # next to the UI binary. `azarch volume/brightness` launches it; it draws a single, no-flicker
-    # Xlib window (so it links X11/Xrandr/Xft, on the build host per the UI build deps). Root-
-    # owned; the OFFLINE Calamares install rsyncs it onto the installed system with no extra step.
-    terminal_user_interface_build.build_osd(
-        airootfs / terminal_user_interface_build.OSD_BIN_SYSTEM_PATH.lstrip("/")
-    )
+    # NOTE: the `azarch` COMMAND core -- the two /usr/local/bin wrappers, the compiled
+    # terminal UI + OSD binaries, and the passwords/backup/hypervisor commands -- USED to be
+    # emitted here. They moved to _emit_azarch_commands(), which runs on BOTH lines (the
+    # headless line needs the `azarch` command too, else its sshd auto-setup self-skips and
+    # `azarch-install` is missing). _emit_desktop now emits ONLY the headed graphical session.
     # Az'arch timedate (OUR Flask Time + Calendar home page -- the site LibreWolf lands
     # on at localhost:49154). A pure-Python app: emit_plan() copies the app sources
     # (applications.py/page.py), the launcher, and the azarch-timedate.service unit to their fixed
@@ -1030,54 +1066,10 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
             entry["builder"](),
             mode=entry["mode"],
         )
-    # Az'arch passwords (OUR encrypted GPG/AES256 terminal password manager -- the
-    # `passwords` command). A pure-Python app like timedate, and now ONE FLAT directory (no
-    # pwlib/ sub-library): emit_plan() writes the entry script, the optional plaintext
-    # importer, every working module, and the /usr/local/bin/passwords launcher to their
-    # fixed root-owned system paths -- one single-file entry each, so the whole flat app is
-    # expressed by the plan alone (no separate directory copy). No systemd service -- it is
-    # an interactive command, not a boot service. Its runtime deps (gnupg for gpg, xclip for
-    # the clipboard) are in the manifest. The OFFLINE Calamares install rsyncs all of it
-    # onto the installed system, so `passwords` works there too, unlocking a store at
-    # ~/Vault/passwords.txt.gpg. See packages/passwords/packaging.py.
-    for entry in passwords.emit_plan():
-        emit.write_text(
-            airootfs / entry["dest"].lstrip("/"),
-            entry["builder"](),
-            mode=entry["mode"],
-        )
-    # Az'arch backup (OUR home-directory backup -- the `backup` command). A pure-Python
-    # app like passwords and a single flat directory: emit_plan() writes the entry
-    # script (and any future module) plus the /usr/local/bin/backup launcher to their
-    # fixed root-owned system paths -- one single-file entry each, so the whole flat app
-    # is expressed by the plan alone (no separate directory copy). No systemd service --
-    # it is an interactive command. Its runtime dep (gnupg for gpg) is already in the
-    # manifest. The OFFLINE Calamares install rsyncs it onto the installed system, so
-    # `backup` works there too, writing ~/backup_<date>.tar.gz.gpg. See
-    # packages/backup/packaging.py.
-    for entry in backup.emit_plan():
-        emit.write_text(
-            airootfs / entry["dest"].lstrip("/"),
-            entry["builder"](),
-            mode=entry["mode"],
-        )
-    # Az'arch hypervisor (OUR per-directory QEMU/KVM VM runner -- the `hypervisor`
-    # command). A pure-Python app like backup and a single flat directory: emit_plan()
-    # writes the entry script (command_line_interface.py) and every working module plus the
-    # /usr/local/bin/hypervisor launcher to their fixed root-owned system paths -- one
-    # single-file entry each, so the whole flat app is expressed by the plan alone (no
-    # separate directory copy). No systemd service -- it is an interactive command. Its
-    # runtime deps (qemu-full, edk2-ovmf, virt-viewer) are in the manifest. The launcher
-    # deliberately does NOT cd (unlike passwords): `hypervisor` derives the VM identity
-    # from the caller's CWD, which the launcher must preserve. The OFFLINE Calamares
-    # install rsyncs it onto the installed system, so `hypervisor` works there too. See
-    # packages/hypervisor/packaging.py.
-    for entry in hypervisor.emit_plan():
-        emit.write_text(
-            airootfs / entry["dest"].lstrip("/"),
-            entry["builder"](),
-            mode=entry["mode"],
-        )
+    # NOTE: passwords/backup/hypervisor (the CLI commands) moved to _emit_azarch_commands()
+    # so the headless line ships them too -- they are interactive commands with no graphical
+    # dependency. _emit_desktop keeps only the headed graphical session (X11/OpenBox/apps +
+    # the timedate browser home page).
     # re-assert ownership of the live user's tree (new files were added under it).
     subprocess.run(_sudo() + ["chown", "-R", "1000:998", str(home)], check=False)
 
@@ -1491,10 +1483,11 @@ def _check_host_deps(sudo, offline: bool) -> None:
     # + the gedit notepad-mode plugin build deps (the `gedit` pkg-config module -> the
     # gedit/GTK3/libpeas dev headers): _emit_apps COMPILES that libpeas plugin later in
     # this run, so the dev stack must be present here or `make` dies on a missing header.
-    # + the bare-`azarch` C terminal UI build dep (just gcc): _emit_desktop COMPILES that
-    # UI (terminal_user_interface_build.build_terminal_user_interface) later in this run. It is pure libc (no ncurses/GTK), so gcc
-    # -- already pulled in by base-devel / the menu deps -- is all it needs; listed for
-    # completeness so the dependency intent is explicit.
+    # + the bare-`azarch` C terminal UI build dep (just gcc): _emit_azarch_commands COMPILES
+    # that UI (terminal_user_interface_build.build_terminal_user_interface) later in this run,
+    # on BOTH lines. It is pure libc (no ncurses/GTK), so gcc -- already pulled in by
+    # base-devel / the menu deps -- is all it needs; listed for completeness so the dependency
+    # intent is explicit.
     host_pkgs = (["archiso", "git", "base-devel", "go"]
                  + application_menu.MENU_BUILD_DEPS + gedit.GEDIT_PLUGIN_BUILD_DEPS
                  + terminal_user_interface_build.TERMINAL_USER_INTERFACE_BUILD_DEPS)

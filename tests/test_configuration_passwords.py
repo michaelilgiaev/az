@@ -190,11 +190,11 @@ def test_compiler_emit_desktop_wires_passwords_in():
     """Guard the compiler-to-package SEAM: the package module's contract can be perfect
     while compiler.py forgets to invoke it, shipping an ISO where `passwords` is missing
     entirely. The package tests above call emit_plan() themselves and would NOT catch that.
-    Assert the real _emit_desktop source emits the passwords plan (which, for the now-flat
-    app, ships every module -- there is no separate directory copy anymore)."""
-    src = inspect.getsource(compiler._emit_desktop)
-    # The emit_plan loop for passwords (writes every module + the launcher).
-    assert "passwords.emit_plan()" in src
+    `passwords` is a CLI command, emitted by _emit_azarch_commands (BOTH lines, so headless
+    ships it too), not the headed-only _emit_desktop."""
+    src = inspect.getsource(compiler._emit_azarch_commands)
+    # The emit_plan loop iterates (passwords, backup, hypervisor); assert passwords is in it.
+    assert "passwords" in src and "emit_plan()" in src
     # And the module is imported under the name the wiring uses.
     assert "from packages.passwords import packaging as passwords" in \
         inspect.getsource(compiler)
