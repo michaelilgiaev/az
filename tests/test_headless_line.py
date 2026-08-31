@@ -1,8 +1,14 @@
 """Tests for the headless product line.
 
-Two guarantees: (1) the headless pacstrap manifest is the full manifest minus the
-GUI stack -- no X11/OpenBox/Calamares/apps, but every base/console capability AND
-the whole GPU/compute driver stack retained; (2) the headed manifest is
+USER DECISION (final): the ONLY thing stripped from the headless line is the
+Calamares GRAPHICAL INSTALLER and its Qt6/KF6 GUI-only toolkit -- headless installs
+via the CLI installer (`azarch-install --cli`). EVERYTHING ELSE STAYS: the X11
+server, OpenBox, the GUI apps (LibreWolf/LibreOffice/GIMP/VLC/Thunar/...),
+themes/fonts, kitty, cups, bluez, spice-vdagent, AND the whole GPU/compute stack.
+
+Three guarantees: (1) the headless pacstrap manifest is the full manifest minus ONLY
+the Calamares set -- the X11/OpenBox/apps/spice/GPU stack all retained; (2) the
+Calamares installer stack is genuinely dropped; (3) the headed manifest is
 byte-for-byte the manifest's own package lines, so the headed line is unchanged by
 the split.
 """
@@ -36,12 +42,26 @@ HEADLESS_MUST_KEEP_GPU = (
     "rocm-hip-runtime", "intel-compute-runtime", "xf86-video-amdgpu", "clinfo",
 )
 
-# GUI packages the headless line MUST NOT ship.
+# The Calamares GRAPHICAL installer + its Qt6/KF6 GUI-only toolkit: the ONLY set the
+# headless line strips (headless installs via `azarch-install --cli`). These are the names
+# removed from the emitted headless packages.x86_64. (gtk3/nss/libnotify/libpulse are NOT
+# here -- they back kept GUI apps; and qt6-base, though dropped from the explicit list, may
+# be pulled back transitively by a kept Qt app like vlc at pacstrap time -- that is fine, the
+# strip is best-effort for the toolkit and load-bearing only for calamares itself.)
 HEADLESS_MUST_DROP = (
+    "calamares", "kpmcore", "qt6-base", "qt6-svg", "qt6-declarative", "qt6-5compat",
+    "kconfig", "kcoreaddons", "ki18n", "kcrash", "kwidgetsaddons", "kiconthemes",
+    "kpackage", "yaml-cpp", "polkit-qt6", "hwinfo",
+)
+
+# The GUI display layer + desktop apps + spice guest agent that STAY on headless (only
+# Calamares is stripped). A regression guard for the earlier "strip everything" plan: none
+# of these may end up in HEADLESS_EXCLUDED or be dropped from the headless manifest.
+HEADLESS_MUST_KEEP_GUI = (
     "xorg-server", "xorg-xinit", "openbox", "picom", "feh", "kitty",
-    "calamares", "kpmcore", "qt6-base", "gtk3", "librewolf", "libreoffice-fresh",
-    "vlc", "gedit", "gimp", "thunar", "xviewer", "qalculate-gtk",
-    "adwaita-icon-theme", "ttf-dejavu", "xclip", "xdotool", "spice-vdagent",
+    "librewolf", "libreoffice-fresh", "vlc", "gedit", "gimp", "thunar",
+    "xviewer", "qalculate-gtk", "adwaita-icon-theme", "ttf-dejavu",
+    "xclip", "xdotool", "spice-vdagent", "cups", "bluez",
 )
 
 
@@ -75,10 +95,20 @@ def test_headless_keeps_the_gpu_compute_stack():
         assert pkg not in pm.HEADLESS_EXCLUDED, f"{pkg!r} must NOT be excluded on headless"
 
 
-def test_headless_drops_gui_stack():
+def test_headless_drops_the_calamares_stack():
     headless = set(pm.manifest_for(is_gui=False))
     for pkg in HEADLESS_MUST_DROP:
-        assert pkg not in headless, f"headless manifest leaked GUI package {pkg!r}"
+        assert pkg not in headless, f"headless manifest kept Calamares package {pkg!r}"
+
+
+def test_headless_keeps_the_gui_and_apps_stack():
+    # Final user decision: only Calamares is stripped; X11/OpenBox/apps/spice/cups/bluez STAY.
+    headless = set(pm.manifest_for(is_gui=False))
+    manifest = set(downloader.manifest_packages())
+    for pkg in HEADLESS_MUST_KEEP_GUI:
+        if pkg in manifest:  # only assert on names the manifest actually ships
+            assert pkg in headless, f"headless manifest wrongly dropped kept GUI pkg {pkg!r}"
+        assert pkg not in pm.HEADLESS_EXCLUDED, f"{pkg!r} must NOT be in HEADLESS_EXCLUDED"
 
 
 def test_excluded_entries_are_real_manifest_packages():
@@ -137,11 +167,12 @@ def test_tty1_autologin_is_universal_not_gui_gated():
     assert autologin_at < guard_at, "tty1 autologin must be emitted for both lines (pre-guard)"
 
 
-def test_link_services_drops_gui_only_units_on_headless():
-    # _link_services(is_gui=False) keeps every universal daemon and drops ONLY the GUI-only
-    # units (the timedate Flask service and the SPICE guest-agent daemon), whose packages the
-    # headless line excludes -- enabling them there would dangle. Behavioural: compare the
-    # enable-links written for each line.
+def test_link_services_drops_only_the_timedate_unit_on_headless():
+    # _link_services(is_gui=False) keeps every universal daemon and drops ONLY the ONE GUI-only
+    # unit: the timedate Flask home-page service, whose unit is emitted by _emit_desktop (which
+    # the headless line skips), so enabling it there would dangle. spice-vdagentd is NOT dropped
+    # -- spice-vdagent stays on headless (only Calamares is stripped), so its daemon is enabled
+    # on BOTH lines. Behavioural: compare the enable-links written for each line.
     def links(is_gui: bool) -> set[str]:
         airootfs = Path(tempfile.mkdtemp()) / "airootfs"
         compiler._link_services(airootfs, is_gui=is_gui)
@@ -149,10 +180,10 @@ def test_link_services_drops_gui_only_units_on_headless():
         return {p.name for p in wants.iterdir()}
 
     headless, headed = links(False), links(True)
-    assert headed - headless == {"azarch-timedate.service", "spice-vdagentd.service"}
-    # universal daemons present on BOTH
+    assert headed - headless == {"azarch-timedate.service"}
+    # universal daemons present on BOTH -- including spice-vdagentd (no longer gui-gated)
     for svc in ("NetworkManager.service", "org.cups.cupsd.service",
-                "pkgs-setup.service", "locale-setup.service",
+                "spice-vdagentd.service", "pkgs-setup.service", "locale-setup.service",
                 "azarch-sleep-policy.service", "home-main-shared.mount"):
         assert svc in headless and svc in headed
 

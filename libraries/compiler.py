@@ -675,8 +675,10 @@ def _build_line(bar: ProgressBar, line: str, line_variants: tuple, offline: bool
     emit.write_exec(ea / "setup-locale.sh", locale.setup_locale_sh())
     emit.write_text(airootfs / "etc/systemd/system/locale-setup.service", system.LOCALE_SETUP_SERVICE)
 
-    # the azarch fastfetch logo/config for the live (and installed) user.
-    _emit_fastfetch(ea, home)
+    # the azarch fastfetch logo/config for the live (and installed) user. is_gui selects the
+    # per-line Edition label the config prints (HEADED vs HEADLESS); it is baked in here so it
+    # stays correct on the installed system (a verbatim clone of this live rootfs).
+    _emit_fastfetch(ea, home, is_gui=is_gui)
 
     # os-release rebrand:
     # Live ISO: the build pacman.conf NoExtracts usr/lib/os-release (libraries/pacman.py)
@@ -1592,16 +1594,27 @@ def _brand_boot_menus(W: Path) -> None:
     emit.write_text(W / "syslinux/archiso_head.cfg", system.BOOT_BIOS_SYSLINUX_HEAD)
 
 
-def _emit_fastfetch(ea: Path, home: Path) -> None:
-    """Write the azarch fastfetch configuration + Az' logo for the live user, and stage
-    a copy under root/azarch/fastfetch so the on-disk installer can replant it
-    into the installed user's ~/.config/fastfetch."""
+def _emit_fastfetch(ea: Path, home: Path, is_gui: bool = True) -> None:
+    """Write the azarch fastfetch configuration + Az' logo into the live user's
+    ~/.config/fastfetch. That live copy IS what the installed system inherits: the on-disk
+    installer clones the live rootfs verbatim (rsync of /), so ~/.config/fastfetch/config.jsonc
+    is carried onto the target unchanged -- there is no separate replant step.
+
+    is_gui selects the Edition line the config prints (HEADED for the graphical line,
+    HEADLESS for the console/compute line). Baking the label here (per line) is what keeps
+    the live and installed fastfetch output identical for the built line, with no runtime
+    detection needed.
+
+    A mirror copy is ALSO staged under root/azarch/fastfetch for parity with the other
+    /root/azarch install payloads (and as a defensive fallback if the clone path ever
+    changes); nothing consumes it today, but it is emitted with the SAME per-line config so
+    it can never disagree with the live/installed one."""
     cfg = home / ".config/fastfetch"
-    emit.write_text(cfg / "config.jsonc", fastfetch.config_jsonc())
+    emit.write_text(cfg / "config.jsonc", fastfetch.config_jsonc(is_gui=is_gui))
     emit.write_text(cfg / fastfetch.LOGO_FILENAME, fastfetch.logo_txt())
-    # staged copy for the installer to plant on the installed system
+    # Mirror copy under /root/azarch (see docstring): same per-line config, so consistent.
     staged = ea / "fastfetch"
-    emit.write_text(staged / "config.jsonc", fastfetch.config_jsonc())
+    emit.write_text(staged / "config.jsonc", fastfetch.config_jsonc(is_gui=is_gui))
     emit.write_text(staged / fastfetch.LOGO_FILENAME, fastfetch.logo_txt())
 
 
@@ -1613,11 +1626,11 @@ def _link_services(airootfs: Path, is_gui: bool = True) -> None:
     # multi-user daemons and the azarch oneshots. X is started from the shell, not by
     # systemd.
     #
-    # is_gui gates the desktop-only enable-links (the timedate Flask home page and the
-    # SPICE guest agent daemon): their units come from GUI-only packages the headless line
-    # skips, so linking them on the headless line would leave a dangling want to a
-    # non-existent unit. Every other link here is universal (base console daemons +
-    # oneshots). The per-variant sshd + instant enable-links are added in _apply_variant,
+    # is_gui gates the ONE desktop-only enable-link (the timedate Flask home page): its unit
+    # comes from a GUI-only emitter the headless line skips, so linking it on the headless line
+    # would leave a dangling want to a unit that was never written. Every other link here is
+    # universal (base console daemons + oneshots + the SPICE guest agent, whose package ships on
+    # BOTH lines). The per-variant sshd + instant enable-links are added in _apply_variant,
     # just before each variant's mkarchiso pass.
     base = airootfs / "etc/systemd/system"
     emit.mkdir(base / "multi-user.target.wants")
@@ -1626,19 +1639,16 @@ def _link_services(airootfs: Path, is_gui: bool = True) -> None:
     # radio) on demand; leaving it out of multi-user.target.wants keeps the radio down at
     # boot. NetworkManager (the network stack) and CUPS (printing) stay auto-enabled on
     # BOTH lines.
-    for svc in ("NetworkManager.service", "org.cups.cupsd.service"):
-        emit.link(f"/usr/lib/systemd/system/{svc}", base / f"multi-user.target.wants/{svc}")
+    #
     # spice-vdagentd is the SPICE guest agent's system daemon: it bridges the
     # com.redhat.spice.0 virtio channel so the session spice-vdagent can sync the guest
-    # pointer/clipboard/resolution with the SPICE client. Enabling it fixes the SPICE-guest
-    # pointer regression (no hover / dropped clicks / stuck labels) -- see the spice-vdagent
-    # note in packages.x86_64 and the autostart line in packages/openbox. HEADED LINE ONLY:
-    # spice-vdagent is a GUI-session package excluded from the headless pacstrap
-    # (packages_manifest.HEADLESS_EXCLUDED), so enabling its daemon on the headless line
-    # would dangle. Harmless on non-SPICE headed systems (the daemon idles with no channel).
-    if is_gui:
-        emit.link("/usr/lib/systemd/system/spice-vdagentd.service",
-                  base / "multi-user.target.wants/spice-vdagentd.service")
+    # pointer/clipboard/resolution with the SPICE client. Enabled on BOTH lines: spice-vdagent
+    # STAYS on the headless pacstrap (only Calamares is stripped -- see
+    # packages_manifest.HEADLESS_EXCLUDED), so its unit exists on headless too, and a headless
+    # box can still be driven over SPICE for on-demand X UI automation. Harmless on non-SPICE
+    # systems either way (the daemon idles with no channel).
+    for svc in ("NetworkManager.service", "org.cups.cupsd.service", "spice-vdagentd.service"):
+        emit.link(f"/usr/lib/systemd/system/{svc}", base / f"multi-user.target.wants/{svc}")
     emit.link("/etc/systemd/system/locale-setup.service", base / "multi-user.target.wants/locale-setup.service")
     emit.link("/etc/systemd/system/pkgs-setup.service", base / "multi-user.target.wants/pkgs-setup.service")
     # PC-vs-laptop idle-sleep policy oneshot: enabled on BOTH ISOs (and, via unpackfs,

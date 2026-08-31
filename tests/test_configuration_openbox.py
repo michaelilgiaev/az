@@ -202,6 +202,60 @@ def test_install_wrapper_is_valid_sh():
         os.remove(path)
 
 
+def test_install_wrapper_gui_explains_on_headless_instead_of_failing():
+    # NEW TASK A: on a HEADLESS instance there is no Calamares (only the CLI installer). If a
+    # user runs `azarch-install --gui` there, the launcher must ECHO a clear explanation and
+    # exit non-zero -- NOT blindly `exec ... calamares` and die with "command not found". The
+    # guard detects Calamares' absence robustly (command -v calamares) rather than hardcoding a
+    # line token. Assert run_gui contains that guard, the guidance to use --cli, and a non-zero
+    # exit, positioned BEFORE the calamares exec.
+    w = desktop.install_wrapper_sh()
+    run_gui = w[w.index("run_gui()"):w.index("run_cli()")]
+    assert "command -v calamares" in run_gui, "run_gui must detect a missing Calamares (headless)"
+    # points the user at the CLI installer, names the headless edition
+    assert "--cli" in run_gui
+    assert "headless" in run_gui.lower()
+    # non-zero exit, and it must come BEFORE the calamares exec (guard, not post-mortem)
+    guard_at = run_gui.index("command -v calamares")
+    exec_at = run_gui.index("calamares\n")  # the `exec ... calamares` line
+    assert guard_at < exec_at, "the headless guard must precede the calamares exec"
+    assert "exit 1" in run_gui[guard_at:exec_at]
+
+
+def test_install_wrapper_gui_headless_guard_is_runtime_correct():
+    # Behavioural: actually RUN the generated launcher with `--gui` under a PATH that has NO
+    # calamares (simulating a headless install). It must exit non-zero and print the CLI
+    # guidance, WITHOUT reaching sudo/calamares. We give it a PATH containing only a fake
+    # `command`-safe environment: an empty dir, so `command -v calamares` fails. `sudo` is also
+    # absent from that PATH, so if the guard did NOT fire the script would fail differently
+    # (and NOT print our message) -- the assertion on the message proves the guard path ran.
+    import os
+    import subprocess
+    import tempfile
+
+    w = desktop.install_wrapper_sh()
+    with tempfile.TemporaryDirectory(dir="/tmp") as d:
+        script = os.path.join(d, "azarch-install")
+        with open(script, "w") as f:
+            f.write(w)
+        os.chmod(script, 0o755)
+        empty_bin = os.path.join(d, "bin")
+        os.mkdir(empty_bin)
+        # PATH with no calamares (and no sudo): a stand-in for the headless system. We invoke
+        # /bin/sh by ABSOLUTE path so the interpreter is found even though the script's internal
+        # PATH (used by `command -v calamares`) points only at the empty dir.
+        r = subprocess.run(
+            ["/bin/sh", script, "--gui"],
+            capture_output=True, text=True, timeout=30,
+            env={"PATH": empty_bin, "DISPLAY": ":0"},
+        )
+        assert r.returncode != 0, "headless --gui must exit non-zero"
+        combined = (r.stdout + r.stderr).lower()
+        assert "headless" in combined and "--cli" in combined, combined
+        # It must NOT have tried to actually launch calamares/sudo (guard fired first).
+        assert "calamares: command not found" not in combined
+
+
 def test_openbox_rc_xml_entry_is_home_owned_conf():
     # OpenBox's rc.xml is a plain config (0o644) and must be handed to the live user
     # (home-owned; mirrored into /etc/skel) or the session cannot read its keybinds.

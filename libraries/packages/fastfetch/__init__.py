@@ -13,10 +13,13 @@ that make `fastfetch` render the azarch brand instead of the stock Arch logo:
                  map, and the hand-rolled art it used was a crude reverse-engineer
                  of the logo. The .ansi asset is the good hand-tuned art.)
   config_jsonc() ~/.config/fastfetch/config.jsonc pointing fastfetch at the logo
-                 file by ABSOLUTE path.
+                 file by ABSOLUTE path, and carrying a custom "Edition" line that
+                 names the running product line (HEADED vs HEADLESS). The label is
+                 baked in per line at build time (config_jsonc(is_gui=...)), so it is
+                 correct both live and on the installed system with no runtime probe.
 
 Both land in the user's ~/.config/fastfetch/ on the live ISO and, via the
-installer copy path, on the installed system.
+installer copy path (the verbatim rootfs clone), on the installed system.
 """
 
 from __future__ import annotations
@@ -36,14 +39,36 @@ _LOGO_ASSET = paths.ASSETSDIR / "ascii" / "azarch_fastfetch.ansi"
 LOGO_FILENAME = "azarch.ansi"
 LOGO_PATH = f"/home/main/.config/fastfetch/{LOGO_FILENAME}"
 
+# The two product lines' human labels, printed as the fastfetch "Edition" line (see
+# config_jsonc). The graphical line is HEADED; the console/compute line is HEADLESS.
+EDITION_HEADED = "Az'arch Headed"
+EDITION_HEADLESS = "Az'arch Headless"
+
+
+def edition_label(is_gui: bool) -> str:
+    """The edition string fastfetch prints for a line: HEADED for the graphical line,
+    HEADLESS for the console/compute line. Baked into the config at build time (the config
+    is emitted per line), so it stays correct live AND on the installed system (which is a
+    verbatim clone of the live rootfs) with no runtime detection needed."""
+    return EDITION_HEADED if is_gui else EDITION_HEADLESS
+
 
 def logo_txt() -> str:
     """The pre-colored Az' art, verbatim from the repo asset."""
     return _LOGO_ASSET.read_text(encoding="utf-8")
 
 
-def config_jsonc() -> str:
+def config_jsonc(is_gui: bool = True) -> str:
     """fastfetch configuration: print the pre-colored Az' art verbatim.
+
+    is_gui: True for the HEADED (graphical) line, False for the HEADLESS
+    (console/compute) line. The ONLY difference between the two configs is the value of
+    the custom "Edition" module line -- "Az'arch Headed" vs "Az'arch Headless" -- so
+    `fastfetch` states which edition is running. It is baked in here at build time
+    (config_jsonc is emitted once per line), which keeps it identical on the live medium
+    and on the installed system: the installer clones the live rootfs verbatim, carrying
+    this ~/.config/fastfetch/config.jsonc onto the target unchanged. Default True keeps a
+    bare config_jsonc() (any existing caller) producing the headed edition's config.
 
     `source` MUST be an absolute path. fastfetch resolves a RELATIVE source
     against the CURRENT WORKING DIRECTORY -- not the configuration dir -- so a bare
@@ -73,6 +98,11 @@ def config_jsonc() -> str:
         "title",
         "separator",
         "os",
+        {{
+            "type": "custom",
+            "key": "Edition",
+            "format": "{edition_label(is_gui)}"
+        }},
         "host",
         "kernel",
         "uptime",

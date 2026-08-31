@@ -1591,6 +1591,22 @@ EOF
 }}
 
 run_gui() {{
+    # HEADLESS GUARD. The headless edition ships NO Calamares -- only the CLI installer
+    # (packages_manifest.HEADLESS_EXCLUDED strips calamares). If someone asks for the GUI here
+    # (explicit --gui, or a stray DISPLAY on a headless box), do NOT blindly `exec calamares`
+    # and die with a bare "command not found": EXPLAIN that this is a headless instance with no
+    # graphical installer and point them at `azarch-install --cli`, then exit non-zero. Detect
+    # it by Calamares' actual absence (command -v) rather than any build-time marker, so it is
+    # correct regardless of how the system was produced.
+    if ! command -v calamares >/dev/null 2>&1; then
+        echo "azarch-install: this is an Az'arch HEADLESS instance -- there is no graphical" >&2
+        echo "installer (Calamares) here. Install with the CLI installer instead:" >&2
+        echo >&2
+        echo "    azarch-install --cli            (interactive)" >&2
+        echo "    azarch-install --cli --auto     (largest fixed disk, unattended)" >&2
+        echo >&2
+        exit 1
+    fi
     # XDG_RUNTIME_DIR is unset before elevating: `sudo -E` would otherwise pass main's
     # /run/user/1000 through to the root Qt process, which then logs a "runtime directory
     # is owned by uid 1000, not 0" warning. DISPLAY/XAUTHORITY (the load-bearing X vars)
