@@ -405,9 +405,10 @@ def _launch(cfg: Config, qemu: list[str], port: "int | None") -> None:
         # child sudo does NOT reap the root daemon, and a non-root kill() could not
         # touch it anyway. Reap it by socket path via sudo pkill so no root daemon (and
         # no held-open share dir) outlives the VM, then remove the root-owned socket.
-        # Non-interactive (see _sudo_teardown): a prompting sudo here would let Ctrl-C
-        # STOP the process group mid-cleanup, stranding QEMU as a zombie.
-        _sudo_teardown(["pkill", "-9", "-f", f"virtiofsd.*{cfg.virtiofs_sock}"])
+        subprocess.run(
+            ["sudo", "pkill", "-9", "-f", f"virtiofsd.*{cfg.virtiofs_sock}"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
         _rm(cfg.spice_sock)
         _rm_sock(cfg.virtiofs_sock)
         # LAST: undo any terminal corruption a child (remote-viewer/VTE) left behind.
@@ -538,9 +539,8 @@ def _rm_sock(path: str) -> None:
     except FileNotFoundError:
         return
     except PermissionError:
-        # Non-interactive: _rm_sock runs from cleanup(), so a prompting sudo would
-        # be the same Ctrl-C-stops-the-group hazard as the virtiofsd reap above.
-        _sudo_teardown(["rm", "-f", path])
+        subprocess.run(["sudo", "rm", "-f", path],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def _maximize_window(title: str, display: "str | None" = None) -> None:
@@ -786,27 +786,6 @@ def _rm(path: str) -> None:
 def _shquote(s: str) -> str:
     import shlex
     return shlex.quote(s)
-
-
-def _sudo_teardown(argv: list[str]) -> None:
-    """Run a sudo command from the TEARDOWN path (cleanup / stale-socket removal),
-    where it must NEVER block or stop the process.
-
-    `-n` makes sudo non-interactive: it uses the credential timestamp cached by the
-    boot-time `sudo` (virtiofsd was started under sudo, so it is normally still
-    valid) and, failing that, errors out INSTANTLY instead of prompting. stdin is
-    /dev/null so there is no controlling terminal to read -- without this, Ctrl-C
-    hands terminal foreground away from our process group and sudo's password read
-    raises SIGTTIN/SIGTTOU, whose default action STOPS the whole group mid-cleanup
-    (the stuck-in-background bug: QEMU left as an unreaped zombie, the CLI frozen).
-    Best-effort by design -- reaping the root daemon is a nicety, not worth hanging
-    the shell for."""
-    subprocess.run(
-        ["sudo", "-n", *argv],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
 
 
 def _sudo(argv: list[str], quiet: bool = False) -> int:

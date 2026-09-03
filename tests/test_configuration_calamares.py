@@ -107,11 +107,11 @@ def test_services_conf_schema_only_units():
 
 
 def test_services_conf_does_not_touch_sshd_auto_setup():
-    # The ssh headed variant enables sshd-hypervisor-setup in the airootfs, which unpackfs
-    # copies verbatim onto the installed system -- so the INSTALLED ssh headed system runs the
+    # The ssh desktop variant enables sshd-hypervisor-setup in the airootfs, which unpackfs
+    # copies verbatim onto the installed system -- so the INSTALLED ssh desktop runs the
     # sshd bring-up at first boot too (ssh in both live AND installed, as the user asked).
     # Calamares' services-systemd config must therefore NOT disable it (nor stock sshd);
-    # a stray disable here would silently kill ssh on the installed ssh headed system.
+    # a stray disable here would silently kill ssh on the installed ssh desktop.
     doc = yaml.safe_load(calamares.services_conf())
     names = {u["name"] for u in doc["units"]}
     assert "sshd-hypervisor-setup" not in names
@@ -419,10 +419,9 @@ def test_shellprocess_removes_installer_wrapper_post_install():
     # Single source of truth: the path this removes is exactly the one openbox.py ships.
     assert csp.INSTALLER_WRAPPER == desktop.INSTALL_WRAPPER_PATH
     assert csp.INSTALLER_WRAPPER == "/usr/local/bin/azarch-install"
-    # The LIVE medium still ships the wrapper (a command_line_plan entry writes it to that
-    # path -- the wrapper moved out of the graphical emit_plan so both lines get it): the
-    # cleanup only strips it from the TARGET chroot, not from the live ISO.
-    plan_dests = {e["dest"] for e in desktop.command_line_plan()}
+    # The LIVE medium still ships the wrapper (an emit_plan entry writes it to that path):
+    # the cleanup only strips it from the TARGET chroot, not from the live ISO.
+    plan_dests = {e["dest"] for e in desktop.emit_plan()}
     assert desktop.INSTALL_WRAPPER_PATH in plan_dests
 
 
@@ -1075,14 +1074,6 @@ def test_users_reuse_home_true():
     assert d["reuseHome"] is True
     # The live user must NOT be autologin on the installed system.
     assert d["doAutologin"] is False
-
-
-def test_users_root_reuses_user_password():
-    # ONE password for the whole system: root reuses the user password, so the GUI shows
-    # a single password field (Az'arch policy, matching the CLI/instant installers).
-    d = yaml.safe_load(calamares.users_conf())
-    assert d["doReusePassword"] is True
-    assert d["setRootPassword"] is True
 
 
 def test_users_hostname_template_is_literal_azarch():

@@ -36,38 +36,30 @@ import compiler
 
 # --- STEP_WEIGHTS <-> bar.step() count invariant ---------------------------
 
-def test_default_step_weights_shape():
-    # The default STEP_WEIGHTS describes the no-flags build: ONE product line (headed),
-    # ONE ISO. Shape: index-0 sentinel, then the 2 prelude + 10 per-line light steps (all
-    # weight 8), then this line's cache (250) + makepkg (120) giants, then the single
-    # mkarchiso giant (270). 12 light "8"s + 3 giants + sentinel = 16 entries.
-    w = compiler.STEP_WEIGHTS
-    assert len(w) == 16
-    assert w[0] == 0
-    assert w[1:13] == [8] * 12                 # 2 prelude + 10 per-line light steps
-    assert w[-3:] == [250, 120, 270]           # one line's giants + one ISO's mkarchiso
-
-
-def test_default_step_weights_light_count():
-    # 12 light steps for the single-headed build: 2 prelude (reset + toolchain) + 10 per-line.
-    w = compiler.STEP_WEIGHTS
-    assert w.count(8) == compiler._PRELUDE_LIGHT_STEPS + compiler._PER_LINE_LIGHT_STEPS
+def test_step_weights_length_and_shape():
+    # 13 lightweight setup/emit steps (index 0 unused sentinel + 12 real "8"s) then
+    # the four giants. Total 17 entries. The extra giant vs. before is the SECOND
+    # mkarchiso pass: one build now assembles BOTH ISO variants (base + sshd).
+    assert len(compiler.STEP_WEIGHTS) == 17
+    assert compiler.STEP_WEIGHTS[0] == 0
+    assert compiler.STEP_WEIGHTS[1:13] == [8] * 12
+    # Final four, in order: package-cache giant, makepkg stage, and the TWO
+    # mkarchiso giants (one per ISO variant).
+    assert compiler.STEP_WEIGHTS[-4:] == [250, 120, 270, 270]
 
 
 def test_step_weights_matches_executed_step_count():
-    # len(weights_for(sel)) - 1 MUST equal the milestones the build executes for that
-    # selection. run() makes the prelude bar.step() calls once; _build_line() makes its
-    # calls once per LINE, but its final (mkarchiso) call is in the per-variant loop, so it
-    # runs once per VARIANT. Verify for the default single-headed selection here (the wider
-    # matrix is covered in test_compiler_driver.test_step_weights_match_number_of_steps).
-    import variants
-
-    prelude = inspect.getsource(compiler.run).count("bar.step(")
-    line = inspect.getsource(compiler._build_line).count("bar.step(")
-    sel = variants.selected_variants()                      # 1 headed ISO
-    n_lines = len(compiler._lines_in(sel))
-    n_variants = len(sel)
-    executed = prelude + n_lines * (line - 1) + n_variants  # -1: mkarchiso call runs per variant
+    # The invariant the module comment stresses: len(STEP_WEIGHTS) - 1 MUST equal the
+    # number of milestones run() EXECUTES. run() makes 15 literal bar.step() calls, but
+    # the last one lives inside the per-variant finalize loop and executes once per
+    # variant -- so the number of executed milestones is (15 - 1 loop call) + one call
+    # per variant = 14 + len(VARIANTS). The weights list must carry exactly that many
+    # real entries (plus the index-0 sentinel), so a step added/removed OR a variant
+    # added/removed without matching STEP_WEIGHTS fails here.
+    src = inspect.getsource(compiler.run)
+    n_literal = src.count("bar.step(")
+    assert n_literal == 15
+    executed = (n_literal - 1) + len(compiler.VARIANTS)  # loop's single call runs per variant
     assert executed == len(compiler.STEP_WEIGHTS) - 1
 
 
@@ -324,145 +316,3 @@ def test_kill_active_child_noop_when_no_child(monkeypatch):
     monkeypatch.setattr(compiler, "_ACTIVE_CHILD_PGID", 0, raising=False)
     compiler.kill_active_child(["sudo", "-n"])
     assert called == []
-
-
-# --- Task 1: --type flag, removal of --server/--all -------------------------
-def test_parse_type_defaults_to_headed():
-    assert compiler.parse_type_flag([]) == "headed"
-    assert compiler.parse_type_flag(["--type="]) == "headed"
-
-
-def test_parse_type_reads_each_value():
-    assert compiler.parse_type_flag(["--type=headless"]) == "headless"
-    assert compiler.parse_type_flag(["--type=headed"]) == "headed"
-    assert compiler.parse_type_flag(["--type=all"]) == "all"
-
-
-def test_parse_type_both_is_alias_for_all():
-    assert compiler.parse_type_flag(["--type=both"]) == "all"
-
-
-def test_type_wants_headless_true_only_for_headless_and_all():
-    assert compiler.type_wants_headless("headless") is True
-    assert compiler.type_wants_headless("all") is True
-    assert compiler.type_wants_headless("headed") is False
-
-
-def test_check_type_flag_rejects_unknown_value():
-    msg = compiler.check_type_flag(["--type=laptop"])
-    assert msg is not None
-    assert "laptop" in msg and "headed" in msg and "headless" in msg
-
-
-def test_check_type_flag_rejects_the_old_line_tokens():
-    # The pre-rename spellings must now be hard errors, not silent fallbacks.
-    for old in ("desktop", "server"):
-        assert compiler.check_type_flag([f"--type={old}"]) is not None
-
-
-def test_check_type_flag_accepts_valid_and_absent():
-    assert compiler.check_type_flag([]) is None
-    for v in ("headed", "headless", "all", "both"):
-        assert compiler.check_type_flag([f"--type={v}"]) is None
-
-
-def test_server_and_all_flags_are_removed():
-    assert not hasattr(compiler, "wants_server")
-    # the old helper name is gone; the renamed one is present
-    assert not hasattr(compiler, "type_wants_server")
-    assert hasattr(compiler, "type_wants_headless")
-
-
-def test_wants_instant_no_longer_reads_all():
-    assert compiler.wants_instant(["--all"]) is False
-    assert compiler.wants_instant(["--instant"]) is True
-
-
-# --- Task 2: --password / --user parsers + conflict -------------------------
-def test_parse_password_flag_reads_value_and_handles_empty():
-    assert compiler.parse_password_flag(["--password=hunter2"]) == "hunter2"
-    assert compiler.parse_password_flag(["--password="]) is None
-    assert compiler.parse_password_flag([]) is None
-
-
-def test_parse_password_flag_keeps_equals_in_value():
-    assert compiler.parse_password_flag(["--password=a=b=c"]) == "a=b=c"
-
-
-def test_check_password_flag_blank_is_error():
-    assert compiler.check_password_flag(["--password"]) is not None
-    assert compiler.check_password_flag(["--password="]) is not None
-    assert compiler.check_password_flag(["--password=ok"]) is None
-    assert compiler.check_password_flag([]) is None
-
-
-def test_ssh_and_password_together_conflict():
-    msg = compiler.check_ssh_password_conflict(['--ssh=a', '--password=b'])
-    assert msg is not None
-    assert "--ssh" in msg and "--password" in msg
-    assert compiler.check_ssh_password_conflict(['--ssh=a']) is None
-    assert compiler.check_ssh_password_conflict(['--password=b']) is None
-    assert compiler.check_ssh_password_conflict([]) is None
-
-
-def test_parse_user_defaults_to_main():
-    assert compiler.parse_user_flag([]) == "main"
-    assert compiler.parse_user_flag(["--user="]) == "main"
-    assert compiler.parse_user_flag(["--user=alice"]) == "alice"
-
-
-def test_user_without_password_warns():
-    assert compiler.user_without_password_warning(["--user=alice"]) is not None
-    assert compiler.user_without_password_warning(["--user=alice", "--password=x"]) is None
-    assert compiler.user_without_password_warning(["--user=alice", "--ssh=x"]) is None
-    assert compiler.user_without_password_warning([]) is None
-
-
-# --- Task 4: --static-ip / --gateway / --dns --------------------------------
-def test_parse_static_ip_and_gateway_and_dns():
-    argv = ['--static-ip=192.168.1.50/24', '--gateway=192.168.1.1', '--dns=1.1.1.1,9.9.9.9']
-    assert compiler.parse_static_ip_flag(argv) == "192.168.1.50/24"
-    assert compiler.parse_gateway_flag(argv) == "192.168.1.1"
-    assert compiler.parse_dns_flag(argv) == "1.1.1.1,9.9.9.9"
-    assert compiler.parse_static_ip_flag([]) is None
-
-
-def test_check_static_ip_rejects_malformed():
-    assert compiler.check_static_ip_flag(['--static-ip=192.168.1.50']) is not None
-    assert compiler.check_static_ip_flag(['--static-ip=999.1.1.1/24']) is not None
-    assert compiler.check_static_ip_flag(['--static-ip=192.168.1.50/24']) is None
-    assert compiler.check_static_ip_flag([]) is None
-
-
-def test_gateway_dns_without_static_ip_warns():
-    assert compiler.gateway_dns_without_static_ip_warning(['--gateway=1.2.3.4']) is not None
-    assert compiler.gateway_dns_without_static_ip_warning(['--dns=1.1.1.1']) is not None
-    assert compiler.gateway_dns_without_static_ip_warning(
-        ['--static-ip=192.168.1.50/24', '--gateway=1.2.3.4']) is None
-    assert compiler.gateway_dns_without_static_ip_warning([]) is None
-
-
-# --- Task 5: --encrypt ------------------------------------------------------
-def test_wants_encrypt_presence():
-    assert compiler.wants_encrypt(["--encrypt"]) is True
-    assert compiler.wants_encrypt([]) is False
-
-
-def test_encrypt_requires_a_password_flag():
-    assert compiler.check_encrypt_flag(["--encrypt"]) is not None
-    assert compiler.check_encrypt_flag(["--encrypt", "--password=x"]) is None
-    assert compiler.check_encrypt_flag(["--encrypt", "--ssh=x"]) is None
-    assert compiler.check_encrypt_flag([]) is None
-
-
-# --- Task 7: pipeline signature threading -----------------------------------
-def test_run_accepts_new_kwargs():
-    sig = inspect.signature(compiler.run)
-    for p in ("login_user", "encrypt", "static_ip_text"):
-        assert p in sig.parameters
-
-
-def test_apply_variant_accepts_new_kwargs():
-    sig = inspect.signature(compiler._apply_variant)
-    for p in ("login_user", "encrypt"):
-        assert p in sig.parameters

@@ -158,7 +158,7 @@ def estimate() -> dict:
 # --- network: download-size model -------------------------------------------
 # packages.x86_64 lists the EXPLICIT top-level packages; `pacman -Sw` downloads
 # the full transitive dependency CLOSURE, which is what actually transfers. The
-# manifest carries ~224 explicit entries; the closure a full headed ISO resolves
+# manifest carries ~224 explicit entries; the closure a full desktop ISO resolves
 # is ~1200, so we scale the explicit count by TRANSITIVE_FACTOR (floored so an
 # edited/short manifest never under-estimates), times an average compressed
 # package size. Both tiers download the same Arch package closure plus the

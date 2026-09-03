@@ -71,10 +71,6 @@ _EMITTERS = [
     *[(f"calamares:{rel}", (lambda v=content: v))
       for rel, content in calamares.emit_map().items()],
     *[(f"desktop:{e['dest']}", e["builder"]) for e in desktop.emit_plan()],
-    # The two /usr/local/bin command wrappers (azarch + azarch-install) moved OUT of the
-    # graphical emit_plan into command_line_plan() (they ship on BOTH lines now); still
-    # exercise their builders for non-empty content.
-    *[(f"desktop-cli:{e['dest']}", e["builder"]) for e in desktop.command_line_plan()],
     ("installer.installer_sh", installer.installer_sh),
     ("installer.chroot_setup_sh", installer.chroot_setup_sh),
     ("installer.setup_pkgs_sh", installer.setup_pkgs_sh),
@@ -122,14 +118,16 @@ def test_emitter_family_covers_all_config_modules():
     # that de-sparsifies /boot so GRUB can read the kernel + finished.conf that adds the
     # Restart-now option + luksbootkeyfile.conf that embeds the LUKS keyfile so the
     # encrypted root is not prompted for twice at boot) + 18 OpenBox desktop builders
-    # (emit_plan: the 17 graphical PLAN entries -- xinitrc, openbox rc.xml/environment/autostart,
-    # the DARK + LIGHT themercs, the GTK2/3/4 dark theme defaults, the dconf color-scheme keyfile
-    # + profile, the /etc/xdg/azarch-picom.conf compositor config, the ~/.Xresources GLOBAL SCALE
-    # entry, the "installed" autostart staged for the Calamares overwrite, the application-menu
-    # usage.json seed, the system + Desktop installer launchers -- plus the appended bash_profile.
-    # The media OSD is NOT here (a compiled binary via build_osd)) + 2 command_line_plan builders
-    # (the /usr/local/bin/azarch-install wrapper and the azarch command line interface -- these
-    # MOVED out of emit_plan so they ship on BOTH the headed and headless lines) + 6 installer +
+    # (emit_plan: the 17 PLAN entries -- xinitrc, openbox rc.xml/environment/autostart, the
+    # DARK + LIGHT themercs, the GTK2/3/4 dark theme defaults, the dconf color-scheme keyfile
+    # + profile, the "installed" autostart staged for the Calamares overwrite, the
+    # application-menu usage.json seed, the system + Desktop installer launchers, the
+    # install wrapper, the azarch command line interface -- plus the appended bash_profile. The
+    # media OSD is NO LONGER here: it is a compiled binary now (on_screen_display.c), installed by build_osd,
+    # not a text emitter. NOW 20: the 19 PLAN entries -- the +2 over the old 17 are the
+    # ~/.Xresources GLOBAL SCALE entry (PROMPT Display/scale task) and the /etc/xdg/azarch-picom.conf
+    # compositor config (fading OFF + opaque frames -- kills the picom fade + transparent-titlebar
+    # defaults) -- plus the appended bash_profile) + 6 installer +
     # locale + profile + 4 pacman + 4 pkgbuild (calamares + librewolf.desktop + the two
     # librewolf PKGBUILD tiers) + 1 librewolf emit_plan builder (the AutoConfig override,
     # now a home file at the profile path, not a packaged /opt file) + 5 timedate
@@ -140,7 +138,7 @@ def test_emitter_family_covers_all_config_modules():
     # terminal_user_interface, keyboard, help, and live_keyboard_line (step six: the LIVE
     # keyboard/Caps-Lock line at the master-password getpass, a verbatim copy of the backup one)
     # -- and the /usr/local/bin/passwords launcher; no separate pwlib/ directory copy anymore).
-    assert len(_EMITTERS) == 19 + 18 + 2 + 6 + 1 + 1 + 4 + 4 + 1 + 5 + 15
+    assert len(_EMITTERS) == 19 + 20 + 6 + 1 + 1 + 4 + 4 + 1 + 5 + 15
 
 
 def test_recipe_dir_contents_are_nonempty_str_both_tiers():

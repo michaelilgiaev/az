@@ -34,38 +34,21 @@ def _bash_ok(fragment: str) -> None:
 
 def test_collect_has_env_preseed_and_interactive_fallback_for_every_field():
     s = idy.identity_collect_sh()
-    # Each COLLECTED field: an AZ_INSTALL_* pre-seed AND a `read` fallback for interactive use.
-    # Full name and a separate root password are GONE (root always reuses the user password).
+    # Each field: an AZ_INSTALL_* pre-seed AND a `read` fallback for interactive use.
     assert 'if [ -n "$AZ_INSTALL_HOSTNAME" ]' in s and 'read -rp "Hostname' in s
+    assert 'if [ -n "$AZ_INSTALL_FULLNAME" ]' in s and 'read -rp "Your full name' in s
     assert 'if [ -n "$AZ_INSTALL_USERNAME" ]' in s and 'read -rp "Username' in s
     assert 'if [ -n "$AZ_INSTALL_PASSWORD" ]' in s and 'read -rsp "Password for' in s
+    assert 'if [ -n "$AZ_INSTALL_ROOT_PASSWORD" ]' in s
     assert 'if [ -n "$AZ_INSTALL_TIMEZONE" ]' in s and 'read -rp "Timezone' in s
 
 
-def test_collect_reads_password_hidden_and_confirms():
+def test_collect_reads_passwords_hidden_and_confirms():
     s = idy.identity_collect_sh()
-    # Hidden entry (`read -s`) and a confirmation/repeat step for the user password.
+    # Hidden entry (`read -s`) and a confirmation/repeat step for both user and root.
     assert "read -rsp" in s
     assert "Repeat password" in s
     assert "Passwords did not match" in s
-
-
-def test_identity_has_no_full_name_anywhere():
-    for text in (idy.identity_collect_sh(), idy.identity_write_sh(), idy.identity_chroot_sh()):
-        low = text.lower()
-        assert "fullname" not in low
-        assert "full name" not in low
-        assert "chfn" not in low
-        assert "gecos" not in low
-
-
-def test_root_password_always_reuses_user_password():
-    collect = idy.identity_collect_sh()
-    # No separate root prompt / no "Use the same password for root?" question / no root preseed.
-    assert "Use the same password for root" not in collect
-    assert "AZ_INSTALL_ROOT_PASSWORD" not in collect
-    # root reuses the user password.
-    assert 'az_root_password="$az_password"' in collect
 
 
 def test_collect_validates_username_and_timezone():
@@ -112,21 +95,12 @@ def test_collect_is_valid_bash():
 
 def test_write_persists_fields_and_secures_passwords():
     s = idy.identity_write_sh()
-    # Full name is no longer collected/persisted.
-    for f in ("hostname", "username", "timezone"):
+    for f in ("hostname", "username", "fullname", "timezone"):
         assert f"/mnt/etc/install_info/{f}" in s
-    assert "/mnt/etc/install_info/fullname" not in s
     # Passwords written under a restrictive umask (0600-ish), not a plain marker file.
     assert "umask 077" in s
     assert "/mnt/etc/install_info/password" in s
     assert "/mnt/etc/install_info/root_password" in s
-
-
-def test_write_records_encrypt_marker_when_requested():
-    s = idy.identity_write_sh()
-    # The instant --encrypt path sets AZ_INSTALL_ENCRYPT; write drops the marker the disk/chroot read.
-    assert "AZ_INSTALL_ENCRYPT" in s
-    assert "/mnt/etc/install_info/encrypt" in s
 
 
 def test_write_is_valid_bash():

@@ -1582,31 +1582,15 @@ Both ERASE the target disk.
 
 Fully unattended over SSH: pre-seed any prompt via the environment, e.g.
   AZ_INSTALL_DISK=sda AZ_INSTALL_HOSTNAME=box AZ_INSTALL_USERNAME=me \
-  AZ_INSTALL_PASSWORD=... AZ_INSTALL_TIMEZONE=Europe/London \
+  AZ_INSTALL_PASSWORD=... AZ_INSTALL_ROOT_PASSWORD=... AZ_INSTALL_TIMEZONE=Europe/London \
   azarch-install --cli
-Recognised: AZ_INSTALL_DISK, AZ_INSTALL_HOSTNAME, AZ_INSTALL_USERNAME,
-AZ_INSTALL_PASSWORD, AZ_INSTALL_TIMEZONE (and AZ_INSTALL_CHOICE). Root reuses the user
-password; there is no full-name field. Any prompt left un-seeded is asked interactively.
+Recognised: AZ_INSTALL_DISK, AZ_INSTALL_HOSTNAME, AZ_INSTALL_USERNAME, AZ_INSTALL_FULLNAME,
+AZ_INSTALL_PASSWORD, AZ_INSTALL_ROOT_PASSWORD, AZ_INSTALL_TIMEZONE (and AZ_INSTALL_CHOICE).
+Any prompt left un-seeded is asked interactively.
 EOF
 }}
 
 run_gui() {{
-    # HEADLESS GUARD. The headless edition ships NO Calamares -- only the CLI installer
-    # (packages_manifest.HEADLESS_EXCLUDED strips calamares). If someone asks for the GUI here
-    # (explicit --gui, or a stray DISPLAY on a headless box), do NOT blindly `exec calamares`
-    # and die with a bare "command not found": EXPLAIN that this is a headless instance with no
-    # graphical installer and point them at `azarch-install --cli`, then exit non-zero. Detect
-    # it by Calamares' actual absence (command -v) rather than any build-time marker, so it is
-    # correct regardless of how the system was produced.
-    if ! command -v calamares >/dev/null 2>&1; then
-        echo "azarch-install: this is an Az'arch HEADLESS instance -- there is no graphical" >&2
-        echo "installer (Calamares) here. Install with the CLI installer instead:" >&2
-        echo >&2
-        echo "    azarch-install --cli            (interactive)" >&2
-        echo "    azarch-install --cli --auto     (largest fixed disk, unattended)" >&2
-        echo >&2
-        exit 1
-    fi
     # XDG_RUNTIME_DIR is unset before elevating: `sudo -E` would otherwise pass main's
     # /run/user/1000 through to the root Qt process, which then logs a "runtime directory
     # is owned by uid 1000, not 0" warning. DISPLAY/XAUTHORITY (the load-bearing X vars)
@@ -1631,11 +1615,10 @@ run_cli() {{
     # The scripted installer needs root and reads its payload from /root/azarch (mode 0750,
     # readable only by root -- so the existence check goes through sudo, not a bare test as
     # `main`). It honours AZ_INSTALL_CHOICE (1=auto largest disk, 2=manual) and AZ_INSTALL_DISK
-    # for the disk step, and the AZ_INSTALL_{{HOSTNAME,USERNAME,PASSWORD,TIMEZONE}} family for
-    # the account/hostname/timezone answers, to run without prompts; with none set it prompts
-    # interactively (fine over SSH). Root reuses the user password (no separate root field) and
-    # there is no full name. Each var is forwarded ACROSS the sudo boundary explicitly (only when
-    # set) so a restrictive sudoers env_reset cannot drop it.
+    # for the disk step, and the AZ_INSTALL_{{HOSTNAME,USERNAME,FULLNAME,PASSWORD,ROOT_PASSWORD,
+    # TIMEZONE}} family for the account/hostname/timezone answers, to run without prompts; with
+    # none set it prompts interactively (fine over SSH). Each is forwarded ACROSS the sudo
+    # boundary explicitly (only when set) so a restrictive sudoers env_reset cannot drop it.
     if ! sudo test -r '{INSTALL_CLI_SCRIPT_PATH}'; then
         echo "azarch-install: CLI installer not found at {INSTALL_CLI_SCRIPT_PATH}" >&2
         exit 1
@@ -1645,7 +1628,9 @@ run_cli() {{
         ${{AZ_INSTALL_DISK:+AZ_INSTALL_DISK=$AZ_INSTALL_DISK}} \\
         ${{AZ_INSTALL_HOSTNAME:+AZ_INSTALL_HOSTNAME=$AZ_INSTALL_HOSTNAME}} \\
         ${{AZ_INSTALL_USERNAME:+AZ_INSTALL_USERNAME=$AZ_INSTALL_USERNAME}} \\
+        ${{AZ_INSTALL_FULLNAME:+AZ_INSTALL_FULLNAME=$AZ_INSTALL_FULLNAME}} \\
         ${{AZ_INSTALL_PASSWORD:+AZ_INSTALL_PASSWORD=$AZ_INSTALL_PASSWORD}} \\
+        ${{AZ_INSTALL_ROOT_PASSWORD:+AZ_INSTALL_ROOT_PASSWORD=$AZ_INSTALL_ROOT_PASSWORD}} \\
         ${{AZ_INSTALL_TIMEZONE:+AZ_INSTALL_TIMEZONE=$AZ_INSTALL_TIMEZONE}} \\
         bash '{INSTALL_CLI_SCRIPT_PATH}'
 }}
@@ -1853,23 +1838,6 @@ PLAN = [
         "mode": _EXEC,
         "owner": "home",
     },
-    # NOTE: the media OSD indicator (/usr/local/lib/azarch/azarch-osd) is NOT emitted here as a
-    # text file anymore -- it is a COMPILED C program (on_screen_display.c). compiler.py builds and installs it
-    # via terminal_user_interface_build.build_osd(), exactly like the terminal UI binary. It is
-    # still pinned 0755 in FILE_PERMISSIONS so archiso ships it executable.
-]
-
-# The two `azarch`/`azarch-install` COMMAND wrappers. These are the ONLY entries in the
-# openbox package that are NOT part of the graphical session -- they are the guest command
-# line interface (`/usr/local/bin/azarch`) and the installer launcher
-# (`/usr/local/bin/azarch-install`), both of which the HEADLESS line needs too: the sshd
-# auto-setup unit runs `azarch --sshd-hypervisor` (and self-skips via ConditionPathExists if
-# the binary is absent -- which was why headless-ssh shipped no sshd), and `azarch-install`
-# is how you install a plain headless ISO (it prints the headless-CLI guidance when run
-# without a display). They are kept OUT of PLAN and returned by command_line_plan() so
-# compiler.py can emit them on BOTH lines while the rest of PLAN (X11/OpenBox/themes/
-# autostart) stays headed-only. Root-owned, executable.
-COMMAND_LINE_PLAN = [
     {
         "builder": install_wrapper_sh,
         "dest": INSTALL_WRAPPER_PATH,
@@ -1882,6 +1850,10 @@ COMMAND_LINE_PLAN = [
         "mode": _EXEC,
         "owner": "root",
     },
+    # NOTE: the media OSD indicator (/usr/local/lib/azarch/azarch-osd) is NOT emitted here as a
+    # text file anymore -- it is a COMPILED C program (on_screen_display.c). compiler.py builds and installs it
+    # via terminal_user_interface_build.build_osd(), exactly like the terminal UI binary. It is
+    # still pinned 0755 in FILE_PERMISSIONS so archiso ships it executable.
 ]
 
 # The .bash_profile snippet is handled separately from PLAN because it is not a
@@ -1892,13 +1864,10 @@ BASH_PROFILE_DEST = f"{HOME}/.bash_profile"
 
 
 def emit_plan() -> list[dict]:
-    """Return the GRAPHICAL-SESSION plan (builder/dest/mode/owner) plus the .bash_profile
-    entry, so compiler.py can iterate a single sequence. This is the HEADED-ONLY payload:
-    the X11/OpenBox session, themes, picom, autostart and the login bootstrap. The two
-    `azarch`/`azarch-install` command wrappers are NOT here -- they live in
-    command_line_plan() so the headless line gets them too. Kept as a function (not just
-    the module constant) to mirror the builder-function style of the other configuration
-    modules and to keep the .bash_profile special-case in one place."""
+    """Return the PLAN list (builder/dest/mode/owner) plus the .bash_profile entry, so
+    compiler.py can iterate a single sequence. Kept as a function (not just the module
+    constant) to mirror the builder-function style of the other configuration modules
+    and to keep the .bash_profile special-case in one place."""
     return PLAN + [
         {
             "builder": bash_profile_startx,
@@ -1907,11 +1876,3 @@ def emit_plan() -> list[dict]:
             "owner": "home",
         },
     ]
-
-
-def command_line_plan() -> list[dict]:
-    """The `azarch` + `azarch-install` command wrappers (see COMMAND_LINE_PLAN). Emitted on
-    BOTH the headed and headless lines -- these are guest COMMANDS, not part of the graphical
-    session. Returned separately from emit_plan() so compiler.py stages them universally
-    while the X11 session in PLAN stays headed-only."""
-    return list(COMMAND_LINE_PLAN)

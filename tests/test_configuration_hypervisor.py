@@ -191,18 +191,16 @@ def test_entry_runs_main_when_executed_as_a_script():
 def test_compiler_emit_desktop_wires_hypervisor_in():
     """Guard the compiler-to-package SEAM: the package's contract can be perfect while
     compiler.py forgets to invoke it, shipping an ISO where `hypervisor` is missing
-    entirely. `hypervisor` is a CLI command, emitted by _emit_azarch_commands (BOTH lines),
-    not the headed-only _emit_desktop."""
-    src = inspect.getsource(compiler._emit_azarch_commands)
-    assert "hypervisor" in src and "emit_plan()" in src
+    entirely."""
+    src = inspect.getsource(compiler._emit_desktop)
+    assert "hypervisor.emit_plan()" in src
     assert ("from packages.hypervisor import packaging as hypervisor"
             in inspect.getsource(compiler))
 
 
 def test_hypervisor_is_excluded_from_auto_app_discovery():
-    """`hypervisor` is emitted BY NAME in _emit_azarch_commands, so it must be in
-    _EXPLICIT_PACKAGES or the app-loop discovery would emit it a SECOND time (duplicate
-    writes)."""
+    """`hypervisor` is emitted BY NAME in _emit_desktop, so it must be in _EXPLICIT_PACKAGES
+    or the app-loop discovery would emit it a SECOND time (duplicate writes)."""
     assert "hypervisor" in compiler._EXPLICIT_PACKAGES
 
 

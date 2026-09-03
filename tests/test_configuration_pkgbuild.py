@@ -234,31 +234,18 @@ def test_calamares_patch_name_is_a_patch_file():
     assert pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME.endswith(".patch")
 
 
-def test_calamares_patch_is_unified_diff_touching_all_three_files():
-    # The patch must be a -p1 unified diff (a/ b/ prefixes) that edits the keyboard
-    # group-switcher model (Alt+Shift default), the users hostname Config (fixed default
-    # hostname), AND the UsersPage widget (hide the full-name row). Missing any file means
-    # one of the three requested behaviours was dropped.
+def test_calamares_patch_is_unified_diff_touching_both_files():
+    # The patch must be a -p1 unified diff (a/ b/ prefixes) that edits BOTH the
+    # keyboard group-switcher model (Alt+Shift default) and the users hostname
+    # config (fixed default hostname). Missing either file means one of the two
+    # requested defaults was dropped.
     p = pkgbuild.calamares_defaults_patch()
     assert "--- a/src/modules/keyboard/KeyboardLayoutModel.cpp" in p
     assert "+++ b/src/modules/keyboard/KeyboardLayoutModel.cpp" in p
     assert "--- a/src/modules/users/Config.cpp" in p
     assert "+++ b/src/modules/users/Config.cpp" in p
-    assert "--- a/src/modules/users/UsersPage.cpp" in p
-    assert "+++ b/src/modules/users/UsersPage.cpp" in p
     # Hunk headers present (so `patch` has something to locate).
-    assert p.count("@@") >= 6  # three hunks => three "@@ ... @@" markers (2 "@@" each)
-
-
-def test_calamares_patch_hides_full_name_row():
-    # THE full-name removal: the added code hides the "What is your name?" row -- the
-    # label, the input, and its status glyph -- in UsersPage's constructor.
-    p = pkgbuild.calamares_defaults_patch()
-    added = [ln[1:] for ln in p.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
-    body = "\n".join(added)
-    assert "ui->labelWhatIsYourName->hide();" in body
-    assert "ui->textBoxFullName->hide();" in body
-    assert "ui->labelFullName->hide();" in body
+    assert p.count("@@") >= 4  # two hunks => two "@@ ... @@" markers (2 "@@" each)
 
 
 def test_calamares_patch_keyboard_selects_alt_shift_toggle():
@@ -329,7 +316,6 @@ def test_calamares_defaults_patch_applies_to_pinned_source():
     rels = (
         "src/modules/keyboard/KeyboardLayoutModel.cpp",
         "src/modules/users/Config.cpp",
-        "src/modules/users/UsersPage.cpp",
     )
     top = f"calamares-{pkgbuild.CALAMARES_VERSION}"
 
@@ -376,16 +362,13 @@ def test_calamares_defaults_patch_applies_to_pinned_source():
         )
         assert real.returncode == 0, f"apply failed:\n{real.stdout}\n{real.stderr}"
 
-        # The three behaviours actually landed in the patched source.
+        # The two behaviours actually landed in the patched source.
         kbd = (work / "src/modules/keyboard/KeyboardLayoutModel.cpp").read_text()
         assert "alt_shift_toggle" in kbd
         assert "setCurrentIndex(" in kbd
         users = (work / "src/modules/users/Config.cpp").read_text()
         assert "makeHostnameSuggestion(" in users
         assert "setHostName( seededHostname )" in users
-        users_page = (work / "src/modules/users/UsersPage.cpp").read_text()
-        assert "ui->labelWhatIsYourName->hide();" in users_page
-        assert "ui->textBoxFullName->hide();" in users_page
 
 
 # --- calamares source patch (region-driven keyboard) -----------------------
@@ -554,7 +537,6 @@ def test_both_calamares_patches_apply_in_sequence_to_pinned_source():
     rels = (
         "src/modules/keyboard/KeyboardLayoutModel.cpp",
         "src/modules/users/Config.cpp",
-        "src/modules/users/UsersPage.cpp",
         "src/modules/keyboard/Config.h",
         "src/modules/keyboard/Config.cpp",
         "src/modules/locale/Config.cpp",

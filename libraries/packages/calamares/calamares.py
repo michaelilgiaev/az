@@ -376,10 +376,7 @@ defaultGroups:
 # written enabling it).
 sudoersGroup: wheel
 setRootPassword: true
-# ONE password for the whole system: root REUSES the user password (Az'arch policy -- the
-# same guarantee the CLI/instant installers enforce). doReusePassword:true hides the separate
-# root-password field and applies the user's password to root, so the user enters it once.
-doReusePassword: true
+doReusePassword: false
 
 # Autologin OFF on the installed system (live ISO autologins, installed does not).
 doAutologin: false
@@ -417,8 +414,7 @@ passwordRequirements:
     minLength: 1
     maxLength: -1
 
-# The full-name (GECOS) field is hidden by our UsersPage source patch (Az'arch does not
-# collect it); the user types the login directly. Weak passwords are permitted.
+# The account's full name field is optional.
 allowWeakPasswords: true
 allowWeakPasswordsDefault: false
 """

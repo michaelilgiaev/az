@@ -1,9 +1,9 @@
-"""The `sshd` build variant: the opt-in second ISO named azarch-headed-ssh-<ver>-
-x86_64.iso, identical to the base `azarch-headed` one but with ssh ENABLED (it
+"""The `sshd` build variant: the opt-in second ISO named azarch-desktop-ssh-<ver>-
+x86_64.iso, identical to the base `azarch-desktop` one but with ssh ENABLED (it
 auto-runs `azarch --sshd-hypervisor` at boot) and `main` carrying the operator's
 build-time --ssh password.
 
-The base/headed ISO is ALWAYS built; the ssh ISO is OPT-IN via `--ssh="<PASSWORD>"`
+The base/desktop ISO is ALWAYS built; the ssh ISO is OPT-IN via `--ssh="<PASSWORD>"`
 (no default password is ever shipped -- see data/PROMPT.md DECISION 2). A bare/blank
 `--ssh` is a HARD ERROR, not a silent base-only build (see check_ssh_flag). The flow is
 compile.sh -> compiler.py -> compiler.run(), which loops over the RUNTIME-selected
@@ -13,8 +13,8 @@ each.
 
 The observable per-variant effects, checked here as pure data/emit (no mkarchiso):
 
-  1. profiledef's iso_name flips azarch-headed -> azarch-headed-ssh, so mkarchiso
-     writes the azarch-headed-ssh-*.iso filename.
+  1. profiledef's iso_name flips azarch-desktop -> azarch-desktop-ssh, so mkarchiso
+     writes the azarch-desktop-ssh-*.iso filename.
   2. _apply_variant emits + enables sshd-hypervisor-setup.service (a systemd oneshot that
      runs `azarch --sshd-hypervisor`) ONLY for the sshd variant; the base ISO gets NEITHER
      the unit nor its enable link, so there it stays ssh-disabled.
@@ -191,17 +191,11 @@ def test_variants_for_includes_sshd_with_hash():
 
 
 def test_run_threads_ssh_hash_into_variant_selection():
-    # The variant SELECTION happens in main() (variants.selected_variants over the
-    # --type/--instant/--ssh axes) and is passed into run() as build_variants; run() +
-    # _build_line thread the ssh hash through to the per-variant apply step, and
-    # _apply_variant writes the variant's shadow via system.shadow_for.
-    assert "selected_variants(" in inspect.getsource(compiler.main), \
-        "main() must select variants at runtime from the axis flags"
-    driver_src = inspect.getsource(compiler.run) + inspect.getsource(compiler._build_line)
-    assert "build_variants" in driver_src, "run() must build the selected variants"
-    assert "ssh_password_hash" in driver_src, "the ssh hash must be threaded into the passes"
-    assert "shadow_for(" in inspect.getsource(compiler._apply_variant), \
-        "_apply_variant must write the variant's shadow via system.shadow_for"
+    # run() must build the runtime-selected variants (not the static VARIANTS tuple)
+    # and thread the ssh hash into the shadow it writes.
+    src = inspect.getsource(compiler.run)
+    assert "_variants_for(" in src, "run() must pick variants at runtime from the ssh hash"
+    assert "shadow_for(" in src, "run() must write the variant's shadow via system.shadow_for"
 
 
 def test_run_signature_takes_ssh_password_hash():
@@ -257,25 +251,25 @@ def _iso_name(pd: str) -> str:
 
 
 def test_iso_name_for_maps_variants():
-    # The base/default ISO is the "headed" product line; the ssh flavour is
-    # "headed-ssh" (the "headless" line slots in as azarch-headless without touching
+    # The base/default ISO is the "desktop" product line; the ssh flavour is
+    # "desktop-ssh" (a future "server" line slots in as azarch-server without touching
     # the base/sshd variant keys). See profile.ISO_NAMES.
-    assert profile.iso_name_for("base") == "azarch-headed"
-    assert profile.iso_name_for("sshd") == "azarch-headed-ssh"
+    assert profile.iso_name_for("base") == "azarch-desktop"
+    assert profile.iso_name_for("sshd") == "azarch-desktop-ssh"
     # An unknown variant must fall back to the base name, never crash the build.
-    assert profile.iso_name_for("nonsense") == "azarch-headed"
-    assert profile.iso_name_for() == "azarch-headed"
+    assert profile.iso_name_for("nonsense") == "azarch-desktop"
+    assert profile.iso_name_for() == "azarch-desktop"
 
 
 def test_profiledef_base_is_azarch_desktop():
-    assert _iso_name(profile.profiledef_sh("base")) == "azarch-headed"
+    assert _iso_name(profile.profiledef_sh("base")) == "azarch-desktop"
     # Default (no arg) is the base ISO.
-    assert _iso_name(profile.profiledef_sh()) == "azarch-headed"
+    assert _iso_name(profile.profiledef_sh()) == "azarch-desktop"
 
 
 def test_profiledef_sshd_is_azarch_desktop_ssh():
-    # This is what makes mkarchiso name the artifact azarch-headed-ssh-<ver>-x86_64.iso.
-    assert _iso_name(profile.profiledef_sh("sshd")) == "azarch-headed-ssh"
+    # This is what makes mkarchiso name the artifact azarch-desktop-ssh-<ver>-x86_64.iso.
+    assert _iso_name(profile.profiledef_sh("sshd")) == "azarch-desktop-ssh"
 
 
 def test_only_iso_name_differs_between_variants():
@@ -285,7 +279,7 @@ def test_only_iso_name_differs_between_variants():
     # parity is what "basically like the normal one" requires).
     base = profile.profiledef_sh("base")
     sshd = profile.profiledef_sh("sshd")
-    norm = lambda s: s.replace('iso_name="azarch-headed-ssh"', 'iso_name="azarch-headed"')
+    norm = lambda s: s.replace('iso_name="azarch-desktop-ssh"', 'iso_name="azarch-desktop"')
     assert norm(sshd) == base
 
 
@@ -321,10 +315,10 @@ def test_sshd_service_guarded_on_cli_presence():
     assert "ConditionPathExists=/usr/local/bin/azarch" in system.SSHD_HYPERVISOR_SETUP_SERVICE
 
 
-# --- base headed ISO ships ssh DISABLED everywhere ------------------------------
+# --- base desktop ships ssh DISABLED everywhere ------------------------------
 
 def test_link_services_never_enables_stock_sshd():
-    # The default headed ISO must ship with ssh OFF. _link_services enables the curated daemon
+    # The default desktop must ship with ssh OFF. _link_services enables the curated daemon
     # set (NetworkManager/CUPS/spice + the azarch oneshots) -- it must NEVER enable the
     # stock sshd.service or ssh.socket, or the base ISO would listen on :22 with a LOCKED
     # account (or, worse on an installed system, expose ssh unexpectedly).
@@ -350,7 +344,7 @@ def test_base_airootfs_enables_no_ssh_unit(tmp_path):
 # The stock archiso `releng` profile ships
 # airootfs/etc/systemd/system/multi-user.target.wants/sshd.service (upstream enables sshd on
 # the official Arch ISO). _copy_releng copies releng wholesale, so WITHOUT an explicit strip
-# that enable-link survives and the BASE headed ISO boots with sshd active on :22 -- exactly the
+# that enable-link survives and the BASE desktop boots with sshd active on :22 -- exactly the
 # reported bug (`systemctl status sshd` -> enabled; active). These tests pin the strip.
 
 def _needs_releng():
@@ -364,7 +358,7 @@ def _needs_releng():
 @_needs_releng()
 def test_copy_releng_strips_inherited_sshd_want(tmp_path):
     # After _copy_releng, the base profile must NOT carry the releng-inherited sshd.service
-    # enable-link -- so the default headed ISO ships sshd DISABLED.
+    # enable-link -- so the default desktop ships sshd DISABLED.
     W = tmp_path / "profile"
     compiler._copy_releng(W)
     want = W / "airootfs/etc/systemd/system/multi-user.target.wants/sshd.service"
@@ -389,7 +383,7 @@ def test_copy_releng_leaves_other_wants_intact(tmp_path):
 # --- firewall parity: base = no ports; ssh = 22/tcp --------------------------
 
 def test_base_firewall_opens_no_ports():
-    # The base headed ISO's live firewall baseline (installer.setup_pkgs_sh): incoming DENY,
+    # The base desktop's live firewall baseline (installer.setup_pkgs_sh): incoming DENY,
     # outgoing ALLOW, and NO service ports opened. It must not `ufw allow` anything but the
     # explicit off-box deny of the timedate port.
     import installer
@@ -401,7 +395,7 @@ def test_base_firewall_opens_no_ports():
 
 
 def test_ssh_variant_opens_22_tcp_via_sshd_bringup():
-    # The ssh headed ISO opens :22/tcp -- via the sshd bring-up (sshd.py), on top of the same
+    # The ssh desktop opens :22/tcp -- via the sshd bring-up (sshd.py), on top of the same
     # deny-incoming base. Assert the bring-up path opens 22/tcp (the user's "port 22 allow
     # tcp"). The bring-up lives in the guest CLI; check its shipped source.
     from packages import openbox as desktop
@@ -446,7 +440,7 @@ def test_apply_variant_sshd_emits_and_enables_service(tmp_path):
     assert link.is_symlink()
     assert os.readlink(link) == "/etc/systemd/system/sshd-hypervisor-setup.service"
     # profiledef at the profile root carries the sshd iso_name.
-    assert _iso_name((W / "profiledef.sh").read_text()) == "azarch-headed-ssh"
+    assert _iso_name((W / "profiledef.sh").read_text()) == "azarch-desktop-ssh"
 
 
 def test_apply_variant_base_has_no_sshd_service_or_link(tmp_path):
@@ -455,7 +449,7 @@ def test_apply_variant_base_has_no_sshd_service_or_link(tmp_path):
     compiler._apply_variant(W, airootfs, "base", ssh_password_hash=None)
     assert not _svc_dest(airootfs).exists()
     assert not _link_dest(airootfs).is_symlink()
-    assert _iso_name((W / "profiledef.sh").read_text()) == "azarch-headed"
+    assert _iso_name((W / "profiledef.sh").read_text()) == "azarch-desktop"
 
 
 def test_apply_variant_base_after_sshd_removes_the_leftover(tmp_path):
@@ -484,17 +478,16 @@ def test_run_signature_has_no_variant_param():
 
 
 def test_run_calls_mkarchiso_once_per_variant():
-    # Each selected variant gets one mkarchiso pass. The per-line build (_build_line)
-    # iterates that line's variants, applies each variant's differences (_apply_variant),
-    # and runs _run_mkarchiso once per variant, appending each returned ISO.
-    src = inspect.getsource(compiler._build_line)
-    assert "for variant in line_variants" in src
+    # run() must invoke _run_mkarchiso once per variant (both ISOs in one build), and
+    # append each returned ISO. Assert the finalize loop iterates VARIANTS and calls
+    # _run_mkarchiso inside it.
+    src = inspect.getsource(compiler.run)
+    # Iterates the RUNTIME-selected variants (base always; sshd only with --ssh), not
+    # the static VARIANTS tuple.
+    assert "for variant in " in src
+    assert "_variants_for(" in src
     assert "_run_mkarchiso(" in src
     assert "_apply_variant(" in src
-    # run() drives the lines (one airootfs per line) from the selected build_variants.
-    run_src = inspect.getsource(compiler.run)
-    assert "for line in " in run_src
-    assert "build_variants" in run_src
 
 
 def test_mkarchiso_pass_resets_work_dir_before_running():
@@ -518,18 +511,18 @@ def test_mkarchiso_pass_resets_work_dir_before_running():
 
 
 def test_iso_selection_glob_distinguishes_base_from_sshd():
-    # output/ can hold BOTH azarch-headed-*.iso and azarch-headed-ssh-*.iso. The base
+    # output/ can hold BOTH azarch-desktop-*.iso and azarch-desktop-ssh-*.iso. The base
     # pass must never pick up the ssh ISO. mkarchiso names artifacts <iso_name>-<YYYY.MM.DD>-
     # <arch>.iso, so anchoring the glob with a digit after "{iso_name}-" separates
-    # them ("azarch-headed-2026..." matches base; "azarch-headed-ssh-..." does not,
+    # them ("azarch-desktop-2026..." matches base; "azarch-desktop-ssh-..." does not,
     # since 's' is not a digit). Emulate the exact glob _run_mkarchiso uses.
     import fnmatch
-    both = ["azarch-headed-2026.07.31-x86_64.iso",
-            "azarch-headed-ssh-2026.07.31-x86_64.iso"]
-    base_hits = [f for f in both if fnmatch.fnmatch(f, "azarch-headed-[0-9]*.iso")]
-    sshd_hits = [f for f in both if fnmatch.fnmatch(f, "azarch-headed-ssh-[0-9]*.iso")]
-    assert base_hits == ["azarch-headed-2026.07.31-x86_64.iso"]
-    assert sshd_hits == ["azarch-headed-ssh-2026.07.31-x86_64.iso"]
+    both = ["azarch-desktop-2026.07.31-x86_64.iso",
+            "azarch-desktop-ssh-2026.07.31-x86_64.iso"]
+    base_hits = [f for f in both if fnmatch.fnmatch(f, "azarch-desktop-[0-9]*.iso")]
+    sshd_hits = [f for f in both if fnmatch.fnmatch(f, "azarch-desktop-ssh-[0-9]*.iso")]
+    assert base_hits == ["azarch-desktop-2026.07.31-x86_64.iso"]
+    assert sshd_hits == ["azarch-desktop-ssh-2026.07.31-x86_64.iso"]
     # And the source really uses the digit-anchored glob (not a bare "-*.iso").
     import inspect
     src = inspect.getsource(compiler._run_mkarchiso)

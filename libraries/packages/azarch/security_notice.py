@@ -14,7 +14,7 @@ installed system too), so the DECISION about whether to actually show anything l
 in the command -- matching the codebase's "guard in the tool" style:
 
   * If ssh is DELIBERATELY configured on this medium (the sshd-hypervisor auto-setup unit
-    is enabled -- i.e. this is the azarch-headed-ssh variant) the operator already chose
+    is enabled -- i.e. this is the azarch-desktop-ssh variant) the operator already chose
     ssh + a password at build time, so we stay QUIET.
   * If `main` already has a real (unlocked) login password, the "password not configured"
     warning does not apply, so we stay QUIET.

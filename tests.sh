@@ -353,22 +353,11 @@ run_log_isolated() {                       # run_log_isolated <mode> <logfile> <
     local mode="$1" logfile="$2" dir="$3" o
     # Mirror the repo minus the bits a run does not need (venv is reused via $PY;
     # .git and logs are irrelevant to a test run) -- keeps the copy tiny and fast.
-    # The multi-gig build caches are excluded too: the copy lands on a /tmp tmpfs, and
-    # cache/pkgs + cache/pacman-pkg (~6.6G each) plus every cache/makepkg/*/.build
-    # extracted scratch tree (~1.9G) would overflow it. Tests only ever read the small
-    # source tarballs (cache/makepkg/*/.src) and pacman sync DBs, which are KEPT; the
-    # excluded trees are pure build output no test opens (any test that does skips when
-    # its file is absent, exactly as it does on a fresh CI checkout).
     if command -v rsync >/dev/null 2>&1; then
-        rsync -a --exclude venv --exclude .git --exclude logs \
-              --exclude 'cache/pkgs' --exclude 'cache/pacman-pkg' \
-              --exclude 'cache/makepkg/*/.build' \
-              "$REPODIR"/ "$dir"/ 2>/dev/null || return 0
+        rsync -a --exclude venv --exclude .git --exclude logs "$REPODIR"/ "$dir"/ 2>/dev/null || return 0
     else
         cp -a "$REPODIR"/. "$dir"/ 2>/dev/null || return 0
-        rm -rf "$dir/venv" "$dir/.git" "$dir/logs" \
-               "$dir/cache/pkgs" "$dir/cache/pacman-pkg"
-        find "$dir/cache/makepkg" -mindepth 2 -maxdepth 2 -type d -name .build -exec rm -rf {} + 2>/dev/null
+        rm -rf "$dir/venv" "$dir/.git" "$dir/logs"
     fi
     read -r -a o <<< "$(opts_for_mode "$mode")"
     # cwd = copy so repo-relative test paths resolve inside it; PYTHONPATH -> the

@@ -85,76 +85,29 @@ _DESKTOP_MODIFICATIONS = ("openbox", "librewolf")
 # unless it is added here on purpose.
 _EXPLICIT_PACKAGES = ("openbox", "librewolf", "application_menu", "window_switcher", "passwords", "backup", "hypervisor", "calamares", "azarch")
 import installer
-import network_profile
-import packages_manifest
 import pacman
 import profile
 import system
-import variants as _variants
 
-# Weights: setup/emit steps carry real weight so the bar visibly advances through them
-# (at weight 1 they were ~2% of the whole bar and looked frozen); the giants are still
-# the bulk, sized from real log spans. The bar is now sized DYNAMICALLY from the selected
-# variants (see weights_for), because the number of milestones depends on how many PRODUCT
-# LINES and how many ISO passes are built:
-#
-#   * prelude (run once):  reset workspace + sync toolchain          -> 2 light steps
-#   * per product LINE:    scaffold, boot-brand, manifest, accounts, -> 9 light steps
-#                          branding, desktop, pacman-svc, units,
-#                          installer-payload
-#                          + warm cache (GIANT 250) + build own pkgs (GIANT 120)
-#   * per ISO variant:     one mkarchiso pass                        -> GIANT 270 each
-#
-# The invariant compiler tests assert is exactly this composition, so it holds for any
-# 1..8 selection. LIGHT/CACHE/MAKEPKG/MKARCHISO name the individual weights.
-_LIGHT = 8
-_CACHE_GIANT = 250
-_MAKEPKG_GIANT = 120
-_MKARCHISO_GIANT = 270
-_PRELUDE_LIGHT_STEPS = 2      # reset workspace + sync toolchain (once)
-# The light bar.step() calls inside _build_line (all weight _LIGHT): scaffold releng,
-# brand boot, stage manifest, provision accounts, overlay branding, overlay desktop,
-# stage pacman+pkgs service, enable units, emit installer payload, resolve pacman.conf.
-# The two GIANT per-line steps (cache warm, own-package build) and the per-variant
-# mkarchiso pass are counted separately in weights_for.
-_PER_LINE_LIGHT_STEPS = 10
+# Weights: setup/emit steps carry real weight so the bar visibly advances through
+# them (at weight 1 they were ~2% of the whole bar and looked frozen); the giants
+# are still the bulk, sized from real log spans. Keep in sync with steps below:
+# len(STEP_WEIGHTS) - 1 MUST equal the number of bar.step() calls in run(). The
+# final FOUR weights belong, in order, to: the package-cache giant, the makepkg
+# stage (our own calamares/librewolf; heavy in the default tier, VERY heavy with
+# --full-compile), and the TWO mkarchiso giants -- one per POSSIBLE ISO variant.
+# The bar is sized for the MAXIMUM (base + sshd); a base-only build (no --ssh) simply
+# runs one mkarchiso pass and finalize() snaps the bar to full, so over-sizing is safe.
+STEP_WEIGHTS = [0] + [8] * 12 + [250, 120, 270, 270]
 
-
-def _lines_in(build_variants: tuple) -> tuple[str, ...]:
-    """The DISTINCT product lines present in the selected variants, in first-seen
-    (variants.selected_variants) order -- headed before headless. One airootfs is built
-    per line, and the bar is sized per line, so both weights_for and run() use this."""
-    seen: list[str] = []
-    for v in build_variants:
-        if v.line not in seen:
-            seen.append(v.line)
-    return tuple(seen)
-
-
-def weights_for(build_variants: tuple) -> list[int]:
-    """The ProgressBar weight list for a given selection of variants.Variant. Index 0
-    is the unused sentinel; then the prelude's light steps, then per DISTINCT LINE its
-    light steps + the two cache/makepkg giants, then one mkarchiso giant per variant.
-    len(result) - 1 == the number of bar.step() calls the build executes."""
-    if not build_variants:
-        build_variants = (_variants.Variant(),)
-    n_lines = len(_lines_in(build_variants))
-    n_variants = len(build_variants)
-    weights = [0]
-    weights += [_LIGHT] * _PRELUDE_LIGHT_STEPS
-    for _ in range(n_lines):
-        weights += [_LIGHT] * _PER_LINE_LIGHT_STEPS
-        weights += [_CACHE_GIANT, _MAKEPKG_GIANT]
-    weights += [_MKARCHISO_GIANT] * n_variants
-    return weights
-
-
-# Back-compat: the historical module constants. Tests and older call sites read
-# compiler.VARIANTS (the two legacy keys) and compiler.STEP_WEIGHTS (the default single-
-# line, single-headed-ISO build). The live build sizes its own bar via weights_for on the
-# actually-selected variants; these defaults describe the no-flags build (one headed ISO).
+# The ISO variants a build CAN produce, in assembly order -- the canonical MAX set that
+# sizes STEP_WEIGHTS's two mkarchiso weights. Every step up to mkarchiso is variant-
+# independent (same packages, same airootfs). WHICH of these actually build is decided
+# at runtime by _variants_for(): the base `azarch-desktop` medium ALWAYS, and the
+# `azarch-desktop-ssh` medium ONLY when --ssh="<PASSWORD>" opts in (no default password
+# is ever shipped). The variant KEYS stay base/sshd; profile.ISO_NAMES maps them to the
+# product-line artifact names.
 VARIANTS = ("base", "sshd")
-STEP_WEIGHTS = weights_for((_variants.Variant(),))
 
 # PGID of the currently-running mkarchiso child (0 = none). mkarchiso is spawned in
 # its own session/process group so the signal handler can kill THAT group (and all
@@ -217,11 +170,11 @@ def check_ssh_flag(argv: list[str]) -> str | None:
     if ssh_flag_present(argv) and parse_ssh_flag(argv) is None:
         return (
             'The --ssh flag needs a password: --ssh="<PASSWORD>". You passed --ssh with '
-            "no value, so there is nothing to set as the ssh ISO's login password. "
+            "no value, so there is nothing to set as the ssh desktop's login password. "
             "No default password is ever shipped, so the ssh ISO was NOT built and "
             "nothing was changed. Re-run with a real password, e.g. "
             'compile.sh --ssh="mysecret", or drop --ssh entirely to build just the base '
-            "headed ISO (ssh disabled)."
+            "desktop ISO (ssh disabled)."
         )
     return None
 
@@ -254,255 +207,10 @@ def ssh_password_hash(password: str) -> str:
     return out
 
 
-# --- The --password / --user opt-in (a login password WITHOUT sshd) ----------
-# --password sets `main` (or --user)'s login password the SAME way --ssh does (hashed
-# into that ISO's /etc/shadow) but does NOT enable sshd. --ssh and --password are
-# MUTUALLY EXCLUSIVE: if the operator wants ssh, they set the password via --ssh.
-
-def parse_password_flag(argv: list[str]) -> str | None:
-    """The `--password=<PW>` value, or None if absent/empty. Mirrors parse_ssh_flag:
-    split('=', 1) so a '=' in the password is kept; a blank value opts out."""
-    for token in argv:
-        if token.startswith("--password="):
-            return token.split("=", 1)[1] or None
-    return None
-
-
-def password_flag_present(argv: list[str]) -> bool:
-    """True if `--password` appears at all (bare, empty, or with a value)."""
-    return any(t == "--password" or t.startswith("--password=") for t in argv)
-
-
-def check_password_flag(argv: list[str]) -> str | None:
-    """Blank/bare --password is a hard error (it demands a string), mirroring --ssh."""
-    if password_flag_present(argv) and parse_password_flag(argv) is None:
-        return (
-            'The --password flag needs a value: --password="<PASSWORD>". You passed '
-            "--password with no value, so there is nothing to set as the login password. "
-            "No default password is ever shipped, so nothing was changed. Re-run with a "
-            'real password, e.g. compile.sh --password="mysecret", or drop --password to '
-            "build the base (locked) ISO."
-        )
-    return None
-
-
-def check_ssh_password_conflict(argv: list[str]) -> str | None:
-    """--ssh and --password together is a hard error: they set the same credential two
-    different ways. If the operator wants ssh, the password goes on --ssh."""
-    if ssh_flag_present(argv) and password_flag_present(argv):
-        return (
-            "--ssh and --password conflict: both set the login password, but --ssh ALSO "
-            'enables sshd. Pick one -- use --ssh="<PW>" if you want remote SSH (it sets '
-            'the password too), or --password="<PW>" for a local login password with sshd '
-            "OFF. No ISO was built."
-        )
-    return None
-
-
-def parse_user_flag(argv: list[str]) -> str:
-    """The login user name for --password/--ssh: the `--user=` value, or "main"."""
-    for token in argv:
-        if token.startswith("--user="):
-            return token.split("=", 1)[1] or "main"
-    return "main"
-
-
-def user_without_password_warning(argv: list[str]) -> str | None:
-    """A WARNING when --user is given without --ssh/--password: the name only takes effect
-    together with a password flag (the live account stays `main`, locked, otherwise)."""
-    present = any(t == "--user" or t.startswith("--user=") for t in argv)
-    if present and not ssh_flag_present(argv) and not password_flag_present(argv):
-        return ("--user only takes effect with a password flag (--ssh or --password); "
-                "with neither, the live account stays `main` and locked. Add --password "
-                'or --ssh to set a login for the chosen user.')
-    return None
-
-
-# --- The --static-ip / --gateway / --dns opt-in (deterministic server IP) -----
-# When set, the compiler bakes a NetworkManager static keyfile into the airootfs so a
-# deployed machine has a fixed IPv4 (see network_profile). --gateway/--dns refine it.
-
-def _value_flag(argv: list[str], name: str) -> str | None:
-    for token in argv:
-        if token.startswith(name + "="):
-            return token.split("=", 1)[1] or None
-    return None
-
-
-def parse_static_ip_flag(argv: list[str]) -> str | None:
-    """The `--static-ip=<CIDR>` value (e.g. 192.168.1.50/24), or None."""
-    return _value_flag(argv, "--static-ip")
-
-
-def parse_gateway_flag(argv: list[str]) -> str | None:
-    """The `--gateway=<IP>` value, or None."""
-    return _value_flag(argv, "--gateway")
-
-
-def parse_dns_flag(argv: list[str]) -> str | None:
-    """The `--dns=<IP[,IP...]>` value (comma list), or None."""
-    return _value_flag(argv, "--dns")
-
-
-def check_static_ip_flag(argv: list[str]) -> str | None:
-    """Validate --static-ip's CIDR, returning an ERROR MESSAGE or None. Absent is fine."""
-    cidr = parse_static_ip_flag(argv)
-    if cidr is None:
-        return None
-    if not network_profile.is_valid_cidr(cidr):
-        return (
-            f'--static-ip="{cidr}" is not a valid IPv4 CIDR. Use A.B.C.D/NN, e.g. '
-            '--static-ip="192.168.1.50/24". No ISO was built.'
-        )
-    return None
-
-
-def gateway_dns_without_static_ip_warning(argv: list[str]) -> str | None:
-    """WARNING when --gateway/--dns are given without --static-ip (they are ignored)."""
-    has_gw = any(t == "--gateway" or t.startswith("--gateway=") for t in argv)
-    has_dns = any(t == "--dns" or t.startswith("--dns=") for t in argv)
-    if (has_gw or has_dns) and parse_static_ip_flag(argv) is None:
-        return ("--gateway/--dns only apply with --static-ip, which was not given, so they "
-                'will be ignored. Add --static-ip="<CIDR>" to set a static address.')
-    return None
-
-
-# --- The --encrypt opt-in (encrypt the INSTANT auto-install's target disk) ----
-# Encryption reuses the ONE password (--ssh/--password); there is no separate encryption
-# password. --encrypt is only meaningful for instant variants (unattended); interactive
-# installs choose encryption at install time.
-
-def wants_encrypt(argv: list[str]) -> bool:
-    """True if --encrypt was requested (encrypt the instant install's disk)."""
-    return _presence_flag(argv, "--encrypt")
-
-
-def check_encrypt_flag(argv: list[str]) -> str | None:
-    """--encrypt without a password (--ssh/--password) is a hard error: there is no
-    passphrase to encrypt with, and no default is ever shipped."""
-    if wants_encrypt(argv) and not ssh_flag_present(argv) and not password_flag_present(argv):
-        return (
-            "--encrypt needs a password to use as the disk passphrase, but neither --ssh "
-            'nor --password was given. Add --password="<PW>" (or --ssh="<PW>") so the '
-            "encrypted install has a passphrase. No ISO was built."
-        )
-    return None
-
-
-# --- The --type / --instant / --timezone axis flags -------------------------
-# The build matrix has three orthogonal axes; the build is the Cartesian product of what
-# was requested (variants.selected_variants). A bare compile.sh still builds exactly one
-# ISO (azarch-headed), and --ssh keeps its existing meaning.
-#   --type=<headed|headless|all|both>  which product LINE(s): headed (default) | headless |
-#                      all/both (both).
-#   --instant          ALSO build the instant (auto-install) variants.
-#   --ssh="<PASSWORD>"  ALSO build the ssh variants (existing flag, unchanged).
-#   --timezone="<TZ>"   the instant-install timezone (default Asia/Jerusalem; validated).
-
-def _presence_flag(argv: list[str], name: str) -> bool:
-    """True if a bare presence flag (e.g. --instant, --encrypt) appears in argv, in either
-    the bare (`--instant`) or value (`--instant=anything`) spelling. These axes are on/off,
-    so any spelling means 'on'."""
-    return any(t == name or t.startswith(name + "=") for t in argv)
-
-
-_TYPE_VALUES = ("headed", "headless", "all", "both")
-
-
-def parse_type_flag(argv: list[str]) -> str:
-    """The product-line selection: the `--type=<headed|headless|all|both>` value,
-    normalized (both -> all), or "headed" when the flag is absent or blank.
-    `all`/`both` mean 'build BOTH lines'. split('=', 1) so a value is never truncated;
-    a blank value falls back to the default."""
-    for token in argv:
-        if token.startswith("--type="):
-            value = token.split("=", 1)[1]
-            if not value:
-                return "headed"
-            return "all" if value == "both" else value
-    return "headed"
-
-
-def check_type_flag(argv: list[str]) -> str | None:
-    """Validate --type, returning an ERROR MESSAGE to abort on, or None to proceed.
-    Absent/blank is fine (defaults to headed). A value outside headed|headless|all|both
-    is a hard error."""
-    for token in argv:
-        if token.startswith("--type="):
-            value = token.split("=", 1)[1]
-            if value and value not in _TYPE_VALUES:
-                return (
-                    f'--type="{value}" is not a valid product line. Use one of: '
-                    '--type="headed" (default, the GUI line), --type="headless" '
-                    '(console-only), or --type="all" (both; --type="both" is an alias). '
-                    "No ISO was built."
-                )
-    return None
-
-
-def type_wants_headless(type_value: str) -> bool:
-    """True when the selected --type builds the headless line (headless or all)."""
-    return type_value in ("headless", "all")
-
-
-def wants_instant(argv: list[str]) -> bool:
-    """True if the instant variants were requested (--instant)."""
-    return _presence_flag(argv, "--instant")
-
-
-DEFAULT_INSTANT_TIMEZONE = "Asia/Jerusalem"
-
-
-def parse_timezone_flag(argv: list[str]) -> str:
-    """The instant-install timezone: the `--timezone=<TZ>` value, or the
-    Asia/Jerusalem default when the flag is absent or blank. split('=', 1) so a zone with
-    no '=' is taken verbatim; a blank value falls back to the default."""
-    for token in argv:
-        if token.startswith("--timezone="):
-            return token.split("=", 1)[1] or DEFAULT_INSTANT_TIMEZONE
-    return DEFAULT_INSTANT_TIMEZONE
-
-
-def check_timezone_flag(argv: list[str]) -> str | None:
-    """Validate --timezone against the build host's zoneinfo DB, returning an ERROR MESSAGE
-    to abort on, or None to proceed. A --timezone naming a zone with no
-    /usr/share/zoneinfo/<TZ> file is a hard error (the installer validates the same way at
-    runtime, so catching it at compile time fails fast instead of shipping an instant ISO
-    that aborts mid-install). Absent/blank --timezone is fine (the default is always valid).
-    Pure enough to unit-test: it only stats the host zoneinfo tree."""
-    from pathlib import Path as _Path
-    present = any(t == "--timezone" or t.startswith("--timezone=") for t in argv)
-    if not present:
-        return None
-    tz = parse_timezone_flag(argv)
-    if not _Path(f"/usr/share/zoneinfo/{tz}").is_file():
-        return (
-            f'--timezone="{tz}" is not a known timezone on this build host (no '
-            f"/usr/share/zoneinfo/{tz}). Use e.g. --timezone=\"Europe/London\" or "
-            '--timezone="America/New_York"; see /usr/share/zoneinfo for the full list. '
-            "No ISO was built."
-        )
-    return None
-
-
-def timezone_without_instant_warning(argv: list[str]) -> str | None:
-    """A WARNING (not an error) when --timezone is given without --instant: the timezone
-    only affects the instant auto-install, so it is silently unused otherwise -- most likely
-    the operator forgot --instant. Returns the warning text, or None when there is nothing to
-    warn about."""
-    present = any(t == "--timezone" or t.startswith("--timezone=") for t in argv)
-    if present and not wants_instant(argv):
-        return ("--timezone only affects the instant auto-install, but --instant was not "
-                "requested, so it will be ignored. Add --instant to build the instant "
-                "variants.")
-    return None
-
-
 def _variants_for(ssh_hash: str | None) -> tuple[str, ...]:
-    """LEGACY helper (kept for the sshd-variant tests): the two headed variant KEYS a
-    build produces given only the ssh hash -- base always, sshd only with a hash. The live
-    build now selects variants via variants.selected_variants (three axes), so run() no
-    longer calls this; it remains as the documented base-always / ssh-opt-in contract."""
+    """The ISO variants a build ACTUALLY produces this run. The base/desktop ISO is
+    ALWAYS built; the sshd ISO is built ONLY when an --ssh password (already hashed)
+    was supplied. Preserves VARIANTS order (base first)."""
     if ssh_hash:
         return VARIANTS
     return ("base",)
@@ -525,10 +233,7 @@ def kill_active_child(sudo: list[str]) -> None:
 
 
 def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
-        full_compile: bool = False, ssh_password_hash: str | None = None,
-        build_variants: tuple = (), timezone: str = "Asia/Jerusalem",
-        login_user: str = "main", login_password: str | None = None,
-        encrypt: bool = False, static_ip_text: str | None = None) -> list[Path]:
+        full_compile: bool = False, ssh_password_hash: str | None = None) -> list[Path]:
     """Execute all steps; return the paths of the built ISOs. Raises on failure.
 
     full_compile: when True, Az'arch's own packages (librewolf) are compiled from
@@ -536,129 +241,59 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     makepkg stage below.
 
     ssh_password_hash: the operator's --ssh password ALREADY HASHED (sha-512 crypt),
-    or None. It is the credential the `ssh` variants bake into `main`'s /etc/shadow
-    (DECISION 2: no default password is ever shipped -- it comes from the operator at
-    build time). None means no ssh variant was requested.
+    or None. It decides whether the OPT-IN sshd ISO is built (DECISION 2: no default
+    password is ever shipped -- the sshd variant's credential comes from the operator
+    at build time). None -> ONLY the base/desktop ISO is built. A hash -> the base ISO
+    PLUS the `azarch-sshd` medium, whose /etc/shadow carries that hash for `main` and
+    which auto-runs `azarch --sshd-hypervisor` at boot.
 
-    build_variants: the variants.Variant tuple this build produces (from
-    variants.selected_variants, decided by the --type/--instant/--ssh flags). It
-    ALWAYS contains the headed base point; it may add the headless line and the
-    instant/ssh flavours. Empty -> default to the single headed base point.
-
-    timezone: the instant-install timezone baked into the instant autorun (compile
-    --timezone, default Asia/Jerusalem; validated on the build host).
-
-    Structure: the build groups the selected variants BY LINE (headed, headless). The
-    two lines need DIFFERENT airootfs contents -- the headless line strips the whole GUI
-    stack (packages AND emitted session files) -- so they cannot share one squashfs.
-    Each line therefore gets its own full profile build (cheap overlay emits) plus one
-    mkarchiso pass per selected sub-variant of that line. The genuinely expensive,
-    line-independent work -- the package cache warm and the own-package (calamares/
-    librewolf) build -- lands in the persistent cache OUTSIDE the work tree, so the
-    first line pays for it and every later line/pass reuses it for free (each line
-    recomputes `offline`, which flips to True once the cache is warm). Within a line
-    the tiny per-variant differences (profiledef iso_name, /etc/shadow, the sshd and
-    instant enable-links) are cheap overlays applied just before each pass."""
-    if not build_variants:
-        build_variants = (_variants.Variant(),)  # headed base point
-    sudo = _sudo()
-
-    # 0 -- One-time workspace reset + host-toolchain check, BEFORE the line loop, so
-    # they run exactly once no matter how many lines/variants are selected (they are
-    # line-independent, and the toolchain check is the single point a missing dep is
-    # reported). Each line's own profile build re-scaffolds the releng tree into W.
-    bar.step("Reset build workspace")
-    _unmount_worktree(sudo)
-    paths.BUILDDIR.mkdir(parents=True, exist_ok=True)
-    subprocess.run(sudo + ["rm", "-rf", str(paths.WORKDIR)], check=False)
-    paths.WORKDIR.mkdir(parents=True, exist_ok=True)
-
-    bar.step("Sync host toolchain")
-    _check_host_deps(sudo, offline)
-
-    # Build each selected LINE in turn (headed first, per selected_variants order),
-    # each producing one ISO per its selected sub-variants. Recompute `offline` per
-    # line: after the first line warms the cache, later lines build fully offline.
-    #
-    # own_packages_ready: the calamares/librewolf build (step 13) is line-independent --
-    # the packages land in the shared repo. The FIRST line builds them; every later line
-    # just RE-STAGES the already-built repo into its airootfs instead of rebuilding. This
-    # matters for `--full-compile` + a second line: without this, `build_own_packages`
-    # offline+full-compile would RE-COMPILE librewolf from source (a multi-hour job) again
-    # for the headless line. Passing own_packages_ready=True after the first line skips that.
-    isos: list[Path] = []
-    own_packages_ready = False
-    for line in _lines_in(build_variants):
-        line_variants = tuple(v for v in build_variants if v.line == line)
-        line_offline = cache_is_complete()
-        isos += _build_line(
-            bar, line, line_variants, line_offline, reclaim_after_mkarchiso,
-            full_compile=full_compile, ssh_password_hash=ssh_password_hash,
-            timezone=timezone, own_packages_ready=own_packages_ready,
-            login_user=login_user, login_password=login_password,
-            encrypt=encrypt, static_ip_text=static_ip_text,
-        )
-        own_packages_ready = True  # built (or confirmed present) by the first line
-    return isos
-
-
-def _build_line(bar: ProgressBar, line: str, line_variants: tuple, offline: bool,
-                reclaim_after_mkarchiso, *, full_compile: bool,
-                ssh_password_hash: str | None, timezone: str,
-                own_packages_ready: bool = False, login_user: str = "main",
-                login_password: str | None = None, encrypt: bool = False,
-                static_ip_text: str | None = None) -> list[Path]:
-    """Build ONE product line's profile tree and assemble its ISO(s).
-
-    line: "headed" or "headless". is_gui below drives every difference between the two:
-    the headed line ships the full manifest + the OpenBox/Calamares/apps session
-    emits; the headless line ships the console subset of the manifest and NONE of the
-    GUI emits (its live console is a plain login shell, and it installs via the
-    headless CLI installer). Everything else -- accounts, branding/locale, the
-    installed-system pacman + pkgs service, systemd units, power policy, the installer
-    payload, the cache warm, and the own-package build -- is identical across lines.
-
-    own_packages_ready: True when a prior line already built calamares/librewolf into the
-    shared repo, so this line skips the (possibly multi-hour under --full-compile) rebuild
-    and only re-stages the repo. False on the first line, which does the real build.
-
-    Returns the ISO paths this line produced (one per variant in line_variants)."""
-    is_gui = line == _variants.LINE_HEADED
+    Every step up to mkarchiso is variant-independent -- same packages, same shared
+    airootfs -- so the shared, heavy work (package cache, own-package build) happens
+    exactly once. The per-variant differences (profiledef iso_name, the sshd-hypervisor
+    auto-setup service, and the variant's /etc/shadow) plus a per-variant mkarchiso
+    pass run in the finalize loop at the end.
+    """
     W = paths.WORKDIR
     airootfs = W / "airootfs"
     ea = airootfs / "root/azarch"  # the azarch payload dir baked into the ISO
     sudo = _sudo()
 
-    # Reset the profile tree for THIS line (the prior line's tree, if any, is wiped so
-    # a headed overlay never bleeds into the headless ISO). The persistent package repo
-    # + cache live outside W, so this reset is cheap and loses nothing expensive.
+    # 1 -- Reset build workspace
+    bar.step("Reset build workspace")
     _unmount_worktree(sudo)
+    paths.BUILDDIR.mkdir(parents=True, exist_ok=True)
     subprocess.run(sudo + ["rm", "-rf", str(W)], check=False)
     W.mkdir(parents=True, exist_ok=True)
+    # NB: we deliberately do NOT os.chdir(W) here. Every path below (emits,
+    # subprocess calls, and the mkarchiso invocation with its absolute -w/-o and
+    # profile args) is absolute, so the build never needs the process cwd to be the
+    # workdir -- and chdir'ing into it left the interpreter (and its caller) parked
+    # inside a disposable scratch tree that gets rm -rf'd on the next run/clear.sh.
+
+    # 2 -- Sync host toolchain
+    bar.step("Sync host toolchain")
+    _check_host_deps(sudo, offline)
 
     # 3 -- Scaffold releng profile
-    bar.step(f"[{line}] Scaffold releng profile")
+    bar.step("Scaffold releng profile")
     _copy_releng(W)
 
     # 4 -- Brand boot menus (systemd-boot + syslinux)
-    bar.step(f"[{line}] Brand boot menus (systemd-boot, syslinux)")
+    bar.step("Brand boot menus (systemd-boot, syslinux)")
     _brand_boot_menus(W)
 
-    # 5 -- Stage pacstrap package manifest (FILTERED per line: the full manifest for
-    # the headed line, the console subset -- manifest minus the GUI stack -- for the
-    # headless line). The offline cache still holds the full superset (warmed below), so a
-    # headless pacstrap just installs fewer of the cached packages. See packages_manifest.
-    bar.step(f"[{line}] Stage pacstrap package manifest")
-    emit.write_text(W / "packages.x86_64", packages_manifest.manifest_text_for(is_gui))
+    # 5 -- Stage pacstrap package manifest
+    bar.step("Stage pacstrap package manifest")
+    emit.copy_data("packages.x86_64", W / "packages.x86_64")
 
     # 6 -- Provision airootfs accounts (users/groups + /home/main, chowned for the
     # autologin `main` user the getty drops straight into on the live console).
-    bar.step(f"[{line}] Provision airootfs accounts (console autologin)")
+    bar.step("Provision airootfs accounts (console autologin)")
     emit.write_text(airootfs / "etc/passwd", system.PASSWD)
     # Shadow ships LOCKED by default (both accounts, DECISION 1): no password login is
-    # possible on the base ISO, autologin still works. The ssh variants rewrite `main`'s
-    # field to the operator's hash per-pass in _apply_variant, so this shared write is
-    # the safe locked baseline every variant starts from.
+    # possible on the base/desktop ISO, autologin still works. The opt-in sshd variant
+    # rewrites `main`'s field to the operator's hash per-pass in _apply_variant, so this
+    # shared write is the safe locked baseline both variants start from.
     emit.write_text(airootfs / "etc/shadow", system.shadow_for(None), mode=0o600)
     emit.write_text(airootfs / "etc/gshadow", system.GSHADOW, mode=0o600)
     emit.write_text(airootfs / "etc/group", system.GROUP)
@@ -669,16 +304,14 @@ def _build_line(bar: ProgressBar, line: str, line_variants: tuple, offline: bool
     # 7 -- Overlay branding and locale into airootfs.
     # One coherent overlay-population act: locale setup-script + service, the fastfetch
     # logo, and the os-release/hostname rebrand.
-    bar.step(f"[{line}] Overlay branding and locale")
+    bar.step("Overlay branding and locale")
 
     # locale: first-run setup script + the systemd unit that runs it.
     emit.write_exec(ea / "setup-locale.sh", locale.setup_locale_sh())
     emit.write_text(airootfs / "etc/systemd/system/locale-setup.service", system.LOCALE_SETUP_SERVICE)
 
-    # the azarch fastfetch logo/config for the live (and installed) user. is_gui selects the
-    # per-line Edition label the config prints (HEADED vs HEADLESS); it is baked in here so it
-    # stays correct on the installed system (a verbatim clone of this live rootfs).
-    _emit_fastfetch(ea, home, is_gui=is_gui)
+    # the azarch fastfetch logo/config for the live (and installed) user.
+    _emit_fastfetch(ea, home)
 
     # os-release rebrand:
     # Live ISO: the build pacman.conf NoExtracts usr/lib/os-release (libraries/pacman.py)
@@ -692,276 +325,191 @@ def _build_line(bar: ProgressBar, line: str, line_variants: tuple, offline: bool
     # pacstrap). The branded file is staged read-only under root/azarch/os-release and
     # the hook copies it into place inside the pacstrapped rootfs.
     emit.write_text(ea / "os-release", system.OS_RELEASE)
-    # The customize hook. On the HEADED line it also carries the per-app override
-    # plant/remove lines (kitty icon SVG, the stale cat PNGs, the gedit/thunar/xviewer
-    # .desktop files, ...) -- those `install`/`rm` lines target GUI PACKAGE paths and copy
-    # bodies _emit_apps stages under root/azarch/apps/. The HEADLESS line ships none of those
-    # packages and runs no _emit_apps, so it gets the branding-only hook (appending the app
-    # overrides there would `install` from absent staged bodies onto absent package files).
-    hook = system.CUSTOMIZE_AIROOTFS + (pacman.app_override_cp_sh() if is_gui else "")
-    emit.write_exec(airootfs / "root/customize_airootfs.sh", hook)
+    # The per-app system files kitty/gedit override (kitty icon SVG, the two stale
+    # cat PNGs, the gedit .desktop) are owned by their own packages, so they hit the
+    # SAME conflict wall -- planting them in the overlay aborts pacstrap. They get the
+    # identical after-pacstrap cure: NoExtract'd (libraries/pacman.py) and copied in by the
+    # customize hook. The replacement bodies are staged under root/azarch/apps/ in
+    # _emit_apps (step 8); here we append their plant/remove lines to the hook.
+    emit.write_exec(airootfs / "root/customize_airootfs.sh",
+                    system.CUSTOMIZE_AIROOTFS + pacman.app_override_cp_sh())
     # Overlay the releng `archiso` hostname with `azarch` (prompt + fastfetch title).
     emit.write_text(airootfs / "etc/hostname", system.HOSTNAME)
 
-    # 8 -- Overlay the live session.
-    # The tty1 autologin override (releng autologins ROOT; we autologin `main` on BOTH
-    # lines) is UNIVERSAL: on the headed line `main`'s ~/.bash_profile (emitted just below)
-    # execs startx into OpenBox; on the headless line there is no such bash_profile, so `main`
-    # simply lands on a plain console login shell -- the correct headless behaviour, and
-    # consistent with the identity re-point the installer runs (which expects an
-    # `--autologin main` drop-in to rewrite after a rename). The `azarch` COMMAND core
-    # (_emit_azarch_commands: the azarch + azarch-install wrappers, the compiled azarch TUI/OSD
-    # binaries, and the passwords/backup/hypervisor commands) is ALSO universal -- the headless
-    # line needs the `azarch` command (its sshd auto-setup runs `azarch --sshd-hypervisor`, and
-    # `azarch-install` is its installer). Everything gated by is_gui below is the GRAPHICAL
-    # stack ONLY (OpenBox/X11 session, per-app tweaks, home-dir layout, the Calamares GUI
-    # installer + its vendored ckbcomp): HEADED-ONLY, since the headless line has no X and
-    # installs via the headless CLI installer staged in step 10.
-    bar.step(f"[{line}] Overlay live session and installer configuration")
-    _emit_tty1_autologin(airootfs)   # autologin `main` to tty1 on both lines
-    _emit_azarch_commands(airootfs, home)   # the azarch command core -- BOTH lines
-    if is_gui:
-        _emit_desktop(airootfs, home)
-        _emit_homedir(airootfs, home)
-        _emit_apps(airootfs, home, ea)
-        _emit_calamares(airootfs)
-        # ckbcomp: Calamares' keyboard page renders its on-screen key legends by shelling
-        # out to `ckbcomp`; without it the preview draws BLANK keys. It is a self-contained
-        # Python 3 port vendored in the calamares package, copied verbatim into /usr/bin.
-        # Desktop-only (it exists solely for the Calamares GUI).
-        emit.copy_data("calamares/ckbcomp.py", airootfs / "usr/bin/ckbcomp", mode=0o755)
+    # 8 -- Overlay the OpenBox live desktop + Calamares installer configuration.
+    # The graphical live session (Manjaro-style): user configs go to BOTH the live
+    # `main` home AND /etc/skel (so a Calamares-created user on the installed system
+    # inherits the same desktop). The tty1 autologin override switches the releng
+    # default (autologin root) to autologin `main`, whose .bash_profile execs startx
+    # into an OpenBox X11 session. The Calamares configuration tree lands under /etc/calamares.
+    bar.step("Overlay OpenBox desktop and Calamares configuration")
+    _emit_desktop(airootfs, home)
+    _emit_homedir(airootfs, home)
+    _emit_apps(airootfs, home, ea)
+    _emit_calamares(airootfs)
+    _emit_tty1_autologin(airootfs)
+    # ckbcomp: Calamares' keyboard page renders its on-screen key legends by shelling
+    # out to `ckbcomp`; without it the preview draws BLANK keys ("ckbcomp not found,
+    # keyboard preview disabled"). `ckbcomp` is a self-contained Python 3 port of the
+    # upstream (Debian/Manjaro) Perl ckbcomp -- byte-identical output, no Perl in the
+    # tree -- which Arch does NOT package, so we vendor it as a file in the calamares package
+    # (libraries/packages/calamares/ckbcomp.py holds the script) and copy it verbatim into
+    # /usr/bin. It needs only python (in base) and the XKB data in /usr/share/X11/xkb (shipped
+    # by xkeyboard-config), both present. It lands in the live ISO (as /usr/bin/ckbcomp, no .py
+    # suffix) and is copied to the target by unpackfs.
+    emit.copy_data("calamares/ckbcomp.py", airootfs / "usr/bin/ckbcomp", mode=0o755)
 
     # 9 -- Stage installed-system pacman and pkgs service.
     # The package-management unit of the installed system: its /etc/pacman.conf, the
-    # live-session setup-pkgs.sh, and the pkgs-setup.service that runs it. Universal.
-    bar.step(f"[{line}] Stage installed-system pacman and pkgs service")
+    # live-session setup-pkgs.sh, and the pkgs-setup.service that runs it.
+    bar.step("Stage installed-system pacman and pkgs service")
     emit.write_text(airootfs / "etc/pacman.conf", pacman.installer_base_conf())
     emit.write_exec(ea / "setup-pkgs.sh", installer.setup_pkgs_sh())
     emit.write_text(airootfs / "etc/systemd/system/pkgs-setup.service", system.PKGS_SETUP_SERVICE)
 
-    # 9b -- Enable systemd units and sudoers policy. Universal daemons (NetworkManager,
-    # CUPS, spice-vdagentd, locale/pkgs oneshots, sleep policy, virtiofs share) + the
-    # sudoers.d drop-ins + power management. The headed-only timedate Flask service is
-    # enabled inside _link_services only when is_gui (its unit is emitted by _emit_desktop,
-    # which the headless line skips). The sshd-hypervisor and instant auto-setup units are
-    # per-variant (finalize loop), not here.
-    bar.step(f"[{line}] Enable systemd units and sudoers policy")
-    _link_services(airootfs, is_gui=is_gui)
+    # 9 -- Enable systemd units and sudoers policy.
+    # Activation/policy at profile finalization: the always-on *.target.wants symlinks
+    # that enable the daemons, plus the sudoers.d drop-ins. The sshd-hypervisor
+    # auto-setup service (emitted + enabled ONLY for the azarch-sshd ISO) is handled
+    # per-variant in the finalize loop below, not here -- this step is variant-shared.
+    bar.step("Enable systemd units and sudoers policy")
+    _link_services(airootfs)
     emit.write_text(airootfs / "etc/sudoers.d/00-rootpw", system.SUDOERS_ROOTPW, mode=0o440)
     emit.write_text(airootfs / "etc/sudoers.d/00-main", system.SUDOERS_MAIN, mode=0o440)
     emit.write_text(airootfs / "etc/sudoers.d/00-secure-path", system.SUDOERS_SECURE_PATH, mode=0o440)
+    # Power management (lid/button + PC-vs-laptop idle sleep), folded into this
+    # unit/policy step so the STEP_WEIGHTS milestone-count invariant is untouched.
+    # All root-owned under /etc + /usr/local/bin, so the OFFLINE Calamares install
+    # (unpackfs rsyncs the live rootfs) carries them onto the installed system with
+    # no separate installer step. The lid/power-button drop-in is STATIC; the
+    # idle-sleep policy is a script+service+udev-rule that decides PC vs laptop and
+    # AC state at runtime (see libraries/system.py). The service enable-symlink is
+    # added in _link_services alongside the other multi-user oneshots.
     _emit_power(airootfs)
-    # The virtiofs shared-folder .mount unit + its mountpoint, enabled on every variant.
+
+    # The virtiofs shared-folder .mount unit + its mountpoint, enabled on both
+    # variants (enable-link in _link_services). Makes --shared appear on the desktop
+    # variant, not just the ssh one.
     _emit_shared_mount(airootfs)
 
-    # Static IPv4: bake ONE NetworkManager keyfile so a deployed machine has a fixed
-    # address (the rootfs clone / Calamares unpackfs carries it onto the install). 0600,
-    # root-owned (NetworkManager refuses world-readable keyfiles).
-    if static_ip_text is not None:
-        emit.write_text(airootfs / network_profile.CONNECTION_PATH.lstrip("/"),
-                        static_ip_text, mode=0o600)
-
     # 10 -- Emit installer payload.
-    # The first-boot script/service/conf + the scripted (terminal/SSH/instant) installer.
-    # profiledef.sh is written per-variant in the finalize loop (its iso_name differs).
-    # The CLI installer (azarch-install-cli.sh) is the ONLY installer on the headless line
-    # and the SSH/instant installer on both lines. The instant autorun script is staged
-    # here too (per line: its ssh flag follows whether any ssh variant of this line is
-    # built; the actual enable happens per-variant). Universal.
-    bar.step(f"[{line}] Emit installer payload")
+    # The first-boot script/service/conf. profiledef.sh (archiso metadata at the
+    # PROFILE ROOT) is NOT emitted here: its iso_name is the one thing that differs
+    # per variant, so it is written per-variant in the finalize loop below. Calamares
+    # (auto-launched from the OpenBox session, step 8) is the GUI installer. The scripted
+    # terminal installer is ALSO emitted (as azarch-install-cli.sh under /root/azarch) so
+    # `azarch-install --cli` can install over SSH with no X -- same partition/pacstrap/
+    # chroot-setup pipeline as the first-boot installer, just driven from a terminal.
+    bar.step("Emit installer payload")
     emit.write_exec(ea / "first-boot-setup.sh", installer.first_boot_sh())
     emit.write_text(ea / "first-boot-setup.service", installer.first_boot_service())
     emit.write_text(ea / "first-boot-setup.conf", installer.first_boot_conf())
+    # The scripted (terminal/SSH) installer -- the CLI half of azarch-install. Baked under
+    # /root/azarch alongside the payload it reads (packages.x86_64, chroot-setup.sh, the
+    # offline repo). openbox.INSTALL_CLI_SCRIPT_PATH points azarch-install --cli at it.
     emit.write_exec(ea / "azarch-install-cli.sh", installer.installer_sh())
 
-    # 11 -- Resolve build pacman.conf and mirrors (uses the FULL manifest's repo).
-    bar.step(f"[{line}] Resolve build pacman.conf and mirrors")
+    # 11 -- Resolve build pacman.conf and mirrors.
+    # Writes the pacstrap/mkarchiso build pacman.conf, injects the persistent CacheDir,
+    # probes mirrors, and switches to the local file:// repo when offline. A distinct
+    # pacman-prep stage that gates the cache download below.
+    bar.step("Resolve build pacman.conf and mirrors")
     _write_build_pacman_conf(W, offline, bar)
 
     # 12 -- Warm pacman cache and stage installer payload (GIANT, weight 250).
-    # Warms the FULL manifest superset (line-independent) into the persistent cache, so
-    # the headless line's smaller pacstrap still resolves from it and later lines reuse it.
-    bar.step(f"[{line}] Warm pacman cache and stage installer payload")
+    # pacman -Sw builds/indexes the local repo (drives bar.sub sub-progress), then the
+    # on-disk installer's package manifest + pacman confs + chroot-setup.sh are staged.
+    bar.step("Warm pacman cache and stage installer payload")
     downloader.build_cache(W, paths.CACHEDIR, offline, bar.sub, bar.phase, full_compile)
     bar.sub_done()
     bar._arm(); bar.draw()
-    # stage the installer-side payload the on-disk installer needs (the FILTERED manifest
-    # for this line, so the installed headless system's own pacstrap manifest is console-only).
-    emit.write_text(ea / "packages.x86_64", packages_manifest.manifest_text_for(is_gui))
+    # stage the installer-side payload the on-disk installer needs
+    emit.copy_data("packages.x86_64", ea / "packages.x86_64")
     emit.write_text(ea / "pacman-base-conf/pacman.conf", pacman.installer_base_conf())
     emit.write_text(ea / "pacstrap-azarch-conf/pacman.conf", pacman.installer_pacstrap_conf())
-    emit.write_exec(ea / "chroot-setup.sh", installer.chroot_setup_sh(is_gui=is_gui))
+    emit.write_exec(ea / "chroot-setup.sh", installer.chroot_setup_sh())
 
-    # 13 -- Build Az'arch's OWN packages and fold them into the offline repo (GIANT-ish,
-    # weight 120; MUCH heavier under --full-compile). calamares + librewolf are built in
-    # every tier; whatever is built is dropped into cache/pkgs/repo/ and re-staged into
-    # airootfs. This is line-INDEPENDENT (the built packages land in the shared repo); on
-    # the headless line they simply are not in that line's pacstrap manifest, so they are
-    # built-but-not-installed (harmless -- the repo is a superset).
-    #
-    # own_packages_ready: only the FIRST line actually BUILDS them; a later line skips the
-    # build (they are already in the shared repo) and just RE-STAGES the repo into its own
-    # airootfs. Without this skip, `--full-compile` on a second line would re-run the
-    # multi-hour librewolf-from-source compile (build_own_packages offline+full-compile
-    # RE-COMPILES by design). The milestone (and the cheap re-stage) still run per line, so
-    # the step count stays one-per-line and every line's airootfs gets the repo.
-    bar.step(f"[{line}] Build packages (calamares, librewolf)")
-    if own_packages_ready:
-        print("    [+] Own packages already built this run -- re-staging the shared repo "
-              "for this line (no rebuild).")
-        bar.sub(1000)
-    else:
-        makepkg.build_own_packages(offline, full_compile, bar.sub, bar.phase)
+    # 13 -- Build Az'arch's OWN packages and fold them into the offline repo
+    # (GIANT-ish, weight 120; MUCH heavier under --full-compile). BOTH calamares
+    # and librewolf are built here in EVERY tier -- neither is in an Arch repo
+    # (librewolf never was; calamares was dropped from extra/, now AUR-only, so
+    # step 12 can no longer fetch it). Default tier: calamares from source
+    # (sha256-verified) + librewolf by repackaging the verified upstream binary
+    # tarball. --full-compile: calamares from source + librewolf from Firefox
+    # source. Whatever is built is dropped into cache/pkgs/repo/, then we
+    # RE-reconcile the index and RE-stage the repo into airootfs so mkarchiso's
+    # pacstrap (and the on-disk installer) can install them.
+    bar.step("Build packages (calamares, librewolf)")
+    makepkg.build_own_packages(offline, full_compile, bar.sub, bar.phase)
     bar.sub_done()
     bar._arm(); bar.draw()
     _refold_own_packages_into_repo(W, full_compile)
 
-    # 14 -- Assemble this line's ISO(s): one mkarchiso pass per selected sub-variant
-    # (weight 270 each). Every step above is variant-independent within the line, so we
-    # overlay each variant's tiny differences (profiledef iso_name, /etc/shadow, the sshd
-    # + instant enable-links) onto the shared airootfs and run one pass per variant.
-    # mkarchiso re-copies the airootfs overlay into its work tree at the start of each
-    # pass, so toggling the shadow / enable-symlinks between passes is reflected per ISO.
-    line_isos: list[Path] = []
-    for variant in line_variants:
-        _apply_variant(W, airootfs, variant,
-                       ssh_password_hash=ssh_password_hash, timezone=timezone,
-                       login_user=login_user, login_password=login_password,
-                       encrypt=encrypt)
-        bar.step(f"Assemble {variant.iso_name} ISO (mkarchiso)")
-        line_isos.append(_run_mkarchiso(sudo, W, bar, reclaim_after_mkarchiso,
-                                        iso_name=variant.iso_name))
-    return line_isos
+    # 14/15 -- Assemble the selected ISO variant(s) (one GIANT mkarchiso pass each,
+    # weight 270). The base ISO always builds; the sshd ISO only when --ssh opted in
+    # (_variants_for). Every step above is variant-independent, so we overlay each
+    # variant's tiny differences (its profiledef iso_name, its /etc/shadow, and whether
+    # the sshd-hypervisor auto-setup service is emitted/enabled) onto the shared airootfs
+    # and run one mkarchiso pass per variant. mkarchiso re-copies the profile's airootfs
+    # overlay into its work tree at the start of each pass, so toggling the shadow /
+    # sshd enable-symlink between passes is correctly reflected in each ISO. The base
+    # pass runs first, then (if selected) the sshd pass; each lands in output/ with its
+    # distinct iso_name.
+    isos: list[Path] = []
+    for variant in _variants_for(ssh_password_hash):
+        _apply_variant(W, airootfs, variant, ssh_password_hash=ssh_password_hash)
+        bar.step(f"Assemble {profile.iso_name_for(variant)} ISO (mkarchiso)")
+        isos.append(_run_mkarchiso(sudo, W, bar, reclaim_after_mkarchiso,
+                                   iso_name=profile.iso_name_for(variant)))
+    return isos
 
 
 # --- helpers ---------------------------------------------------------------
 
-def _apply_variant(W: Path, airootfs: Path, variant,
-                   ssh_password_hash: str | None = None,
-                   timezone: str = "Asia/Jerusalem",
-                   login_user: str = "main", login_password: str | None = None,
-                   encrypt: bool = False) -> None:
-    """Overlay the per-variant differences onto the shared (per-line) profile tree just
-    before its mkarchiso pass. Accepts a variants.Variant (or a legacy "base"/"sshd"
-    key, coerced) and toggles the two flavour axes -- ssh and instant -- independently.
-    Four things differ between the variants of a line, all rewritten EVERY pass so a
-    preceding variant's state never bleeds into the next one on the shared airootfs:
+def _apply_variant(W: Path, airootfs: Path, variant: str,
+                   ssh_password_hash: str | None = None) -> None:
+    """Overlay the per-variant differences onto the shared profile tree just before
+    its mkarchiso pass. Three things differ between the base and sshd ISOs:
 
-      1. profiledef iso_name -- drives the artifact filename (azarch-<line>[-instant]
-         [-ssh]-<ver>.iso). Rewritten at the profile root.
-      2. /etc/shadow -- ssh variants replace `main`'s field with the operator's
-         build-time hash (remote login with the --ssh password); non-ssh variants ship
-         the base LOCKED shadow (relocked here even if a prior ssh pass left a hash).
-      3. the sshd-hypervisor auto-setup service + enable-link -- emitted+enabled ONLY on
-         ssh variants (that ISO auto-runs `azarch --sshd-hypervisor` at boot); removed
-         otherwise.
-      4. the instant auto-install service + enable-link -- emitted+enabled ONLY on
-         instant variants. Its script (installer.instant_install_sh) pre-seeds the
-         AZ_INSTALL_* environment for the largest-non-USB-disk unattended install with
-         user `main`, the given timezone, and either the cloned ssh password (ssh
-         variants) or a LOCKED `!*` account (non-ssh). Removed on non-instant variants.
+      1. profiledef iso_name -- drives the artifact filename (azarch-desktop-<ver>.iso vs
+         azarch-desktop-ssh-<ver>.iso). Rewritten at the profile root every pass.
+      2. the sshd-hypervisor auto-setup service -- emitted AND enabled (a
+         multi-user.target.wants symlink) ONLY for the sshd variant, so that ISO
+         auto-runs `azarch --sshd-hypervisor` at boot. The base ISO must have
+         NEITHER, so we affirmatively remove both when building it -- otherwise a
+         leftover from the preceding sshd... (order is base-first today, but this
+         stays correct if the order ever flips) would bleed into the base ISO.
+      3. /etc/shadow -- the base ISO ships LOCKED accounts (no password login); the
+         sshd ISO replaces `main`'s field with the operator's build-time hash so
+         they can log in remotely with the --ssh password. Rewritten every pass so a
+         hashed shadow from a preceding sshd pass never leaks into the base ISO.
 
-    ssh_password_hash is REQUIRED (a sha-512 crypt hash) for an ssh variant: an ssh ISO
-    must never ship the base locked shadow -- that would be an sshd nobody can log in to,
-    silently hiding that the credential was dropped."""
-    v = _variants.coerce(variant)
-    emit.write_exec(W / "profiledef.sh", profile.profiledef_sh(v))
+    ssh_password_hash is REQUIRED (a sha-512 crypt hash) when variant == "sshd": the
+    sshd ISO must never be built with the base locked shadow -- that would ship an sshd
+    nobody can authenticate to, silently hiding that the credential was dropped.
 
-    # 2 -- /etc/shadow.
-    if v.ssh:
+    Everything else in the profile is identical across variants and already staged."""
+    emit.write_exec(W / "profiledef.sh", profile.profiledef_sh(variant))
+    svc = airootfs / "etc/systemd/system/sshd-hypervisor-setup.service"
+    link = (airootfs / "etc/systemd/system/multi-user.target.wants"
+            / "sshd-hypervisor-setup.service")
+    if variant == "sshd":
         if not ssh_password_hash:
             raise ValueError(
-                "_apply_variant: an ssh variant requires an --ssh password hash; "
-                "refusing to build an ssh ISO with the base (locked) shadow."
+                "_apply_variant: the sshd variant requires an --ssh password hash; "
+                "refusing to build an sshd ISO with the base (locked) shadow."
             )
+        # main gets the operator's real hash; root stays locked.
         emit.write_text(airootfs / "etc/shadow",
                         system.shadow_for(ssh_password_hash), mode=0o600)
+        emit.write_text(svc, system.SSHD_HYPERVISOR_SETUP_SERVICE)
+        emit.link("/etc/systemd/system/sshd-hypervisor-setup.service", link)
     else:
+        # Base ISO: LOCK the shadow (relock even if a prior sshd pass left a hashed
+        # one in the shared airootfs) and strip the sshd auto-setup unit + enable link.
         emit.write_text(airootfs / "etc/shadow", system.shadow_for(None), mode=0o600)
-
-    wants = airootfs / "etc/systemd/system/multi-user.target.wants"
-
-    # 3 -- sshd-hypervisor auto-setup (ssh variants only).
-    sshd_svc = airootfs / "etc/systemd/system/sshd-hypervisor-setup.service"
-    sshd_link = wants / "sshd-hypervisor-setup.service"
-    if v.ssh:
-        emit.write_text(sshd_svc, system.SSHD_HYPERVISOR_SETUP_SERVICE)
-        emit.link("/etc/systemd/system/sshd-hypervisor-setup.service", sshd_link)
-    else:
-        sshd_link.unlink(missing_ok=True)
-        sshd_svc.unlink(missing_ok=True)
-
-    # 4 -- instant auto-install (instant variants only).
-    inst_svc = airootfs / "etc/systemd/system/azarch-instant-install.service"
-    inst_link = wants / "azarch-instant-install.service"
-    inst_script = airootfs / "root/azarch/azarch-instant-install.sh"
-    if v.instant:
-        # The script's password posture follows THIS variant's ssh flag: ssh -> keep the
-        # cloned --ssh password; non-ssh -> lock the installed account (`!*`).
-        # When --encrypt is set the target disk is LUKS-formatted with the ONE password.
-        # For an ssh variant that password was already cloned into the account, so LUKS
-        # reads it from AZ_INSTALL_PASSWORD only for the NON-ssh case (account stays locked,
-        # but LUKS still needs the secret) -- hence passphrase is threaded only then.
-        passphrase = login_password if (encrypt and not v.ssh) else None
-        emit.write_exec(inst_script,
-                        installer.instant_install_sh(timezone, ssh=v.ssh,
-                                                     encrypt=encrypt, user=login_user,
-                                                     passphrase=passphrase))
-        emit.write_text(inst_svc, system.INSTANT_INSTALL_SERVICE)
-        emit.link("/etc/systemd/system/azarch-instant-install.service", inst_link)
-    else:
-        inst_link.unlink(missing_ok=True)
-        inst_svc.unlink(missing_ok=True)
-        inst_script.unlink(missing_ok=True)
-
-
-def _emit_azarch_commands(airootfs: Path, home: Path) -> None:
-    """Emit the `azarch` COMMAND core -- the part of the guest tooling that is NOT the
-    graphical session and therefore ships on BOTH the headed and headless lines.
-
-    This is the fix for the headless line arriving with "no azarch command, and no ssh": the
-    whole payload below used to live inside _emit_desktop() (headed-only), so a headless ISO
-    got none of it. Concretely it means the sshd-hypervisor auto-setup unit
-    (ExecStart=/usr/local/bin/azarch --sshd-hypervisor, guarded by
-    ConditionPathExists=/usr/local/bin/azarch) SILENTLY SELF-SKIPPED on headless-ssh -- so
-    sshd was never enabled -- and `azarch-install` was absent, leaving no installer command.
-
-    What ships here (all root-owned system paths; the OFFLINE install rsyncs them onto the
-    installed system with no extra step):
-      * the /usr/local/bin/azarch and /usr/local/bin/azarch-install wrappers
-        (openbox.command_line_plan()),
-      * the COMPILED `azarch` terminal UI binary + its theme-preview screenshots, and the
-        COMPILED media OSD binary (built from the azarch package's C sources; harmless on a
-        headless box -- they are only launched by `azarch` subcommands a headless user would
-        not run, but keeping them makes the `azarch` command whole),
-      * the passwords / backup / hypervisor interactive CLI commands (pure-Python, no
-        graphical dependency).
-    Kept OUT of _emit_desktop so the split is explicit: _emit_desktop is now the headed
-    graphical session ONLY. Called from _build_line on every line (see is_gui usage there)."""
-    # 1 -- the two /usr/local/bin command wrappers (azarch + azarch-install).
-    for entry in openbox.command_line_plan():
-        emit.write_text(airootfs / entry["dest"].lstrip("/"),
-                        entry["builder"](), mode=entry["mode"])
-    # 2 -- the compiled `azarch` terminal UI + its previews, and the compiled media OSD.
-    # These are C programs built with `make` against the azarch package's private sources.
-    terminal_user_interface_build.build_terminal_user_interface(
-        airootfs / terminal_user_interface_build.TERMINAL_USER_INTERFACE_BIN_SYSTEM_PATH.lstrip("/")
-    )
-    terminal_user_interface_build.install_previews(
-        airootfs / terminal_user_interface_build.TERMINAL_USER_INTERFACE_PREVIEW_SYSTEM_DIR.lstrip("/")
-    )
-    terminal_user_interface_build.build_osd(
-        airootfs / terminal_user_interface_build.OSD_BIN_SYSTEM_PATH.lstrip("/")
-    )
-    # 3 -- passwords / backup / hypervisor: pure-Python interactive commands, one flat plan
-    # each. Their runtime deps (gnupg, xclip, qemu-full, edk2-ovmf, virt-viewer) are in the
-    # manifest on both lines. See packages/{passwords,backup,hypervisor}/packaging.py.
-    for module in (passwords, backup, hypervisor):
-        for entry in module.emit_plan():
-            emit.write_text(airootfs / entry["dest"].lstrip("/"),
-                            entry["builder"](), mode=entry["mode"])
-    # re-assert ownership of the live user's tree (new files may have been added under it).
-    subprocess.run(_sudo() + ["chown", "-R", "1000:998", str(home)], check=False)
+        link.unlink(missing_ok=True)
+        svc.unlink(missing_ok=True)
 
 
 def _emit_desktop(airootfs: Path, home: Path) -> None:
@@ -1048,11 +596,29 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
             entry["builder"](),
             mode=entry["mode"],
         )
-    # NOTE: the `azarch` COMMAND core -- the two /usr/local/bin wrappers, the compiled
-    # terminal UI + OSD binaries, and the passwords/backup/hypervisor commands -- USED to be
-    # emitted here. They moved to _emit_azarch_commands(), which runs on BOTH lines (the
-    # headless line needs the `azarch` command too, else its sshd auto-setup self-skips and
-    # `azarch-install` is missing). _emit_desktop now emits ONLY the headed graphical session.
+    # The bare-`azarch` TERMINAL UI (OUR C settings UI: Theme / Wallpaper / Network, opened
+    # by running `azarch` with no arguments). It is part of the `azarch` package now (one
+    # program, C for speed); like the menu it is a COMPILED C program: build_terminal_user_interface() runs
+    # `make` against a private copy of the package's C sources and installs the resulting
+    # binary under /usr/local/lib/azarch. The `azarch` command line interface (installed by openbox.PLAN
+    # below) execs this binary for the no-argument case. Then install_previews() ships the
+    # theme-preview screenshots (verbatim) into the sibling previews dir the UI reads at
+    # runtime with kitty. Root-owned; the OFFLINE Calamares install rsyncs both onto the
+    # installed system with no separate step.
+    terminal_user_interface_build.build_terminal_user_interface(
+        airootfs / terminal_user_interface_build.TERMINAL_USER_INTERFACE_BIN_SYSTEM_PATH.lstrip("/")
+    )
+    terminal_user_interface_build.install_previews(
+        airootfs / terminal_user_interface_build.TERMINAL_USER_INTERFACE_PREVIEW_SYSTEM_DIR.lstrip("/")
+    )
+    # The media OSD indicator (bottom-middle cyan volume/brightness bar). Like the terminal UI it
+    # is a COMPILED C program (on_screen_display.c -> azarch-osd), built from the SAME Makefile and installed
+    # next to the UI binary. `azarch volume/brightness` launches it; it draws a single, no-flicker
+    # Xlib window (so it links X11/Xrandr/Xft, on the build host per the UI build deps). Root-
+    # owned; the OFFLINE Calamares install rsyncs it onto the installed system with no extra step.
+    terminal_user_interface_build.build_osd(
+        airootfs / terminal_user_interface_build.OSD_BIN_SYSTEM_PATH.lstrip("/")
+    )
     # Az'arch timedate (OUR Flask Time + Calendar home page -- the site LibreWolf lands
     # on at localhost:49154). A pure-Python app: emit_plan() copies the app sources
     # (applications.py/page.py), the launcher, and the azarch-timedate.service unit to their fixed
@@ -1066,10 +632,54 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
             entry["builder"](),
             mode=entry["mode"],
         )
-    # NOTE: passwords/backup/hypervisor (the CLI commands) moved to _emit_azarch_commands()
-    # so the headless line ships them too -- they are interactive commands with no graphical
-    # dependency. _emit_desktop keeps only the headed graphical session (X11/OpenBox/apps +
-    # the timedate browser home page).
+    # Az'arch passwords (OUR encrypted GPG/AES256 terminal password manager -- the
+    # `passwords` command). A pure-Python app like timedate, and now ONE FLAT directory (no
+    # pwlib/ sub-library): emit_plan() writes the entry script, the optional plaintext
+    # importer, every working module, and the /usr/local/bin/passwords launcher to their
+    # fixed root-owned system paths -- one single-file entry each, so the whole flat app is
+    # expressed by the plan alone (no separate directory copy). No systemd service -- it is
+    # an interactive command, not a boot service. Its runtime deps (gnupg for gpg, xclip for
+    # the clipboard) are in the manifest. The OFFLINE Calamares install rsyncs all of it
+    # onto the installed system, so `passwords` works there too, unlocking a store at
+    # ~/Vault/passwords.txt.gpg. See packages/passwords/packaging.py.
+    for entry in passwords.emit_plan():
+        emit.write_text(
+            airootfs / entry["dest"].lstrip("/"),
+            entry["builder"](),
+            mode=entry["mode"],
+        )
+    # Az'arch backup (OUR home-directory backup -- the `backup` command). A pure-Python
+    # app like passwords and a single flat directory: emit_plan() writes the entry
+    # script (and any future module) plus the /usr/local/bin/backup launcher to their
+    # fixed root-owned system paths -- one single-file entry each, so the whole flat app
+    # is expressed by the plan alone (no separate directory copy). No systemd service --
+    # it is an interactive command. Its runtime dep (gnupg for gpg) is already in the
+    # manifest. The OFFLINE Calamares install rsyncs it onto the installed system, so
+    # `backup` works there too, writing ~/backup_<date>.tar.gz.gpg. See
+    # packages/backup/packaging.py.
+    for entry in backup.emit_plan():
+        emit.write_text(
+            airootfs / entry["dest"].lstrip("/"),
+            entry["builder"](),
+            mode=entry["mode"],
+        )
+    # Az'arch hypervisor (OUR per-directory QEMU/KVM VM runner -- the `hypervisor`
+    # command). A pure-Python app like backup and a single flat directory: emit_plan()
+    # writes the entry script (command_line_interface.py) and every working module plus the
+    # /usr/local/bin/hypervisor launcher to their fixed root-owned system paths -- one
+    # single-file entry each, so the whole flat app is expressed by the plan alone (no
+    # separate directory copy). No systemd service -- it is an interactive command. Its
+    # runtime deps (qemu-full, edk2-ovmf, virt-viewer) are in the manifest. The launcher
+    # deliberately does NOT cd (unlike passwords): `hypervisor` derives the VM identity
+    # from the caller's CWD, which the launcher must preserve. The OFFLINE Calamares
+    # install rsyncs it onto the installed system, so `hypervisor` works there too. See
+    # packages/hypervisor/packaging.py.
+    for entry in hypervisor.emit_plan():
+        emit.write_text(
+            airootfs / entry["dest"].lstrip("/"),
+            entry["builder"](),
+            mode=entry["mode"],
+        )
     # re-assert ownership of the live user's tree (new files were added under it).
     subprocess.run(_sudo() + ["chown", "-R", "1000:998", str(home)], check=False)
 
@@ -1309,7 +919,7 @@ def _emit_shared_mount(airootfs: Path) -> None:
 
     The hypervisor exports the host ./shared folder over virtiofs (mount tag
     "shared"); this unit mounts it at /home/main/shared on boot for BOTH variants,
-    so --shared works on the headed variant too (it no longer rides on the ssh
+    so --shared works on the desktop variant too (it no longer rides on the ssh
     bring-up). The mountpoint dir must exist for systemd to mount onto it; it is
     owned by `main` (uid 1000) via the closing chown in _emit_provision/_emit_apps
     that covers all of /home/main. The enable-link is added in _link_services."""
@@ -1483,11 +1093,10 @@ def _check_host_deps(sudo, offline: bool) -> None:
     # + the gedit notepad-mode plugin build deps (the `gedit` pkg-config module -> the
     # gedit/GTK3/libpeas dev headers): _emit_apps COMPILES that libpeas plugin later in
     # this run, so the dev stack must be present here or `make` dies on a missing header.
-    # + the bare-`azarch` C terminal UI build dep (just gcc): _emit_azarch_commands COMPILES
-    # that UI (terminal_user_interface_build.build_terminal_user_interface) later in this run,
-    # on BOTH lines. It is pure libc (no ncurses/GTK), so gcc -- already pulled in by
-    # base-devel / the menu deps -- is all it needs; listed for completeness so the dependency
-    # intent is explicit.
+    # + the bare-`azarch` C terminal UI build dep (just gcc): _emit_desktop COMPILES that
+    # UI (terminal_user_interface_build.build_terminal_user_interface) later in this run. It is pure libc (no ncurses/GTK), so gcc
+    # -- already pulled in by base-devel / the menu deps -- is all it needs; listed for
+    # completeness so the dependency intent is explicit.
     host_pkgs = (["archiso", "git", "base-devel", "go"]
                  + application_menu.MENU_BUILD_DEPS + gedit.GEDIT_PLUGIN_BUILD_DEPS
                  + terminal_user_interface_build.TERMINAL_USER_INTERFACE_BUILD_DEPS)
@@ -1516,7 +1125,7 @@ def _check_host_deps(sudo, offline: bool) -> None:
 # The stock archiso `releng` profile enables sshd on the official Arch ISO by shipping
 # airootfs/etc/systemd/system/multi-user.target.wants/sshd.service. _copy_releng copies
 # releng verbatim (symlinks preserved), so that link survives onto BOTH Az'arch variants
-# unless stripped -- which is exactly why the DEFAULT headed ISO was booting with sshd active
+# unless stripped -- which is exactly why the DEFAULT desktop was booting with sshd active
 # on :22 (`systemctl status sshd` -> enabled; running). ssh must be OFF on the base ISO and
 # ON only on the ssh variant, where it is enabled at boot by sshd-hypervisor-setup.service
 # (see _apply_variant / packages/azarch/sshd.py), NOT by this inherited stock want. So we
@@ -1539,7 +1148,7 @@ def _copy_releng(W: Path) -> None:
     if not src.is_dir():
         raise SystemExit(f"[x] archiso releng profile not found at {src}; is archiso installed?")
     emit.copy_tree(src, W)
-    # Strip releng's inherited sshd enable-link so the DEFAULT headed ISO ships sshd DISABLED
+    # Strip releng's inherited sshd enable-link so the DEFAULT desktop ships sshd DISABLED
     # (the ssh variant re-enables it per-variant). Without this the base ISO listens on :22.
     _strip_releng_wants(W)
 
@@ -1587,59 +1196,43 @@ def _brand_boot_menus(W: Path) -> None:
     emit.write_text(W / "syslinux/archiso_head.cfg", system.BOOT_BIOS_SYSLINUX_HEAD)
 
 
-def _emit_fastfetch(ea: Path, home: Path, is_gui: bool = True) -> None:
-    """Write the azarch fastfetch configuration + Az' logo into the live user's
-    ~/.config/fastfetch. That live copy IS what the installed system inherits: the on-disk
-    installer clones the live rootfs verbatim (rsync of /), so ~/.config/fastfetch/config.jsonc
-    is carried onto the target unchanged -- there is no separate replant step.
-
-    is_gui selects the Edition line the config prints (HEADED for the graphical line,
-    HEADLESS for the console/compute line). Baking the label here (per line) is what keeps
-    the live and installed fastfetch output identical for the built line, with no runtime
-    detection needed.
-
-    A mirror copy is ALSO staged under root/azarch/fastfetch for parity with the other
-    /root/azarch install payloads (and as a defensive fallback if the clone path ever
-    changes); nothing consumes it today, but it is emitted with the SAME per-line config so
-    it can never disagree with the live/installed one."""
+def _emit_fastfetch(ea: Path, home: Path) -> None:
+    """Write the azarch fastfetch configuration + Az' logo for the live user, and stage
+    a copy under root/azarch/fastfetch so the on-disk installer can replant it
+    into the installed user's ~/.config/fastfetch."""
     cfg = home / ".config/fastfetch"
-    emit.write_text(cfg / "config.jsonc", fastfetch.config_jsonc(is_gui=is_gui))
+    emit.write_text(cfg / "config.jsonc", fastfetch.config_jsonc())
     emit.write_text(cfg / fastfetch.LOGO_FILENAME, fastfetch.logo_txt())
-    # Mirror copy under /root/azarch (see docstring): same per-line config, so consistent.
+    # staged copy for the installer to plant on the installed system
     staged = ea / "fastfetch"
-    emit.write_text(staged / "config.jsonc", fastfetch.config_jsonc(is_gui=is_gui))
+    emit.write_text(staged / "config.jsonc", fastfetch.config_jsonc())
     emit.write_text(staged / fastfetch.LOGO_FILENAME, fastfetch.logo_txt())
 
 
-def _link_services(airootfs: Path, is_gui: bool = True) -> None:
+def _link_services(airootfs: Path) -> None:
     # Graphical live medium WITHOUT a display manager: the tty1 autologin (overridden
     # to `main`) drops into a login shell whose ~/.bash_profile execs startx ->
     # openbox-session -> (autostart) Calamares. So there is deliberately NO
     # display-manager unit and NO graphical.target.wants here; we only enable the
-    # multi-user daemons and the azarch oneshots. X is started from the shell, not by
-    # systemd.
+    # multi-user daemons and the two azarch oneshots. X is started from the shell, not
+    # by systemd.
     #
-    # is_gui gates the ONE desktop-only enable-link (the timedate Flask home page): its unit
-    # comes from a GUI-only emitter the headless line skips, so linking it on the headless line
-    # would leave a dangling want to a unit that was never written. Every other link here is
-    # universal (base console daemons + oneshots + the SPICE guest agent, whose package ships on
-    # BOTH lines). The per-variant sshd + instant enable-links are added in _apply_variant,
-    # just before each variant's mkarchiso pass.
+    # These enable-links are variant-independent (both ISOs get them). The sshd
+    # variant's extra sshd-hypervisor-setup enable-link is added per-variant in
+    # _apply_variant, just before that variant's mkarchiso pass.
     base = airootfs / "etc/systemd/system"
     emit.mkdir(base / "multi-user.target.wants")
     # bluetooth.service is DELIBERATELY NOT enabled here: Bluetooth is OFF by default on
     # Az'arch. `azarch network bluetooth on` enables + starts it (and rfkill-unblocks the
     # radio) on demand; leaving it out of multi-user.target.wants keeps the radio down at
-    # boot. NetworkManager (the network stack) and CUPS (printing) stay auto-enabled on
-    # BOTH lines.
-    #
+    # boot. NetworkManager (the network stack) and CUPS (printing) stay auto-enabled.
     # spice-vdagentd is the SPICE guest agent's system daemon: it bridges the
     # com.redhat.spice.0 virtio channel so the session spice-vdagent can sync the guest
-    # pointer/clipboard/resolution with the SPICE client. Enabled on BOTH lines: spice-vdagent
-    # STAYS on the headless pacstrap (only Calamares is stripped -- see
-    # packages_manifest.HEADLESS_EXCLUDED), so its unit exists on headless too, and a headless
-    # box can still be driven over SPICE for on-demand X UI automation. Harmless on non-SPICE
-    # systems either way (the daemon idles with no channel).
+    # pointer/clipboard/resolution with the SPICE client. Enabling it fixes the SPICE-guest
+    # pointer regression (no hover / dropped clicks / stuck labels) -- see the spice-vdagent
+    # note in packages.x86_64 and the autostart line in packages/openbox. Harmless on
+    # non-SPICE systems (the daemon idles with no channel). Auto-enabled on BOTH ISOs and,
+    # via unpackfs, the installed system.
     for svc in ("NetworkManager.service", "org.cups.cupsd.service", "spice-vdagentd.service"):
         emit.link(f"/usr/lib/systemd/system/{svc}", base / f"multi-user.target.wants/{svc}")
     emit.link("/etc/systemd/system/locale-setup.service", base / "multi-user.target.wants/locale-setup.service")
@@ -1651,15 +1244,13 @@ def _link_services(airootfs: Path, is_gui: bool = True) -> None:
     emit.link("/etc/systemd/system/azarch-sleep-policy.service",
               base / "multi-user.target.wants/azarch-sleep-policy.service")
     # Az'arch timedate home page service: the Flask Time + Calendar site (localhost:49154)
-    # LibreWolf lands on. HEADED LINE ONLY -- its unit is emitted by _emit_desktop (which
-    # the headless line skips), and a headless machine has no browser to land on it. Enabling
-    # it on the headless line would leave a dangling want to a unit that was never written.
-    if is_gui:
-        emit.link(timedate.SERVICE_SYSTEM_PATH,
-                  base / f"multi-user.target.wants/{timedate.SERVICE_NAME}")
+    # LibreWolf lands on. Enabled on BOTH ISOs (and, via unpackfs, the installed system)
+    # so the home page is listening at boot. See timedate.service_unit() / _emit_desktop.
+    emit.link(timedate.SERVICE_SYSTEM_PATH,
+              base / f"multi-user.target.wants/{timedate.SERVICE_NAME}")
     # The virtiofs shared-folder auto-mount: enabled on BOTH ISOs (and, via unpackfs,
     # the installed system) so the host ./shared folder appears at /home/main/shared
-    # on boot regardless of --ssh. This is the fix for the headed-variant coupling;
+    # on boot regardless of --ssh. This is the fix for the desktop-variant coupling;
     # the unit body + mountpoint come from _emit_shared_mount. A .mount enable-link is
     # a symlink named after the unit, same mechanism as the .service links above.
     emit.link("/etc/systemd/system/home-main-shared.mount",
@@ -1726,7 +1317,7 @@ def _probe_and_maybe_switch(W: Path, conf: str, localrepo: Path, bar: ProgressBa
     subprocess.run(["rm", "-rf", str(probe)], check=False)
 
 
-def _run_mkarchiso(sudo, W: Path, bar: ProgressBar, reclaim_after, iso_name: str = "azarch-headed") -> Path:
+def _run_mkarchiso(sudo, W: Path, bar: ProgressBar, reclaim_after, iso_name: str = "azarch-desktop") -> Path:
     # temp dir cleanup (matches the old "Cleaning up temp directory" step)
     subprocess.run(["rm", "-rf", str(W / ".temp")], check=False)
     # Reset the mkarchiso work tree BEFORE every pass. This is load-bearing for the
@@ -2019,22 +1610,14 @@ def main() -> int:
     if estimate.parse_estimate_flag(sys.argv[1:]) is not None:
         return estimate.run(sys.argv[1:])
 
-    # HARD STOPS (side-effect-free, before any workspace/cache setup). Each returns an
-    # error message to print + exit 2 on; None means proceed. A bare/empty --ssh or
-    # --password, an --ssh+--password conflict, --encrypt without a password, a bad --type,
-    # a malformed --static-ip, or an unknown --timezone all abort cleanly here.
-    for err in (
-        check_type_flag(sys.argv[1:]),
-        check_ssh_flag(sys.argv[1:]),
-        check_password_flag(sys.argv[1:]),
-        check_ssh_password_conflict(sys.argv[1:]),
-        check_encrypt_flag(sys.argv[1:]),
-        check_static_ip_flag(sys.argv[1:]),
-        check_timezone_flag(sys.argv[1:]),
-    ):
-        if err:
-            sys.stderr.write("[x] " + err + "\n")
-            return 2
+    # HARD STOP: `--ssh` present but with no password. The flag demands a string; a bare
+    # `--ssh` / `--ssh=` must ABORT with an explanation rather than silently building the
+    # base ISO only (the reported bug). Do this BEFORE any workspace/cache setup so it is a
+    # clean, side-effect-free early exit.
+    ssh_flag_error = check_ssh_flag(sys.argv[1:])
+    if ssh_flag_error:
+        sys.stderr.write("[x] " + ssh_flag_error + "\n")
+        return 2
 
     paths.CACHEDIR.mkdir(parents=True, exist_ok=True)
 
@@ -2052,68 +1635,26 @@ def main() -> int:
         print("[*] --full-compile: Az'arch's own packages will be built ENTIRELY from source.")
         print("    This includes a LibreWolf/Firefox compile that can take 1.5-3+ hours.")
 
-    # ONE login password from EITHER --ssh (also enables sshd + the ssh variants) OR
-    # --password (sshd off); they are mutually exclusive (checked above). It is hashed HERE
-    # (sha-512 crypt) and threaded into run(); the plaintext stays in this process EXCEPT for
-    # a non-ssh encrypted instant, where the LUKS passphrase needs it (threaded as
-    # login_password and written only into that ISO's root-owned instant script).
+    # The base/desktop ISO is ALWAYS built. The `azarch-sshd` ISO is OPT-IN: it is built
+    # ONLY when `--ssh="<PASSWORD>"` supplies a non-empty string (DECISION 2 -- no default
+    # password is ever shipped; the sshd variant's credential comes from the operator at
+    # build time). The password is hashed HERE (sha-512 crypt) and threaded into run();
+    # the plaintext never leaves this process. An empty/missing --ssh -> no sshd ISO.
     ssh_password = parse_ssh_flag(sys.argv[1:])
-    login_password = ssh_password if ssh_password else parse_password_flag(sys.argv[1:])
-    login_hash = ssh_password_hash(login_password) if login_password else None
-    login_user = parse_user_flag(sys.argv[1:])
-
-    # The headed line is ALWAYS built; --type adds the headless line, --instant adds the
-    # auto-install variants, --ssh adds the ssh variants (the Cartesian product via
-    # variants.selected_variants). --encrypt encrypts the instant install's disk.
-    type_value = parse_type_flag(sys.argv[1:])
-    headless = type_wants_headless(type_value)
-    instant = wants_instant(sys.argv[1:])
-    encrypt = wants_encrypt(sys.argv[1:])
-    timezone = parse_timezone_flag(sys.argv[1:])
-    build_variants = _variants.selected_variants(
-        headless=headless, instant=instant, ssh=bool(ssh_password),
-    )
-
-    # Static IP: build the NetworkManager keyfile text once (baked into every line's
-    # airootfs in run()). --gateway/--dns refine it; both validated/warn'd above.
-    static_ip = parse_static_ip_flag(sys.argv[1:])
-    static_ip_text = None
-    if static_ip:
-        static_ip_text = network_profile.nmconnection_text(
-            static_ip, gateway=parse_gateway_flag(sys.argv[1:]),
-            dns=parse_dns_flag(sys.argv[1:]),
-        )
-
-    # Warnings (non-fatal): a flag that will be silently ignored in this configuration.
-    for warn in (
-        timezone_without_instant_warning(sys.argv[1:]),
-        user_without_password_warning(sys.argv[1:]),
-        gateway_dns_without_static_ip_warning(sys.argv[1:]),
-    ):
-        if warn:
-            print("[!] " + warn)
-
-    # Announce exactly what will be built (name every ISO), so the operator sees the matrix
-    # the flags expanded to before the long build starts.
-    noun = "ISO" if len(build_variants) == 1 else "ISOs"
-    print(f"[*] Building {len(build_variants)} {noun}:")
-    for v in build_variants:
-        notes = []
-        if v.ssh:
-            notes.append(f"ssh: `{login_user}` gets the --ssh password, sshd on :22")
-        if v.instant:
-            enc = ", ENCRYPTED disk" if encrypt else ""
-            notes.append(f"instant: auto-install to the largest disk, tz {timezone}{enc}")
-        suffix = ("  (" + "; ".join(notes) + ")") if notes else ""
-        print(f"      - {v.iso_name}-<ver>-x86_64.iso{suffix}")
-    if not login_hash:
-        print('    (pass --ssh="<PW>" for ssh; --password="<PW>" for a local login; '
-              '--type=headless|all for the headless line; --instant for auto-install.)')
+    ssh_hash = ssh_password_hash(ssh_password) if ssh_password else None
+    if ssh_hash:
+        print("[*] --ssh supplied: building the base `azarch-desktop` ISO AND the opt-in "
+              "`azarch-desktop-ssh` ISO")
+        print("    (the ssh medium sets `main`'s password from --ssh, enables sshd, and "
+              "opens port 22 at boot).")
+    else:
+        print("[*] Building the base `azarch-desktop` ISO only (ssh disabled). Pass "
+              "--ssh=\"<PASSWORD>\" to ALSO build the opt-in `azarch-desktop-ssh` ISO.")
 
     offline = cache_is_complete()
     _stale_cache_notice(offline)
 
-    bar = ProgressBar(weights_for(build_variants))
+    bar = ProgressBar(STEP_WEIGHTS)
     own = Ownership(_sudo())
     keep = SudoKeepalive()
 
@@ -2151,10 +1692,7 @@ def main() -> int:
     bar.init()
     try:
         isos = run(bar, offline, full_compile=full_compile,
-                   ssh_password_hash=login_hash,
-                   login_user=login_user, login_password=login_password,
-                   encrypt=encrypt, static_ip_text=static_ip_text,
-                   build_variants=build_variants, timezone=timezone,
+                   ssh_password_hash=ssh_hash,
                    reclaim_after_mkarchiso=own.reclaim_full)
     except SystemExit as e:
         teardown()

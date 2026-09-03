@@ -2,7 +2,7 @@
 
 The BUG: `--shared` only made the folder appear inside the ssh ISO variant, because
 the share was mounted only as a side effect of the ssh bring-up service. Nothing on
-the headed variant mounted it, so `--shared` silently did nothing there.
+the desktop variant mounted it, so `--shared` silently did nothing there.
 
 The FIX moves the transport to virtiofs and, on the HOST, spawns a `virtiofsd`
 daemon whenever `shared` is set -- REGARDLESS of `ssh`. These tests pin that

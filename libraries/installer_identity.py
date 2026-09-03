@@ -12,11 +12,10 @@ scripted path reaches parity on those user-facing choices (see data/PROMPT.md: "
 entire process through the command line ... the same result"):
 
   identity_collect_sh()  -- runs BEFORE the destructive wipe: prompt (or read from env for
-                            an unattended SSH install) for hostname / username / password /
-                            timezone, validate, and stash them in shell variables. Root
-                            reuses the user password (one password for the whole system);
-                            there is no full-name field. Prompting first means a mistyped
-                            answer costs nothing -- no disk has been touched yet.
+                            an unattended SSH install) for hostname / full name / username /
+                            user password / root password / timezone, validate, and stash
+                            them in shell variables. Prompting first means a mistyped answer
+                            costs nothing -- no disk has been touched yet.
   identity_write_sh()    -- runs AFTER the target root is mounted at /mnt: persist the
                             collected answers under /mnt/etc/install_info/ so the chroot can
                             read them (the same install_info channel disk/is_uefi already use).
@@ -71,6 +70,14 @@ else
     az_hostname="${az_hostname:-azarch}"
 fi
 
+# Full name (optional, cosmetic GECOS field).
+if [ -n "$AZ_INSTALL_FULLNAME" ]; then
+    az_fullname="$AZ_INSTALL_FULLNAME"
+    echo "Full name: $az_fullname (pre-seeded)"
+else
+    read -rp "Your full name (optional): " az_fullname
+fi
+
 # Login user name. Must match a POSIX-ish account name; re-prompt (or abort a seeded run).
 while :; do
     if [ -n "$AZ_INSTALL_USERNAME" ]; then
@@ -106,30 +113,8 @@ while :; do
     break
 done
 
-# INSTANT password short-circuits (both TTY-less, set by installer.instant_install_sh):
-#   AZ_INSTALL_LOCK=1          -- non-ssh instant: create the account with NO password
-#                                (locked `!*`, Ubuntu-style); the chroot step locks it.
-#   AZ_INSTALL_KEEP_PASSWORD=1 -- ssh instant: KEEP the password already cloned from the live
-#                                medium (the --ssh hash baked into `main`'s shadow); neither
-#                                prompt nor change it.
-# Either way there is nothing to collect, so skip BOTH password prompts/pre-seeds -- this is
-# what stops the installer from blocking on an interactive `read` under the instant service.
-if [ "$AZ_INSTALL_LOCK" = "1" ]; then
-    az_lock_account=1
-    az_password=""
-    az_root_password=""
-    echo "User + root passwords: LOCKED (instant, no password login)"
-elif [ "$AZ_INSTALL_KEEP_PASSWORD" = "1" ]; then
-    az_keep_password=1
-    az_password=""
-    az_root_password=""
-    echo "User password: kept from the live medium (ssh instant)"
-fi
-
 # User password (confirmed, hidden). AZ_INSTALL_PASSWORD pre-seeds it for unattended installs.
-if [ "$az_lock_account" = "1" ] || [ "$az_keep_password" = "1" ]; then
-    :   # locked or kept-from-clone -- no password to collect (handled above)
-elif [ -n "$AZ_INSTALL_PASSWORD" ]; then
+if [ -n "$AZ_INSTALL_PASSWORD" ]; then
     az_password="$AZ_INSTALL_PASSWORD"
     echo "User password: (pre-seeded)"
 else
@@ -142,17 +127,27 @@ else
     done
 fi
 
-# Root password ALWAYS equals the user password -- ONE password for the whole system (user,
-# root, and the btrfs LUKS passphrase). There is no separate root prompt or pre-seed. The
-# instant short-circuits above already set az_root_password="" alongside a lock/keep marker;
-# for a normal install root simply mirrors the collected user password.
-if [ "$az_lock_account" = "1" ]; then
-    :   # locked instant install -- root stays locked too (no root password set)
-elif [ "$az_keep_password" = "1" ]; then
-    :   # ssh instant -- keep root as cloned from the live medium (locked there)
+# Root password. Offer to reuse the user password (common) or set a distinct one. A headless
+# run pre-seeds AZ_INSTALL_ROOT_PASSWORD, or falls back to the user password when unset.
+if [ -n "$AZ_INSTALL_ROOT_PASSWORD" ]; then
+    az_root_password="$AZ_INSTALL_ROOT_PASSWORD"
+    echo "Root password: (pre-seeded)"
+elif [ -n "$AZ_INSTALL_PASSWORD" ]; then
+    az_root_password="$AZ_INSTALL_PASSWORD"
+    echo "Root password: (same as user, pre-seeded)"
 else
-    az_root_password="$az_password"
-    echo "Root password: same as the user password"
+    read -rp "Use the same password for root? [Y/n]: " az_same_root
+    case "$az_same_root" in
+        [nN]*)
+            while :; do
+                read -rsp "Password for root: " az_root_password; echo
+                if [ -z "$az_root_password" ]; then echo "Password cannot be empty."; continue; fi
+                read -rsp "Repeat root password: " az_root_password2; echo
+                [ "$az_root_password" = "$az_root_password2" ] && break
+                echo "Passwords did not match, try again."
+            done ;;
+        *) az_root_password="$az_password" ;;
+    esac
 fi
 
 # Timezone. Validated against the live /usr/share/zoneinfo tree (the same DB the target has).
@@ -171,8 +166,7 @@ while :; do
     if [ -n "$AZ_INSTALL_TIMEZONE" ]; then echo "Aborting (pre-seeded timezone is invalid)."; exit 1; fi
 done
 
-export az_hostname az_username az_password az_root_password az_timezone
-export az_lock_account az_keep_password
+export az_hostname az_fullname az_username az_password az_root_password az_timezone
 """
 
 
@@ -180,31 +174,17 @@ def identity_write_sh() -> str:
     """Bash that persists the collected answers under /mnt/etc/install_info so the chroot can
     read them. Passwords are written to root-only (0600) files that the chroot step deletes
     after use, so a plaintext password never lingers on the installed system. The non-secret
-    fields (hostname/user/timezone) go to plain marker files like disk/is_uefi."""
+    fields (hostname/user/fullname/timezone) go to plain marker files like disk/is_uefi."""
     return f"""
 # Persist the identity answers for the chroot step (same install_info channel as disk/is_uefi).
 mkdir -p {INFO_DIR}
 printf '%s' "$az_hostname" > {INFO_DIR}/hostname
 printf '%s' "$az_username" > {INFO_DIR}/username
+printf '%s' "$az_fullname" > {INFO_DIR}/fullname
 printf '%s' "$az_timezone" > {INFO_DIR}/timezone
-# Encryption marker (set by the instant --encrypt path via AZ_INSTALL_ENCRYPT). The disk step
-# already wrote the crypt UUID marker; this records the intent so the chroot's crypttab/GRUB
-# blocks fire even if only the env flag is present. Absent -> a plain, unencrypted install.
-if [ "$AZ_INSTALL_ENCRYPT" = "1" ]; then printf '1' > {INFO_DIR}/encrypt; fi
-# Password persistence, three instant-aware cases:
-#   lock  -> write a lock_account marker; the chroot LOCKS `!` both accounts, no secret files.
-#   keep  -> write NOTHING (ssh instant): no password files and no marker, so the chroot leaves
-#            the password the rootfs clone already carried (the --ssh hash) untouched.
-#   normal-> write the collected user + root passwords to root-only (0600) files the chroot
-#            consumes and shreds.
-if [ "$az_lock_account" = "1" ]; then
-    printf '1' > {INFO_DIR}/lock_account
-elif [ "$az_keep_password" = "1" ]; then
-    :   # ssh instant -- keep the cloned password; persist no password files or markers
-else
-    ( umask 077; printf '%s' "$az_password" > {INFO_DIR}/password )
-    ( umask 077; printf '%s' "$az_root_password" > {INFO_DIR}/root_password )
-fi
+# Passwords: root-only files (0600), consumed and shredded by the chroot step.
+( umask 077; printf '%s' "$az_password" > {INFO_DIR}/password )
+( umask 077; printf '%s' "$az_root_password" > {INFO_DIR}/root_password )
 """
 
 
@@ -226,6 +206,7 @@ def identity_chroot_sh() -> str:
 if [ -d /etc/install_info ]; then
     az_hostname="$(cat /etc/install_info/hostname 2>/dev/null)"
     az_username="$(cat /etc/install_info/username 2>/dev/null)"
+    az_fullname="$(cat /etc/install_info/fullname 2>/dev/null)"
     az_timezone="$(cat /etc/install_info/timezone 2>/dev/null)"
 
     # Hostname.
@@ -235,7 +216,7 @@ if [ -d /etc/install_info ]; then
 
     # Account: rename the copied-in live user ({DEFAULT_USERNAME}) to the chosen name so its
     # uid/gid and /home tree are preserved; only rename when the name actually differs and the
-    # target name is free. Then refresh group membership and shell.
+    # target name is free. Then refresh group membership, shell, and the GECOS full name.
     if [ -n "$az_username" ] && id {DEFAULT_USERNAME} >/dev/null 2>&1 \\
        && [ "$az_username" != "{DEFAULT_USERNAME}" ] && ! id "$az_username" >/dev/null 2>&1; then
         usermod -l "$az_username" {DEFAULT_USERNAME}
@@ -253,24 +234,18 @@ if [ -d /etc/install_info ]; then
     fi
     usermod -aG wheel "$az_login" 2>/dev/null || true
     usermod -s /bin/bash "$az_login" 2>/dev/null || true
-
-    # Passwords. Either LOCK both accounts (instant, no password login -- the `!*`
-    # Ubuntu default) or set the collected user + root passwords via chpasswd, then
-    # shred the plaintext files. `passwd -l` writes the locked `!` marker into shadow,
-    # exactly what system.LOCKED_PASSWORD ships on the live medium -- so a locked
-    # instant install matches the base ISO's no-password-login posture.
-    if [ "$(cat /etc/install_info/lock_account 2>/dev/null)" = "1" ]; then
-        passwd -l "$az_login" >/dev/null 2>&1 || true
-        passwd -l root >/dev/null 2>&1 || true
-    else
-        if [ -f /etc/install_info/password ]; then
-            printf '%s:%s' "$az_login" "$(cat /etc/install_info/password)" | chpasswd
-        fi
-        if [ -f /etc/install_info/root_password ]; then
-            printf 'root:%s' "$(cat /etc/install_info/root_password)" | chpasswd
-        fi
-        rm -f /etc/install_info/password /etc/install_info/root_password
+    if [ -n "$az_fullname" ]; then
+        chfn -f "$az_fullname" "$az_login" 2>/dev/null || usermod -c "$az_fullname" "$az_login" 2>/dev/null || true
     fi
+
+    # Passwords (user + root) via chpasswd, then shred the plaintext files.
+    if [ -f /etc/install_info/password ]; then
+        printf '%s:%s' "$az_login" "$(cat /etc/install_info/password)" | chpasswd
+    fi
+    if [ -f /etc/install_info/root_password ]; then
+        printf 'root:%s' "$(cat /etc/install_info/root_password)" | chpasswd
+    fi
+    rm -f /etc/install_info/password /etc/install_info/root_password
 
     # SUDO GRANT for the chosen login. The only sudo rule copied onto the target is
     # /etc/sudoers.d/00-main (`main ALL=(ALL) NOPASSWD: ALL`); after a rename to e.g. "alice"

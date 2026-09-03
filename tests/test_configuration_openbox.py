@@ -54,10 +54,9 @@ def _load_azarch_command_line_interface():
 
 # --- PLAN mode/owner/dest table --------------------------------------------
 
-def test_plan_has_exactly_seventeen_entries():
-    # compiler.py iterates PLAN; a dropped/extra entry silently un-emits a file. PLAN is now
-    # the HEADED GRAPHICAL SESSION ONLY (the two /usr/local/bin command wrappers moved to
-    # command_line_plan() so the headless line gets them too). It ships exactly seventeen files:
+def test_plan_has_exactly_nineteen_entries():
+    # compiler.py iterates PLAN; a dropped/extra entry silently un-emits a file. The
+    # panel-less OpenBox session ships exactly nineteen files via PLAN:
     #   1. ~/.xinitrc                               (startx -> openbox-session)
     #   2. ~/.config/openbox/rc.xml                 (keybinds, theme, titlebar-button binds)
     #   3. ~/.themes/Azarch-Dark/openbox-3/themerc  (DARK Az'arch theme -- the default)
@@ -75,31 +74,16 @@ def test_plan_has_exactly_seventeen_entries():
     #  15. ~/.local/share menu usage seed            (default menu ordering)
     #  16. /usr/share/applications/azarch-install.desktop (menu re-open entry, system)
     #  17. ~/Desktop/azarch-install.desktop          (double-clickable installer launcher)
+    #  18. /usr/local/bin/azarch-install             (privileged Calamares wrapper)
+    #  19. /usr/local/bin/azarch                      (guest-side command line interface)
     # (entries 3-9 are the system theme: dark is the default; `azarch theme` toggles it; entry
     # 10 is the compositor config that kills the picom fade + transparent-titlebar defaults;
     # entry 11 is the GLOBAL SCALE, PROMPT Display/scale task.)
-    # NOTE: /usr/local/bin/azarch-install and /usr/local/bin/azarch are NO LONGER PLAN entries --
-    # they are the guest COMMAND wrappers, emitted on BOTH lines via command_line_plan() (see
-    # test_command_line_plan_holds_the_two_wrappers). The media OSD
-    # (/usr/local/lib/azarch/azarch-osd) is also not here -- it is a COMPILED C binary built by
-    # terminal_user_interface_build.build_osd().
+    # NOTE: the media OSD (/usr/local/lib/azarch/azarch-osd) is NO LONGER a PLAN entry -- it is a
+    # COMPILED C binary now (on_screen_display.c), built + installed by terminal_user_interface_build.build_osd()
+    # like the terminal UI binary, so it is not emitted as a text file here.
     # The .bash_profile snippet is appended by emit_plan(), NOT part of PLAN.
-    assert len(desktop.PLAN) == 17
-    # and the two wrappers are genuinely OUT of PLAN (they belong to command_line_plan()).
-    plan_dests = {e["dest"] for e in desktop.PLAN}
-    assert desktop.AZARCH_BIN_PATH not in plan_dests
-    assert desktop.INSTALL_WRAPPER_PATH not in plan_dests
-
-
-def test_command_line_plan_holds_the_two_wrappers():
-    # The two command wrappers (azarch + azarch-install) live in command_line_plan(), which
-    # compiler.py emits on BOTH the headed and headless lines. Exactly two entries, both
-    # root-owned executables at their fixed /usr/local/bin paths.
-    cli = desktop.command_line_plan()
-    assert [e["dest"] for e in cli] == [desktop.INSTALL_WRAPPER_PATH, desktop.AZARCH_BIN_PATH]
-    for e in cli:
-        assert e["owner"] == "root"
-        assert e["mode"] == 0o755
+    assert len(desktop.PLAN) == 19
 
 
 def test_plan_entries_have_the_four_declared_keys():
@@ -146,9 +130,8 @@ def test_scripts_are_exec_configs_are_conf():
 def test_install_wrapper_entry_is_root_owned_exec():
     # The privileged launcher lives in /usr/local/bin and must stay root-owned
     # (0:0) and executable; chowning it to the live user would let uid 1000 rewrite
-    # the thing that runs `sudo -E calamares`. It is now in command_line_plan() (emitted on
-    # both lines), not PLAN.
-    entry = next(e for e in desktop.command_line_plan() if e["dest"] == desktop.INSTALL_WRAPPER_PATH)
+    # the thing that runs `sudo -E calamares`.
+    entry = next(e for e in desktop.PLAN if e["dest"] == desktop.INSTALL_WRAPPER_PATH)
     assert entry["mode"] == 0o755
     assert entry["owner"] == "root"
     assert entry["builder"] is desktop.install_wrapper_sh
@@ -192,11 +175,9 @@ def test_install_wrapper_forwards_identity_env_across_sudo():
     # AZ_INSTALL_* family, which run_cli must forward ACROSS the sudo boundary (env_reset in
     # sudoers would otherwise drop them). Assert each identity var is explicitly forwarded.
     w = desktop.install_wrapper_sh()
-    for var in ("AZ_INSTALL_HOSTNAME", "AZ_INSTALL_USERNAME",
-                "AZ_INSTALL_PASSWORD", "AZ_INSTALL_TIMEZONE"):
+    for var in ("AZ_INSTALL_HOSTNAME", "AZ_INSTALL_USERNAME", "AZ_INSTALL_FULLNAME",
+                "AZ_INSTALL_PASSWORD", "AZ_INSTALL_ROOT_PASSWORD", "AZ_INSTALL_TIMEZONE"):
         assert f"{var}=${var}" in w, f"run_cli must forward {var} across sudo"
-    # Full name is no longer collected -- it must NOT be forwarded or documented.
-    assert "AZ_INSTALL_FULLNAME" not in w
     # The help documents the unattended env pre-seed so an SSH user can discover it.
     assert "AZ_INSTALL_TIMEZONE" in w and "unattended" in w.lower()
 
@@ -219,60 +200,6 @@ def test_install_wrapper_is_valid_sh():
         os.remove(path)
 
 
-def test_install_wrapper_gui_explains_on_headless_instead_of_failing():
-    # NEW TASK A: on a HEADLESS instance there is no Calamares (only the CLI installer). If a
-    # user runs `azarch-install --gui` there, the launcher must ECHO a clear explanation and
-    # exit non-zero -- NOT blindly `exec ... calamares` and die with "command not found". The
-    # guard detects Calamares' absence robustly (command -v calamares) rather than hardcoding a
-    # line token. Assert run_gui contains that guard, the guidance to use --cli, and a non-zero
-    # exit, positioned BEFORE the calamares exec.
-    w = desktop.install_wrapper_sh()
-    run_gui = w[w.index("run_gui()"):w.index("run_cli()")]
-    assert "command -v calamares" in run_gui, "run_gui must detect a missing Calamares (headless)"
-    # points the user at the CLI installer, names the headless edition
-    assert "--cli" in run_gui
-    assert "headless" in run_gui.lower()
-    # non-zero exit, and it must come BEFORE the calamares exec (guard, not post-mortem)
-    guard_at = run_gui.index("command -v calamares")
-    exec_at = run_gui.index("calamares\n")  # the `exec ... calamares` line
-    assert guard_at < exec_at, "the headless guard must precede the calamares exec"
-    assert "exit 1" in run_gui[guard_at:exec_at]
-
-
-def test_install_wrapper_gui_headless_guard_is_runtime_correct():
-    # Behavioural: actually RUN the generated launcher with `--gui` under a PATH that has NO
-    # calamares (simulating a headless install). It must exit non-zero and print the CLI
-    # guidance, WITHOUT reaching sudo/calamares. We give it a PATH containing only a fake
-    # `command`-safe environment: an empty dir, so `command -v calamares` fails. `sudo` is also
-    # absent from that PATH, so if the guard did NOT fire the script would fail differently
-    # (and NOT print our message) -- the assertion on the message proves the guard path ran.
-    import os
-    import subprocess
-    import tempfile
-
-    w = desktop.install_wrapper_sh()
-    with tempfile.TemporaryDirectory(dir="/tmp") as d:
-        script = os.path.join(d, "azarch-install")
-        with open(script, "w") as f:
-            f.write(w)
-        os.chmod(script, 0o755)
-        empty_bin = os.path.join(d, "bin")
-        os.mkdir(empty_bin)
-        # PATH with no calamares (and no sudo): a stand-in for the headless system. We invoke
-        # /bin/sh by ABSOLUTE path so the interpreter is found even though the script's internal
-        # PATH (used by `command -v calamares`) points only at the empty dir.
-        r = subprocess.run(
-            ["/bin/sh", script, "--gui"],
-            capture_output=True, text=True, timeout=30,
-            env={"PATH": empty_bin, "DISPLAY": ":0"},
-        )
-        assert r.returncode != 0, "headless --gui must exit non-zero"
-        combined = (r.stdout + r.stderr).lower()
-        assert "headless" in combined and "--cli" in combined, combined
-        # It must NOT have tried to actually launch calamares/sudo (guard fired first).
-        assert "calamares: command not found" not in combined
-
-
 def test_openbox_rc_xml_entry_is_home_owned_conf():
     # OpenBox's rc.xml is a plain config (0o644) and must be handed to the live user
     # (home-owned; mirrored into /etc/skel) or the session cannot read its keybinds.
@@ -285,27 +212,26 @@ def test_openbox_rc_xml_entry_is_home_owned_conf():
     assert entry["builder"] is desktop.openbox_rc_xml
 
 
-def test_root_owned_dests_are_menu_entry_installed_autostart_dconf_and_picom():
-    # Exactly five PLAN entries are root-owned (PLAN is the headed graphical session only now):
-    # the system-wide installer menu .desktop (/usr/share/applications), the STAGED "installed"
-    # OpenBox autostart the Calamares install copies onto the target, the TWO dconf system-theme
-    # files (the color-scheme=prefer-dark keyfile + the dconf profile) under /etc, and OUR picom
-    # compositor config under /etc/xdg (fading OFF, opaque frames -- shared by the live +
-    # installed autostart). Everything else in PLAN is a /home/main dotfile handed to the live
-    # user (uid 1000, gid 998). The two /usr/local/bin command wrappers are ALSO root-owned but
-    # now live in command_line_plan() (both lines), not PLAN. The media OSD is root-owned too but
-    # is installed by the C build (build_osd), not as a PLAN text entry.
+def test_root_owned_dests_are_wrapper_cli_menu_entry_installed_autostart_dconf_and_picom():
+    # Exactly seven PLAN entries are root-owned: the azarch command line interface (/usr/local/bin),
+    # the installer wrapper (/usr/local/bin), the system-wide installer menu .desktop
+    # (/usr/share/applications), the STAGED "installed" OpenBox autostart the Calamares install
+    # copies onto the target, the TWO dconf system-theme files (the color-scheme=prefer-dark
+    # keyfile + the dconf profile) under /etc, and OUR picom compositor config under /etc/xdg
+    # (fading OFF, opaque frames -- shared by the live + installed autostart). Everything else is a
+    # /home/main dotfile handed to the live user (uid 1000, gid 998). The media OSD is root-owned
+    # too but is installed by the C build (build_osd), not as a PLAN text entry -- so it is not in
+    # this set.
     root_dests = [e["dest"] for e in desktop.PLAN if e["owner"] == "root"]
     assert set(root_dests) == {
+        desktop.INSTALL_WRAPPER_PATH,
+        desktop.AZARCH_BIN_PATH,
         "/usr/share/applications/azarch-install.desktop",
         desktop.INSTALLED_AUTOSTART_STAGING_PATH,
         desktop.DCONF_THEME_KEYFILE_PATH,
         desktop.DCONF_PROFILE_USER_PATH,
         desktop.PICOM_CONFIG_PATH,
     }
-    # the two command wrappers are root-owned in command_line_plan(), not PLAN.
-    cli_root = {e["dest"] for e in desktop.command_line_plan() if e["owner"] == "root"}
-    assert cli_root == {desktop.INSTALL_WRAPPER_PATH, desktop.AZARCH_BIN_PATH}
 
 
 def test_desktop_launcher_is_on_the_desktop_executable_and_home_owned():
@@ -373,11 +299,11 @@ def test_home_owner_gid_is_autologin_group():
 
 # --- emit_plan(): PLAN + bash_profile, without mutating PLAN ----------------
 
-def test_emit_plan_length_is_seventeen_plus_bash_profile():
-    # 17 PLAN entries (the headed graphical session; the two /usr/local/bin command wrappers
-    # moved to command_line_plan()) + the appended .bash_profile snippet = 18. emit_plan() is
-    # the graphical-session sequence compiler.py iterates under `if is_gui:`.
-    assert len(desktop.emit_plan()) == 18
+def test_emit_plan_length_is_nineteen_plus_bash_profile():
+    # 19 PLAN entries + the appended .bash_profile snippet = 20. emit_plan() is the
+    # single sequence compiler.py iterates. (19 = 18 + the new /etc/xdg/azarch-picom.conf
+    # compositor config that disables the picom fade + transparent-titlebar defaults.)
+    assert len(desktop.emit_plan()) == 20
 
 
 def test_emit_plan_prefix_is_plan():
@@ -404,7 +330,7 @@ def test_emit_plan_does_not_mutate_module_plan():
     before = len(desktop.PLAN)
     desktop.emit_plan()
     desktop.emit_plan()
-    assert len(desktop.PLAN) == before == 17
+    assert len(desktop.PLAN) == before == 19
 
 
 # --- xinitrc: OpenBox X11 session, no flash ---------------------------------

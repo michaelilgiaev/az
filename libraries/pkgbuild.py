@@ -72,10 +72,10 @@ THUNAR_RESOLVE_SYMLINK_PATCH_NAME = "azarch-thunar-resolve-symlink.patch"
 # ---------------------------------------------------------------------------
 # calamares -- source patch: Az'arch installer UI defaults
 # ---------------------------------------------------------------------------
-# Three of the installer's UI behaviours are decided in Calamares' C++ (its module
-# *.conf schemas expose no key for them), so they can only be changed by patching the
-# source before the build. This single patch, applied in the recipe's prepare(),
-# carries all three:
+# Two of the installer's default selections are decided in Calamares' C++ (its
+# module *.conf schemas expose no key for either), so they can only be changed by
+# patching the source before the build. This single patch, applied in the recipe's
+# prepare(), carries both:
 #
 #   1. Keyboard page -- "Switch Keyboard" (the xkb group-switcher dropdown).
 #      Upstream builds the dropdown from a QMap sorted by human-readable label and
@@ -94,13 +94,7 @@ THUNAR_RESOLVE_SYMLINK_PATCH_NAME = "azarch-thunar-resolve-symlink.patch"
 #      auto-derive path -- so with modules/users.conf `template: "azarch"` the field
 #      shows "azarch" by default and stays "azarch" regardless of the other inputs.
 #
-#   3. Users page -- "What is your name?" (the full-name / GECOS row). Az'arch does
-#      not collect a full name, so the patch hides that row (label + input + status
-#      glyph) in UsersPage's constructor. The user types the login directly; the
-#      existing full-name signal wiring is left intact (the field is just never shown),
-#      so an empty name flows through harmlessly.
-#
-# All three hunks are small and target stable code paths in calamares 3.4.2; the pinned
+# Both hunks are small and target stable code paths in calamares 3.4.2; the pinned
 # tarball guarantees the context lines below match. A context drift on a version
 # bump makes `patch` fail LOUDLY in prepare() (the build aborts) rather than
 # silently dropping the customization -- refresh the hunks when bumping the version.
@@ -109,11 +103,10 @@ CALAMARES_DEFAULTS_PATCH_NAME = "azarch-calamares-defaults.patch"
 
 def calamares_defaults_patch() -> str:
     r"""Unified diff (-p1) applied to the extracted calamares-3.4.2 source in the
-    recipe's prepare(): default the keyboard group-switcher to Alt+Shift, seed a
-    fixed, non-reactive default hostname, and hide the full-name (GECOS) row on the
-    Users page. See the block comment above for why these live in a source patch
-    rather than a module .conf. The paths are a/ b/ prefixed so `patch -p1` (run from
-    the source root) applies them.
+    recipe's prepare(): default the keyboard group-switcher to Alt+Shift and seed a
+    fixed, non-reactive default hostname. See the block comment above for why these
+    live in a source patch rather than a module .conf. The paths are a/ b/ prefixed
+    so `patch -p1` (run from the source root) applies them.
 
     The diff is built line-by-line rather than as one big triple-quoted literal
     ON PURPOSE: a unified diff's CONTEXT lines (unchanged surrounding source) must
@@ -172,25 +165,6 @@ def calamares_defaults_patch() -> str:
         "     }",
         " ",
         "     setConfigurationDefaultGroups( configurationMap, m_defaultGroups );",
-        "--- a/src/modules/users/UsersPage.cpp",
-        "+++ b/src/modules/users/UsersPage.cpp",
-        "@@ -105,6 +105,16 @@",
-        "     connect( ui->textBoxFullName, &QLineEdit::textEdited, config, &Config::setFullName );",
-        "     connect( config, &Config::fullNameChanged, this, &UsersPage::onFullNameTextEdited );",
-        " ",
-        "+    // Az'arch: the distribution does not collect a full name (GECOS). Hide the whole",
-        "+    // \"What is your name?\" row -- the label, the input, and its status glyph -- so the",
-        "+    // user types the login directly. The signal wiring above stays intact (the field is",
-        "+    // just never shown), so an empty full name flows through harmlessly and the login",
-        "+    // field is filled in by the user rather than auto-derived from a name.",
-        "+    ui->labelWhatIsYourName->hide();",
-        "+    ui->textBoxFullName->hide();",
-        "+    ui->labelFullName->hide();",
-        "+    ui->labelFullNameError->hide();",
-        "+",
-        "     // If the hostname is going to be written out, then show the field",
-        "     if ( ( m_config->hostnameAction() == HostNameAction::EtcHostname )",
-        "          || ( m_config->hostnameAction() == HostNameAction::SystemdHostname ) )",
     ]
     # Trailing newline so the last line is terminated (patch/POSIX text file).
     return "\n".join(lines) + "\n"

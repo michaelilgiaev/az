@@ -79,19 +79,14 @@ def require_virtiofsd() -> None:
 
 
 def is_running(cfg) -> bool:
-    """True if a LIVE process whose comm matches the VM's PROC name exists.
+    """True if a process whose comm matches the VM's PROC name is alive.
 
-    `pgrep -x "$PROC"`: an EXACT match against the (15-char-capped) process comm,
-    so two VMs in two dirs never see each other as running. `-r DRST` restricts the
-    match to live run states (Disk-sleep, Running, Sleeping, sTopped) and EXCLUDES
-    Z (zombie): a hard/crashed teardown can leave QEMU as `[PROC] <defunct>` until
-    its parent reaps it, and a plain `pgrep -x` matches that dead zombie -- making
-    `run`/`install` falsely refuse with "VM already running". A stopped (T) VM still
-    counts (it holds resources); a zombie holds nothing and must not.
+    Mirrors `pgrep -x "$PROC"`: an EXACT match against the (15-char-capped)
+    process comm, so two VMs in two dirs never see each other as running.
     """
     try:
         subprocess.run(
-            ["pgrep", "-x", "-r", "DRST", cfg.proc],
+            ["pgrep", "-x", cfg.proc],
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
