@@ -24,17 +24,30 @@ tier?"): `network=true` runs the network tier, `root=true` selects the root tier
 
 The toggle
 ----------
-Both booleans live in ONE committed file, `tests/test_modes.conf` (default: both `false`),
-as `key = value` lines::
+Both booleans live in ONE LOCAL file, `tests/test_modes.conf` (default: both `false`), as
+`key = value` lines::
 
     network = false
     root = false
 
-Flip them WITHOUT running the suite via `tests.sh --offline/--online` (network) and
+The file is per-machine local state: it is GITIGNORED, not committed. `tests.sh` CREATES it
+with the both-`false` default on first run if it is missing, and otherwise leaves it alone, so
+a fresh clone starts both-off (nothing to hang on, no sudo demanded) and each machine keeps its
+own toggles. Because the file may not exist yet on a brand-new clone before the first
+`tests.sh` run, this module treats a MISSING file exactly like the default (both off) -- see
+`_read_conf`, which never raises.
+
+Flip the toggles WITHOUT running the suite via `tests.sh --offline/--online` (network) and
 `tests.sh --user/--root` (root) -- they rewrite the file and exit. Environment variables
 `AZARCH_TESTS_NETWORK` / `AZARCH_TESTS_ROOT` override the file for a single run; tests.sh
 exports them to match the file so its run and the two isolated off-screen log-copy runs (whose
 repo copies do not contain the conf) all agree, and CI can set them directly.
+
+The root tier additionally DEMANDS sudo: with `root = true` persisted, a plain `bash tests.sh`
+run as a non-root user STOPS at the shell layer (in tests.sh) and asks the user to re-run under
+sudo, rather than quietly skipping the root-marked tests. The `os.geteuid()` self-skip in the
+root-marked tests remains as a second layer (for `-m root` selection and the test-only
+`AZARCH_ALLOW_NONROOT` escape hatch, which bypasses the shell-layer demand).
 
 Anything unrecognized (a typo in the file, a bad env value) falls back to the SAFE default
 (the tier OFF): an offline run can never hang, and a user-mode run can never need sudo, so an
@@ -47,8 +60,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-# The committed config file. It lives beside the tests (per the design), so it travels with
-# the repo and is NOT gitignored -- a fresh clone inherits the safe both-off default.
+# The LOCAL config file. It lives beside the tests but is GITIGNORED, not committed -- it is
+# per-machine state that tests.sh auto-creates (both off) on first run. A fresh clone therefore
+# may not have it yet; _read_conf() treats a missing file as the safe both-off default.
 CONFIG_PATH = Path(__file__).resolve().parent / "test_modes.conf"
 
 # The env vars that override the file for one run (tests.sh exports them; CI may set them).

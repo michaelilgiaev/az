@@ -1,6 +1,7 @@
 """Contract tests for tests.sh: the test-mode toggles, --help, marker registration, and the
 env-export wiring the isolated log runs depend on. Mirrors the sibling Coder suite's
 test_tests_sh.py so both distributions enforce the same standard."""
+import re
 import subprocess
 from pathlib import Path
 
@@ -130,13 +131,206 @@ def test_help_prints_usage_and_does_not_run_pytest():
         assert "passed" not in out and "collected" not in out
 
 
-def test_committed_modes_conf_default_is_both_false():
-    # The checked-in default must be both false: a fresh clone / CI then never hangs on the network
-    # and never needs sudo.
-    assert MODESCONF.exists(), "tests/test_modes.conf must be committed"
-    d = _conf_dict()
-    assert d.get("network") == "false", "committed network mode must default to false (offline)"
-    assert d.get("root") == "false", "committed root mode must default to false (user)"
+# --- Local (gitignored) conf: auto-create-if-missing, never-clobber -------------------------
+# tests/test_modes.conf is LOCAL per-machine state (gitignored, NOT committed). tests.sh must
+# CREATE it (both false) on first run when it is missing, and otherwise leave it byte-identical.
+# We exercise the actual auto-create block extracted from tests.sh against a TEMP path, so the
+# real repo's conf is never touched and no venv/pytest is built.
+
+def _autocreate_snippet(conf_path):
+    """The verbatim 'create the conf if missing' block from tests.sh, retargeted at conf_path.
+
+    Extracted (not reimplemented) so this test breaks if the real block's behavior drifts. The
+    block is anchored between the `MODESCONF=` assignment and the `conf_bool()` definition."""
+    sh = TESTS_SH.read_text()
+    m = re.search(r'^if \[ ! -f "\$MODESCONF" \]; then\n(?:.*\n)*?^fi$', sh, re.MULTILINE)
+    assert m, "the auto-create `if [ ! -f \"$MODESCONF\" ]` block must exist in tests.sh"
+    return f'MODESCONF="{conf_path}"\n{m.group(0)}\n'
+
+
+def test_missing_conf_is_created_with_both_false(tmp_path):
+    conf = tmp_path / "sub" / "test_modes.conf"   # parent missing too: block must mkdir -p
+    assert not conf.exists()
+    r = subprocess.run(["bash", "-c", _autocreate_snippet(conf)],
+                       capture_output=True, text=True, timeout=15)
+    assert r.returncode == 0, r.stderr
+    assert conf.exists(), "a missing conf must be auto-created"
+    assert conf.read_text() == "network = false\nroot = false\n"
+
+
+def test_existing_conf_is_not_clobbered(tmp_path):
+    conf = tmp_path / "test_modes.conf"
+    original = "network = true\nroot = true\n"   # a NON-default value the block must preserve
+    conf.write_text(original)
+    r = subprocess.run(["bash", "-c", _autocreate_snippet(conf)],
+                       capture_output=True, text=True, timeout=15)
+    assert r.returncode == 0, r.stderr
+    assert conf.read_text() == original, "an existing conf must be left byte-identical"
+
+
+def test_modes_conf_is_gitignored_not_tracked():
+    # The conf is local state now: it must NOT be a tracked file, and git must ignore it.
+    import subprocess as sp
+    tracked = sp.run(["git", "ls-files", "--error-unmatch", "tests/test_modes.conf"],
+                     cwd=str(REPO), capture_output=True, text=True)
+    assert tracked.returncode != 0, "tests/test_modes.conf must NOT be tracked by git (it is local state)"
+    ignored = sp.run(["git", "check-ignore", "tests/test_modes.conf"],
+                     cwd=str(REPO), capture_output=True, text=True)
+    assert ignored.returncode == 0 and ignored.stdout.strip(), \
+        "tests/test_modes.conf must be gitignored"
+
+
+# --- Root tier demands sudo -----------------------------------------------------------------
+# With the root tier ENABLED, a plain `bash tests.sh` (non-root) must STOP and ask for sudo,
+# instead of quietly skipping the root-marked tests. We drive the ACTUAL guard block extracted
+# from tests.sh (needs conf_bool too), so the test tracks the real logic and needs no venv. The
+# pytest process is non-root, so the `id -u != 0` arm holds naturally; the AZARCH_ALLOW_NONROOT
+# escape hatch is the seam that lets a non-root run proceed past the guard.
+
+# The mode env vars the guard consults. A guard test must run in a HERMETIC environment: when
+# this suite itself is launched via `bash tests.sh`, the parent EXPORTS AZARCH_TESTS_ROOT (and
+# friends), which would otherwise leak in and override the temp conf the test wrote. _run_guard
+# strips all three and re-applies only what the test asks for.
+_GUARD_ENV_VARS = ("AZARCH_TESTS_ROOT", "AZARCH_TESTS_NETWORK", "AZARCH_ALLOW_NONROOT")
+
+
+def _guard_snippet(conf_path, args=""):
+    """conf_bool() + the root-sudo guard block from tests.sh, retargeted at conf_path. The mode
+    env vars are supplied by the caller via a sanitized env (see _run_guard), NOT exported here,
+    so an inherited AZARCH_TESTS_ROOT cannot leak in. Echoes PASSED_GUARD if the guard let the
+    run continue (so a test can distinguish 'passed' from 'refused with exit 1')."""
+    sh = TESTS_SH.read_text()
+    cb = re.search(r"^conf_bool\(\) \{.*?^\}", sh, re.MULTILINE | re.DOTALL)
+    assert cb, "conf_bool() must be defined in tests.sh"
+    guard = re.search(r'^# --- Root tier demands sudo\..*?^fi$', sh, re.MULTILINE | re.DOTALL)
+    assert guard, "the root-sudo guard block must exist in tests.sh"
+    prelude = f'MODESCONF="{conf_path}"\nset --{(" " + args) if args else ""}\n'
+    return prelude + cb.group(0) + "\n" + guard.group(0) + '\necho PASSED_GUARD\n'
+
+
+def _run_guard(tmp_path, conf_text, root_env=None, allow_nonroot=None, args=""):
+    """Write conf_text to a temp conf and run the extracted guard against it in a HERMETIC env
+    (all inherited mode vars stripped). root_env sets AZARCH_TESTS_ROOT; allow_nonroot sets
+    AZARCH_ALLOW_NONROOT -- only when the test passes them, so the conf is the sole other input."""
+    import os
+    conf = tmp_path / "test_modes.conf"
+    conf.write_text(conf_text)
+    env = {k: v for k, v in os.environ.items() if k not in _GUARD_ENV_VARS}
+    if root_env is not None:
+        env["AZARCH_TESTS_ROOT"] = root_env
+    if allow_nonroot is not None:
+        env["AZARCH_ALLOW_NONROOT"] = allow_nonroot
+    return subprocess.run(["bash", "-c", _guard_snippet(conf, args=args)],
+                          capture_output=True, text=True, timeout=15, env=env)
+
+
+@pytest.mark.skipif(__import__("os").geteuid() == 0,
+                    reason="guard's refusal path is for NON-root; this process is root")
+def test_root_mode_without_sudo_is_refused(tmp_path):
+    r = _run_guard(tmp_path, "network = false\nroot = true\n")
+    assert r.returncode == 1, (r.stdout, r.stderr)
+    assert "PASSED_GUARD" not in r.stdout, "the guard must STOP the run, not fall through"
+    assert "not root" in r.stderr and "sudo bash tests.sh" in r.stderr
+    assert "bash tests.sh --user" in r.stderr, "the refusal must point at the --user off-switch"
+
+
+# Every truthy spelling the Python reader (_testmodes._as_bool, which lowercases) accepts must
+# ALSO trip the guard -- otherwise the guard reads the env value as false and waves the run
+# through while pytest's conftest, reading the SAME var, selects the root tier and the tests
+# silently self-skip. The mixed/upper-case entries (TRUE, Yes, ON) are the exact regression an
+# adversarial review found: the guard's `case` did not case-fold while Python does.
+@pytest.mark.skipif(__import__("os").geteuid() == 0,
+                    reason="guard's refusal path is for NON-root; this process is root")
+@pytest.mark.parametrize("root_env", [
+    "true", "TRUE", "True", "tRuE", "1", "yes", "Yes", "YES", "on", "ON",
+    " true ", "\ttrue\t", "true\n",   # surrounding ASCII whitespace: Python _ascii_strip trims it
+])                                     # truthy, so the guard MUST too (a `$(cmd)` capture yields \n)
+def test_root_env_truthy_without_sudo_is_refused(tmp_path, root_env):
+    # Env override alone (conf says root=false) must also trigger the demand -- env wins, and it
+    # must do so for ANY casing/spelling/whitespace-padding Python treats as truthy, not just a
+    # bare lowercase "true". Both the case-fold and the edge-trim in tests.sh's guard are covered.
+    r = _run_guard(tmp_path, "network = false\nroot = false\n", root_env=root_env)
+    assert r.returncode == 1, (repr(root_env), r.stdout, r.stderr)
+    assert "sudo bash tests.sh" in r.stderr
+
+
+@pytest.mark.parametrize("root_env", ["false", "FALSE", "no", "off", "online", "garbage", ""])
+def test_root_env_non_truthy_never_demands_sudo(tmp_path, root_env):
+    # The falsey/unrecognized spellings (incl. the network-only word `online`, which must NOT
+    # enable root) must leave the guard inert WHEN THE CONF IS ALSO false -- mirroring Python's
+    # fail-closed default. (Unrecognized values fall through to the conf; here the conf is false.)
+    r = _run_guard(tmp_path, "network = false\nroot = false\n", root_env=root_env)
+    assert r.returncode == 0, (root_env, r.stdout, r.stderr)
+    assert "PASSED_GUARD" in r.stdout
+
+
+# The env var must win ONLY when it parses to a real boolean. An UNRECOGNIZED env value (empty,
+# whitespace-only, junk, or the network-only word `online`) must ABSTAIN and let the CONF decide --
+# exactly as _testmodes.root_enabled() does. The whitespace-only-with-conf-true case is the precise
+# divergence an adversarial review found: bash's old `[ -n ]` test treated a blank-but-nonempty
+# value as "set" and skipped the conf (reading false), while Python fell through to the conf (true),
+# silently skipping the enabled tier. Both engines must now fall through.
+@pytest.mark.skipif(__import__("os").geteuid() == 0,
+                    reason="guard's refusal path is for NON-root; this process is root")
+@pytest.mark.parametrize("root_env", ["", "  ", "\t", "\n", "online", "garbage", "maybe"])
+def test_unrecognized_env_falls_through_to_conf_true(tmp_path, root_env):
+    # conf says root=true; an unrecognized env value must NOT override it to false -- the guard
+    # must still refuse, matching Python (which reads the env as None and falls to the true conf).
+    r = _run_guard(tmp_path, "network = false\nroot = true\n", root_env=root_env)
+    assert r.returncode == 1, (repr(root_env), r.stdout, r.stderr)
+    assert "sudo bash tests.sh" in r.stderr
+
+
+@pytest.mark.parametrize("root_env", ["", "  ", "\t", "online", "garbage"])
+def test_unrecognized_env_falls_through_to_conf_false(tmp_path, root_env):
+    # Mirror: conf says root=false; an unrecognized env value falls through to the false conf, so
+    # the guard stays inert.
+    r = _run_guard(tmp_path, "network = false\nroot = false\n", root_env=root_env)
+    assert r.returncode == 0, (repr(root_env), r.stdout, r.stderr)
+    assert "PASSED_GUARD" in r.stdout
+
+
+def test_root_mode_with_escape_hatch_proceeds(tmp_path):
+    # AZARCH_ALLOW_NONROOT=1 is the test seam: even root=true + non-root must fall THROUGH the
+    # guard (the hermetic suite relies on this). Works whether or not the process is root.
+    r = _run_guard(tmp_path, "network = false\nroot = true\n", allow_nonroot="1")
+    assert r.returncode == 0, (r.stdout, r.stderr)
+    assert "PASSED_GUARD" in r.stdout, "the escape hatch must let the run continue"
+    assert "not root" not in r.stderr
+
+
+def test_user_mode_never_demands_sudo(tmp_path):
+    # root=false: the guard must be inert regardless of UID.
+    r = _run_guard(tmp_path, "network = false\nroot = false\n")
+    assert r.returncode == 0, (r.stdout, r.stderr)
+    assert "PASSED_GUARD" in r.stdout
+
+
+def test_root_toggle_flag_never_demands_sudo(_preserve_modesconf):
+    # Flipping the switch (`--root`) must ALWAYS work, even as a non-root user -- the demand is
+    # only for actually RUNNING the suite. The toggle exits 0 well before the guard.
+    r = _run_toggle("--root")
+    assert r.returncode == 0, r.stderr
+    combined = r.stdout + r.stderr
+    assert "root=true" in combined
+    assert "needs administrator rights" not in combined and "not root" not in combined
+
+
+def test_help_never_demands_sudo_even_with_root_enabled(_preserve_modesconf):
+    # `--help` short-circuits before any mode resolution, so even root=true must not gate it.
+    MODESCONF.write_text("network = false\nroot = true\n")
+    r = _run_toggle("--help")
+    assert r.returncode == 0, r.stderr
+    out = r.stdout + r.stderr
+    assert "Usage:" in out
+    assert "not root" not in out and "needs administrator rights" not in out
+
+
+def test_usage_documents_the_root_sudo_demand():
+    # The house rule: --help must EXPLAIN the sudo behavior so it is discoverable.
+    r = _run_toggle("--help")
+    out = r.stdout + r.stderr
+    assert "sudo" in out, "usage must mention the root tier's sudo requirement"
 
 
 def test_tests_sh_exports_both_modes_for_isolated_runs():

@@ -43,18 +43,24 @@
 # --- TEST MODES (network + root; both OFF by default) ------------------------
 # Two PERSISTED booleans in tests/test_modes.conf select which privileged tiers
 # actually run. Both default OFF, so a plain `bash tests.sh` is green with no
-# connectivity and no sudo.
+# connectivity and no sudo. The conf is LOCAL per-machine state: it is gitignored,
+# not committed. tests.sh CREATES it (both false) on first run if it is missing and
+# otherwise leaves it alone, so a fresh clone starts both-off and each machine keeps
+# its own toggles.
 #
 #   network -- a few tests reach a REAL external host (marked `network`). OFFLINE
 #              (default) SKIPS them, so a plain run never hangs on a DNS lookup.
 #              ONLINE runs them.
 #   root    -- tests that need UID 0 (marked `root`; the two calamares btrfs
-#              loop-mount desparse tests). USER (default) SKIPS them; ROOT selects
-#              the tier (they still self-skip via os.geteuid() when not actually
-#              UID 0).
+#              loop-mount desparse tests). USER (default) SKIPS them. ROOT enables
+#              the tier -- and because these tests do nothing useful without UID 0,
+#              a ROOT-mode `bash tests.sh` run WITHOUT sudo now STOPS and tells you
+#              to re-run under sudo, instead of quietly skipping what you enabled.
+#              (Under sudo they run; selecting the tier does not otherwise force root.)
 #
 # The toggles are flipped WITHOUT running the suite (they rewrite
-# tests/test_modes.conf and exit immediately -- no venv build, no pytest):
+# tests/test_modes.conf and exit immediately -- no venv build, no pytest, no sudo
+# demand -- flipping the switch is always allowed):
 #   bash tests.sh --offline / --online   # flip `network`; does NOT run the suite
 #   bash tests.sh --user    / --root     # flip `root`;    does NOT run the suite
 # Passing both halves of a pair (e.g. --online --offline) is a hard error. Flip both
@@ -95,12 +101,26 @@ LOG_LOUD="$LOGDIR/tests-loud.log"
 LOG_QUIET="$LOGDIR/tests-quiet.log"
 
 # --- Test modes (network + root; both OFF by default) -----------------------
-# Two PERSISTED booleans in tests/test_modes.conf (committed; default both `false`)
-# select the privileged tiers. conftest.py reads the file; AZARCH_TESTS_NETWORK /
-# AZARCH_TESTS_ROOT override it for one run; we export both below so the terminal run
-# and the two isolated log-copy runs all agree with the file. See tests/_testmodes.py
-# for the parser and precedence rules.
+# Two PERSISTED booleans in tests/test_modes.conf select the privileged tiers. The file is
+# LOCAL per-machine state -- it is gitignored, NOT committed. tests.sh CREATES it (both
+# `false`) on first run if it is missing, and otherwise leaves it untouched on a normal run,
+# so a fresh clone starts with both tiers OFF (no network hang, no sudo demand) and each
+# machine keeps its own toggles. conftest.py reads the file; AZARCH_TESTS_NETWORK /
+# AZARCH_TESTS_ROOT override it for one run; we export both below so the terminal run and the
+# two isolated log-copy runs all agree with the file. See tests/_testmodes.py for the parser
+# and precedence rules.
 MODESCONF="$REPODIR/tests/test_modes.conf"
+
+# Ensure the local conf exists before ANY read of it (the toggle writer, conf_bool, the
+# env-export, and the root-sudo guard below all read it). If it is missing -- a fresh clone,
+# or a machine where it was never created -- write the safe both-OFF default. If it already
+# exists we do NOT touch it: it is the user's local state and only an explicit toggle flag
+# (handled below) may rewrite it. This is idempotent and side-effect free on every run after
+# the first, and it means every code path downstream can assume the file is present.
+if [ ! -f "$MODESCONF" ]; then
+    mkdir -p "$(dirname "$MODESCONF")"
+    printf 'network = false\nroot = false\n' > "$MODESCONF"
+fi
 
 # conf_bool <key> -- read one boolean from tests/test_modes.conf, echoing `true`/`false`. This is
 # the ONE parser used by both the toggle writer and the env-export below, and it is kept faithful to
@@ -146,8 +166,10 @@ conf_bool() {                              # conf_bool <key> -> echoes true|fals
 
 # --help / -h and the four toggle flags (--online/--offline, --user/--root) are handled
 # in THIS early pass, BEFORE output-mode parsing / venv bootstrap, so help and toggles
-# are instant and side-effect free (a toggle rewrites the conf and EXITS -- no venv
-# build, no pytest). Anything else falls through untouched to the normal run below.
+# are instant (no venv build, no pytest -- a toggle rewrites the conf and EXITS). The only
+# filesystem touch on this path is the one-time auto-create of the conf just above, which
+# writes the both-off default if (and only if) the file is missing -- a no-op on every run
+# after the first. Anything else falls through untouched to the normal run below.
 #
 # usage -- print help covering every flag, then the caller exits 0.
 usage() {
@@ -164,12 +186,16 @@ Output modes (what the TERMINAL shows; logs/ always gets all three views):
   -l, --loud       LOUD   -- one bright line per test, full tracebacks
   -q and -l are mutually exclusive.
 
+tests/test_modes.conf is LOCAL (gitignored); tests.sh creates it (both false) on first run.
+
 Test-mode toggles (flip a persisted boolean in tests/test_modes.conf and EXIT; no suite run):
   --offline / --online   network tier: skip / run the `network`-marked tests (default: offline)
-  --user    / --root     root tier:    skip / select the `root`-marked tests  (default: user)
+  --user    / --root     root tier:    skip / enable the `root`-marked tests  (default: user)
   Passing both halves of a pair is an error. Flip both at once, e.g.:  --online --root
   These are INDEPENDENT of -q/-l. Env overrides for one run (env wins over the file):
       AZARCH_TESTS_NETWORK=online|offline   AZARCH_TESTS_ROOT=true|false
+  With the root tier ENABLED, a plain `bash tests.sh` (no sudo) STOPS and asks you to
+  re-run with sudo. Turn it back off with --user, or run: sudo bash tests.sh
 
 Help:
   -h, --help             print this and exit.
@@ -261,6 +287,50 @@ for arg in "$@"; do
         *)               PYTEST_ARGS+=("$arg") ;;
     esac
 done
+
+# --- Root tier demands sudo. -------------------------------------------------
+# When the root tier is ENABLED (root = true in the conf, or AZARCH_TESTS_ROOT set truthy),
+# the root-marked tests need UID 0 to do anything real -- so a plain `bash tests.sh` without
+# sudo would only ever SKIP them, silently defeating the toggle the user just turned on.
+# Refuse instead: stop here with a clear instruction to re-run under sudo. This runs on the
+# NORMAL-RUN path only -- `--help` and every toggle flag (--root/--user/...) have already
+# exited above, so flipping the switch never trips this; only actually RUNNING the suite does.
+# It also runs BEFORE the venv build below, so an unprivileged root-mode run fails fast and
+# cheap rather than after seconds of venv work.
+#   * Effective mode is resolved EXACTLY as the run itself resolves it (env wins over the
+#     file, via the canonical conf_bool), so the guard and the tests never disagree.
+#   * AZARCH_ALLOW_NONROOT is a TEST-ONLY escape hatch (mirrors CODER_ALLOW_NONROOT in the
+#     sibling setup.sh/teardown.sh): it lets the hermetic suite drive a root-mode tests.sh as
+#     an ordinary user without the refusal. A real user never sets it, so they still stop.
+# Resolve the effective root mode EXACTLY as _testmodes.root_enabled() does: the env var wins
+# ONLY when it parses to a recognized boolean; any UNRECOGNIZED env value (empty, whitespace-only,
+# or junk) makes the env ABSTAIN and we fall through to the conf file -- never to a bare `false`.
+# Getting this precedence byte-identical to Python is what keeps the guard and pytest's conftest
+# (both reading the same env var) from ever disagreeing and silently skipping the enabled tier.
+# Three divergences an adversarial review caught, all fixed by matching _as_bool's normalize:
+#   * folding: `AZARCH_TESTS_ROOT=TRUE`/`Yes`/`ON` -- Python lowercases, so truthy; the raw `case`
+#     saw it as unrecognized -> false and waved the run through.
+#   * trimming: `AZARCH_TESTS_ROOT=" true "` or a trailing newline from `$(...)` capture -- Python
+#     _ascii_strip trims it truthy; an untrimmed `case` would not match.
+#   * abstain: `AZARCH_TESTS_ROOT="  "` (whitespace-only) with `root = true` in the conf -- Python
+#     reads the env as None and falls to the conf (true); the old `[ -n ]` test treated the
+#     non-empty-but-blank value as "set" and skipped the conf, reading false. Now both fall through.
+# root_token <raw> -> echoes true|false|unknown, applying _as_bool's ASCII-trim + case-fold.
+root_token() {
+    local v="$1"
+    v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"   # ASCII-trim both ends
+    v="$(printf '%s' "$v" | tr '[:upper:]' '[:lower:]')"            # case-fold
+    case "$v" in true|1|yes|on) echo true ;; false|0|no|off) echo false ;; *) echo unknown ;; esac
+}
+ROOT_MODE="$(root_token "${AZARCH_TESTS_ROOT:-}")"
+[ "$ROOT_MODE" = unknown ] && ROOT_MODE="$(conf_bool root)"   # env abstained -> the conf decides
+if [ "$ROOT_MODE" = true ] && [ "$(id -u)" -ne 0 ] && [ -z "${AZARCH_ALLOW_NONROOT:-}" ]; then
+    echo "[tests] the root test tier is ENABLED but you are not root." >&2
+    echo "[tests] These tests need administrator rights. Please re-run with sudo:" >&2
+    echo "            sudo bash tests.sh${*:+ $*}" >&2
+    echo "[tests] Or turn the root tier back off (no sudo needed): bash tests.sh --user" >&2
+    exit 1
+fi
 
 # --- 1. Ensure the venv exists. ---------------------------------------------
 if [ ! -x "$PY" ]; then
