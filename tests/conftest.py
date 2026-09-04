@@ -9,6 +9,8 @@ resolve no matter how the tests are launched.
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -62,3 +64,51 @@ def pytest_collection_modifyitems(config, items):
         for keyword, skip in marks:
             if keyword in item.keywords:
                 item.add_marker(skip)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _isolated_gnupg_home(tmp_path_factory):
+    """Point GNUPGHOME at a fresh, PRE-WARMED homedir for the whole test session.
+
+    The backup / passwords tests shell out to the REAL `gpg` (its declared dep) for
+    symmetric encrypt/decrypt. Left to the ambient ~/.gnupg they pass on a developer box
+    (whose gpg-agent is already warm) but flake on a cold CI runner: the FIRST symmetric
+    encrypt of the run races gpg's one-time homedir creation + gpg-agent socket spin-up and
+    can return non-zero, surfacing as `AssertionError: vault setup failed`
+    (test_configuration_backup.py). gpg discards its own stderr in the helper, so the CI log
+    shows only `assert False` -- the cause is invisible.
+
+    Fix both problems at the source: give every test an ISOLATED homedir (no dependency on
+    ambient agent state, no cross-test contamination) and WARM it ONCE here -- create the
+    keybox and spin up gpg-agent via a throwaway symmetric encrypt -- so no individual test
+    ever pays the cold-start. gpg honours GNUPGHOME from the environment directly, so no
+    production code needs a --homedir flag. The agent socket lives under
+    /run/user/<uid>/gnupg (a short hashed path), not under GNUPGHOME, so the homedir path
+    length is irrelevant to the AF_UNIX sun_path limit. If gpg is not installed the warm-up
+    is skipped silently -- those tests self-skip on `shutil.which("gpg")` anyway.
+    """
+    home = tmp_path_factory.mktemp("gnupg")
+    os.chmod(home, 0o700)
+    previous = os.environ.get("GNUPGHOME")
+    os.environ["GNUPGHOME"] = str(home)
+
+    # Warm the fresh homedir: this first symmetric encrypt creates pubring.kbx and starts
+    # gpg-agent, so the real tests never hit the cold-start race that flakes CI.
+    seed = home / "warmup.txt"
+    seed.write_text("warmup\n", encoding="utf-8")
+    try:
+        subprocess.run(
+            ["gpg", "--batch", "--yes", "--pinentry-mode", "loopback",
+             "--symmetric", "--cipher-algo", "AES256", "--passphrase-fd", "0",
+             "-o", str(home / "warmup.gpg"), str(seed)],
+            input=b"warmup\n", capture_output=True, timeout=60, check=False,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        pass  # gpg absent/misbehaving -- the real gpg tests self-skip via shutil.which.
+
+    yield str(home)
+
+    if previous is None:
+        os.environ.pop("GNUPGHOME", None)
+    else:
+        os.environ["GNUPGHOME"] = previous
