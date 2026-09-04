@@ -222,8 +222,8 @@ Test-mode toggles (flip a persisted boolean in tests/test_modes.conf and EXIT; n
   re-run with sudo. Turn it back off with --user, or run: sudo bash tests.sh
 
 Test-mode status (report the booleans and EXIT; no suite run, no conf change):
-  --status               echo each mode's conf value, env override, and resolved effective
-                         value, then exit. Read-only. Cannot be combined with a toggle.
+  --status               echo each mode's conf value, env override, resolved effective value,
+                         and how many tests carry that mode's marker, then exit. Read-only.
 
 Help:
   -h, --help             print this and exit.
@@ -262,26 +262,41 @@ for arg in "$@"; do
     esac
 done
 
-# --status is a READ-ONLY report: it echoes each mode's persisted conf value, any env override, and
-# the RESOLVED effective value (env wins over conf, byte-identical to _testmodes.py), then exits --
-# no venv build, no pytest, no sudo demand, and it NEVER writes the conf. Handled here in the early
-# pass so it is instant. It cannot be combined with a toggle: a toggle MUTATES the conf while status
-# READS it, so mixing them is ambiguous ("did you want the value before or after the flip?") -- refuse
-# rather than guess. The only prior filesystem touch is the one-time conf auto-create above, so a
-# --status on a fresh clone reports the freshly-written both-off default rather than erroring.
+# --status is a READ-ONLY report: it echoes each mode's persisted conf value, any env override, the
+# RESOLVED effective value (env wins over conf, byte-identical to _testmodes.py), and a count of how
+# many tests carry that mode's marker, then exits -- no venv BUILD, no sudo demand, and it NEVER writes
+# the conf. (The count runs the venv's pytest collector ONLY if the venv already exists, so it stays
+# instant and never builds; a fresh clone reports the count unavailable.) Handled in the early pass so
+# it is instant. It cannot be combined with a toggle: a toggle MUTATES the conf while status READS it,
+# so mixing them is ambiguous ("did you want the value before or after the flip?") -- refuse rather than
+# guess. The only prior filesystem touch is the one-time conf auto-create above, so a --status on a
+# fresh clone reports the both-off default rather than erroring.
 if [ "$WANT_STATUS" -eq 1 ]; then
     if [ "$ANY_TOGGLE" -eq 1 ]; then
         echo "[tests] error: --status cannot be combined with a toggle (--online/--offline/--user/--root) -- it only reports" >&2
         exit 2
     fi
-    # status_line <label> <key> <env-var-name> <env-token-fn> -- print one mode's conf/env/effective.
+    # count_field <marker> <noun> -- the bracketed, plural-aware marker count for a status line. The
+    # counting + formatting live in tests/_testmodes.py (the test-mode source of truth); we only invoke
+    # it when the venv python already exists, so --status stays instant and never BUILDS the venv.
+    count_field() {                        # count_field <marker> <noun>
+        local marker="$1" noun="$2"
+        if [ -x "$PY" ]; then
+            "$PY" "$REPODIR/tests/_testmodes.py" --count-field "$marker" "$noun" "$PY" 2>/dev/null \
+                || printf '[%s tests: unavailable]' "$noun"
+        else
+            printf '[%s tests: venv not built]' "$noun"   # no venv yet -> do NOT build here
+        fi
+    }
+    # status_line <label> <key> <env-var-name> <env-token-fn> -- print one mode's conf/env/effective,
+    # then a trailing count of how many tests carry that mode's marker (count_field above).
     # conf: conf_bool (the persisted file value). env: the token fn applied to the env var, shown as
     # its raw display or "(unset)" when the var is absent. effective: env wins ONLY when it parses to a
     # recognized token (true/false); an unset OR unrecognized env ABSTAINS to the conf -- exactly the
     # precedence network_enabled()/root_enabled() use, so `--status` never disagrees with a real run.
     status_line() {                        # status_line <label> <key> <envname> <tokenfn>
         local label="$1" key="$2" envname="$3" tokenfn="$4"
-        local conf env_raw env_tok eff extra=""
+        local conf env_raw env_tok eff extra="" count
         conf="$(conf_bool "$key")"
         if [ -z "${!envname+x}" ]; then          # var UNSET (distinct from set-but-empty)
             env_raw="(unset)"; env_tok=unknown
@@ -297,8 +312,9 @@ if [ "$WANT_STATUS" -eq 1 ]; then
         else
             [ "$eff" = true ] && extra="root tier ENABLED (needs UID 0)" || extra="user, root tests SKIPPED"
         fi
-        printf '  %-8s conf=%-5s %s=%-9s -> effective: %-5s (%s)\n' \
-               "$label" "$conf" "$envname" "$env_raw" "$eff" "$extra"
+        count="$(count_field "$key" "$key")"
+        printf '  %-8s conf=%-5s %s=%-9s -> effective: %-5s (%s)  %s\n' \
+               "$label" "$conf" "$envname" "$env_raw" "$eff" "$extra" "$count"
     }
     echo "[tests] test mode status  (conf: ${MODESCONF#$REPODIR/}; env overrides the conf for one run)"
     status_line "network:" network AZARCH_TESTS_NETWORK net_env_token

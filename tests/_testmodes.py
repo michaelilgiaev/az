@@ -58,6 +58,9 @@ existing muscle memory).
 from __future__ import annotations
 
 import os
+import re
+import subprocess
+import sys
 from pathlib import Path
 
 # The LOCAL config file. It lives beside the tests but is GITIGNORED, not committed -- it is
@@ -192,6 +195,65 @@ def is_user() -> bool:
     return not root_enabled()
 
 
+# --- Marker census (how many tests each gated tier holds) --------------------------------
+# The repo root, from this file's location: tests/_testmodes.py -> parents[1] is the repo. Used
+# to root the collection at the repo's tests/ dir regardless of the caller's CWD.
+_REPO = Path(__file__).resolve().parents[1]
+
+# pytest's per-run collection summary always ends with a line naming how many items were
+# SELECTED by the `-m` expression -- `collected 2035 items / 2029 deselected / 6 selected` on a
+# match, `... / 0 selected` when none match. We read that `N selected` field. It is the value
+# pytest's OWN marker-expression engine resolves, so parametrized cases and module-global
+# `pytestmark` markers are counted exactly as a real `-m <marker>` run would select them (a grep
+# of `@pytest.mark.<marker>` decorators would undercount both -- e.g. this repo's 6 network tests
+# come from ONE module-global `pytestmark`, not six decorators).
+_SELECTED_RE = re.compile(r"(\d+) selected")
+
+
+def marker_test_count(marker: str, *, python: str | None = None) -> int | None:
+    """How many tests carry the given pytest marker, via pytest's own collector.
+
+    Returns the integer count, or None when it cannot be determined (pytest/venv missing, a
+    collection error, or a timeout) so the caller can show "unavailable" rather than a wrong
+    number. NEVER raises -- this backs the read-only `tests.sh --status` report, which must stay
+    robust and side-effect free (`--collect-only` runs NO test: no network, no sudo, no writes).
+
+    `python` selects the interpreter to run pytest under (defaults to the current one); tests.sh
+    passes its venv python so the count reflects the venv's installed pytest and plugins. pytest
+    EXITS 5 when zero tests match ("no tests ran"), so success is judged by parsing the
+    `N selected` field, NOT by the return code.
+    """
+    py = python or sys.executable
+    try:
+        # pyproject.toml's addopts already sets `-p no:cacheprovider` (no .pytest_cache is ever
+        # written), so we do not repeat it here; `--collect-only` runs no test (no net/sudo/writes).
+        proc = subprocess.run(
+            [py, "-m", "pytest", "-m", marker, "--collect-only", "-q", str(_REPO / "tests")],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd=str(_REPO),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    hits = _SELECTED_RE.findall(proc.stdout)
+    if not hits:
+        return None
+    return int(hits[-1])
+
+
+def count_field(marker: str, noun: str, *, python: str | None = None) -> str:
+    """Format `marker_test_count` as the bracketed, plural-aware field `tests.sh --status`
+    appends to each mode line: `[1 network test]`, `[2 root tests]`, `[0 root tests]`, or
+    `[<noun> tests: unavailable]` when the count could not be taken (e.g. no built venv)."""
+    n = marker_test_count(marker, python=python)
+    if n is None:
+        return f"[{noun} tests: unavailable]"
+    if n == 1:
+        return f"[1 {noun} test]"
+    return f"[{n} {noun} tests]"
+
+
 # --- Writer (convenience; the user-facing toggle is `tests.sh`, which writes in bash) ------
 def write_modes(*, network: bool | None = None, root: bool | None = None) -> dict[str, bool]:
     """Persist the given booleans to the config file, preserving any key not passed. Returns
@@ -210,3 +272,26 @@ def write_modes(*, network: bool | None = None, root: bool | None = None) -> dic
         )
     )
     return cur
+
+
+# --- CLI (used by tests.sh --status to print each tier's marker count) --------------------
+# `python _testmodes.py --count-field <marker> <noun> [python]` prints the bracketed count field
+# for that marker and exits 0. tests.sh passes its venv python as the optional third arg so the
+# count reflects the venv's pytest. This is deliberately crash-proof: any unexpected error prints
+# the "unavailable" form and still exits 0, so the read-only --status report is never derailed by
+# the count.
+def _main(argv: list[str]) -> int:
+    if len(argv) >= 3 and argv[0] == "--count-field":
+        marker, noun = argv[1], argv[2]
+        python = argv[3] if len(argv) >= 4 and argv[3] else None
+        try:
+            print(count_field(marker, noun, python=python))
+        except Exception:                       # never let the count crash --status
+            print(f"[{noun} tests: unavailable]")
+        return 0
+    print("usage: _testmodes.py --count-field <marker> <noun> [python]", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main(sys.argv[1:]))
