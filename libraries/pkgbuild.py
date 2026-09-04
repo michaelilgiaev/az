@@ -84,22 +84,27 @@ THUNAR_RESOLVE_SYMLINK_PATCH_NAME = "azarch-thunar-resolve-symlink.patch"
 #      constructor select the entry whose xkb id is `alt_shift_toggle` once the list
 #      is built, so the dropdown defaults to "Alt+Shift". (KeyboardLayoutModel.cpp)
 #
-#   2. Users page -- "What is the name of this computer?" (hostname).
-#      Upstream seeds the hostname field ONLY once the user types a name, expanding
-#      the `hostname.template` ("${first}-${product}" by default) on every keystroke
-#      so the hostname keeps changing as the Full Name / Login fields change. The
-#      patch seeds the template's expansion as the INITIAL hostname at module load
-#      and (via setHostName, which marks the value "custom") takes the field off the
-#      auto-derive path -- so with modules/users.conf `template: "azarch"` the field
-#      shows "azarch" by default and stays "azarch" regardless of the other inputs.
-#      (Config.cpp, the @@ -1020 hunk.)
+#   2. Users page -- SEED the hostname AND the login (Username) fields.
+#      Hostname: upstream seeds it ONLY once the user types a name, expanding the
+#      `hostname.template` ("${first}-${product}" by default) on every keystroke so the
+#      hostname keeps changing as the Full Name / Login fields change. The patch seeds
+#      the template's expansion as the INITIAL hostname at module load and (via
+#      setHostName, which marks the value "custom") takes the field off the auto-derive
+#      path -- so with modules/users.conf `template: "azarch"` the field shows "azarch"
+#      by default and stays "azarch" regardless of the other inputs.
+#      Login: upstream leaves the Username field empty until typed. Per PROMPT.md the
+#      field must DEFAULT to containing "main" (not merely hint it), so the patch calls
+#      setLoginName("main") in the same setConfigurationMap() tail. setLoginName marks
+#      the value "custom" (m_customLoginName), so the Full-Name auto-derive path never
+#      overwrites it, and loginNameStatus() is non-empty so Next is reachable at once.
+#      (Config.cpp, the @@ -1020 hunk seeds both.)
 #
 #   3a. Users page -- RENAME the four field-prompt labels in page_usersetup.ui to short
 #      "Field:" captions (the QLabel objectNames are username_label_2, hostnameLabel,
 #      password_label_2 and labelChooseRootPassword), and change the HOSTNAME field's
-#      placeholder from "Computer Name" to "azarch" (the seeded default, so clearing the
-#      field shows "azarch" greyed) and the LOGIN field's placeholder from "login" to
-#      "main" (the login VALUE stays empty by design; only its greyed hint changes).
+#      placeholder from "Computer Name" to "azarch" and the LOGIN field's placeholder
+#      from "login" to "main" (both fields are SEEDED to those values by edit 2, so each
+#      placeholder is the fallback hint shown only if the user clears the field).
 #        "What name do you want to use to log in?"          -> "Username:"
 #        "What is the name of this computer?"               -> "Hostname:"
 #        "Choose a password to keep your account safe."     -> "Username Password:"
@@ -112,9 +117,10 @@ THUNAR_RESOLVE_SYMLINK_PATCH_NAME = "azarch-thunar-resolve-symlink.patch"
 #      widgets (the QHBoxLayout is not a widget, so each child is hidden individually),
 #      AND Config::isReady() drops its `!fullName().isEmpty()` gate -- because isReady()
 #      hard-requires a non-empty full name, hiding the field WITHOUT relaxing isReady()
-#      would leave fullName empty forever and Next permanently greyed. The login is NOT
-#      seeded (it starts empty; its own required-field error, edit 4, gates Next until a
-#      name is typed). (UsersPage.cpp @@ -105 hunk + Config.cpp @@ -765 hunk.)
+#      would leave fullName empty forever and Next permanently greyed. The login IS
+#      seeded to "main" (edit 2), so with the Full Name row gone the Username field
+#      still opens pre-filled and Next is reachable. (UsersPage.cpp @@ -105 hunk +
+#      Config.cpp @@ -765 hunk.)
 #
 #   4. Users page -- an empty LOGIN or HOSTNAME is a required-field error. Upstream's
 #      loginNameStatus()/hostnameStatus() treat an empty value as "ok" (they return an
@@ -123,9 +129,9 @@ THUNAR_RESOLVE_SYMLINK_PATCH_NAME = "azarch-thunar-resolve-symlink.patch"
 #      one character." / "Hostname parameter must include at least two characters." --
 #      which both shows the field error AND (via isReady()'s
 #      loginNameStatus().isEmpty()/hostnameStatus().isEmpty() gates) disables Next until
-#      filled. The login is NOT seeded (starts empty); the hostname is seeded to "azarch"
-#      by edit 2, so its error only appears if the user clears the field. (Config.cpp
-#      @@ -236 / @@ -301 hunks.)
+#      filled. Both the login ("main") and hostname ("azarch") are seeded by edit 2, so
+#      each error only appears if the user clears that field. (Config.cpp @@ -236 /
+#      @@ -301 hunks.)
 #
 #   5. Users page -- REMOVE the "Require strong passwords." checkbox (UsersPage.cpp
 #      force-hides it: setVisible(false) regardless of the config value). Password-
@@ -162,10 +168,10 @@ def calamares_defaults_patch() -> str:
 
     The Full Name ("What is your name?") row is HIDDEN and Config::isReady() is relaxed
     (dropping its non-empty-full-name gate) so hiding the field does not permanently
-    disable Next. The login VALUE is NOT seeded -- it starts empty (placeholder hint
-    "main") and its own required-field error gates Next until a username is typed. The
-    "Use the same password for the administrator account." checkbox label is re-worded
-    to "Use username password for root password.".
+    disable Next. The login VALUE is SEEDED to "main" (PROMPT.md: the Username field
+    must DEFAULT to containing the text "main"); the "main" placeholder is now just a
+    fallback hint. The "Use the same password for the administrator account." checkbox
+    label is re-worded to "Use username password for root password.".
 
     The diff is built line-by-line rather than as one big triple-quoted literal
     ON PURPOSE: a unified diff's CONTEXT lines (unchanged surrounding source) must
@@ -216,11 +222,11 @@ def calamares_defaults_patch() -> str:
         "+      <string>Username:</string>",
         "      </property>",
         # login field placeholder "login" -> "main": per PROMPT.md the Username field
-        # defaults EMPTY (never seeded), but its greyed placeholder must HINT "main" --
-        # the default account name used elsewhere in the installer. The field VALUE stays
-        # empty (so loginNameStatus() shows the required-field error until typed); only
-        # the placeholder text changes. This textBox is nested one level deeper than the
-        # prompt labels (7-space indent). Ascending order: line 147, after 123, before 222.
+        # must DEFAULT to containing "main". Config.cpp's setConfigurationMap() SEEDS the
+        # field VALUE to "main" (so loginNameStatus() is non-empty and Next is reachable
+        # out of the box); this placeholder is the fallback hint shown only if the user
+        # clears the field. This textBox is nested one level deeper than the prompt labels
+        # (7-space indent). Ascending order: line 147, after 123, before 222.
         "@@ -147,3 +147,3 @@",
         '        <property name="placeholderText">',
         "-        <string>login</string>",
@@ -280,8 +286,8 @@ def calamares_defaults_patch() -> str:
         "+    // GECOS/full name is not asked for; Config::isReady() no longer requires a",
         "+    // non-empty full name (see Config.cpp), so Next stays reachable with these widgets",
         "+    // gone. The QHBoxLayout that holds the field is not a widget, so each child widget",
-        "+    // is hidden individually. The login VALUE is deliberately NOT seeded: the Username",
-        "+    // field defaults EMPTY and shows the \"main\" placeholder hint.",
+        "+    // is hidden individually. The login VALUE is seeded to \"main\" in Config.cpp\'s",
+        "+    // setConfigurationMap() (the \"main\" placeholder is now merely a fallback hint).",
         "+    ui->labelWhatIsYourName->setVisible( false );",
         "+    ui->textBoxFullName->setVisible( false );",
         "+    ui->labelFullName->setVisible( false );",
@@ -298,10 +304,10 @@ def calamares_defaults_patch() -> str:
         "+    // accepted). Force the checkbox hidden regardless of the config value.",
         "+    ui->checkBoxRequireStrongPassword->setVisible( false );",
         # --- Config.cpp: required-field errors + fixed hostname seed ---------
-        # isReady() is LEFT pristine (still gates on a non-empty full name AND a
-        # non-empty login), so there is NO isReady() hunk. Two status functions
-        # get a required-field message on empty; the hostname is still seeded to
-        # the template default. The login is NOT seeded (starts empty by design).
+        # Two status functions get a required-field message on empty; the hostname
+        # is seeded to the template default and the login is seeded to "main" (both
+        # in setConfigurationMap()'s tail below). isReady()'s readyFullName gate is
+        # dropped (the Full Name row is hidden) -- see the @@ -765 hunk.
         "--- a/src/modules/users/Config.cpp",
         "+++ b/src/modules/users/Config.cpp",
         # loginNameStatus(): empty login -> required-field error (was "ok" / "")
@@ -354,7 +360,10 @@ def calamares_defaults_patch() -> str:
         "-    return readyFullName && readyHostname && readyUsername && readyUserPassword && readyRootPassword;",
         "+    return readyHostname && readyUsername && readyUserPassword && readyRootPassword;",
         " }",
-        # Seed the fixed hostname from the template (login NOT seeded).
+        # Seed the fixed hostname from the template. (The login seed is a SEPARATE
+        # hunk further down -- @@ -1069 -- so this hostname hunk keeps its original,
+        # fuzz-0 trailing context. Splicing the login lines into this hunk's trailing
+        # context made `patch` apply it with fuzz 2, weakening the fail-loud contract.)
         # old=6 (3 ctx + } + blank + setConfig ctx); new=19 (6 ctx + 13 added).
         "@@ -1020,6 +1027,19 @@",
         '         m_forbiddenHostNames = Calamares::getStringList( hostnameSettings, "forbidden_names" );',
@@ -376,6 +385,30 @@ def calamares_defaults_patch() -> str:
         "     }",
         " ",
         "     setConfigurationDefaultGroups( configurationMap, m_defaultGroups );",
+        # Seed the default login to "main" -- its OWN hunk (kept apart from the hostname
+        # hunk above so both apply at fuzz 0). PROMPT.md: the Username field must DEFAULT
+        # to containing "main", not merely hint it via the placeholder. Anchored on the
+        # existing tail (updateGSAutoLogin(..., loginName()) then checkReady()), inserting
+        # the seed right before checkReady() so readiness is (re)computed with the login
+        # already set. setLoginName() emits loginNameStatusChanged -> checkReady (a wired
+        # connection), and marks the value "custom" (m_customLoginName) so the Full-Name
+        # auto-derive path never overwrites it; loginNameStatus() is then non-empty so the
+        # required-field error clears and Next is reachable out of the box. (ApplyPresets
+        # for "loginName" runs after this but does NOT overwrite it: users.conf ships no
+        # `presets` map, so apply() takes its no-value branch and never calls setProperty.)
+        # old=4 (updateGSAutoLogin + blank + checkReady + blank ctx); new=11 (+7 added).
+        "@@ -1069,4 +1076,11 @@",
+        "     updateGSAutoLogin( doAutoLogin(), loginName() );",
+        "+",
+        "+    // Az'arch: seed the default login to \"main\" so the Username field opens",
+        "+    // pre-filled (PROMPT.md). setLoginName() marks it custom (m_customLoginName),",
+        "+    // so the Full-Name auto-derive path never clobbers it, and it emits",
+        "+    // loginNameStatusChanged -> checkReady() (below) so readiness reflects the",
+        "+    // seeded value immediately.",
+        '+    setLoginName( QStringLiteral( "main" ) );',
+        "     checkReady();",
+        " ",
+        "     ApplyPresets( *this, configurationMap ) << \"fullName\"",
         "--- a/src/modules/users/SetPasswordJob.cpp",
         "+++ b/src/modules/users/SetPasswordJob.cpp",
         "@@ -81,12 +81,17 @@",
@@ -855,21 +888,29 @@ def calamares_region_keyboard_patch() -> str:
 
 
 # ---------------------------------------------------------------------------
-# calamares -- source patch: hide Back + Next on the Finish page
+# calamares -- source patch: hide Back + Next on the Finish page AND during Install
 # ---------------------------------------------------------------------------
 # The installer's Back/Next buttons are the MAIN-WINDOW navigation buttons driven by
 # libcalamaresui's ViewManager, not anything a module .conf can reach -- so removing
-# them from the Finish ("finished") page can only be done in C++. The finished ViewStep
-# ALREADY returns false from isBackEnabled()/isNextEnabled(), but that only DISABLES
-# (greys) the buttons; they stay visible. To HIDE them, this patch adds one call in
-# ViewManager::updateButtonLabels(): inside the existing `isAtVeryEnd()` branch (taken
-# only on the last step, which the finished page is -- it returns isAtEnd()==true), call
-# updateBackAndNextVisibility(false). That fires backAndNextVisibleChanged(false), wired
-# in CalamaresWindow to setVisible(false) on BOTH buttons, so the finished page shows
-# neither Back nor Next -- only the "Done" (quit) button, kept visible in that same
-# branch. updateButtonLabels() runs LAST in next() (after next()'s own
-# updateBackAndNextVisibility() call), so this wins for the finished step; every
-# non-final step takes the else branch and keeps its normal button visibility.
+# them can only be done in C++. Both the finished ViewStep and the running install
+# (ExecutionViewStep) ALREADY return false from isBackEnabled()/isNextEnabled(), but
+# that only DISABLES (greys) the buttons; they stay visible. To HIDE them, this patch
+# adds two calls in ViewManager::updateButtonLabels(), each calling
+# updateBackAndNextVisibility(false) -- which fires backAndNextVisibleChanged(false),
+# wired in CalamaresWindow to setVisible(false) on BOTH buttons:
+#
+#   1. FINISH page -- inside the existing `isAtVeryEnd()` branch (taken only on the last
+#      step, the finished page -- it returns isAtEnd()==true). Only the "Done" (quit)
+#      button, kept visible in that same branch, remains.
+#   2. INSTALL (exec) step -- inside the `else` branch, gated on
+#      stepIsExecute(m_currentStep) so ONLY the running install step hides them; the
+#      ordinary UI steps (welcome/locale/keyboard/partition/users/summary) keep their
+#      normal Back/Next. (PROMPT.md: the Install section's Back/Next are greyed out
+#      anyway, so remove them.)
+#
+# updateButtonLabels() runs LAST in next() (after next()'s own updateBackAndNextVisibility()
+# call), so both calls WIN for their step; every other non-final UI step falls through the
+# else branch's stepIsExecute() guard and keeps its normal button visibility.
 #
 # Kept in its OWN patch (not folded into azarch-calamares-defaults.patch) so the two
 # concerns stay independent -- defaults is the Users/Keyboard UI, this is a libcalamaresui
@@ -881,15 +922,17 @@ CALAMARES_FINISH_BUTTONS_PATCH_NAME = "azarch-calamares-finish-buttons.patch"
 def calamares_finish_buttons_patch() -> str:
     r"""Unified diff (-p1) applied to the extracted calamares-3.4.2 source in the
     recipe's prepare(), after the other two calamares patches: hide the Back and Next
-    navigation buttons on the Finish page (see the block comment above). Touches only
-    src/libcalamaresui/ViewManager.cpp.
+    navigation buttons BOTH on the Finish page AND while the install (exec) step runs
+    (see the block comment above). Touches only src/libcalamaresui/ViewManager.cpp.
 
     Same authoring rule as the sibling patches: assembled line-by-line so every
     unified-diff CONTEXT line keeps its exact single leading space (blank context lines
     are one space) -- a triple-quoted literal would let an editor strip that trailing
-    space and silently break `patch`. The hunk header (@@ -437,6 ...) was generated by
+    space and silently break `patch`. The two hunk headers (@@ -437,6 ... for the Finish
+    branch and @@ -458,4 ... for the exec-step else branch; the latter's NEW-side start
+    465 already accounts for the +7 lines the first hunk inserts) were generated by
     `diff -u` against the pinned 3.4.2 source and verified to apply with `patch -p1`;
-    regenerate it the same way on a version bump."""
+    regenerate them the same way on a version bump."""
     lines = [
         "--- a/src/libcalamaresui/ViewManager.cpp",
         "+++ b/src/libcalamaresui/ViewManager.cpp",
@@ -901,12 +944,36 @@ def calamares_finish_buttons_patch() -> str:
         "+        // buttons -- the install is complete, there is nowhere to go back to and nothing",
         '+        // to advance to; only the "Done" (quit) button, kept visible just above, remains.',
         "+        // This runs after next()'s own updateBackAndNextVisibility() call (updateButtonLabels",
-        "+        // is invoked last), so it wins for the finished step. Non-final steps take the else",
-        "+        // branch and keep their normal button visibility.",
+        "+        // is invoked last), so it wins for the finished step. The else branch below hides",
+        "+        // them on the running install (exec) step too.",
         "+        updateBackAndNextVisibility( false );",
         "         if ( settings->quitAtEnd() )",
         "         {",
         "             quit();",
+        # Second hunk: the else branch (every non-final step). Hide Back+Next while
+        # the INSTALL (exec) step is running -- upstream leaves them visible-but-greyed
+        # (ExecutionViewStep::isBackEnabled()/isNextEnabled() return false). PROMPT.md:
+        # remove them during the Install section since they are greyed out anyway. Gated
+        # on stepIsExecute(m_currentStep) so ONLY the exec step hides them; ordinary UI
+        # steps (welcome/locale/.../summary) keep normal Back/Next. This runs LAST in
+        # next() (updateButtonLabels is invoked last), so it wins over next()'s own
+        # updateBackAndNextVisibility(true) for the exec step. NEW-side start is 465 =
+        # 458 + 7 (the +7 net lines the finish hunk above inserts). old=4 (2 ctx + blank
+        # ctx + quitLabel ctx), new=13 (those 4 ctx + 9 added lines).
+        "@@ -458,4 +465,13 @@",
+        "         updateCancelEnabled( !settings->disableCancel()",
+        "                              && !( stepIsExecute( m_steps, m_currentStep ) && settings->disableCancelDuringExec() ) );",
+        "+",
+        "+        // Az'arch: hide Back+Next while the install (exec) step is running -- they are",
+        "+        // disabled (greyed) there anyway (ExecutionViewStep returns false for both), so",
+        "+        // PROMPT.md asks for them gone. Only the exec step matches; other UI steps keep",
+        "+        // their normal navigation buttons.",
+        "+        if ( stepIsExecute( m_steps, m_currentStep ) )",
+        "+        {",
+        "+            updateBackAndNextVisibility( false );",
+        "+        }",
+        " ",
+        '         UPDATE_BUTTON_PROPERTY( quitLabel, tr( "&Cancel", "@button" ) );',
     ]
     # Trailing newline so the last line is terminated (patch/POSIX text file).
     return "\n".join(lines) + "\n"

@@ -373,20 +373,20 @@ def users_conf() -> str:
     hard-requires a non-empty full name by default, so hiding the field WITHOUT relaxing
     isReady() leaves fullName empty forever and Next permanently greyed. The same patch
     RENAMES the four field-prompt labels to short captions -- "Username:", "Hostname:",
-    "Username Password:", "Root Password:" -- leaves the reuse-password checkbox label
-    pristine ("Use the same password for the administrator account."), sets the hostname
-    field's placeholder to "azarch" and LEAVES the login field's placeholder pristine
-    ("login"), and makes an empty username or hostname a required-field error ("User
-    parameter must include at least one character." / "Hostname parameter must include at
-    least two characters."), which shows the field error and disables Next until filled.
-    Per Prompt#3 the login name is NOT seeded -- the Username field defaults EMPTY and its
-    "login" placeholder hints where to type; only the hostname is SEEDED ("azarch", so its
-    error appears only if the field is cleared, in which case the greyed "azarch"
-    placeholder still hints the default). Defaults, all Az'arch: login EMPTY (the user must
-    type one), hostname "azarch", the user password empty (skippable -> a skipped/empty
-    password becomes a LOCKED "*" account via the SetPasswordJob patch), and the
-    reuse-password checkbox CHECKED (doReusePassword: true). The "Require strong passwords."
-    checkbox is removed (allowWeakPasswords: false + the patch force-hides it)."""
+    "Username Password:", "Root Password:" -- re-words the reuse-password checkbox label
+    to "Use username password for root password.", sets the hostname field's placeholder
+    to "azarch" and the login field's placeholder to "main", and makes an empty username
+    or hostname a required-field error ("User parameter must include at least one
+    character." / "Hostname parameter must include at least two characters."), which shows
+    the field error and disables Next until filled.
+    Per PROMPT.md the login name IS SEEDED to "main" (the Username field DEFAULTS to
+    containing "main", not merely hinting it) and the hostname is SEEDED to "azarch"; for
+    each, its "main"/"azarch" placeholder is the fallback hint shown only if the field is
+    cleared (in which case the required-field error appears and Next is blocked). Defaults,
+    all Az'arch: login "main", hostname "azarch", the user password empty (skippable -> a
+    skipped/empty password becomes a LOCKED "*" account via the SetPasswordJob patch), and
+    the reuse-password checkbox CHECKED (doReusePassword: true). The "Require strong
+    passwords." checkbox is removed (allowWeakPasswords: false + the patch force-hides it)."""
     return """\
 # User account configuration for the installed system.
 ---

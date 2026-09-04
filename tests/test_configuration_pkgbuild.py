@@ -281,9 +281,9 @@ def test_calamares_patch_is_unified_diff_touching_all_files():
     ):
         assert f"--- a/{rel}" in p, rel
         assert f"+++ b/{rel}" in p, rel
-    # Thirteen hunks total (kbd 1, ui 5, UsersPage 2, Config 4, SetPasswordJob 1);
-    # each hunk header carries two "@@" markers, so at least 26.
-    assert p.count("@@") >= 26
+    # Sixteen hunks total (kbd 1, ui 7, UsersPage 2, Config 5, SetPasswordJob 1);
+    # each hunk header carries two "@@" markers, so at least 32.
+    assert p.count("@@") >= 32
 
 
 def test_calamares_patch_keyboard_selects_alt_shift_toggle():
@@ -394,7 +394,7 @@ def test_calamares_defaults_patch_applies_to_pinned_source():
         # Dry-run first (pure check), then a real apply (proves the result is
         # writable and the offsets are exact, not fuzz-matched).
         dry = subprocess.run(
-            ["patch", "-p1", "--dry-run"],
+            ["patch", "-p1", "--fuzz=0", "--dry-run"],
             input=patch_text,
             text=True,
             cwd=work,
@@ -404,7 +404,7 @@ def test_calamares_defaults_patch_applies_to_pinned_source():
         assert dry.returncode == 0, f"dry-run failed:\n{dry.stdout}\n{dry.stderr}"
 
         real = subprocess.run(
-            ["patch", "-p1"],
+            ["patch", "-p1", "--fuzz=0"],
             input=patch_text,
             text=True,
             cwd=work,
@@ -421,9 +421,10 @@ def test_calamares_defaults_patch_applies_to_pinned_source():
         assert "makeHostnameSuggestion(" in users
         assert "setHostName( seededHostname )" in users
         # isReady() is RELAXED (the Full Name row is hidden, so fullName() is always
-        # empty by design). The login is NOT seeded: the Username field defaults EMPTY
-        # (its VALUE), so there is no setLoginName in UsersPage.cpp (asserted below).
-        # Per PROMPT.md the empty field's greyed placeholder HINTS "main".
+        # empty by design). Per PROMPT.md the login IS seeded to "main" (the Username
+        # field DEFAULTS to containing "main", not merely hinting it) -- the seed lives
+        # in Config.cpp's setConfigurationMap(), right before setConfigurationDefaultGroups.
+        assert 'setLoginName( QStringLiteral( "main" ) )' in users
         assert "readyFullName" not in users  # the full-name gate is dropped
         assert "return readyHostname && readyUsername" in users
         # Empty login / hostname now report a required-field error (was "ok").
@@ -431,14 +432,16 @@ def test_calamares_defaults_patch_applies_to_pinned_source():
         assert 'return tr( "Hostname parameter must include at least two characters." )' in users
         # The four field-prompt labels are RENAMED to short captions in the .ui; the
         # hostname placeholder becomes "azarch" and the login placeholder becomes "main"
-        # (hint only -- the field VALUE stays empty). The reuse checkbox is re-worded.
+        # (the login VALUE is also seeded to "main" in Config.cpp -- see above -- so the
+        # placeholder is now the fallback hint shown only if the field is cleared). The
+        # reuse checkbox is re-worded.
         ui = (work / "src/modules/users/page_usersetup.ui").read_text()
         assert "<string>Username:</string>" in ui
         assert "<string>Hostname:</string>" in ui
         assert "<string>Username Password:</string>" in ui
         assert "<string>Root Password:</string>" in ui
         assert "<string>azarch</string>" in ui           # hostname placeholder
-        assert "<string>main</string>" in ui             # login placeholder HINT "main"
+        assert "<string>main</string>" in ui             # login placeholder + seeded value
         assert "<string>login</string>" not in ui        # old login placeholder gone
         assert "What name do you want to use to log in?" not in ui
         assert "What is the name of this computer?" not in ui
@@ -449,8 +452,8 @@ def test_calamares_defaults_patch_applies_to_pinned_source():
         assert "Use username password for root password." in ui
         assert "Use the same password for the administrator account." not in ui
         # Full Name row IS hidden (each child widget) + strong-password checkbox hidden.
-        # The login VALUE is NOT seeded (only its placeholder hints "main"), so
-        # setLoginName must be ABSENT.
+        # The login seed lives in Config.cpp's setConfigurationMap() (asserted above),
+        # NOT here in UsersPage.cpp, so setLoginName must be ABSENT from this file.
         page = (work / "src/modules/users/UsersPage.cpp").read_text()
         assert "ui->labelWhatIsYourName->setVisible( false )" in page
         assert "ui->textBoxFullName->setVisible( false )" in page
@@ -611,7 +614,7 @@ def test_calamares_region_patch_emitted_with_recipe():
         )
 
 
-# --- calamares source patch (hide Back + Next on the Finish page) -----------
+# --- calamares source patch (hide Back + Next on Finish AND during Install) ---
 
 def test_calamares_finish_buttons_patch_name_is_a_distinct_patch_file():
     n = pkgbuild.CALAMARES_FINISH_BUTTONS_PATCH_NAME
@@ -622,14 +625,22 @@ def test_calamares_finish_buttons_patch_name_is_a_distinct_patch_file():
 
 
 def test_calamares_finish_buttons_patch_touches_viewmanager_and_hides_both():
-    # The patch must be a -p1 unified diff on ViewManager.cpp that adds the call which
-    # hides BOTH nav buttons on the last (Finish) step: updateBackAndNextVisibility(false).
+    # The patch must be a -p1 unified diff on ViewManager.cpp with TWO hunks, each
+    # adding an updateBackAndNextVisibility(false) call: one in the isAtVeryEnd()
+    # (Finish page) branch and one in the else branch gated on stepIsExecute() so the
+    # running Install (exec) step also hides Back+Next (PROMPT.md: they are greyed out
+    # during install anyway).
     p = pkgbuild.calamares_finish_buttons_patch()
     assert "--- a/src/libcalamaresui/ViewManager.cpp" in p
     assert "+++ b/src/libcalamaresui/ViewManager.cpp" in p
+    # Two hunks -> four "@@" markers.
+    assert p.count("@@") == 4
     added = [ln[1:] for ln in p.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
     body = "\n".join(added)
-    assert "updateBackAndNextVisibility( false )" in body
+    # Both nav buttons hidden -- twice (once per branch).
+    assert body.count("updateBackAndNextVisibility( false )") == 2
+    # The exec-step guard: only the running install step matches.
+    assert "if ( stepIsExecute( m_steps, m_currentStep ) )" in body
 
 
 def test_calamares_finish_buttons_patch_context_lines_have_leading_space():
@@ -681,20 +692,27 @@ def test_calamares_finish_buttons_patch_applies_to_pinned_source():
 
         patch_text = pkgbuild.calamares_finish_buttons_patch()
         dry = subprocess.run(
-            ["patch", "-p1", "--dry-run"],
+            ["patch", "-p1", "--fuzz=0", "--dry-run"],
             input=patch_text, text=True, cwd=work, capture_output=True, timeout=30,
         )
         assert dry.returncode == 0, f"dry-run failed:\n{dry.stdout}\n{dry.stderr}"
         real = subprocess.run(
-            ["patch", "-p1"],
+            ["patch", "-p1", "--fuzz=0"],
             input=patch_text, text=True, cwd=work, capture_output=True, timeout=30,
         )
         assert real.returncode == 0, f"apply failed:\n{real.stdout}\n{real.stderr}"
 
-        # The hide-both call landed inside the very-end branch (right after the
-        # updateCancelEnabled(true) line that branch already runs).
+        # Both hide-calls landed: one in the very-end (Finish) branch and one in the
+        # else branch guarded by stepIsExecute() for the running Install (exec) step.
         patched = (work / rel).read_text()
-        assert "updateBackAndNextVisibility( false )" in patched
+        assert patched.count("updateBackAndNextVisibility( false )") == 2
+        # The exec-step guard sits in the else branch, right after updateCancelEnabled.
+        assert (
+            "if ( stepIsExecute( m_steps, m_currentStep ) )\n"
+            "        {\n"
+            "            updateBackAndNextVisibility( false );\n"
+            "        }"
+        ) in patched
 
 
 def test_both_calamares_patches_apply_in_sequence_to_pinned_source():
@@ -746,12 +764,12 @@ def test_both_calamares_patches_apply_in_sequence_to_pinned_source():
             pkgbuild.calamares_region_keyboard_patch(),
         ):
             dry = subprocess.run(
-                ["patch", "-p1", "--dry-run"],
+                ["patch", "-p1", "--fuzz=0", "--dry-run"],
                 input=patch_text, text=True, cwd=work, capture_output=True, timeout=30,
             )
             assert dry.returncode == 0, f"dry-run failed:\n{dry.stdout}\n{dry.stderr}"
             real = subprocess.run(
-                ["patch", "-p1"],
+                ["patch", "-p1", "--fuzz=0"],
                 input=patch_text, text=True, cwd=work, capture_output=True, timeout=30,
             )
             assert real.returncode == 0, f"apply failed:\n{real.stdout}\n{real.stderr}"
@@ -764,6 +782,77 @@ def test_both_calamares_patches_apply_in_sequence_to_pinned_source():
         assert "m_regionSecondLayout" in kbd_h
         loc = (work / "src/modules/locale/Config.cpp").read_text()
         assert 'gs->insert( countryKey, location->country() )' in loc
+
+
+def test_all_three_calamares_patches_apply_in_sequence_to_pinned_source():
+    # THE full integration guard: all THREE calamares patches must apply cleanly, IN
+    # prepare() ORDER (defaults, region-keyboard, finish-buttons), to the real pinned
+    # source. finish-buttons touches ViewManager.cpp (disjoint from the other two), so
+    # this also proves the three do not conflict. Verifies BOTH PROMPT.md changes land:
+    # the login is seeded to "main" and Back+Next are hidden on the exec step.
+    tarball = _find_calamares_tarball()
+    if tarball is None:
+        pytest.skip("pinned calamares tarball not present under cache/ (CI checkout)")
+    if shutil.which("patch") is None:
+        pytest.skip("`patch` not available on this host")
+
+    import tempfile
+
+    rels = (
+        "src/modules/keyboard/KeyboardLayoutModel.cpp",
+        "src/modules/users/page_usersetup.ui",
+        "src/modules/users/UsersPage.cpp",
+        "src/modules/users/Config.cpp",
+        "src/modules/users/SetPasswordJob.cpp",
+        "src/modules/keyboard/Config.h",
+        "src/modules/keyboard/Config.cpp",
+        "src/modules/locale/Config.cpp",
+        "src/libcalamaresui/ViewManager.cpp",
+    )
+    top = f"calamares-{pkgbuild.CALAMARES_VERSION}"
+
+    with tempfile.TemporaryDirectory() as td:
+        work = Path(td)
+        with tarfile.open(tarball, "r:gz") as tf:
+            for rel in rels:
+                member = tf.getmember(f"{top}/{rel}")
+                fobj = tf.extractfile(member)
+                assert fobj is not None, f"missing {rel} in tarball"
+                dst = work / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_bytes(fobj.read())
+
+        # Pristine guards: neither PROMPT.md change is present upstream.
+        assert 'setLoginName( QStringLiteral( "main" ) )' not in (
+            work / "src/modules/users/Config.cpp"
+        ).read_text()
+        assert "updateBackAndNextVisibility( false )" not in (
+            work / "src/libcalamaresui/ViewManager.cpp"
+        ).read_text()
+
+        for patch_text in (
+            pkgbuild.calamares_defaults_patch(),
+            pkgbuild.calamares_region_keyboard_patch(),
+            pkgbuild.calamares_finish_buttons_patch(),
+        ):
+            dry = subprocess.run(
+                ["patch", "-p1", "--fuzz=0", "--dry-run"],
+                input=patch_text, text=True, cwd=work, capture_output=True, timeout=30,
+            )
+            assert dry.returncode == 0, f"dry-run failed:\n{dry.stdout}\n{dry.stderr}"
+            real = subprocess.run(
+                ["patch", "-p1", "--fuzz=0"],
+                input=patch_text, text=True, cwd=work, capture_output=True, timeout=30,
+            )
+            assert real.returncode == 0, f"apply failed:\n{real.stdout}\n{real.stderr}"
+
+        # Both PROMPT.md changes landed.
+        assert 'setLoginName( QStringLiteral( "main" ) )' in (
+            work / "src/modules/users/Config.cpp"
+        ).read_text()
+        assert (
+            work / "src/libcalamaresui/ViewManager.cpp"
+        ).read_text().count("updateBackAndNextVisibility( false )") == 2
 
 
 # --- brace-doubling invariant across every generator -----------------------
