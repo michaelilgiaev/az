@@ -366,12 +366,19 @@ def users_conf() -> str:
         top-level spelling was ignored and the account fell back to the useradd default.
     They are gone; the shell now lives under `user:` where it is read.
 
-    The Full Name ("What is your name?") field IS shown and the user MUST fill it:
-    the users page's Next button is `Config::isReady()`, which hard-requires a non-empty
-    full name (`!fullName().isEmpty()`). An earlier revision tried to HIDE that field via
-    a UsersPage source patch WITHOUT also relaxing isReady() -- so fullName stayed empty,
-    isReady() never returned true, and Next was permanently greyed (the "Users section
-    broke" report). The fix keeps the field visible so readiness is reachable."""
+    The Full Name ("What is your name?") field is now HIDDEN (Az'arch source patch in
+    pkgbuild.calamares_defaults_patch): the account's GECOS/full name is not asked for.
+    Hiding it required TWO coordinated source changes -- the field is hidden in UsersPage
+    AND `Config::isReady()` no longer requires a non-empty full name -- because isReady()
+    hard-requires a non-empty full name by default (`!fullName().isEmpty()`), so hiding
+    the field WITHOUT relaxing isReady() leaves fullName empty forever and Next
+    permanently greyed (the original "Users section broke" report). The same patch seeds
+    the login name to "main" so isReady()'s non-empty-login requirement still holds with
+    the Full Name row gone. Defaults, all Az'arch: login "main", hostname "azarch", the
+    user password empty (skippable -> a skipped/empty password becomes a LOCKED "*"
+    account via the SetPasswordJob patch), and the "Use the same password for root."
+    checkbox CHECKED (doReusePassword: true). The "Require strong passwords." checkbox is
+    removed (allowWeakPasswords: false + the patch force-hides it)."""
     return """\
 # User account configuration for the installed system.
 ---
@@ -400,7 +407,17 @@ autologinGroup: autologin
 # written enabling it).
 sudoersGroup: wheel
 setRootPassword: true
-doReusePassword: false
+
+# doReusePassword: true makes the "Use the same password for root." checkbox on the
+# users page START CHECKED (UsersPage seeds the checkbox from Config's
+# m_reuseUserPasswordForRoot, which this key sets). So by default root reuses the
+# user's password: the user fills ONE password box and root mirrors it. With the user
+# password left empty (the Az'arch default -- the field is skippable), root reuses that
+# empty password and Calamares' SetPasswordJob LOCKS the account (usermod -p '!'),
+# which our source patch broadens from root-only to any empty password -- so a skipped
+# password yields a locked "*" account rather than a passwordless login. The prompt's
+# "root password boolean must default to True (checkbox checked)" maps to this key.
+doReusePassword: true
 
 # Autologin OFF on the installed system (live ISO autologins, installed does not).
 doAutologin: false
@@ -424,13 +441,20 @@ hostname:
     writeHostsFile: true
     template: "azarch"
 
-# Password policy. minLength:1 requires a non-empty password; maxLength:-1 is "no max".
-# allowWeakPasswords lets a short/weak password through (marked Weak, not Invalid), so
-# the Next button is not blocked on password strength.
-passwordRequirements:
-    minLength: 1
-    maxLength: -1
-allowWeakPasswords: true
+# Password policy. NO `passwordRequirements` block ON PURPOSE: the user password is
+# SKIPPABLE (the PROMPT wants it to default empty and, if skipped, become a locked "*"
+# account). A `passwordRequirements.minLength: 1` would register a length check that
+# marks an EMPTY password Invalid -> Config::isReady() would block Next and the field
+# could not be skipped. With no checks registered, passwordStatus() returns Valid for
+# ANY password including empty, so an empty password never blocks Next. The locking of
+# a skipped (empty) password is done by our SetPasswordJob source patch (usermod -p '!').
+#
+# allowWeakPasswords:false HIDES the "Require strong passwords." checkbox (UsersPage only
+# shows it when permitWeakPasswords() is true). The PROMPT wants that checkbox removed;
+# our source patch ALSO force-hides it, so this is belt-and-suspenders. Because no
+# password checks are configured, there is nothing to enforce anyway -- empty/weak
+# passwords still pass. allowWeakPasswordsDefault is irrelevant with the box hidden.
+allowWeakPasswords: false
 allowWeakPasswordsDefault: false
 """
 

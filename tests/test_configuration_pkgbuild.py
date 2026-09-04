@@ -187,10 +187,10 @@ def test_librewolf_src_shares_pkgver_and_lwver():
 def test_calamares_pkgver_and_sha():
     s = pkgbuild.pkgbuild_calamares()
     assert "pkgver=3.4.2" in s
-    # The tarball hash is pinned; the TWO shipped-in-repo patches (defaults +
-    # region-keyboard) are each SKIP (local files, matched by position to the
-    # second and third source() entries).
-    assert ("sha256sums=('%s' 'SKIP' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
+    # The tarball hash is pinned; the THREE shipped-in-repo patches (defaults +
+    # region-keyboard + finish-buttons) are each SKIP (local files, matched by position
+    # to the second, third and fourth source() entries).
+    assert ("sha256sums=('%s' 'SKIP' 'SKIP' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
 
 
 def test_calamares_pkgver_var_survives_brace_collapse():
@@ -213,39 +213,53 @@ def test_calamares_cmake_build_caps_jobs():
 # --- calamares source patch (installer UI defaults) ------------------------
 
 def test_calamares_pkgbuild_references_patch_in_source_and_prepare():
-    # The patch must be a source() entry (so makepkg stages it) AND actually applied
+    # Each patch must be a source() entry (so makepkg stages it) AND actually applied
     # in prepare(); a patch present but never applied would silently do nothing.
     s = pkgbuild.pkgbuild_calamares()
-    name = pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME
-    assert ("'%s'" % name) in s                       # listed in source=()
     assert "prepare() {" in s
-    assert ("patch -p1 < \"$srcdir/%s\"" % name) in s  # applied, -p1, from srcdir
+    for name in (
+        pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME,
+        pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME,
+        pkgbuild.CALAMARES_FINISH_BUTTONS_PATCH_NAME,
+    ):
+        assert ("'%s'" % name) in s                        # listed in source=()
+        assert ("patch -p1 < \"$srcdir/%s\"" % name) in s  # applied, -p1, from srcdir
 
 
 def test_calamares_patch_skip_aligned_after_tarball_hash():
-    # sha256sums matches source() by POSITION: real tarball hash first, then SKIP
-    # for each local patch file. Exactly two SKIPs (the defaults + region patches).
+    # sha256sums matches source() by POSITION: real tarball hash first, then SKIP for
+    # each local patch file. Three SKIPs (defaults + region + finish-buttons patches).
     s = pkgbuild.pkgbuild_calamares()
-    assert ("sha256sums=('%s' 'SKIP' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
-    assert s.count("'SKIP'") == 2
+    assert ("sha256sums=('%s' 'SKIP' 'SKIP' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
+    assert s.count("'SKIP'") == 3
 
 
 def test_calamares_patch_name_is_a_patch_file():
     assert pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME.endswith(".patch")
 
 
-def test_calamares_patch_is_unified_diff_touching_both_files():
-    # The patch must be a -p1 unified diff (a/ b/ prefixes) that edits BOTH the
-    # keyboard group-switcher model (Alt+Shift default) and the users hostname
-    # config (fixed default hostname). Missing either file means one of the two
-    # requested defaults was dropped.
+def test_calamares_patch_is_unified_diff_touching_all_files():
+    # The patch must be a -p1 unified diff (a/ b/ prefixes) that edits every file the
+    # Az'arch installer-UI refactor touches. Missing any file means one of the requested
+    # changes was dropped:
+    #   KeyboardLayoutModel.cpp -- Alt+Shift group-switcher default
+    #   page_usersetup.ui       -- the two re-worded password strings
+    #   UsersPage.cpp           -- hide Full Name row + hide strong-password checkbox
+    #   Config.cpp              -- isReady() relax + hostname seed + login "main" seed
+    #   SetPasswordJob.cpp      -- empty password locks any account
     p = pkgbuild.calamares_defaults_patch()
-    assert "--- a/src/modules/keyboard/KeyboardLayoutModel.cpp" in p
-    assert "+++ b/src/modules/keyboard/KeyboardLayoutModel.cpp" in p
-    assert "--- a/src/modules/users/Config.cpp" in p
-    assert "+++ b/src/modules/users/Config.cpp" in p
-    # Hunk headers present (so `patch` has something to locate).
-    assert p.count("@@") >= 4  # two hunks => two "@@ ... @@" markers (2 "@@" each)
+    for rel in (
+        "src/modules/keyboard/KeyboardLayoutModel.cpp",
+        "src/modules/users/page_usersetup.ui",
+        "src/modules/users/UsersPage.cpp",
+        "src/modules/users/Config.cpp",
+        "src/modules/users/SetPasswordJob.cpp",
+    ):
+        assert f"--- a/{rel}" in p, rel
+        assert f"+++ b/{rel}" in p, rel
+    # Eight hunks total (kbd 1, ui 2, UsersPage 2, Config 2, SetPasswordJob 1);
+    # each hunk header carries two "@@" markers, so at least 16.
+    assert p.count("@@") >= 16
 
 
 def test_calamares_patch_keyboard_selects_alt_shift_toggle():
@@ -311,11 +325,15 @@ def test_calamares_defaults_patch_applies_to_pinned_source():
 
     import tempfile
 
-    # The two files the patch touches, as stored inside the tarball (prefixed by
-    # the calamares-<ver>/ top-level directory the archive unpacks into).
+    # Every file the patch touches, as stored inside the tarball (prefixed by the
+    # calamares-<ver>/ top-level directory the archive unpacks into). All five must be
+    # extracted or `patch -p1` aborts on the first missing target.
     rels = (
         "src/modules/keyboard/KeyboardLayoutModel.cpp",
+        "src/modules/users/page_usersetup.ui",
+        "src/modules/users/UsersPage.cpp",
         "src/modules/users/Config.cpp",
+        "src/modules/users/SetPasswordJob.cpp",
     )
     top = f"calamares-{pkgbuild.CALAMARES_VERSION}"
 
@@ -334,10 +352,15 @@ def test_calamares_defaults_patch_applies_to_pinned_source():
 
         # Guard against silently testing already-patched source: the pristine
         # files must NOT yet contain the additions the patch introduces.
-        pristine_kbd = (work / rels[0]).read_text()
-        pristine_users = (work / rels[1]).read_text()
+        pristine_kbd = (work / "src/modules/keyboard/KeyboardLayoutModel.cpp").read_text()
+        pristine_users = (work / "src/modules/users/Config.cpp").read_text()
+        pristine_ui = (work / "src/modules/users/page_usersetup.ui").read_text()
         assert "alt_shift_toggle" not in pristine_kbd
         assert "seededHostname" not in pristine_users
+        # Pristine still has the OLD strings / the root-only lock / the full-name gate.
+        assert "Choose a password to keep your account safe." in pristine_ui
+        assert "Use the same password for the administrator account." in pristine_ui
+        assert 'readyFullName' in pristine_users  # isReady() still gates on full name
 
         patch_text = pkgbuild.calamares_defaults_patch()
         # Dry-run first (pure check), then a real apply (proves the result is
@@ -362,13 +385,31 @@ def test_calamares_defaults_patch_applies_to_pinned_source():
         )
         assert real.returncode == 0, f"apply failed:\n{real.stdout}\n{real.stderr}"
 
-        # The two behaviours actually landed in the patched source.
+        # All behaviours actually landed in the patched source.
         kbd = (work / "src/modules/keyboard/KeyboardLayoutModel.cpp").read_text()
         assert "alt_shift_toggle" in kbd
         assert "setCurrentIndex(" in kbd
         users = (work / "src/modules/users/Config.cpp").read_text()
         assert "makeHostnameSuggestion(" in users
         assert "setHostName( seededHostname )" in users
+        # Full Name row removed from readiness + login seeded to "main".
+        assert 'setLoginName( QStringLiteral( "main" ) )' in users
+        assert "readyFullName" not in users  # the full-name gate is gone
+        assert "return readyHostname && readyUsername" in users
+        # Password strings re-worded in the .ui.
+        ui = (work / "src/modules/users/page_usersetup.ui").read_text()
+        assert "Choose a password for your user." in ui
+        assert "Use the same password for root." in ui
+        assert "Choose a password to keep your account safe." not in ui
+        assert "Use the same password for the administrator account." not in ui
+        # Full Name row + strong-password checkbox hidden in UsersPage.
+        page = (work / "src/modules/users/UsersPage.cpp").read_text()
+        assert "ui->labelWhatIsYourName->setVisible( false )" in page
+        assert "ui->checkBoxRequireStrongPassword->setVisible( false )" in page
+        # Empty password locks any account (root-only condition broadened).
+        spj = (work / "src/modules/users/SetPasswordJob.cpp").read_text()
+        assert 'if ( m_newPassword.isEmpty() )' in spj
+        assert 'if ( m_userName == "root" && m_newPassword.isEmpty() )' not in spj
 
 
 # --- calamares source patch (region-driven keyboard) -----------------------
@@ -389,9 +430,9 @@ def test_calamares_pkgbuild_references_region_patch_in_source_and_prepare():
     name = pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME
     assert ("'%s'" % name) in s
     assert ("patch -p1 < \"$srcdir/%s\"" % name) in s
-    # Both patches present in source() -> now TWO local files -> two SKIPs.
-    assert ("sha256sums=('%s' 'SKIP' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
-    assert s.count("'SKIP'") == 2
+    # Three patches present in source() -> now THREE local files -> three SKIPs.
+    assert ("sha256sums=('%s' 'SKIP' 'SKIP' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
+    assert s.count("'SKIP'") == 3
 
 
 def test_calamares_region_patch_touches_keyboard_and_locale_modules():
@@ -520,6 +561,92 @@ def test_calamares_region_patch_emitted_with_recipe():
         )
 
 
+# --- calamares source patch (hide Back + Next on the Finish page) -----------
+
+def test_calamares_finish_buttons_patch_name_is_a_distinct_patch_file():
+    n = pkgbuild.CALAMARES_FINISH_BUTTONS_PATCH_NAME
+    assert n.endswith(".patch")
+    # Distinct from the other two calamares patches (three separate files).
+    assert n != pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME
+    assert n != pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME
+
+
+def test_calamares_finish_buttons_patch_touches_viewmanager_and_hides_both():
+    # The patch must be a -p1 unified diff on ViewManager.cpp that adds the call which
+    # hides BOTH nav buttons on the last (Finish) step: updateBackAndNextVisibility(false).
+    p = pkgbuild.calamares_finish_buttons_patch()
+    assert "--- a/src/libcalamaresui/ViewManager.cpp" in p
+    assert "+++ b/src/libcalamaresui/ViewManager.cpp" in p
+    added = [ln[1:] for ln in p.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
+    body = "\n".join(added)
+    assert "updateBackAndNextVisibility( false )" in body
+
+
+def test_calamares_finish_buttons_patch_context_lines_have_leading_space():
+    # Same unified-diff hygiene as the sibling patches: every body line begins with
+    # exactly one of " ", "+", "-".
+    p = pkgbuild.calamares_finish_buttons_patch()
+    for ln in p.splitlines():
+        if ln.startswith(("--- ", "+++ ", "@@ ")):
+            continue
+        assert ln[:1] in (" ", "+", "-"), repr(ln)
+
+
+def test_calamares_finish_buttons_patch_emitted_with_recipe():
+    # recipe_dirs must emit the finish-buttons patch under its filename in BOTH tiers.
+    for tier in (False, True):
+        files = dict(pkgbuild.recipe_dirs(tier))["calamares"]
+        assert files[pkgbuild.CALAMARES_FINISH_BUTTONS_PATCH_NAME] == (
+            pkgbuild.calamares_finish_buttons_patch()
+        )
+
+
+def test_calamares_finish_buttons_patch_applies_to_pinned_source():
+    # Integration guard: the finish-buttons patch must apply cleanly to the real,
+    # pinned calamares source with `patch -p1` (catches context drift on a version
+    # bump). Source ViewManager.cpp from the PRISTINE tarball, not the .build scratch.
+    tarball = _find_calamares_tarball()
+    if tarball is None:
+        pytest.skip("pinned calamares tarball not present under cache/ (CI checkout)")
+    if shutil.which("patch") is None:
+        pytest.skip("`patch` not available on this host")
+
+    import tempfile
+
+    rel = "src/libcalamaresui/ViewManager.cpp"
+    top = f"calamares-{pkgbuild.CALAMARES_VERSION}"
+    with tempfile.TemporaryDirectory() as td:
+        work = Path(td)
+        with tarfile.open(tarball, "r:gz") as tf:
+            member = tf.getmember(f"{top}/{rel}")
+            fobj = tf.extractfile(member)
+            assert fobj is not None, f"missing {rel} in tarball"
+            dst = work / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(fobj.read())
+
+        # Pristine guard: the added call must not already be present.
+        pristine = (work / rel).read_text()
+        assert "updateBackAndNextVisibility( false )" not in pristine
+
+        patch_text = pkgbuild.calamares_finish_buttons_patch()
+        dry = subprocess.run(
+            ["patch", "-p1", "--dry-run"],
+            input=patch_text, text=True, cwd=work, capture_output=True, timeout=30,
+        )
+        assert dry.returncode == 0, f"dry-run failed:\n{dry.stdout}\n{dry.stderr}"
+        real = subprocess.run(
+            ["patch", "-p1"],
+            input=patch_text, text=True, cwd=work, capture_output=True, timeout=30,
+        )
+        assert real.returncode == 0, f"apply failed:\n{real.stdout}\n{real.stderr}"
+
+        # The hide-both call landed inside the very-end branch (right after the
+        # updateCancelEnabled(true) line that branch already runs).
+        patched = (work / rel).read_text()
+        assert "updateBackAndNextVisibility( false )" in patched
+
+
 def test_both_calamares_patches_apply_in_sequence_to_pinned_source():
     # THE integration guard for the region feature: BOTH patches must apply cleanly,
     # IN THE ORDER prepare() runs them (defaults first, then region), to the real
@@ -533,10 +660,15 @@ def test_both_calamares_patches_apply_in_sequence_to_pinned_source():
 
     import tempfile
 
-    # Union of every file the two patches touch, extracted pristine.
+    # Union of every file the two patches touch, extracted pristine. The defaults patch
+    # touches five (keyboard model + the four users-module files); the region patch adds
+    # keyboard/locale files.
     rels = (
         "src/modules/keyboard/KeyboardLayoutModel.cpp",
+        "src/modules/users/page_usersetup.ui",
+        "src/modules/users/UsersPage.cpp",
         "src/modules/users/Config.cpp",
+        "src/modules/users/SetPasswordJob.cpp",
         "src/modules/keyboard/Config.h",
         "src/modules/keyboard/Config.cpp",
         "src/modules/locale/Config.cpp",
@@ -727,8 +859,9 @@ def test_overrides_delivered_to_profile_path_not_opt():
 def test_recipe_dirs_default_tier():
     # DEFAULT tier: calamares first (Arch dropped extra/calamares, so it must be
     # built here now), then thunar (rebuilt from source with the symlink-resolve
-    # patch), then librewolf. calamares carries its PKGBUILD + the source patch that
-    # sets the installer UI defaults; thunar carries its PKGBUILD + the resolve patch;
+    # patch), then librewolf. calamares carries its PKGBUILD + the three source patches
+    # (installer UI defaults, region keyboard, finish-page buttons); thunar carries its
+    # PKGBUILD + the resolve patch;
     # the librewolf dir carries PKGBUILD + the .desktop, its PKGBUILD the repackage
     # recipe (no bsys6 make targets).
     dirs = pkgbuild.recipe_dirs(False)
@@ -738,6 +871,7 @@ def test_recipe_dirs_default_tier():
         "PKGBUILD",
         pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME,
         pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME,
+        pkgbuild.CALAMARES_FINISH_BUTTONS_PATCH_NAME,
     }
     assert set(dict(dirs)["thunar"]) == {
         "PKGBUILD",
@@ -761,6 +895,7 @@ def test_recipe_dirs_full_tier():
         "PKGBUILD",
         pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME,
         pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME,
+        pkgbuild.CALAMARES_FINISH_BUTTONS_PATCH_NAME,
     }
     assert set(dict(dirs)["thunar"]) == {
         "PKGBUILD",

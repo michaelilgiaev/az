@@ -1145,12 +1145,40 @@ def test_users_conf_shell_is_under_user_submap():
     assert "userShell" not in d  # the dead top-level spelling must not return
 
 
+def test_users_conf_password_is_skippable_and_reuse_for_root_default_checked():
+    # Az'arch PROMPT: the user password defaults EMPTY and is SKIPPABLE, and the
+    # "Use the same password for root." checkbox defaults CHECKED.
+    #
+    # 1. NO passwordRequirements block. A `minLength: 1` (or any length check) would
+    #    register a check that marks an EMPTY password Invalid, and Config::isReady()
+    #    blocks Next on an Invalid password -> the field could not be skipped. With no
+    #    checks configured, passwordStatus() returns Valid for any password (incl.
+    #    empty), so an empty password never blocks Next. A skipped password is then
+    #    locked to "*" by the SetPasswordJob source patch. Assert the block is absent.
+    d = yaml.safe_load(calamares.users_conf())
+    assert "passwordRequirements" not in d, (
+        "users.conf must NOT set passwordRequirements -- a length check would make an "
+        "empty (skipped) password Invalid and block Next"
+    )
+    # 2. doReusePassword: true -> the reuse-for-root checkbox starts CHECKED, so root
+    #    mirrors the user password by default (one password box; empty -> root locked).
+    assert d["doReusePassword"] is True
+    # 3. allowWeakPasswords: false -> the "Require strong passwords." checkbox is not
+    #    shown via the config path (the source patch also force-hides it). Since no
+    #    checks are configured there is nothing to enforce, so empty still passes.
+    assert d["allowWeakPasswords"] is False
+    # setRootPassword stays true (root account IS written; it just reuses/locks).
+    assert d["setRootPassword"] is True
+
+
 def test_users_conf_validates_against_shipped_schema_when_present():
     # When the pinned calamares source tree is extracted in the makepkg cache, validate
     # the emitted users.conf against the REAL users.schema.yaml with jsonschema -- the
     # authoritative check. Skipped (not failed) when the build cache is absent, since the
     # extracted source is a build artifact; the transcribed-contract tests above always run.
-    import jsonschema  # noqa: PLC0415  (optional, only needed for this authoritative check)
+    jsonschema = pytest.importorskip(
+        "jsonschema"
+    )  # optional, only needed for this authoritative check
     from conftest import REPO  # noqa: PLC0415
 
     schema_path = (

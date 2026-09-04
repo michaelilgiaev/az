@@ -70,20 +70,19 @@ THUNAR_RESOLVE_SYMLINK_PATCH_NAME = "azarch-thunar-resolve-symlink.patch"
 
 
 # ---------------------------------------------------------------------------
-# calamares -- source patch: Az'arch installer UI defaults
+# calamares -- source patch: Az'arch installer UI defaults + Users-page refactor
 # ---------------------------------------------------------------------------
-# Two of the installer's default selections are decided in Calamares' C++ (its
-# module *.conf schemas expose no key for either), so they can only be changed by
-# patching the source before the build. This single patch, applied in the recipe's
-# prepare(), carries both:
+# A batch of installer UI decisions are made in Calamares' C++ (the module *.conf
+# schemas expose no key for them), so they can only be changed by patching the source
+# before the build. This single patch, applied in the recipe's prepare(), carries all
+# of them (all VERIFIED against the pinned calamares-3.4.2 tarball):
 #
 #   1. Keyboard page -- "Switch Keyboard" (the xkb group-switcher dropdown).
 #      Upstream builds the dropdown from a QMap sorted by human-readable label and
 #      leaves the current index at 0 (the alphabetically-first combo), so "Alt+Shift"
 #      is present but NOT pre-selected. The patch makes KeyboardGroupsSwitchersModel's
 #      constructor select the entry whose xkb id is `alt_shift_toggle` once the list
-#      is built, so the dropdown defaults to "Alt+Shift". (Nothing else on the page
-#      changes; layout stays "us" via modules/keyboard.conf guessLayout:false.)
+#      is built, so the dropdown defaults to "Alt+Shift". (KeyboardLayoutModel.cpp)
 #
 #   2. Users page -- "What is the name of this computer?" (hostname).
 #      Upstream seeds the hostname field ONLY once the user types a name, expanding
@@ -93,20 +92,52 @@ THUNAR_RESOLVE_SYMLINK_PATCH_NAME = "azarch-thunar-resolve-symlink.patch"
 #      and (via setHostName, which marks the value "custom") takes the field off the
 #      auto-derive path -- so with modules/users.conf `template: "azarch"` the field
 #      shows "azarch" by default and stays "azarch" regardless of the other inputs.
+#      (Config.cpp, the @@ -1020 hunk.)
 #
-# Both hunks are small and target stable code paths in calamares 3.4.2; the pinned
-# tarball guarantees the context lines below match. A context drift on a version
-# bump makes `patch` fail LOUDLY in prepare() (the build aborts) rather than
-# silently dropping the customization -- refresh the hunks when bumping the version.
+#   3. Users page -- REMOVE the "What is your name?" (Full Name) row. The GECOS/full
+#      name is not asked for. This needs TWO coordinated edits: UsersPage.cpp hides
+#      the label + the field's widgets (the QHBoxLayout is not a widget, so each child
+#      is hidden individually), AND Config::isReady() drops its `!fullName().isEmpty()`
+#      requirement -- because isReady() hard-requires a non-empty full name, hiding the
+#      field WITHOUT relaxing isReady() leaves fullName empty forever and Next
+#      permanently greyed (the original "Users section broke" regression).
+#      (UsersPage.cpp + Config.cpp @@ -763 hunk.)
+#
+#   4. Users page -- default the LOGIN name to "main". With the Full Name row gone the
+#      login is never derived from a typed name, so it is seeded directly (setLoginName
+#      marks it "custom" so nothing later recomputes it) -- which also satisfies
+#      isReady()'s non-empty-login requirement. (Config.cpp @@ -1020 hunk.)
+#
+#   5. Users page -- REMOVE the "Require strong passwords." checkbox (UsersPage.cpp
+#      force-hides it) and re-word the two password strings in page_usersetup.ui:
+#      "Choose a password to keep your account safe." -> "Choose a password for your
+#      user." and "Use the same password for the administrator account." -> "Use the
+#      same password for root." (page_usersetup.ui + UsersPage.cpp.)
+#
+#   6. SetPasswordJob -- a SKIPPED (empty) password locks the account. Upstream locks
+#      only root on an empty password (usermod -p '!'); the installer lets the user
+#      skip the password field, and a skipped password must become a locked "*" account
+#      (not crypt("") -- an empty but usable password). The patch broadens the
+#      empty-password special case from root-only to ANY user. (SetPasswordJob.cpp.)
+#
+# The hunks are small and target stable code paths; the pinned tarball guarantees the
+# context lines below match. A context drift on a version bump makes `patch` fail
+# LOUDLY in prepare() (the build aborts) rather than silently dropping the
+# customization -- refresh the hunks (regenerate via `diff -u`) when bumping the
+# version. (See modules/users.conf in packages/calamares/calamares.py for the .conf
+# side: doReusePassword:true checks the reuse-for-root box by default,
+# allowWeakPasswords:false + no passwordRequirements so an empty password is accepted.)
 CALAMARES_DEFAULTS_PATCH_NAME = "azarch-calamares-defaults.patch"
 
 
 def calamares_defaults_patch() -> str:
     r"""Unified diff (-p1) applied to the extracted calamares-3.4.2 source in the
-    recipe's prepare(): default the keyboard group-switcher to Alt+Shift and seed a
-    fixed, non-reactive default hostname. See the block comment above for why these
-    live in a source patch rather than a module .conf. The paths are a/ b/ prefixed
-    so `patch -p1` (run from the source root) applies them.
+    recipe's prepare(): default the keyboard group-switcher to Alt+Shift, seed a fixed
+    non-reactive hostname and a "main" login, remove the Full Name row + the strong-
+    password checkbox, re-word the two password strings, and lock a skipped (empty)
+    password. See the block comment above for the per-edit rationale and why these live
+    in a source patch rather than a module .conf. Paths are a/ b/ prefixed so
+    `patch -p1` (run from the source root) applies them.
 
     The diff is built line-by-line rather than as one big triple-quoted literal
     ON PURPOSE: a unified diff's CONTEXT lines (unchanged surrounding source) must
@@ -115,9 +146,10 @@ def calamares_defaults_patch() -> str:
     space-only lines invisible and trivially corrupted by an editor that strips
     trailing whitespace -- which silently breaks `patch`. Assembling from a list
     keeps every context line's leading space explicit and greppable. The hunk
-    headers (@@ -284,4 ... / @@ -1020,6 ...) were generated by `diff -u` against the
-    pinned 3.4.2 source and verified to apply with `patch -p1`; regenerate them the
-    same way on a version bump."""
+    headers (@@ -284,4 / @@ -322,7 / @@ -469,7 / @@ -105,6 / @@ -153,7 / @@ -763,12 /
+    @@ -1020,8 / @@ -81,12 ...) were generated by `diff -u` against the pinned 3.4.2
+    source (edit a pristine extraction, then diff) and verified to apply with
+    `patch -p1`; regenerate them the same way on a version bump."""
     # Each entry is one full diff line. Context lines start with " " (space),
     # additions with "+", hunk headers with "@@", file headers with ---/+++.
     lines = [
@@ -142,9 +174,79 @@ def calamares_defaults_patch() -> str:
         "+        }",
         "+    }",
         " }",
+        "--- a/src/modules/users/page_usersetup.ui",
+        "+++ b/src/modules/users/page_usersetup.ui",
+        "@@ -322,7 +322,7 @@",
+        "    <item>",
+        '     <widget class="QLabel" name="password_label_2">',
+        '      <property name="text">',
+        "-      <string>Choose a password to keep your account safe.</string>",
+        "+      <string>Choose a password for your user.</string>",
+        "      </property>",
+        '      <property name="wordWrap">',
+        "       <bool>false</bool>",
+        "@@ -469,7 +469,7 @@",
+        "    <item>",
+        '     <widget class="QCheckBox" name="checkBoxReusePassword">',
+        '      <property name="text">',
+        "-      <string>Use the same password for the administrator account.</string>",
+        "+      <string>Use the same password for root.</string>",
+        "      </property>",
+        "     </widget>",
+        "    </item>",
+        "--- a/src/modules/users/UsersPage.cpp",
+        "+++ b/src/modules/users/UsersPage.cpp",
+        "@@ -105,6 +105,16 @@",
+        "     connect( ui->textBoxFullName, &QLineEdit::textEdited, config, &Config::setFullName );",
+        "     connect( config, &Config::fullNameChanged, this, &UsersPage::onFullNameTextEdited );",
+        " ",
+        '+    // Az\'arch: hide the "What is your name?" (Full Name) row entirely. The account\'s',
+        '+    // GECOS/full name is not asked for; the login defaults to "main" (seeded in',
+        "+    // Config.cpp) and Config::isReady() no longer requires a non-empty full name, so",
+        "+    // Next stays reachable with these widgets gone. The QHBoxLayout that holds the",
+        "+    // field is not a widget, so each child widget is hidden individually.",
+        "+    ui->labelWhatIsYourName->setVisible( false );",
+        "+    ui->textBoxFullName->setVisible( false );",
+        "+    ui->labelFullName->setVisible( false );",
+        "+    ui->labelFullNameError->setVisible( false );",
+        "+",
+        "     // If the hostname is going to be written out, then show the field",
+        "     if ( ( m_config->hostnameAction() == HostNameAction::EtcHostname )",
+        "          || ( m_config->hostnameAction() == HostNameAction::SystemdHostname ) )",
+        "@@ -153,7 +163,11 @@",
+        "         connect( ui->checkBoxReusePassword, Calamares::checkBoxStateChangedSignal, this, &UsersPage::onReuseUserPasswordChanged );",
+        "     }",
+        " ",
+        "-    ui->checkBoxRequireStrongPassword->setVisible( m_config->permitWeakPasswords() );",
+        '+    // Az\'arch: never show the "Require strong passwords." checkbox. Password-strength',
+        "+    // enforcement is not offered on this installer (no libpwquality checks are",
+        "+    // configured in users.conf, so any password -- including an empty one -- is",
+        "+    // accepted). Force the checkbox hidden regardless of the config value.",
+        "+    ui->checkBoxRequireStrongPassword->setVisible( false );",
+        "     ui->checkBoxRequireStrongPassword->setChecked( m_config->requireStrongPasswords() );",
+        "     if ( m_config->permitWeakPasswords() )",
+        "     {",
         "--- a/src/modules/users/Config.cpp",
         "+++ b/src/modules/users/Config.cpp",
-        "@@ -1020,6 +1020,20 @@",
+        "@@ -763,12 +763,15 @@",
+        " bool",
+        " Config::isReady() const",
+        " {",
+        "-    bool readyFullName = !fullName().isEmpty();  // Needs some text",
+        '+    // Az\'arch: the "What is your name?" (Full Name) field is hidden (see UsersPage.cpp),',
+        "+    // so the full name is always empty by design. Do NOT gate readiness on it, or Next",
+        '+    // would be permanently disabled. Login name (seeded to "main" below), hostname and',
+        "+    // password validity still gate as usual.",
+        "     bool readyHostname = hostnameStatus().isEmpty();  // .. no warning message",
+        "     bool readyUsername = !loginName().isEmpty() && loginNameStatus().isEmpty();  // .. no warning message",
+        "     bool readyUserPassword = userPasswordValidity() != Config::PasswordValidity::Invalid;",
+        "     bool readyRootPassword = rootPasswordValidity() != Config::PasswordValidity::Invalid;",
+        "-    return readyFullName && readyHostname && readyUsername && readyUserPassword && readyRootPassword;",
+        "+    return readyHostname && readyUsername && readyUserPassword && readyRootPassword;",
+        " }",
+        " ",
+        " /** @brief Update ready status and emit signal",
+        "@@ -1020,8 +1023,29 @@",
         '         m_forbiddenHostNames = Calamares::getStringList( hostnameSettings, "forbidden_names" );',
         "         m_forbiddenHostNames << alwaysForbiddenHostNames();",
         "         tidy( m_forbiddenHostNames );",
@@ -164,7 +266,38 @@ def calamares_defaults_patch() -> str:
         "+        }",
         "     }",
         " ",
+        '+    // Az\'arch: seed a fixed default login name ("main"). The "What is your name?"',
+        "+    // field is hidden, so the login is never derived from a typed full name;",
+        "+    // setLoginName() marks it custom (m_customLoginName = true) so it is not later",
+        "+    // recomputed, and it satisfies Config::isReady()'s non-empty-login requirement",
+        "+    // with the Full Name row gone. Users can still edit the Login field on the page.",
+        '+    setLoginName( QStringLiteral( "main" ) );',
+        "+",
         "     setConfigurationDefaultGroups( configurationMap, m_defaultGroups );",
+        " ",
+        "     // Renaming of Autologin -> AutoLogin in 4ffa79d4cf also affected",
+        "--- a/src/modules/users/SetPasswordJob.cpp",
+        "+++ b/src/modules/users/SetPasswordJob.cpp",
+        "@@ -81,12 +81,17 @@",
+        '                                             tr( "rootMountPoint is %1" ).arg( destDir.absolutePath() ) );',
+        "     }",
+        " ",
+        '-    if ( m_userName == "root" && m_newPassword.isEmpty() )  //special case for disabling root account',
+        '+    // Az\'arch: an empty password locks the account (shadow "!") for ANY user, not just',
+        "+    // root. The installer lets the user skip the password field; a skipped password must",
+        '+    // yield a locked account (no usable password) rather than crypt("") -- an empty but',
+        "+    // *valid* password that would allow passwordless login. Upstream only special-cased",
+        '+    // "root" here; broadening it to every user gives the "skip -> * (locked)" behaviour.',
+        '+    if ( m_newPassword.isEmpty() )  //special case for disabling the account (no usable password)',
+        "     {",
+        '         int ec = Calamares::System::instance()->targetEnvCall( { "usermod", "-p", "!", m_userName } );',
+        "         if ( ec )",
+        "         {",
+        '-            return Calamares::JobResult::error( tr( "Cannot disable root account." ),',
+        '+            return Calamares::JobResult::error( tr( "Cannot disable account %1." ).arg( m_userName ),',
+        '                                                 tr( "usermod terminated with error code %1." ).arg( ec ) );',
+        "         }",
+        "         return Calamares::JobResult::ok();",
     ]
     # Trailing newline so the last line is terminated (patch/POSIX text file).
     return "\n".join(lines) + "\n"
@@ -622,6 +755,64 @@ def calamares_region_keyboard_patch() -> str:
 
 
 # ---------------------------------------------------------------------------
+# calamares -- source patch: hide Back + Next on the Finish page
+# ---------------------------------------------------------------------------
+# The installer's Back/Next buttons are the MAIN-WINDOW navigation buttons driven by
+# libcalamaresui's ViewManager, not anything a module .conf can reach -- so removing
+# them from the Finish ("finished") page can only be done in C++. The finished ViewStep
+# ALREADY returns false from isBackEnabled()/isNextEnabled(), but that only DISABLES
+# (greys) the buttons; they stay visible. To HIDE them, this patch adds one call in
+# ViewManager::updateButtonLabels(): inside the existing `isAtVeryEnd()` branch (taken
+# only on the last step, which the finished page is -- it returns isAtEnd()==true), call
+# updateBackAndNextVisibility(false). That fires backAndNextVisibleChanged(false), wired
+# in CalamaresWindow to setVisible(false) on BOTH buttons, so the finished page shows
+# neither Back nor Next -- only the "Done" (quit) button, kept visible in that same
+# branch. updateButtonLabels() runs LAST in next() (after next()'s own
+# updateBackAndNextVisibility() call), so this wins for the finished step; every
+# non-final step takes the else branch and keeps its normal button visibility.
+#
+# Kept in its OWN patch (not folded into azarch-calamares-defaults.patch) so the two
+# concerns stay independent -- defaults is the Users/Keyboard UI, this is a libcalamaresui
+# navigation tweak. Same fail-loud-on-drift contract: the pinned tarball guarantees the
+# context; a version bump that moves these lines makes `patch` abort the build.
+CALAMARES_FINISH_BUTTONS_PATCH_NAME = "azarch-calamares-finish-buttons.patch"
+
+
+def calamares_finish_buttons_patch() -> str:
+    r"""Unified diff (-p1) applied to the extracted calamares-3.4.2 source in the
+    recipe's prepare(), after the other two calamares patches: hide the Back and Next
+    navigation buttons on the Finish page (see the block comment above). Touches only
+    src/libcalamaresui/ViewManager.cpp.
+
+    Same authoring rule as the sibling patches: assembled line-by-line so every
+    unified-diff CONTEXT line keeps its exact single leading space (blank context lines
+    are one space) -- a triple-quoted literal would let an editor strip that trailing
+    space and silently break `patch`. The hunk header (@@ -437,6 ...) was generated by
+    `diff -u` against the pinned 3.4.2 source and verified to apply with `patch -p1`;
+    regenerate it the same way on a version bump."""
+    lines = [
+        "--- a/src/libcalamaresui/ViewManager.cpp",
+        "+++ b/src/libcalamaresui/ViewManager.cpp",
+        "@@ -437,6 +437,13 @@",
+        "         UPDATE_BUTTON_PROPERTY( quitVisible, true );",
+        '         UPDATE_BUTTON_PROPERTY( quitIcon, "dialog-ok-apply" );',
+        "         updateCancelEnabled( true );",
+        "+        // Az'arch: on the very last step (the Finish page) hide BOTH the Back and Next",
+        "+        // buttons -- the install is complete, there is nowhere to go back to and nothing",
+        '+        // to advance to; only the "Done" (quit) button, kept visible just above, remains.',
+        "+        // This runs after next()'s own updateBackAndNextVisibility() call (updateButtonLabels",
+        "+        // is invoked last), so it wins for the finished step. Non-final steps take the else",
+        "+        // branch and keep their normal button visibility.",
+        "+        updateBackAndNextVisibility( false );",
+        "         if ( settings->quitAtEnd() )",
+        "         {",
+        "             quit();",
+    ]
+    # Trailing newline so the last line is terminated (patch/POSIX text file).
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
 # calamares -- built from source, always
 # ---------------------------------------------------------------------------
 def pkgbuild_calamares() -> str:
@@ -686,10 +877,11 @@ source=(
   "calamares-${{pkgver}}.tar.gz::${{url}}/releases/download/v${{pkgver}}/calamares-${{pkgver}}.tar.gz"
   '{CALAMARES_DEFAULTS_PATCH_NAME}'
   '{CALAMARES_REGION_KEYBOARD_PATCH_NAME}'
+  '{CALAMARES_FINISH_BUTTONS_PATCH_NAME}'
 )
 # Tarball: pinned sha256 (makepkg aborts on mismatch). Patches: shipped in-repo,
 # reviewed in packages.pkgbuild (SKIP -- local files, not downloaded).
-sha256sums=('{CALAMARES_SHA256}' 'SKIP' 'SKIP')
+sha256sums=('{CALAMARES_SHA256}' 'SKIP' 'SKIP' 'SKIP')
 
 prepare() {{
   cd "calamares-${{pkgver}}"
@@ -705,6 +897,10 @@ prepare() {{
   # keyboard + locale modules (disjoint from the defaults patch above, so order is
   # not load-bearing). Same fail-loud-on-drift contract.
   patch -p1 < "$srcdir/{CALAMARES_REGION_KEYBOARD_PATCH_NAME}"
+  # Az'arch: hide the Back + Next buttons on the Finish page (libcalamaresui
+  # ViewManager). Independent of the two patches above (touches only ViewManager.cpp),
+  # so order is not load-bearing. Same fail-loud-on-drift contract.
+  patch -p1 < "$srcdir/{CALAMARES_FINISH_BUTTONS_PATCH_NAME}"
 }}
 
 build() {{
@@ -1200,6 +1396,7 @@ def recipe_dirs(full_compile: bool) -> list[tuple[str, dict[str, str]]]:
         "PKGBUILD": pkgbuild_calamares(),
         CALAMARES_DEFAULTS_PATCH_NAME: calamares_defaults_patch(),
         CALAMARES_REGION_KEYBOARD_PATCH_NAME: calamares_region_keyboard_patch(),
+        CALAMARES_FINISH_BUTTONS_PATCH_NAME: calamares_finish_buttons_patch(),
     })
     # thunar: rebuilt (same version as extra/) with the symlink-resolve patch, in EVERY tier --
     # the patched location-bar behaviour is not optional. Built from source like calamares.
