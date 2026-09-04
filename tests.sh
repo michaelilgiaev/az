@@ -40,9 +40,35 @@
 # (wrapped skip reasons, digit walls) ever leaks into the leaner mixed/quiet views.
 # A small awk only fits lines to the terminal WIDTH; it never reconstructs dots.
 #
+# --- TEST MODES (network + root; both OFF by default) ------------------------
+# Two PERSISTED booleans in tests/test_modes.conf select which privileged tiers
+# actually run. Both default OFF, so a plain `bash tests.sh` is green with no
+# connectivity and no sudo.
+#
+#   network -- a few tests reach a REAL external host (marked `network`). OFFLINE
+#              (default) SKIPS them, so a plain run never hangs on a DNS lookup.
+#              ONLINE runs them.
+#   root    -- tests that need UID 0 (marked `root`; the two calamares btrfs
+#              loop-mount desparse tests). USER (default) SKIPS them; ROOT selects
+#              the tier (they still self-skip via os.geteuid() when not actually
+#              UID 0).
+#
+# The toggles are flipped WITHOUT running the suite (they rewrite
+# tests/test_modes.conf and exit immediately -- no venv build, no pytest):
+#   bash tests.sh --offline / --online   # flip `network`; does NOT run the suite
+#   bash tests.sh --user    / --root     # flip `root`;    does NOT run the suite
+# Passing both halves of a pair (e.g. --online --offline) is a hard error. Flip both
+# at once:  bash tests.sh --online --root
+# Override either for a single run without editing the file (env wins over the file):
+#   AZARCH_TESTS_NETWORK=online AZARCH_TESTS_ROOT=true bash tests.sh
+# These toggles are INDEPENDENT of the output-verbosity flags (-q/--quiet, -l/--loud).
+#
+# --- HELP --------------------------------------------------------------------
+#   bash tests.sh --help  (or -h)   # print usage for every flag and exit
+#
 # --- PASS-THROUGH ------------------------------------------------------------
-# Any OTHER arguments are passed straight through to pytest (only the mode flags
-# above are stripped), e.g.:
+# Any OTHER arguments are passed straight through to pytest (only the mode/output
+# flags above are stripped), e.g.:
 #   bash tests.sh -k pacman                # run only tests matching "pacman"
 #   bash tests.sh tests/test_paths.py      # run one file
 #   bash tests.sh -q -k pacman             # green dots, only "pacman" tests
@@ -67,6 +93,145 @@ LOGDIR="$REPODIR/logs"
 LOG_MIXED="$LOGDIR/tests.log"
 LOG_LOUD="$LOGDIR/tests-loud.log"
 LOG_QUIET="$LOGDIR/tests-quiet.log"
+
+# --- Test modes (network + root; both OFF by default) -----------------------
+# Two PERSISTED booleans in tests/test_modes.conf (committed; default both `false`)
+# select the privileged tiers. conftest.py reads the file; AZARCH_TESTS_NETWORK /
+# AZARCH_TESTS_ROOT override it for one run; we export both below so the terminal run
+# and the two isolated log-copy runs all agree with the file. See tests/_testmodes.py
+# for the parser and precedence rules.
+MODESCONF="$REPODIR/tests/test_modes.conf"
+
+# conf_bool <key> -- read one boolean from tests/test_modes.conf, echoing `true`/`false`. This is
+# the ONE parser used by both the toggle writer and the env-export below, and it is kept faithful to
+# tests/_testmodes.py's Python parser so `bash tests.sh` and a bare `pytest` never disagree on the
+# same file:
+#   * value is TRIM-only (leading/trailing ASCII whitespace), matching Python's str.strip() -- we do
+#     NOT strip interior spaces, so a mangled `t rue` is UNRECOGNIZED and falls closed (false), not
+#     silently coerced to true.
+#   * a POSITIVE ALLOWLIST gate: after trim+fold, any value containing a character outside [a-z0-9]
+#     is rejected as false BEFORE token-matching. Every real token (true/false/1/0/yes/no/on/off/
+#     online/offline) is pure [a-z0-9], so nothing legitimate is lost -- but this makes junk with
+#     exotic bytes (a stray NBSP U+00A0, a Unicode line separator U+2028, an interior form-feed)
+#     fail CLOSED here, converging on Python (whose ASCII-only strip already leaves such values
+#     unrecognized). Gating on an allowlist -- not a blocklist of bad chars -- is why this covers the
+#     whole class rather than a handful of enumerated characters.
+#   * true tokens: true/1/yes/on. false tokens: false/0/no/off. Anything else -> false (fail closed).
+#   * the legacy words `online`/`offline` are accepted ONLY for the `network` key (online=true,
+#     offline=false) -- they are meaningless for `root`, which is why _network_token() in Python
+#     applies them for network alone. Accepting `online` for `root` here would diverge from Python.
+# Missing file / missing key -> false. Never fails under errexit/nounset (all reads are guarded).
+# (One pathological input stays engine-specific and is deliberately not chased: a NUL byte anywhere
+# in the file makes GNU grep report "binary file matches" and skip the line -> false here, while
+# Python reads the surrounding lines. A NUL cannot occur in this two-line boolean file in practice,
+# and both readings are SAFE -- the committed default is false -- so forcing byte-identical NUL
+# handling between grep and CPython is not worth a bespoke pure-bash line reader.)
+conf_bool() {                              # conf_bool <key> -> echoes true|false
+    local key="$1" line val
+    [ -f "$MODESCONF" ] || { echo false; return; }
+    line="$(grep -iE "^[[:space:]]*$key[[:space:]]*=" "$MODESCONF" | tail -n1 || true)"
+    val="${line#*=}"                        # everything after the first '='
+    val="${val#"${val%%[![:space:]]*}"}"    # trim leading whitespace (edges only, like str.strip)
+    val="${val%"${val##*[![:space:]]}"}"    # trim trailing whitespace
+    val="$(printf '%s' "$val" | tr '[:upper:]' '[:lower:]')"   # case-fold; interior spaces PRESERVED
+    case "$val" in *[!a-z0-9]*) echo false; return ;; esac     # allowlist gate: junk -> fail closed
+    if [ "$key" = network ]; then
+        case "$val" in online) echo true; return ;; offline) echo false; return ;; esac
+    fi
+    case "$val" in
+        true|1|yes|on) echo true ;;
+        *)             echo false ;;
+    esac
+}
+
+# --help / -h and the four toggle flags (--online/--offline, --user/--root) are handled
+# in THIS early pass, BEFORE output-mode parsing / venv bootstrap, so help and toggles
+# are instant and side-effect free (a toggle rewrites the conf and EXITS -- no venv
+# build, no pytest). Anything else falls through untouched to the normal run below.
+#
+# usage -- print help covering every flag, then the caller exits 0.
+usage() {
+    cat <<'EOF'
+Usage: bash tests.sh [FLAGS] [PYTEST ARGS...]
+
+The ONE command to run the azarch test suite. Self-bootstrapping: builds ./venv, installs
+requirements.txt, runs pytest. Re-running is cheap. All flags below are CONSUMED here (never
+forwarded to pytest); everything else passes straight through to pytest.
+
+Output modes (what the TERMINAL shows; logs/ always gets all three views):
+  (no flag)        MIXED  -- per-file grouped dots (the default)
+  -q, --quiet      QUIET  -- bare green dots
+  -l, --loud       LOUD   -- one bright line per test, full tracebacks
+  -q and -l are mutually exclusive.
+
+Test-mode toggles (flip a persisted boolean in tests/test_modes.conf and EXIT; no suite run):
+  --offline / --online   network tier: skip / run the `network`-marked tests (default: offline)
+  --user    / --root     root tier:    skip / select the `root`-marked tests  (default: user)
+  Passing both halves of a pair is an error. Flip both at once, e.g.:  --online --root
+  These are INDEPENDENT of -q/-l. Env overrides for one run (env wins over the file):
+      AZARCH_TESTS_NETWORK=online|offline   AZARCH_TESTS_ROOT=true|false
+
+Help:
+  -h, --help             print this and exit.
+
+Pass-through examples (forwarded to pytest verbatim):
+  bash tests.sh -k pacman                run only tests matching "pacman"
+  bash tests.sh tests/test_paths.py      run one file
+  bash tests.sh -m root                  ONLY the root tier (needs --root / true env, and real UID 0)
+EOF
+}
+
+# Collect the requested toggles. Each of the two pairs is mutually exclusive; the two
+# pairs are independent, so `--online --root` sets both. NET_TOGGLE/ROOT_TOGGLE hold
+# the requested value ("true"/"false") or "" if that pair was not touched.
+NET_TOGGLE=""
+ROOT_TOGGLE=""
+ANY_TOGGLE=0
+set_pair() {                            # set_pair <var-name> <value> <flag-a> <flag-b>
+    local cur; cur="$(eval "printf '%s' \"\$$1\"")"
+    if [ -n "$cur" ] && [ "$cur" != "$2" ]; then
+        echo "[tests] error: '$3' and '$4' are mutually exclusive -- pick one" >&2
+        exit 2
+    fi
+    eval "$1=\$2"
+    ANY_TOGGLE=1
+}
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help) usage; exit 0 ;;
+        --online)  set_pair NET_TOGGLE  true  --online --offline ;;
+        --offline) set_pair NET_TOGGLE  false --online --offline ;;
+        --root)    set_pair ROOT_TOGGLE true  --root   --user ;;
+        --user)    set_pair ROOT_TOGGLE false --root   --user ;;
+    esac
+done
+if [ "$ANY_TOGGLE" -eq 1 ]; then
+    # Read the CURRENT booleans (via the canonical conf_bool above) so a toggle of one pair
+    # preserves the other. Missing/garbage -> false (fail closed), same as Python.
+    net="$(conf_bool network)"
+    root="$(conf_bool root)"
+    [ -n "$NET_TOGGLE" ]  && net="$NET_TOGGLE"
+    [ -n "$ROOT_TOGGLE" ] && root="$ROOT_TOGGLE"
+    mkdir -p "$(dirname "$MODESCONF")"
+    printf 'network = %s\nroot = %s\n' "$net" "$root" > "$MODESCONF"
+    echo "[tests] test modes: network=$net root=$root  (saved to ${MODESCONF#$REPODIR/})"
+    # A short, mode-specific hint for whichever pair(s) the caller actually flipped.
+    if [ -n "$NET_TOGGLE" ]; then
+        if [ "$net" = true ]; then
+            echo "[tests] network-marked tests will now RUN. Toggle back with: bash tests.sh --offline"
+        else
+            echo "[tests] network-marked tests will be SKIPPED. Enable them with: bash tests.sh --online"
+        fi
+    fi
+    if [ -n "$ROOT_TOGGLE" ]; then
+        if [ "$root" = true ]; then
+            echo "[tests] root-marked tests will now RUN (if actually UID 0). Toggle back with: bash tests.sh --user"
+        else
+            echo "[tests] root-marked tests will be SKIPPED. Enable them with: bash tests.sh --root"
+        fi
+    fi
+    exit 0
+fi
 
 # --- 0. Pick the output mode. -----------------------------------------------
 # Walk the args ONCE: pull out the (at most one) mode flag and keep everything
@@ -148,6 +313,21 @@ export PYTHONPATH="$REPODIR/libraries:$REPODIR/scripts/libraries${PYTHONPATH:+:$
 # (same mtime) and make a test read old bytes. Compiling fresh every run costs a
 # few ms on this tiny codebase and removes that whole class of confusion.
 export PYTHONDONTWRITEBYTECODE=1
+
+# Pin BOTH test modes for THIS run to whatever tests/test_modes.conf says (via the canonical
+# conf_bool defined near the top), and export them so the two isolated log-copy runs (child
+# subshells) resolve the SAME modes -- their repo copies do not contain the real conf file, so the
+# env vars are how they learn it. An AZARCH_TESTS_NETWORK / AZARCH_TESTS_ROOT already set in the
+# caller's environment WINS (lets CI or a one-off override without editing the file). A
+# missing/empty/garbage value reads false (tier OFF) -- offline cannot hang, user needs no sudo.
+if [ -z "${AZARCH_TESTS_NETWORK:-}" ]; then
+    # Export the network mode as the legacy WORD (online/offline) so `-m network` docs and
+    # any word-expecting reader keep working; _testmodes.py accepts both the word and true/false.
+    [ "$(conf_bool network)" = true ] && export AZARCH_TESTS_NETWORK=online || export AZARCH_TESTS_NETWORK=offline
+fi
+if [ -z "${AZARCH_TESTS_ROOT:-}" ]; then
+    export AZARCH_TESTS_ROOT="$(conf_bool root)"
+fi
 
 # Right-align the percentage and keep lines from wrapping. Below, pytest's stdout
 # is a PIPE (we tee it), so pytest cannot query the terminal width and falls back
@@ -351,13 +531,36 @@ log_path_for() {                           # log_path_for <mode> -> its logfile
 # is irrelevant (the terminal run is authoritative), so it is not propagated.
 run_log_isolated() {                       # run_log_isolated <mode> <logfile> <dir>
     local mode="$1" logfile="$2" dir="$3" o
-    # Mirror the repo minus the bits a run does not need (venv is reused via $PY;
-    # .git and logs are irrelevant to a test run) -- keeps the copy tiny and fast.
+    # Mirror the repo minus the bits a run does not need (venv is reused via $PY; .git
+    # and logs are irrelevant to a test run) -- keeps the copy tiny and fast. output/ and
+    # cache/ are EXCLUDED too and this is not optional: they hold the built ISOs and the
+    # package cache (tens of GB), which no test reads. Copying them once filled /tmp (a
+    # 16G tmpfs) with a 47G copy, the copy failed on ENOSPC, and this function -- which
+    # swallows copy errors (|| return 0) so a log run never aborts the suite -- left the
+    # off-screen log EMPTY. Excluding the bulk gitignored dirs keeps the mirror at a few MB.
+    #
+    # One consequence, by design: a handful of tests read a pinned fixture FROM cache/ (e.g.
+    # the calamares tarball the pkgbuild patch tests source). Absent from the copy, those
+    # self-skip with their own "not present under cache/ (CI checkout)" reason -- exactly the
+    # fresh-checkout path their authors already handle. They still PASS in the authoritative
+    # terminal run (which has cache/ in place), so the suite RESULT is unchanged; only the two
+    # off-screen LOGS may show those couple extra skips. That is the right trade: faithful,
+    # never-empty logs beat copying 15G of cache to keep two skip lines out of a log.
     if command -v rsync >/dev/null 2>&1; then
-        rsync -a --exclude venv --exclude .git --exclude logs "$REPODIR"/ "$dir"/ 2>/dev/null || return 0
+        rsync -a --exclude venv --exclude .git --exclude logs --exclude output --exclude cache \
+              "$REPODIR"/ "$dir"/ 2>/dev/null || return 0
     else
-        cp -a "$REPODIR"/. "$dir"/ 2>/dev/null || return 0
-        rm -rf "$dir/venv" "$dir/.git" "$dir/logs"
+        # cp has no --exclude, and a copy-then-delete would still transit the tens of GB in
+        # output/ + cache/ (ENOSPC on the tmpfs). So copy each top-level entry SELECTIVELY,
+        # skipping the excluded names, so the bulk dirs are never read at all. Dotfiles too
+        # (shopt dotglob) so .dockerignore/.gitattributes etc. come along.
+        ( shopt -s dotglob nullglob
+          for entry in "$REPODIR"/*; do
+              case "$(basename "$entry")" in
+                  venv|.git|logs|output|cache) continue ;;
+              esac
+              cp -a "$entry" "$dir"/ 2>/dev/null || exit 0
+          done ) || return 0
     fi
     read -r -a o <<< "$(opts_for_mode "$mode")"
     # cwd = copy so repo-relative test paths resolve inside it; PYTHONPATH -> the

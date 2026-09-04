@@ -1,0 +1,198 @@
+"""Single source of truth for the azarch test suite's TEST MODES -- two independent
+booleans, `network` and `root`, that select which privileged tiers of the suite run.
+
+Why this exists
+---------------
+Most of this suite is PURE: it exercises the deterministic Python logic (config-file
+emitters, package-list handling, path building, the specification pipeline) against fakes,
+never building an ISO, calling pacman/makepkg/mkarchiso, touching the network, or using
+sudo. Two tiers are the exception and are gated by a persisted toggle so a plain
+`bash tests.sh` stays green with no connectivity and no privileges:
+
+- `network`: a handful of tests reach a REAL host (e.g. the live resolver-server contract
+  test). OFFLINE (the default) SKIPS the `network`-marked tests, so a plain run never hangs
+  on a DNS lookup. ONLINE runs them. Those tests ALSO keep their own cheap TCP reachability
+  probe as a hard safety net, so an ONLINE run on a disconnected box still skips cleanly
+  rather than hanging.
+- `root`: tests that need UID 0 to run (the two calamares btrfs loop-mount desparse tests).
+  USER mode (the default) SKIPS the `root`-marked tests. ROOT mode SELECTS them -- they then
+  run IF the process is actually UID 0, and otherwise self-skip via their own `os.geteuid()`
+  guard (selecting the tier does not force root).
+
+The two booleans gate in OPPOSITE directions but the file meaning is uniform ("run this
+tier?"): `network=true` runs the network tier, `root=true` selects the root tier.
+
+The toggle
+----------
+Both booleans live in ONE committed file, `tests/test_modes.conf` (default: both `false`),
+as `key = value` lines::
+
+    network = false
+    root = false
+
+Flip them WITHOUT running the suite via `tests.sh --offline/--online` (network) and
+`tests.sh --user/--root` (root) -- they rewrite the file and exit. Environment variables
+`AZARCH_TESTS_NETWORK` / `AZARCH_TESTS_ROOT` override the file for a single run; tests.sh
+exports them to match the file so its run and the two isolated off-screen log-copy runs (whose
+repo copies do not contain the conf) all agree, and CI can set them directly.
+
+Anything unrecognized (a typo in the file, a bad env value) falls back to the SAFE default
+(the tier OFF): an offline run can never hang, and a user-mode run can never need sudo, so an
+ambiguous config fails closed, not open. For the network var ONLY, the legacy words `online`
+/ `offline` are also accepted (matches the sibling Coder distribution's convention and
+existing muscle memory).
+"""
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+# The committed config file. It lives beside the tests (per the design), so it travels with
+# the repo and is NOT gitignored -- a fresh clone inherits the safe both-off default.
+CONFIG_PATH = Path(__file__).resolve().parent / "test_modes.conf"
+
+# The env vars that override the file for one run (tests.sh exports them; CI may set them).
+ENV_NETWORK = "AZARCH_TESTS_NETWORK"
+ENV_ROOT = "AZARCH_TESTS_ROOT"
+
+# Canonical mode words kept for the network API's public surface (is_offline/is_online).
+OFFLINE = "offline"
+ONLINE = "online"
+
+# Truthy/falsey tokens accepted in the conf and env vars. Everything else -> None (unknown),
+# and each caller then falls back to its safe default (fail closed).
+_TRUE = frozenset({"true", "1", "yes", "on"})
+_FALSE = frozenset({"false", "0", "no", "off"})
+
+# The ASCII whitespace set the sibling bash parser (conf_bool in tests.sh) trims with its POSIX
+# `[[:space:]]` in the C/UTF-8 locale: space, tab, newline, carriage return, vertical tab, form
+# feed. We normalize to EXACTLY this set (not Python's larger Unicode str.strip()) so the two
+# parsers agree byte-for-byte -- a leading NBSP (U+00A0) or other exotic Unicode space is NOT a
+# separator here, so such a value stays unrecognized and falls CLOSED (tier off), matching bash and
+# erring safe. `str.split()`/`str.strip()` with no args would instead eat U+00A0 and friends and
+# read the value as truthy, diverging from bash and failing OPEN.
+_ASCII_WS = " \t\n\r\v\f"
+
+
+def _ascii_strip(value: str) -> str:
+    """Trim only ASCII whitespace from both ends -- the same set bash's `[[:space:]]` trims. Any
+    other character (including exotic Unicode whitespace and interior spaces) is preserved, so a
+    value that is not a clean token fails to match below and falls closed."""
+    return value.strip(_ASCII_WS)
+
+
+def _as_bool(value: str | None) -> bool | None:
+    """Map a raw string to a bool, or None if it is not a recognized token. ASCII-whitespace
+    trimmed + case-folded; interior/exotic whitespace leaves the value unrecognized -> None."""
+    if value is None:
+        return None
+    v = _ascii_strip(value).lower()
+    if v in _TRUE:
+        return True
+    if v in _FALSE:
+        return False
+    return None
+
+
+def _network_token(value: str | None) -> bool | None:
+    """Parse a NETWORK value, accepting the legacy words `online`/`offline` in addition to the
+    generic boolean tokens. `online` -> True (run the tier), `offline` -> False."""
+    if value is None:
+        return None
+    v = _ascii_strip(value).lower()
+    if v == ONLINE:
+        return True
+    if v == OFFLINE:
+        return False
+    return _as_bool(v)
+
+
+def _read_conf() -> dict[str, str]:
+    """Parse `test_modes.conf` into a {key: raw_value} dict. Never raises -- a missing, unreadable,
+    or invalid-UTF-8 file yields an empty dict (or drops the bad bytes), and each caller then falls
+    back to its safe default. Lines without `=`, blank lines, and `#` comments are ignored.
+
+    Robustness details that keep this byte-faithful to the bash parser and crash-free:
+      * bytes are decoded with errors='replace' (NOT read_text, which raises UnicodeDecodeError on a
+        stray non-UTF-8 byte) -- a corrupt conf must fail CLOSED, never take down pytest collection.
+      * lines are split ONLY on \\n / \\r\\n (str.splitlines() also breaks on form-feed, vertical
+        tab, and Unicode line separators, which bash's line-oriented grep does not) -- so a value
+        with an embedded FF/VT stays on one line here too, matching bash.
+      * the per-line and per-value trim is ASCII-only (_ascii_strip), matching bash.
+    """
+    out: dict[str, str] = {}
+    try:
+        raw = CONFIG_PATH.read_bytes()
+    except OSError:
+        return out
+    text = raw.decode("utf-8", errors="replace")
+    for line in text.replace("\r\n", "\n").split("\n"):
+        line = _ascii_strip(line)
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        # ASCII-strip both (matches bash: grep trims the key with [[:space:]], conf_bool trims the
+        # value the same). The value keeps its raw case here; _as_bool/_network_token case-fold it.
+        out[_ascii_strip(key).lower()] = _ascii_strip(val)
+    return out
+
+
+def network_enabled() -> bool:
+    """True when the NETWORK tier should run. Env var wins, then the conf, else the safe
+    default (False: offline cannot hang). Never raises."""
+    env = _network_token(os.environ.get(ENV_NETWORK))
+    if env is not None:
+        return env
+    conf = _network_token(_read_conf().get("network"))
+    return conf if conf is not None else False
+
+
+def root_enabled() -> bool:
+    """True when the ROOT tier should be SELECTED. Env var wins, then the conf, else the safe
+    default (False: user mode never needs sudo). Selecting the tier does not force UID 0 -- the
+    root-marked tests keep their own privilege guards. Never raises."""
+    env = _as_bool(os.environ.get(ENV_ROOT))
+    if env is not None:
+        return env
+    conf = _as_bool(_read_conf().get("root"))
+    return conf if conf is not None else False
+
+
+# --- Network public surface --------------------------------------------------------------
+def current_mode() -> str:
+    """The active network mode as a word: ONLINE or OFFLINE."""
+    return ONLINE if network_enabled() else OFFLINE
+
+
+def is_offline() -> bool:
+    return not network_enabled()
+
+
+def is_online() -> bool:
+    return network_enabled()
+
+
+# --- Root public surface -----------------------------------------------------------------
+def is_user() -> bool:
+    """True when the suite is in USER mode (root tier NOT selected)."""
+    return not root_enabled()
+
+
+# --- Writer (convenience; the user-facing toggle is `tests.sh`, which writes in bash) ------
+def write_modes(*, network: bool | None = None, root: bool | None = None) -> dict[str, bool]:
+    """Persist the given booleans to the config file, preserving any key not passed. Returns
+    the full {network, root} state written. The user-facing toggle path is
+    `tests.sh --online/--offline/--user/--root` (bash), which writes the file directly and does
+    not import this module; this writer is a convenience/last-line guard."""
+    cur = {"network": network_enabled(), "root": root_enabled()}
+    if network is not None:
+        cur["network"] = bool(network)
+    if root is not None:
+        cur["root"] = bool(root)
+    CONFIG_PATH.write_text(
+        "network = {}\nroot = {}\n".format(
+            "true" if cur["network"] else "false",
+            "true" if cur["root"] else "false",
+        )
+    )
+    return cur

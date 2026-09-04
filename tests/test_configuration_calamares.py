@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 
+import pytest
 import yaml
 
 from packages.calamares import calamares
@@ -749,6 +750,7 @@ def test_desparse_marks_boot_nocompress_so_future_kernels_stay_readable():
     )
 
 
+@pytest.mark.root
 def test_desparse_actually_yields_uncompressed_boot_on_zstd_btrfs(tmp_path):
     # BEHAVIORAL proof against the REAL failure mode, on a real btrfs mounted exactly
     # like the installer mounts the target (compress=zstd:1). Reproduces the state
@@ -965,6 +967,7 @@ def test_desparse_sequence_entry_resolves_to_the_desparse_conf_not_the_default()
     )
 
 
+@pytest.mark.root
 def test_desparse_full_chain_yields_grub_readable_kernel_on_zstd_btrfs(tmp_path):
     # THE definitive end-to-end guard: follow the WHOLE chain Calamares follows --
     # settings.conf sequence -> instance -> config file -> command -- and run the
