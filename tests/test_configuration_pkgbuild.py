@@ -421,41 +421,41 @@ def test_calamares_defaults_patch_applies_to_pinned_source():
         assert "makeHostnameSuggestion(" in users
         assert "setHostName( seededHostname )" in users
         # isReady() is RELAXED (the Full Name row is hidden, so fullName() is always
-        # empty by design). The login IS seeded to "main" (the default account); if the
-        # user clears it, loginNameStatus() flags the empty error and the "main"
-        # placeholder hints the default. setLoginName lives in UsersPage.cpp (below).
+        # empty by design). Per Prompt#3 the login is NOT seeded: the Username field
+        # defaults EMPTY and shows the "login" placeholder (never "main"), so there is
+        # no setLoginName in UsersPage.cpp (asserted below).
         assert "readyFullName" not in users  # the full-name gate is dropped
         assert "return readyHostname && readyUsername" in users
         # Empty login / hostname now report a required-field error (was "ok").
         assert 'return tr( "User parameter must include at least one character." )' in users
         assert 'return tr( "Hostname parameter must include at least two characters." )' in users
         # The four field-prompt labels are RENAMED to short captions in the .ui; the
-        # hostname placeholder becomes "azarch", the login placeholder becomes "main",
-        # and the reuse checkbox is re-worded.
+        # hostname placeholder becomes "azarch". Per Prompt#3 the login placeholder is
+        # LEFT pristine ("login") and the reuse checkbox label is LEFT pristine.
         ui = (work / "src/modules/users/page_usersetup.ui").read_text()
         assert "<string>Username:</string>" in ui
         assert "<string>Hostname:</string>" in ui
         assert "<string>Username Password:</string>" in ui
         assert "<string>Root Password:</string>" in ui
         assert "<string>azarch</string>" in ui           # hostname placeholder
-        assert "<string>main</string>" in ui             # login placeholder -> main
-        assert "<string>login</string>" not in ui        # old login placeholder gone
+        assert "<string>login</string>" in ui            # login placeholder LEFT pristine
+        assert "<string>main</string>" not in ui         # login is NOT seeded to "main"
         assert "What name do you want to use to log in?" not in ui
         assert "What is the name of this computer?" not in ui
         assert "Choose a password to keep your account safe." not in ui
         assert "Choose a password for the administrator account." not in ui
         assert "Computer Name" not in ui                  # placeholder renamed
-        # The reuse-password checkbox label is re-worded (was pristine "... administrator
-        # account."); the pristine wording must be gone.
-        assert "<string>Use username password for root password.</string>" in ui
-        assert "Use the same password for the administrator account." not in ui
-        # Full Name row IS hidden (each child widget) + strong-password checkbox hidden,
-        # and the login is seeded to "main".
+        # The reuse-password checkbox label is LEFT pristine ("... administrator
+        # account."); the VERBAL re-wording must NOT be present.
+        assert "Use the same password for the administrator account." in ui
+        assert "Use username password for root password." not in ui
+        # Full Name row IS hidden (each child widget) + strong-password checkbox hidden.
+        # Per Prompt#3 the login is NOT seeded, so setLoginName must be ABSENT.
         page = (work / "src/modules/users/UsersPage.cpp").read_text()
         assert "ui->labelWhatIsYourName->setVisible( false )" in page
         assert "ui->textBoxFullName->setVisible( false )" in page
         assert "ui->checkBoxRequireStrongPassword->setVisible( false )" in page
-        assert 'setLoginName( QStringLiteral( "main" ) )' in page
+        assert 'setLoginName( QStringLiteral( "main" ) )' not in page
         # Empty password locks any account (root-only condition broadened).
         spj = (work / "src/modules/users/SetPasswordJob.cpp").read_text()
         assert 'if ( m_newPassword.isEmpty() )' in spj

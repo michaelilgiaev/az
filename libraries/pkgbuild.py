@@ -213,14 +213,9 @@ def calamares_defaults_patch() -> str:
         "-      <string>What name do you want to use to log in?</string>",
         "+      <string>Username:</string>",
         "      </property>",
-        # login field placeholder "login" -> "main": login seeded to "main" (see
-        # setLoginName below), so clearing the field shows greyed "main". 8-space
-        # indent; ascending order (147, after 123, before 222).
-        "@@ -147,3 +147,3 @@",
-        '        <property name="placeholderText">',
-        "-        <string>login</string>",
-        "+        <string>main</string>",
-        "        </property>",
+        # login field placeholder is LEFT pristine ("login"): per Prompt#3 the Username
+        # field defaults EMPTY and shows the "login" placeholder hint (never "main"), so
+        # there is deliberately NO placeholder hunk and NO setLoginName seed here.
         # hostname prompt "What is the name of this computer?" -> "Hostname:"
         "@@ -222,3 +222,3 @@",
         '      <property name="text">',
@@ -244,13 +239,9 @@ def calamares_defaults_patch() -> str:
         "-      <string>Choose a password to keep your account safe.</string>",
         "+      <string>Username Password:</string>",
         "      </property>",
-        # reuse-password checkbox label -> "Use username password for root password."
-        # (ascending order: 471, after 324, before 494). 6-space indent.
-        "@@ -471,3 +471,3 @@",
-        '      <property name="text">',
-        "-      <string>Use the same password for the administrator account.</string>",
-        "+      <string>Use username password for root password.</string>",
-        "      </property>",
+        # reuse-password checkbox label is LEFT pristine ("Use the same password for the
+        # administrator account.") per the Prompt#3 TARGET END-STATE, so there is NO hunk
+        # for it here.
         # root-password prompt "Choose a password ... administrator account." -> "Root Password:"
         "@@ -494,3 +494,3 @@",
         '      <property name="text">',
@@ -265,7 +256,7 @@ def calamares_defaults_patch() -> str:
         # The "Require strong passwords." checkbox is likewise force-hidden.
         "--- a/src/modules/users/UsersPage.cpp",
         "+++ b/src/modules/users/UsersPage.cpp",
-        "@@ -105,6 +105,18 @@",
+        "@@ -105,6 +105,17 @@",
         "     connect( ui->textBoxFullName, &QLineEdit::textEdited, config, &Config::setFullName );",
         "     connect( config, &Config::fullNameChanged, this, &UsersPage::onFullNameTextEdited );",
         " ",
@@ -273,16 +264,12 @@ def calamares_defaults_patch() -> str:
         "+    // GECOS/full name is not asked for; Config::isReady() no longer requires a",
         "+    // non-empty full name (see Config.cpp), so Next stays reachable with these widgets",
         "+    // gone. The QHBoxLayout that holds the field is not a widget, so each child widget",
-        "+    // is hidden individually.",
+        "+    // is hidden individually. The login is deliberately NOT seeded (Prompt#3: the",
+        "+    // Username field defaults EMPTY and shows the \"login\" placeholder).",
         "+    ui->labelWhatIsYourName->setVisible( false );",
         "+    ui->textBoxFullName->setVisible( false );",
         "+    ui->labelFullName->setVisible( false );",
         "+    ui->labelFullNameError->setVisible( false );",
-        "+",
-        # Az'arch: seed the login to "main" (the default account). The field starts
-        # filled with "main"; if the user clears it, loginNameStatus() flags the empty
-        # error and the "main" placeholder (page_usersetup.ui) hints the default.
-        "+    config->setLoginName( QStringLiteral( \"main\" ) );",
         "+",
         "     // If the hostname is going to be written out, then show the field",
         "     if ( ( m_config->hostnameAction() == HostNameAction::EtcHostname )",
