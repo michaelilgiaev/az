@@ -132,7 +132,7 @@ def test_link_services_enables_spice_vdagentd(tmp_path):
 
 def test_link_services_enables_shared_virtiofs_mount(tmp_path):
     # BEHAVIORAL: _link_services must enable the virtiofs shared-folder mount on BOTH
-    # variants (this is the fix for the desktop-variant coupling -- the share must
+    # variants (this is the fix for the headed-variant coupling -- the share must
     # appear without the ssh bring-up). A .mount enable-link is a symlink named after
     # the unit, exactly like a .service one.
     import os

@@ -14,18 +14,18 @@ from __future__ import annotations
 
 # ISO base names per build variant. mkarchiso names the artifact
 # <iso_name>-<version>-<arch>.iso, so these drive the two output filenames:
-#   base -> azarch-desktop-<ver>-x86_64.iso      (the normal live/install medium)
-#   sshd -> azarch-desktop-ssh-<ver>-x86_64.iso  (same, but ssh is ENABLED and `main`
-#                                                 has the operator's --ssh password)
+#   base -> azarch-headed-<ver>-x86_64.iso      (the normal live/install medium)
+#   sshd -> azarch-headed-ssh-<ver>-x86_64.iso  (same, but ssh is ENABLED and `main`
+#                                                has the operator's --ssh password)
 #
-# "desktop" is the product LINE and "-ssh" its sub-flavour. This leaves room for a future
-# "server" line (azarch-server) without disturbing the base/sshd variant KEYS the build
+# "headed" is the product LINE and "-ssh" its sub-flavour. This leaves room for a future
+# "headless" line (azarch-headless) without disturbing the base/sshd variant KEYS the build
 # branches on -- those stay `base`/`sshd`; only the artifact NAME carries the product line.
 # The two ISOs are separated in output/ by the digit-anchored glob "{iso_name}-[0-9]*.iso":
-# "azarch-desktop-2026..." matches base, "azarch-desktop-ssh-..." does not (the char after
-# "azarch-desktop-" is 's', not a digit), exactly as before the rename.
-ISO_NAME = "azarch-desktop"
-ISO_NAME_SSHD = "azarch-desktop-ssh"
+# "azarch-headed-2026..." matches base, "azarch-headed-ssh-..." does not (the char after
+# "azarch-headed-" is 's', not a digit), exactly as before the rename.
+ISO_NAME = "azarch-headed"
+ISO_NAME_SSHD = "azarch-headed-ssh"
 
 # The set of recognized build variants -> iso_name. compiler.run loops over the
 # runtime-selected variant (compiler._variants_for), calling iso_name_for to name the ISO.
@@ -42,7 +42,7 @@ INSTALL_DIR = "arch"
 
 
 def iso_name_for(variant: str = "base") -> str:
-    """The mkarchiso iso_name for a build variant (unknown -> base 'azarch-desktop')."""
+    """The mkarchiso iso_name for a build variant (unknown -> base 'azarch-headed')."""
     return ISO_NAMES.get(variant, ISO_NAME)
 
 BOOTMODES = (

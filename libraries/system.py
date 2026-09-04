@@ -44,7 +44,7 @@ def shadow_for(main_password_hash: str | None = None) -> str:
     """Return the /etc/shadow contents for a build variant.
 
     * main_password_hash is None  -> the base/default SHADOW: BOTH accounts LOCKED.
-      This is what the base desktop ISO ships (the one built when --ssh is NOT supplied,
+      This is what the base headed ISO ships (the one built when --ssh is NOT supplied,
       DECISION 1): no password login is possible for anyone, autologin still works.
 
     * main_password_hash is a crypt hash (starts with `$`) -> the sshd variant's
@@ -549,9 +549,9 @@ StandardError=journal
 WantedBy=multi-user.target
 """
 
-# The virtiofs shared-folder auto-mount, baked into EVERY variant (desktop + ssh).
+# The virtiofs shared-folder auto-mount, baked into EVERY variant (headed + ssh).
 # This is the fix for the old --shared/--ssh coupling: the share used to appear only
-# because the ssh bring-up mounted it as a side effect, so the desktop variant never
+# because the ssh bring-up mounted it as a side effect, so the headed variant never
 # got it. Now a plain systemd .mount unit mounts the host ./shared folder at
 # /home/main/shared on boot, independent of ssh, on whichever variant is running.
 #

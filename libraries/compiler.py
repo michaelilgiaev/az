@@ -104,8 +104,8 @@ STEP_WEIGHTS = [0] + [8] * 12 + [250, 120, 270, 270]
 # The ISO variants a build CAN produce -- the canonical MAX set that sizes STEP_WEIGHTS's
 # two mkarchiso weights. Every step up to mkarchiso is variant-independent (same packages,
 # same airootfs). WHICH ONE actually builds is decided at runtime by _variants_for(), and
-# it is always exactly one: the base `azarch-desktop` medium WITHOUT --ssh, or the
-# `azarch-desktop-ssh` medium (INDIVIDUALLY, not alongside base) WHEN --ssh="<PASSWORD>"
+# it is always exactly one: the base `azarch-headed` medium WITHOUT --ssh, or the
+# `azarch-headed-ssh` medium (INDIVIDUALLY, not alongside base) WHEN --ssh="<PASSWORD>"
 # opts in (no default password is ever shipped). The variant KEYS stay base/sshd;
 # profile.ISO_NAMES maps them to the product-line artifact names.
 VARIANTS = ("base", "sshd")
@@ -173,7 +173,7 @@ def check_ssh_flag(argv: list[str]) -> str | None:
             'The --ssh flag needs a password: --ssh="<PASSWORD>". You passed --ssh with no '
             "value, and no default password is ever shipped, so nothing was built. Re-run "
             'with a real password, e.g. compile.sh --ssh="mysecret", or drop --ssh to build '
-            "the base desktop ISO (ssh disabled)."
+            "the base headed ISO (ssh disabled)."
         )
     return None
 
@@ -210,8 +210,8 @@ def _variants_for(ssh_hash: str | None) -> tuple[str, ...]:
     """The ISO variants a build ACTUALLY produces this run -- exactly ONE.
 
     --ssh outputs the SSH-type medium INDIVIDUALLY: when an --ssh password (already
-    hashed) is supplied, ONLY the `azarch-desktop-ssh` ISO is built -- NOT the base ISO
-    alongside it. Without --ssh, ONLY the base `azarch-desktop` ISO is built. So a plain
+    hashed) is supplied, ONLY the `azarch-headed-ssh` ISO is built -- NOT the base ISO
+    alongside it. Without --ssh, ONLY the base `azarch-headed` ISO is built. So a plain
     run and an --ssh run each produce a single, distinct medium; the base ISO is simply
     what you get when you do not opt into ssh.
 
@@ -249,7 +249,7 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     ssh_password_hash: the operator's --ssh password ALREADY HASHED (sha-512 crypt),
     or None. It selects WHICH single ISO is built (DECISION 2: no default password is
     ever shipped -- the sshd variant's credential comes from the operator at build time).
-    None -> ONLY the base/desktop ISO. A hash -> ONLY the `azarch-desktop-ssh` medium
+    None -> ONLY the base/headed ISO. A hash -> ONLY the `azarch-headed-ssh` medium
     (built INDIVIDUALLY, NOT alongside the base ISO), whose /etc/shadow carries that hash
     for `main` and which auto-runs `azarch --sshd-hypervisor` at boot.
 
@@ -297,7 +297,7 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     bar.step("Provision airootfs accounts (console autologin)")
     emit.write_text(airootfs / "etc/passwd", system.PASSWD)
     # Shadow ships LOCKED by default (both accounts, DECISION 1): no password login is
-    # possible on the base/desktop ISO, autologin still works. The opt-in sshd variant
+    # possible on the base/headed ISO, autologin still works. The opt-in sshd variant
     # rewrites `main`'s field to the operator's hash per-pass in _apply_variant, so this
     # shared write is the safe locked baseline both variants start from.
     emit.write_text(airootfs / "etc/shadow", system.shadow_for(None), mode=0o600)
@@ -394,7 +394,7 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     _emit_power(airootfs)
 
     # The virtiofs shared-folder .mount unit + its mountpoint, enabled on both
-    # variants (enable-link in _link_services). Makes --shared appear on the desktop
+    # variants (enable-link in _link_services). Makes --shared appear on the headed
     # variant, not just the ssh one.
     _emit_shared_mount(airootfs)
 
@@ -478,8 +478,8 @@ def _apply_variant(W: Path, airootfs: Path, variant: str,
     """Overlay the per-variant differences onto the shared profile tree just before
     its mkarchiso pass. Three things differ between the base and sshd ISOs:
 
-      1. profiledef iso_name -- drives the artifact filename (azarch-desktop-<ver>.iso vs
-         azarch-desktop-ssh-<ver>.iso). Rewritten at the profile root every pass.
+      1. profiledef iso_name -- drives the artifact filename (azarch-headed-<ver>.iso vs
+         azarch-headed-ssh-<ver>.iso). Rewritten at the profile root every pass.
       2. the sshd-hypervisor auto-setup service -- emitted AND enabled (a
          multi-user.target.wants symlink) ONLY for the sshd variant, so that ISO
          auto-runs `azarch --sshd-hypervisor` at boot. The base ISO must have
@@ -926,7 +926,7 @@ def _emit_shared_mount(airootfs: Path) -> None:
 
     The hypervisor exports the host ./shared folder over virtiofs (mount tag
     "shared"); this unit mounts it at /home/main/shared on boot for BOTH variants,
-    so --shared works on the desktop variant too (it no longer rides on the ssh
+    so --shared works on the headed variant too (it no longer rides on the ssh
     bring-up). The mountpoint dir must exist for systemd to mount onto it; it is
     owned by `main` (uid 1000) via the closing chown in _emit_provision/_emit_apps
     that covers all of /home/main. The enable-link is added in _link_services."""
@@ -1132,7 +1132,7 @@ def _check_host_deps(sudo, offline: bool) -> None:
 # The stock archiso `releng` profile enables sshd on the official Arch ISO by shipping
 # airootfs/etc/systemd/system/multi-user.target.wants/sshd.service. _copy_releng copies
 # releng verbatim (symlinks preserved), so that link survives onto BOTH Az'arch variants
-# unless stripped -- which is exactly why the DEFAULT desktop was booting with sshd active
+# unless stripped -- which is exactly why the DEFAULT headed ISO was booting with sshd active
 # on :22 (`systemctl status sshd` -> enabled; running). ssh must be OFF on the base ISO and
 # ON only on the ssh variant, where it is enabled at boot by sshd-hypervisor-setup.service
 # (see _apply_variant / packages/azarch/sshd.py), NOT by this inherited stock want. So we
@@ -1155,7 +1155,7 @@ def _copy_releng(W: Path) -> None:
     if not src.is_dir():
         raise SystemExit(f"[x] archiso releng profile not found at {src}; is archiso installed?")
     emit.copy_tree(src, W)
-    # Strip releng's inherited sshd enable-link so the DEFAULT desktop ships sshd DISABLED
+    # Strip releng's inherited sshd enable-link so the DEFAULT headed ISO ships sshd DISABLED
     # (the ssh variant re-enables it per-variant). Without this the base ISO listens on :22.
     _strip_releng_wants(W)
 
@@ -1257,7 +1257,7 @@ def _link_services(airootfs: Path) -> None:
               base / f"multi-user.target.wants/{timedate.SERVICE_NAME}")
     # The virtiofs shared-folder auto-mount: enabled on BOTH ISOs (and, via unpackfs,
     # the installed system) so the host ./shared folder appears at /home/main/shared
-    # on boot regardless of --ssh. This is the fix for the desktop-variant coupling;
+    # on boot regardless of --ssh. This is the fix for the headed-variant coupling;
     # the unit body + mountpoint come from _emit_shared_mount. A .mount enable-link is
     # a symlink named after the unit, same mechanism as the .service links above.
     emit.link("/etc/systemd/system/home-main-shared.mount",
@@ -1324,7 +1324,7 @@ def _probe_and_maybe_switch(W: Path, conf: str, localrepo: Path, bar: ProgressBa
     subprocess.run(["rm", "-rf", str(probe)], check=False)
 
 
-def _run_mkarchiso(sudo, W: Path, bar: ProgressBar, reclaim_after, iso_name: str = "azarch-desktop") -> Path:
+def _run_mkarchiso(sudo, W: Path, bar: ProgressBar, reclaim_after, iso_name: str = "azarch-headed") -> Path:
     # temp dir cleanup (matches the old "Cleaning up temp directory" step)
     subprocess.run(["rm", "-rf", str(W / ".temp")], check=False)
     # Reset the mkarchiso work tree BEFORE every pass. This is load-bearing for the
@@ -1370,12 +1370,12 @@ def _run_mkarchiso(sudo, W: Path, bar: ProgressBar, reclaim_after, iso_name: str
     if rc != 0:
         raise SystemExit(f"[x] mkarchiso failed (exit {rc})")
     # Select the ISO THIS build produced. output/ may hold BOTH variants
-    # (azarch-*.iso AND azarch-sshd-*.iso) when both have been built, so we must not
-    # just take the first *.iso. mkarchiso names artifacts <iso_name>-<version>-<arch>
+    # (azarch-headed-*.iso AND azarch-headed-ssh-*.iso) when both have been built, so we
+    # must not just take the first *.iso. mkarchiso names artifacts <iso_name>-<version>-<arch>
     # where <version> is YYYY.MM.DD (always starts with a DIGIT). Anchoring the glob
-    # with a digit right after "{iso_name}-" makes the BASE selection exact: "azarch-"
-    # followed by a digit matches azarch-2026...iso but NOT azarch-sshd-...iso ("s" is
-    # not a digit) -- so the base pass can never accidentally pick up the sshd ISO,
+    # with a digit right after "{iso_name}-" makes the BASE selection exact: "azarch-headed-"
+    # followed by a digit matches azarch-headed-2026...iso but NOT azarch-headed-ssh-...iso
+    # ("s" is not a digit) -- so the base pass can never accidentally pick up the sshd ISO,
     # regardless of build order or mtimes.
     isos = sorted(paths.BUILDDIR.glob(f"{iso_name}-[0-9]*.iso"))
     if not isos:
@@ -1642,8 +1642,8 @@ def main() -> int:
         print("[*] --full-compile: Az'arch's own packages will be built ENTIRELY from source.")
         print("    This includes a LibreWolf/Firefox compile that can take 1.5-3+ hours.")
 
-    # Each run builds exactly ONE ISO. The base/desktop ISO is the default. The
-    # `azarch-desktop-ssh` ISO is built INDIVIDUALLY (in place of the base ISO, not on top
+    # Each run builds exactly ONE ISO. The base/headed ISO is the default. The
+    # `azarch-headed-ssh` ISO is built INDIVIDUALLY (in place of the base ISO, not on top
     # of it) ONLY when `--ssh="<PASSWORD>"` supplies a non-empty string (DECISION 2 -- no
     # default password is ever shipped; the ssh variant's credential comes from the operator
     # at build time). The password is hashed HERE (sha-512 crypt) and threaded into run();
@@ -1651,13 +1651,13 @@ def main() -> int:
     ssh_password = parse_ssh_flag(sys.argv[1:])
     ssh_hash = ssh_password_hash(ssh_password) if ssh_password else None
     if ssh_hash:
-        print("[*] --ssh supplied: building ONLY the opt-in `azarch-desktop-ssh` ISO "
+        print("[*] --ssh supplied: building ONLY the opt-in `azarch-headed-ssh` ISO "
               "(the base ISO is NOT built)")
         print("    (the ssh medium sets `main`'s password from --ssh, enables sshd, and "
               "opens port 22 at boot).")
     else:
-        print("[*] Building ONLY the base `azarch-desktop` ISO (ssh disabled). Pass "
-              "--ssh=\"<PASSWORD>\" to build the opt-in `azarch-desktop-ssh` ISO instead.")
+        print("[*] Building ONLY the base `azarch-headed` ISO (ssh disabled). Pass "
+              "--ssh=\"<PASSWORD>\" to build the opt-in `azarch-headed-ssh` ISO instead.")
 
     offline = cache_is_complete()
     _stale_cache_notice(offline)

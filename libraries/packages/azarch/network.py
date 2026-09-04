@@ -606,7 +606,7 @@ def cmd_ssh(args: list[str]) -> int:
     stop   -> disable+stop sshd and CLOSE port 22 again (sshd_stop).
     status -> whether sshd is active + whether :22 is allowed (sshd_status).
 
-    This is the CLI behind the TUI's Network > SSH Server screen. The default desktop
+    This is the CLI behind the TUI's Network > SSH Server screen. The default headed ISO
     ships ssh OFF; this is how a user turns it on/off deliberately."""
     verb = args[0] if args else "status"
     if verb == "start":

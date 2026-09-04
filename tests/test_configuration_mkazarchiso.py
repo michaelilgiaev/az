@@ -141,7 +141,7 @@ def test_enable_links_mirror_the_recipe_curated_set():
         "azarch-sleep-policy.service", "azarch-timedate.service",
         # The virtiofs shared-folder auto-mount -- enabled on BOTH variants so the
         # host ./shared folder appears at /home/main/shared regardless of --ssh
-        # (the fix for the desktop-variant coupling). It is a .mount unit, not a
+        # (the fix for the headed-variant coupling). It is a .mount unit, not a
         # .service, but the enable-link mechanism is unit-type agnostic.
         "home-main-shared.mount",
     }
@@ -250,9 +250,9 @@ def test_current_packages_command_lists_native_explicit_packages():
 
 def test_profiledef_names_the_sshd_iso():
     pd = mk.profiledef_sh()
-    # Method B builds the ssh flavour of the desktop line -> azarch-desktop-ssh (matches
+    # Method B builds the ssh flavour of the headed line -> azarch-headed-ssh (matches
     # the recipe's profile.ISO_NAME_SSHD).
-    assert 'iso_name="azarch-desktop-ssh"' in pd
+    assert 'iso_name="azarch-headed-ssh"' in pd
     assert pd.startswith("#!/usr/bin/env bash")
 
 
@@ -269,7 +269,7 @@ def test_shared_mount_unit_is_virtiofs_at_home_main_shared():
     # The virtiofs auto-mount unit baked into EVERY variant. Its name must encode the
     # mount path (systemd requirement: home-main-shared.mount <-> /home/main/shared),
     # it mounts the "shared" virtiofs tag, and it is WantedBy multi-user.target so it
-    # comes up on boot on the desktop variant too (no ssh service involved).
+    # comes up on boot on the headed variant too (no ssh service involved).
     unit = mk.HOME_MAIN_SHARED_MOUNT
     assert "[Mount]" in unit
     assert "What=shared" in unit               # the virtiofs mount tag
@@ -337,8 +337,8 @@ def test_overlay_sshd_variant_writes_hashed_shadow_and_enables_the_auto_setup(mo
     os.makedirs(os.path.join(profile, "airootfs/etc"), exist_ok=True)
     fake_hash = "$6$salt$" + "z" * 86
     mk._overlay_sshd_variant(profile, fake_hash)
-    # profiledef names the ssh ISO (desktop line).
-    assert 'iso_name="azarch-desktop-ssh"' in (tmp_path / "profile/profiledef.sh").read_text()
+    # profiledef names the ssh ISO (headed line).
+    assert 'iso_name="azarch-headed-ssh"' in (tmp_path / "profile/profiledef.sh").read_text()
     # shadow: main hashed, root locked (the sole writer of the ISO shadow).
     shadow = (tmp_path / "profile/airootfs/etc/shadow").read_text()
     rows = {l.split(":")[0]: l.split(":")[1] for l in shadow.splitlines()}
