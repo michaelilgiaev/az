@@ -98,13 +98,14 @@ THUNAR_RESOLVE_SYMLINK_PATCH_NAME = "azarch-thunar-resolve-symlink.patch"
 #      "Field:" captions (the QLabel objectNames are username_label_2, hostnameLabel,
 #      password_label_2 and labelChooseRootPassword), and change the HOSTNAME field's
 #      placeholder from "Computer Name" to "azarch" (the seeded default, so clearing the
-#      field shows "azarch" greyed). The login field keeps its "login" placeholder.
+#      field shows "azarch" greyed) and the LOGIN field's placeholder from "login" to
+#      "main" (the login VALUE stays empty by design; only its greyed hint changes).
 #        "What name do you want to use to log in?"          -> "Username:"
 #        "What is the name of this computer?"               -> "Hostname:"
 #        "Choose a password to keep your account safe."     -> "Username Password:"
 #        "Choose a password for the administrator account." -> "Root Password:"
-#      The "Use the same password for the administrator account." checkbox label is LEFT
-#      pristine. (page_usersetup.ui.)
+#      The "Use the same password for the administrator account." checkbox label is
+#      RE-WORDED to "Use username password for root password." (page_usersetup.ui.)
 #
 #   3b. Users page -- REMOVE the "What is your name?" (Full Name) row. The account's
 #      GECOS/full name is not asked for. UsersPage.cpp hides the label + the field's
@@ -161,9 +162,10 @@ def calamares_defaults_patch() -> str:
 
     The Full Name ("What is your name?") row is HIDDEN and Config::isReady() is relaxed
     (dropping its non-empty-full-name gate) so hiding the field does not permanently
-    disable Next. The login is NOT seeded -- it starts empty (placeholder "login") and
-    its own required-field error gates Next until a username is typed. The "Use the same
-    password for the administrator account." checkbox label is left at pristine wording.
+    disable Next. The login VALUE is NOT seeded -- it starts empty (placeholder hint
+    "main") and its own required-field error gates Next until a username is typed. The
+    "Use the same password for the administrator account." checkbox label is re-worded
+    to "Use username password for root password.".
 
     The diff is built line-by-line rather than as one big triple-quoted literal
     ON PURPOSE: a unified diff's CONTEXT lines (unchanged surrounding source) must
@@ -213,9 +215,17 @@ def calamares_defaults_patch() -> str:
         "-      <string>What name do you want to use to log in?</string>",
         "+      <string>Username:</string>",
         "      </property>",
-        # login field placeholder is LEFT pristine ("login"): per Prompt#3 the Username
-        # field defaults EMPTY and shows the "login" placeholder hint (never "main"), so
-        # there is deliberately NO placeholder hunk and NO setLoginName seed here.
+        # login field placeholder "login" -> "main": per PROMPT.md the Username field
+        # defaults EMPTY (never seeded), but its greyed placeholder must HINT "main" --
+        # the default account name used elsewhere in the installer. The field VALUE stays
+        # empty (so loginNameStatus() shows the required-field error until typed); only
+        # the placeholder text changes. This textBox is nested one level deeper than the
+        # prompt labels (7-space indent). Ascending order: line 147, after 123, before 222.
+        "@@ -147,3 +147,3 @@",
+        '        <property name="placeholderText">',
+        "-        <string>login</string>",
+        "+        <string>main</string>",
+        "        </property>",
         # hostname prompt "What is the name of this computer?" -> "Hostname:"
         "@@ -222,3 +222,3 @@",
         '      <property name="text">',
@@ -239,9 +249,15 @@ def calamares_defaults_patch() -> str:
         "-      <string>Choose a password to keep your account safe.</string>",
         "+      <string>Username Password:</string>",
         "      </property>",
-        # reuse-password checkbox label is LEFT pristine ("Use the same password for the
-        # administrator account.") per the Prompt#3 TARGET END-STATE, so there is NO hunk
-        # for it here.
+        # reuse-password checkbox "Use the same password for the administrator account."
+        # -> "Use username password for root password." per PROMPT.md Prompt#1. This is the
+        # checkbox that (with doReusePassword:true) is checked by default, making root reuse
+        # the user's password. Ascending order: line 471, after 324, before 494.
+        "@@ -471,3 +471,3 @@",
+        '      <property name="text">',
+        "-      <string>Use the same password for the administrator account.</string>",
+        "+      <string>Use username password for root password.</string>",
+        "      </property>",
         # root-password prompt "Choose a password ... administrator account." -> "Root Password:"
         "@@ -494,3 +494,3 @@",
         '      <property name="text">',
@@ -264,8 +280,8 @@ def calamares_defaults_patch() -> str:
         "+    // GECOS/full name is not asked for; Config::isReady() no longer requires a",
         "+    // non-empty full name (see Config.cpp), so Next stays reachable with these widgets",
         "+    // gone. The QHBoxLayout that holds the field is not a widget, so each child widget",
-        "+    // is hidden individually. The login is deliberately NOT seeded (Prompt#3: the",
-        "+    // Username field defaults EMPTY and shows the \"login\" placeholder).",
+        "+    // is hidden individually. The login VALUE is deliberately NOT seeded: the Username",
+        "+    // field defaults EMPTY and shows the \"main\" placeholder hint.",
         "+    ui->labelWhatIsYourName->setVisible( false );",
         "+    ui->textBoxFullName->setVisible( false );",
         "+    ui->labelFullName->setVisible( false );",
