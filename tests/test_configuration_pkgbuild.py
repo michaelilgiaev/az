@@ -210,6 +210,30 @@ def test_calamares_cmake_build_caps_jobs():
     assert 'cmake --build build -j"${AZARCH_JOBS:-1}"' in s
 
 
+def test_calamares_cmake_pins_python_to_system_interpreter():
+    # calamares links libpython into libcalamares.so via the LEGACY find_package(Python
+    # ... Development) module; a stray user-local interpreter (uv/pipx shim) would link a
+    # libpython the target ISO lacks. BOTH module families must be pinned to the system
+    # python, or the .so depends on e.g. libpython3.12.so.1.0 and calamares won't start.
+    s = pkgbuild.pkgbuild_calamares()
+    assert '_pyexe="/usr/bin/python3"' in s
+    for prefix in ("Python", "Python3"):
+        assert ('-D%s_EXECUTABLE="$_pyexe"' % prefix) in s
+        assert ('-D%s_ROOT_DIR=/usr' % prefix) in s
+        assert ('-D%s_FIND_STRATEGY=LOCATION' % prefix) in s
+        assert ('-D%s_FIND_VIRTUALENV=STANDARD' % prefix) in s
+
+
+def test_calamares_cmake_disables_pwquality():
+    # The users module does an UNCONDITIONAL find_package(LibPWQuality) with no WITH_
+    # toggle. If the build host has libpwquality, the module links libpwquality.so.1,
+    # which the Az'arch ISO does not ship -> the users viewmodule fails to dlopen on the
+    # target and calamares aborts. Disabling the find_package keeps the module portable
+    # (and matches the design: strong-password checking is force-hidden anyway).
+    s = pkgbuild.pkgbuild_calamares()
+    assert "-DCMAKE_DISABLE_FIND_PACKAGE_LibPWQuality=ON" in s
+
+
 # --- calamares source patch (installer UI defaults) ------------------------
 
 def test_calamares_pkgbuild_references_patch_in_source_and_prepare():
@@ -243,9 +267,9 @@ def test_calamares_patch_is_unified_diff_touching_all_files():
     # Az'arch installer-UI refactor touches. Missing any file means one of the requested
     # changes was dropped:
     #   KeyboardLayoutModel.cpp -- Alt+Shift group-switcher default
-    #   page_usersetup.ui       -- rename the four field-prompt labels
-    #   UsersPage.cpp           -- hide strong-password checkbox
-    #   Config.cpp              -- empty login/hostname errors + hostname seed
+    #   page_usersetup.ui       -- rename 4 prompt labels + hostname placeholder "azarch"
+    #   UsersPage.cpp           -- hide Full Name row + hide strong-password checkbox
+    #   Config.cpp              -- isReady() relax + empty login/hostname errors + host seed
     #   SetPasswordJob.cpp      -- empty password locks any account
     p = pkgbuild.calamares_defaults_patch()
     for rel in (
@@ -257,9 +281,9 @@ def test_calamares_patch_is_unified_diff_touching_all_files():
     ):
         assert f"--- a/{rel}" in p, rel
         assert f"+++ b/{rel}" in p, rel
-    # Ten hunks total (kbd 1, ui 4, UsersPage 1, Config 3, SetPasswordJob 1);
-    # each hunk header carries two "@@" markers, so at least 20.
-    assert p.count("@@") >= 20
+    # Thirteen hunks total (kbd 1, ui 5, UsersPage 2, Config 4, SetPasswordJob 1);
+    # each hunk header carries two "@@" markers, so at least 26.
+    assert p.count("@@") >= 26
 
 
 def test_calamares_patch_keyboard_selects_alt_shift_toggle():
@@ -396,32 +420,42 @@ def test_calamares_defaults_patch_applies_to_pinned_source():
         users = (work / "src/modules/users/Config.cpp").read_text()
         assert "makeHostnameSuggestion(" in users
         assert "setHostName( seededHostname )" in users
-        # isReady() is LEFT pristine: the full-name gate is preserved and the
-        # login is NOT seeded to "main" (it starts empty by design).
-        assert 'setLoginName( QStringLiteral( "main" ) )' not in users
-        assert "readyFullName" in users  # the full-name gate is preserved
-        assert "return readyFullName && readyHostname && readyUsername" in users
+        # isReady() is RELAXED (the Full Name row is hidden, so fullName() is always
+        # empty by design). The login IS seeded to "main" (the default account); if the
+        # user clears it, loginNameStatus() flags the empty error and the "main"
+        # placeholder hints the default. setLoginName lives in UsersPage.cpp (below).
+        assert "readyFullName" not in users  # the full-name gate is dropped
+        assert "return readyHostname && readyUsername" in users
         # Empty login / hostname now report a required-field error (was "ok").
         assert 'return tr( "User parameter must include at least one character." )' in users
         assert 'return tr( "Hostname parameter must include at least two characters." )' in users
-        # The four field-prompt labels are RENAMED to short captions in the .ui;
-        # the Full Name row and the reuse checkbox keep their pristine wording.
+        # The four field-prompt labels are RENAMED to short captions in the .ui; the
+        # hostname placeholder becomes "azarch", the login placeholder becomes "main",
+        # and the reuse checkbox is re-worded.
         ui = (work / "src/modules/users/page_usersetup.ui").read_text()
         assert "<string>Username:</string>" in ui
         assert "<string>Hostname:</string>" in ui
         assert "<string>Username Password:</string>" in ui
         assert "<string>Root Password:</string>" in ui
+        assert "<string>azarch</string>" in ui           # hostname placeholder
+        assert "<string>main</string>" in ui             # login placeholder -> main
+        assert "<string>login</string>" not in ui        # old login placeholder gone
         assert "What name do you want to use to log in?" not in ui
         assert "What is the name of this computer?" not in ui
         assert "Choose a password to keep your account safe." not in ui
         assert "Choose a password for the administrator account." not in ui
-        # Left pristine: the Full Name prompt and the reuse-password checkbox label.
-        assert "<string>What is your name?</string>" in ui
-        assert "Use the same password for the administrator account." in ui
-        # Full Name row is NOT hidden; only the strong-password checkbox is hidden.
+        assert "Computer Name" not in ui                  # placeholder renamed
+        # The reuse-password checkbox label is re-worded (was pristine "... administrator
+        # account."); the pristine wording must be gone.
+        assert "<string>Use username password for root password.</string>" in ui
+        assert "Use the same password for the administrator account." not in ui
+        # Full Name row IS hidden (each child widget) + strong-password checkbox hidden,
+        # and the login is seeded to "main".
         page = (work / "src/modules/users/UsersPage.cpp").read_text()
-        assert "ui->labelWhatIsYourName->setVisible( false )" not in page
+        assert "ui->labelWhatIsYourName->setVisible( false )" in page
+        assert "ui->textBoxFullName->setVisible( false )" in page
         assert "ui->checkBoxRequireStrongPassword->setVisible( false )" in page
+        assert 'setLoginName( QStringLiteral( "main" ) )' in page
         # Empty password locks any account (root-only condition broadened).
         spj = (work / "src/modules/users/SetPasswordJob.cpp").read_text()
         assert 'if ( m_newPassword.isEmpty() )' in spj

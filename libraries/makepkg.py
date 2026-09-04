@@ -225,6 +225,27 @@ def _run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, **kw)
 
 
+def _sanitize_build_path(path: str, home: str) -> str:
+    """Return `path` (a PATH string) with every entry under `home`/.local removed,
+    so a package build resolves toolchains from the SYSTEM only.
+
+    A uv-/pipx-/pyenv-managed shim on the user's PATH (e.g.
+    ~/.local/bin/python3.12 -> ~/.local/share/uv/python/cpython-3.12/...) is
+    otherwise discovered by cmake's find_package(Python ...) and linked into the
+    package, producing a binary that depends on a libpython the target ISO does not
+    ship (the calamares libpython3.12.so.1.0 breakage). Recipes ALSO pin
+    Python_*/Python3_* to /usr, so this is belt-and-suspenders -- but it protects
+    every other package generically. If stripping empties PATH (or `home` is
+    falsy), fall back to a minimal system PATH so the build still finds coreutils.
+    """
+    if not home:
+        return path
+    local = os.path.join(home, ".local")
+    kept = [p for p in path.split(os.pathsep)
+            if p and not (p == local or p.startswith(local + os.sep))]
+    return os.pathsep.join(kept) or "/usr/bin:/bin"
+
+
 def _repo_has_all(pkg_repo: Path, names: tuple[str, ...]) -> bool:
     """True if a built package file exists for every name this tier produces."""
     for name in names:
@@ -509,6 +530,10 @@ def _makepkg_one(builder: str, recipe_dir: Path, offline: bool = False) -> None:
     if offline:
         cmd += ["--holdver", "--noextract", "--nocheck"]
     env = dict(os.environ)
+    # Keep the user's ~/.local toolchain shims (uv/pipx/pyenv) out of the build PATH
+    # so cmake's find_package(Python ...) resolves the SYSTEM interpreter, not a
+    # stray user-local one (see _sanitize_build_path for the full rationale).
+    env["PATH"] = _sanitize_build_path(env.get("PATH", ""), env.get("HOME", ""))
     # Point makepkg at a retry-hardened copy of the system makepkg.conf so a flaky
     # source download (mid-stream HTTP/2 reset, slow-crawl stall) is retried instead
     # of aborting the whole build (see _harden_dlagents). Written into recipe_dir,

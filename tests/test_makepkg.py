@@ -175,6 +175,47 @@ def test_sudo_root_vs_nonroot(monkeypatch):
     assert makepkg._sudo() == ["sudo"]
 
 
+# --- _sanitize_build_path: keep user-local toolchain shims out of the build ---
+# A uv/pipx/pyenv shim on the invoking user's PATH (e.g. ~/.local/bin/python3.12)
+# must not be discoverable during the build, or cmake's find_package(Python ...)
+# links the wrong libpython into the package (the calamares libpython3.12.so.1.0
+# breakage). These pin the pure filtering logic.
+_HOME = "/home/main"
+
+
+def test_sanitize_build_path_strips_local_bin():
+    p = f"/home/main/.local/bin:/usr/bin:/bin"
+    assert makepkg._sanitize_build_path(p, _HOME) == "/usr/bin:/bin"
+
+
+def test_sanitize_build_path_strips_nested_local_paths():
+    # Both the bin shim and a deeper ~/.local/share entry go; system paths stay,
+    # order preserved.
+    p = ("/home/main/.local/bin:/usr/local/bin:"
+         "/home/main/.local/share/uv/python/cpython-3.12/bin:/usr/bin")
+    assert makepkg._sanitize_build_path(p, _HOME) == "/usr/local/bin:/usr/bin"
+
+
+def test_sanitize_build_path_keeps_lookalike_prefix():
+    # A directory whose name merely STARTS with ".local" (but is not the ~/.local
+    # tree) must be kept -- only ~/.local and its subdirs are stripped.
+    p = "/home/main/.locallib/bin:/usr/bin"
+    assert makepkg._sanitize_build_path(p, _HOME) == "/home/main/.locallib/bin:/usr/bin"
+
+
+def test_sanitize_build_path_falls_back_when_emptied():
+    # If every entry was user-local, don't hand makepkg an empty PATH (it would fail
+    # to find even coreutils) -- fall back to a minimal system PATH.
+    p = "/home/main/.local/bin:/home/main/.local/share/foo/bin"
+    assert makepkg._sanitize_build_path(p, _HOME) == "/usr/bin:/bin"
+
+
+def test_sanitize_build_path_noop_without_home():
+    # No HOME -> nothing to anchor ~/.local on -> leave PATH untouched.
+    p = "/home/main/.local/bin:/usr/bin"
+    assert makepkg._sanitize_build_path(p, "") == p
+
+
 # --- _scratch_has_sources: the "can an offline recompile succeed?" check -----
 def _populate_scratch(scratch, *, with_build_content):
     """Create the expected recipe dirs under scratch, each with a PKGBUILD and a

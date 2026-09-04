@@ -94,18 +94,26 @@ THUNAR_RESOLVE_SYMLINK_PATCH_NAME = "azarch-thunar-resolve-symlink.patch"
 #      shows "azarch" by default and stays "azarch" regardless of the other inputs.
 #      (Config.cpp, the @@ -1020 hunk.)
 #
-#   3. Users page -- RENAME the four field-prompt labels in page_usersetup.ui to short
+#   3a. Users page -- RENAME the four field-prompt labels in page_usersetup.ui to short
 #      "Field:" captions (the QLabel objectNames are username_label_2, hostnameLabel,
-#      password_label_2 and labelChooseRootPassword):
+#      password_label_2 and labelChooseRootPassword), and change the HOSTNAME field's
+#      placeholder from "Computer Name" to "azarch" (the seeded default, so clearing the
+#      field shows "azarch" greyed). The login field keeps its "login" placeholder.
 #        "What name do you want to use to log in?"          -> "Username:"
 #        "What is the name of this computer?"               -> "Hostname:"
 #        "Choose a password to keep your account safe."     -> "Username Password:"
 #        "Choose a password for the administrator account." -> "Root Password:"
-#      The "What is your name?" (Full Name) row and the "Use the same password for the
-#      administrator account." checkbox are LEFT at their pristine wording/visibility --
-#      the Full Name row is present and Config::isReady() keeps its pristine full-name
-#      gate. (An earlier revision hid the Full Name row, relaxed isReady() and seeded
-#      the login to "main"; the New Prompt reverts all three.) (page_usersetup.ui.)
+#      The "Use the same password for the administrator account." checkbox label is LEFT
+#      pristine. (page_usersetup.ui.)
+#
+#   3b. Users page -- REMOVE the "What is your name?" (Full Name) row. The account's
+#      GECOS/full name is not asked for. UsersPage.cpp hides the label + the field's
+#      widgets (the QHBoxLayout is not a widget, so each child is hidden individually),
+#      AND Config::isReady() drops its `!fullName().isEmpty()` gate -- because isReady()
+#      hard-requires a non-empty full name, hiding the field WITHOUT relaxing isReady()
+#      would leave fullName empty forever and Next permanently greyed. The login is NOT
+#      seeded (it starts empty; its own required-field error, edit 4, gates Next until a
+#      name is typed). (UsersPage.cpp @@ -105 hunk + Config.cpp @@ -765 hunk.)
 #
 #   4. Users page -- an empty LOGIN or HOSTNAME is a required-field error. Upstream's
 #      loginNameStatus()/hostnameStatus() treat an empty value as "ok" (they return an
@@ -151,12 +159,11 @@ def calamares_defaults_patch() -> str:
     patch rather than a module .conf. Paths are a/ b/ prefixed so `patch -p1` (run
     from the source root) applies them.
 
-    The Full Name ("What is your name?") row is INTENTIONALLY left intact (upstream
-    behaviour) -- it is NOT hidden and Config::isReady() keeps its pristine full-name
-    gate. The "Use the same password for the administrator account." checkbox label is
-    likewise left at its pristine wording. (An earlier revision hid the Full Name row,
-    relaxed isReady(), and seeded the login to "main"; the New Prompt reverts all
-    three -- the row is present, isReady() is pristine, the login starts empty.)
+    The Full Name ("What is your name?") row is HIDDEN and Config::isReady() is relaxed
+    (dropping its non-empty-full-name gate) so hiding the field does not permanently
+    disable Next. The login is NOT seeded -- it starts empty (placeholder "login") and
+    its own required-field error gates Next until a username is typed. The "Use the same
+    password for the administrator account." checkbox label is left at pristine wording.
 
     The diff is built line-by-line rather than as one big triple-quoted literal
     ON PURPOSE: a unified diff's CONTEXT lines (unchanged surrounding source) must
@@ -206,17 +213,43 @@ def calamares_defaults_patch() -> str:
         "-      <string>What name do you want to use to log in?</string>",
         "+      <string>Username:</string>",
         "      </property>",
+        # login field placeholder "login" -> "main": login seeded to "main" (see
+        # setLoginName below), so clearing the field shows greyed "main". 8-space
+        # indent; ascending order (147, after 123, before 222).
+        "@@ -147,3 +147,3 @@",
+        '        <property name="placeholderText">',
+        "-        <string>login</string>",
+        "+        <string>main</string>",
+        "        </property>",
         # hostname prompt "What is the name of this computer?" -> "Hostname:"
         "@@ -222,3 +222,3 @@",
         '      <property name="text">',
         "-      <string>What is the name of this computer?</string>",
         "+      <string>Hostname:</string>",
         "      </property>",
+        # hostname field placeholder "Computer Name" -> "azarch": the field is seeded
+        # to "azarch", but if the user CLEARS it the greyed placeholder shows "azarch"
+        # (the default that will be used) instead of the generic "Computer Name". This
+        # textBox is nested one level deeper than the prompt labels (8/9-space indent).
+        # MUST stay in ascending file-line order (line 249, after 222, before 324).
+        # Indent: all four lines are 8-space indented (verified via `diff -u`).
+        "@@ -249,3 +249,3 @@",
+        '        <property name="placeholderText">',
+        "-        <string>Computer Name</string>",
+        "+        <string>azarch</string>",
+        "        </property>",
         # user-password prompt "Choose a password ... safe." -> "Username Password:"
         "@@ -324,3 +324,3 @@",
         '      <property name="text">',
         "-      <string>Choose a password to keep your account safe.</string>",
         "+      <string>Username Password:</string>",
+        "      </property>",
+        # reuse-password checkbox label -> "Use username password for root password."
+        # (ascending order: 471, after 324, before 494). 6-space indent.
+        "@@ -471,3 +471,3 @@",
+        '      <property name="text">',
+        "-      <string>Use the same password for the administrator account.</string>",
+        "+      <string>Use username password for root password.</string>",
         "      </property>",
         # root-password prompt "Choose a password ... administrator account." -> "Root Password:"
         "@@ -494,3 +494,3 @@",
@@ -224,13 +257,37 @@ def calamares_defaults_patch() -> str:
         "-      <string>Choose a password for the administrator account.</string>",
         "+      <string>Root Password:</string>",
         "      </property>",
-        # --- UsersPage.cpp: hide ONLY the strong-password checkbox -----------
-        # The Full Name row is left visible (New Prompt: "What is your name?"
-        # present). Only the "Require strong passwords." checkbox is force-hidden.
-        # A one-line replacement hunk: 1 old line -> 5 new lines, no context.
+        # --- UsersPage.cpp: hide the Full Name row + the strong-password checkbox
+        # The "What is your name?" (Full Name) row is REMOVED (hidden): the account's
+        # GECOS/full name is not asked for. Each child widget of the QHBoxLayout is
+        # hidden individually (the layout itself is not a widget). Config::isReady()
+        # is relaxed below so a permanently-empty full name does not disable Next.
+        # The "Require strong passwords." checkbox is likewise force-hidden.
         "--- a/src/modules/users/UsersPage.cpp",
         "+++ b/src/modules/users/UsersPage.cpp",
-        "@@ -156,1 +156,5 @@",
+        "@@ -105,6 +105,18 @@",
+        "     connect( ui->textBoxFullName, &QLineEdit::textEdited, config, &Config::setFullName );",
+        "     connect( config, &Config::fullNameChanged, this, &UsersPage::onFullNameTextEdited );",
+        " ",
+        '+    // Az\'arch: hide the "What is your name?" (Full Name) row entirely. The account\'s',
+        "+    // GECOS/full name is not asked for; Config::isReady() no longer requires a",
+        "+    // non-empty full name (see Config.cpp), so Next stays reachable with these widgets",
+        "+    // gone. The QHBoxLayout that holds the field is not a widget, so each child widget",
+        "+    // is hidden individually.",
+        "+    ui->labelWhatIsYourName->setVisible( false );",
+        "+    ui->textBoxFullName->setVisible( false );",
+        "+    ui->labelFullName->setVisible( false );",
+        "+    ui->labelFullNameError->setVisible( false );",
+        "+",
+        # Az'arch: seed the login to "main" (the default account). The field starts
+        # filled with "main"; if the user clears it, loginNameStatus() flags the empty
+        # error and the "main" placeholder (page_usersetup.ui) hints the default.
+        "+    config->setLoginName( QStringLiteral( \"main\" ) );",
+        "+",
+        "     // If the hostname is going to be written out, then show the field",
+        "     if ( ( m_config->hostnameAction() == HostNameAction::EtcHostname )",
+        "          || ( m_config->hostnameAction() == HostNameAction::SystemdHostname ) )",
+        "@@ -156,1 +166,5 @@",
         "-    ui->checkBoxRequireStrongPassword->setVisible( m_config->permitWeakPasswords() );",
         '+    // Az\'arch: never show the "Require strong passwords." checkbox. Password-strength',
         "+    // enforcement is not offered on this installer (no libpwquality checks are",
@@ -277,6 +334,23 @@ def calamares_defaults_patch() -> str:
         '+        return tr( "Hostname parameter must include at least two characters." );',
         "+    }",
         " ",
+        # isReady(): drop the readyFullName gate. The Full Name row is hidden
+        # (UsersPage.cpp), so fullName() is always empty by design -- gating on it
+        # would leave Next permanently disabled. Login/hostname/password still gate.
+        # old=6 (3 ctx + del + 2 ctx + del); new=5 (3 ctx + 2 ctx) -- net -2 lines... wait:
+        # explicit: old has 1 ctx('{'), the readyFullName del line, then readyHostname/
+        # readyUsername/readyUserPassword/readyRootPassword ctx, then the return del +
+        # return add. Counted directly below.
+        "@@ -765,8 +775,7 @@",
+        " {",
+        "-    bool readyFullName = !fullName().isEmpty();  // Needs some text",
+        "     bool readyHostname = hostnameStatus().isEmpty();  // .. no warning message",
+        "     bool readyUsername = !loginName().isEmpty() && loginNameStatus().isEmpty();  // .. no warning message",
+        "     bool readyUserPassword = userPasswordValidity() != Config::PasswordValidity::Invalid;",
+        "     bool readyRootPassword = rootPasswordValidity() != Config::PasswordValidity::Invalid;",
+        "-    return readyFullName && readyHostname && readyUsername && readyUserPassword && readyRootPassword;",
+        "+    return readyHostname && readyUsername && readyUserPassword && readyRootPassword;",
+        " }",
         # Seed the fixed hostname from the template (login NOT seeded).
         # old=6 (3 ctx + } + blank + setConfig ctx); new=19 (6 ctx + 13 added).
         "@@ -1020,6 +1027,19 @@",
@@ -930,10 +1004,54 @@ build() {{
   cd "calamares-${{pkgver}}"
   # Qt6 + KF6, bundled pybind11 for Python job modules, QML on for the branding
   # slideshow, crash reporter off (extra deps, pointless on a live ISO).
+  #
+  # PIN Python to the SYSTEM interpreter (/usr/bin/python3) and its matching library.
+  # calamares links libpython into libcalamares.so for the Python job modules, so the
+  # linked ABI MUST match the python package the ISO ships (the `python` depends), i.e.
+  # the running system's /usr/lib/libpython3.X.so. Without pinning, CMake can discover
+  # an UNRELATED interpreter that happens to be on the build host (e.g. a uv-managed
+  # cpython-3.12 under ~/.local/share/uv, reachable via the ~/.local/bin/python3.12
+  # shim on PATH), link against THAT libpython3.12.so.1.0, and produce a calamares that
+  # dies on the target with "error while loading shared libraries:
+  # libpython3.12.so.1.0: cannot open shared object file" -- because the target only
+  # has 3.14.
+  #
+  # IMPORTANT: calamares-3.4.2's CMakeLists.txt uses the LEGACY module --
+  #   find_package(Python ... COMPONENTS Interpreter Development)  (no "3") --
+  # and it is the Development component of THAT module which links libpython into
+  # libcalamares.so. The legacy FindPython reads the Python_* hint variables; the
+  # Python3_* hints only steer the newer FindPython3 (used by bundled pybind11). So we
+  # MUST pin BOTH module families or FindPython silently re-discovers the uv 3.12.
+  # FIND_STRATEGY=LOCATION + FIND_VIRTUALENV=STANDARD + an absolute _ROOT_DIR/_EXECUTABLE
+  # make the ABI track the system python (whatever version Arch currently ships), so the
+  # binary is portable to any ISO built from the same python package. Belt-and-suspenders,
+  # _makepkg_one also strips ~/.local from PATH so the uv shim can't win the search.
+  #
+  # DISABLE libpwquality (same portability class as Python above). The users module's
+  # CMakeLists does an UNCONDITIONAL find_package(LibPWQuality) with no WITH_ toggle: if
+  # the BUILD host happens to have libpwquality (many distros pull it in transitively),
+  # the module links libpwquality.so.1 and #defines CHECK_PWQUALITY. The Az'arch ISO does
+  # NOT ship libpwquality, so that build produces a users viewmodule that fails to
+  # dlopen on the target ("undefined symbol: pwquality_*" / "libpwquality.so.1: cannot
+  # open shared object file") and calamares aborts with 'Module "users@users" ... FAILED'.
+  # CMAKE_DISABLE_FIND_PACKAGE_LibPWQuality=ON forces that find_package to report
+  # not-found, so the module builds WITHOUT the optional strong-password check -- which is
+  # exactly what we want anyway (the strong-password checkbox is force-hidden and empty
+  # passwords lock the account; there is no path in the Az'arch flow that uses pwquality).
+  _pyexe="/usr/bin/python3"
   cmake -B build -S . \\
     -DCMAKE_BUILD_TYPE=Release \\
     -DCMAKE_INSTALL_PREFIX=/usr \\
     -DCMAKE_INSTALL_LIBDIR=lib \\
+    -DPython_EXECUTABLE="$_pyexe" \\
+    -DPython_ROOT_DIR=/usr \\
+    -DPython_FIND_STRATEGY=LOCATION \\
+    -DPython_FIND_VIRTUALENV=STANDARD \\
+    -DPython3_EXECUTABLE="$_pyexe" \\
+    -DPython3_ROOT_DIR=/usr \\
+    -DPython3_FIND_STRATEGY=LOCATION \\
+    -DPython3_FIND_VIRTUALENV=STANDARD \\
+    -DCMAKE_DISABLE_FIND_PACKAGE_LibPWQuality=ON \\
     -DWITH_QT6=ON \\
     -DWITH_PYBIND11=ON \\
     -DWITH_QML=ON \\

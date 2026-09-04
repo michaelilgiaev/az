@@ -366,21 +366,26 @@ def users_conf() -> str:
         top-level spelling was ignored and the account fell back to the useradd default.
     They are gone; the shell now lives under `user:` where it is read.
 
-    The Full Name ("What is your name?") field is PRESENT (upstream behaviour): the
-    account's GECOS/full name is asked for, and `Config::isReady()` keeps its pristine
-    non-empty-full-name gate. The Az'arch source patch (pkgbuild.calamares_defaults_patch)
+    The Full Name ("What is your name?") field is HIDDEN (Az'arch source patch in
+    pkgbuild.calamares_defaults_patch): the account's GECOS/full name is not asked for.
+    Hiding it required TWO coordinated source changes -- the field is hidden in UsersPage
+    AND `Config::isReady()` no longer requires a non-empty full name -- because isReady()
+    hard-requires a non-empty full name by default, so hiding the field WITHOUT relaxing
+    isReady() leaves fullName empty forever and Next permanently greyed. The same patch
     RENAMES the four field-prompt labels to short captions -- "Username:", "Hostname:",
-    "Username Password:", "Root Password:" -- and makes an empty username or hostname a
-    required-field error ("User parameter must include at least one character." /
-    "Hostname parameter must include at least two characters."), which shows the field
-    error and disables Next until filled. The login name is NOT seeded (it starts EMPTY,
-    so its error shows until the user types a name); the hostname is seeded to "azarch"
-    (so its error only appears if the field is cleared). Defaults, all Az'arch: login
-    empty, hostname "azarch", the user password empty (skippable -> a skipped/empty
-    password becomes a LOCKED "*" account via the SetPasswordJob patch), and the "Use the
-    same password for the administrator account." checkbox CHECKED (doReusePassword: true).
-    The "Require strong passwords." checkbox is removed (allowWeakPasswords: false + the
-    patch force-hides it)."""
+    "Username Password:", "Root Password:" -- re-words the reuse-password checkbox to
+    "Use username password for root password.", sets the hostname field's placeholder to
+    "azarch" and the login field's placeholder to "main", and makes an empty username or
+    hostname a required-field error ("User parameter must include at least one
+    character." / "Hostname parameter must include at least two characters."), which
+    shows the field error and disables Next until filled. The login name is SEEDED to
+    "main" and the hostname to "azarch" (so their errors only appear if a field is
+    cleared, in which case the greyed placeholder still hints the default). Defaults, all
+    Az'arch: login "main", hostname "azarch", the user password empty (skippable -> a
+    skipped/empty password becomes a LOCKED "*" account via the SetPasswordJob patch),
+    and the reuse-password checkbox ("Use username password for root password.") CHECKED
+    (doReusePassword: true). The "Require strong passwords." checkbox is removed
+    (allowWeakPasswords: false + the patch force-hides it)."""
     return """\
 # User account configuration for the installed system.
 ---
