@@ -164,6 +164,30 @@ conf_bool() {                              # conf_bool <key> -> echoes true|fals
     esac
 }
 
+# ENV token parsers -- resolve an ENV OVERRIDE value to true|false|unknown, applying the SAME
+# normalize _testmodes.py's _as_bool/_network_token use (ASCII-trim both ends + case-fold), so the
+# early `--status` report and the root-sudo guard below agree with what a real run resolves. `unknown`
+# means the env value is unrecognized (empty, whitespace-only, or junk) -- the caller then ABSTAINS to
+# the conf file, exactly as Python does (an unrecognized env is None, never a bare false). These read
+# ONLY their single argument (never the conf), so they are pure and side-effect free.
+#   * root_env_token: the generic boolean tokens only -- `online`/`offline` are meaningless for root
+#     (matches _as_bool, which _testmodes.py uses for AZARCH_TESTS_ROOT).
+#   * net_env_token:  additionally accepts the legacy words online=true / offline=false (matches
+#     _network_token, used for AZARCH_TESTS_NETWORK), then falls through to the generic tokens.
+root_env_token() {                         # root_env_token <raw> -> true|false|unknown
+    local v="$1"
+    v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"   # ASCII-trim both ends
+    v="$(printf '%s' "$v" | tr '[:upper:]' '[:lower:]')"            # case-fold
+    case "$v" in true|1|yes|on) echo true ;; false|0|no|off) echo false ;; *) echo unknown ;; esac
+}
+net_env_token() {                          # net_env_token <raw> -> true|false|unknown
+    local v="$1"
+    v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"   # ASCII-trim both ends
+    v="$(printf '%s' "$v" | tr '[:upper:]' '[:lower:]')"            # case-fold
+    case "$v" in online) echo true; return ;; offline) echo false; return ;; esac  # legacy words (network only)
+    case "$v" in true|1|yes|on) echo true ;; false|0|no|off) echo false ;; *) echo unknown ;; esac
+}
+
 # --help / -h and the four toggle flags (--online/--offline, --user/--root) are handled
 # in THIS early pass, BEFORE output-mode parsing / venv bootstrap, so help and toggles
 # are instant (no venv build, no pytest -- a toggle rewrites the conf and EXITS). The only
@@ -197,6 +221,10 @@ Test-mode toggles (flip a persisted boolean in tests/test_modes.conf and EXIT; n
   With the root tier ENABLED, a plain `bash tests.sh` (no sudo) STOPS and asks you to
   re-run with sudo. Turn it back off with --user, or run: sudo bash tests.sh
 
+Test-mode status (report the booleans and EXIT; no suite run, no conf change):
+  --status               echo each mode's conf value, env override, and resolved effective
+                         value, then exit. Read-only. Cannot be combined with a toggle.
+
 Help:
   -h, --help             print this and exit.
 
@@ -213,6 +241,7 @@ EOF
 NET_TOGGLE=""
 ROOT_TOGGLE=""
 ANY_TOGGLE=0
+WANT_STATUS=0
 set_pair() {                            # set_pair <var-name> <value> <flag-a> <flag-b>
     local cur; cur="$(eval "printf '%s' \"\$$1\"")"
     if [ -n "$cur" ] && [ "$cur" != "$2" ]; then
@@ -225,12 +254,58 @@ set_pair() {                            # set_pair <var-name> <value> <flag-a> <
 for arg in "$@"; do
     case "$arg" in
         -h|--help) usage; exit 0 ;;
+        --status)  WANT_STATUS=1 ;;
         --online)  set_pair NET_TOGGLE  true  --online --offline ;;
         --offline) set_pair NET_TOGGLE  false --online --offline ;;
         --root)    set_pair ROOT_TOGGLE true  --root   --user ;;
         --user)    set_pair ROOT_TOGGLE false --root   --user ;;
     esac
 done
+
+# --status is a READ-ONLY report: it echoes each mode's persisted conf value, any env override, and
+# the RESOLVED effective value (env wins over conf, byte-identical to _testmodes.py), then exits --
+# no venv build, no pytest, no sudo demand, and it NEVER writes the conf. Handled here in the early
+# pass so it is instant. It cannot be combined with a toggle: a toggle MUTATES the conf while status
+# READS it, so mixing them is ambiguous ("did you want the value before or after the flip?") -- refuse
+# rather than guess. The only prior filesystem touch is the one-time conf auto-create above, so a
+# --status on a fresh clone reports the freshly-written both-off default rather than erroring.
+if [ "$WANT_STATUS" -eq 1 ]; then
+    if [ "$ANY_TOGGLE" -eq 1 ]; then
+        echo "[tests] error: --status cannot be combined with a toggle (--online/--offline/--user/--root) -- it only reports" >&2
+        exit 2
+    fi
+    # status_line <label> <key> <env-var-name> <env-token-fn> -- print one mode's conf/env/effective.
+    # conf: conf_bool (the persisted file value). env: the token fn applied to the env var, shown as
+    # its raw display or "(unset)" when the var is absent. effective: env wins ONLY when it parses to a
+    # recognized token (true/false); an unset OR unrecognized env ABSTAINS to the conf -- exactly the
+    # precedence network_enabled()/root_enabled() use, so `--status` never disagrees with a real run.
+    status_line() {                        # status_line <label> <key> <envname> <tokenfn>
+        local label="$1" key="$2" envname="$3" tokenfn="$4"
+        local conf env_raw env_tok eff extra=""
+        conf="$(conf_bool "$key")"
+        if [ -z "${!envname+x}" ]; then          # var UNSET (distinct from set-but-empty)
+            env_raw="(unset)"; env_tok=unknown
+        else
+            env_raw="${!envname}"; env_tok="$("$tokenfn" "$env_raw")"
+            [ -z "$env_raw" ] && env_raw="(empty)"        # set-but-empty: show it, still abstains
+        fi
+        if [ "$env_tok" = unknown ]; then eff="$conf"; else eff="$env_tok"; fi
+        # A human-friendly gloss on the effective value (network reads online/offline; root reads its
+        # run-vs-skip meaning) so the line is readable at a glance without decoding true/false.
+        if [ "$key" = network ]; then
+            [ "$eff" = true ] && extra="online, network tests RUN" || extra="offline, network tests SKIPPED"
+        else
+            [ "$eff" = true ] && extra="root tier ENABLED (needs UID 0)" || extra="user, root tests SKIPPED"
+        fi
+        printf '  %-8s conf=%-5s %s=%-9s -> effective: %-5s (%s)\n' \
+               "$label" "$conf" "$envname" "$env_raw" "$eff" "$extra"
+    }
+    echo "[tests] test mode status  (conf: ${MODESCONF#$REPODIR/}; env overrides the conf for one run)"
+    status_line "network:" network AZARCH_TESTS_NETWORK net_env_token
+    status_line "root:"    root    AZARCH_TESTS_ROOT    root_env_token
+    exit 0
+fi
+
 if [ "$ANY_TOGGLE" -eq 1 ]; then
     # Read the CURRENT booleans (via the canonical conf_bool above) so a toggle of one pair
     # preserves the other. Missing/garbage -> false (fail closed), same as Python.
@@ -315,14 +390,9 @@ done
 #   * abstain: `AZARCH_TESTS_ROOT="  "` (whitespace-only) with `root = true` in the conf -- Python
 #     reads the env as None and falls to the conf (true); the old `[ -n ]` test treated the
 #     non-empty-but-blank value as "set" and skipped the conf, reading false. Now both fall through.
-# root_token <raw> -> echoes true|false|unknown, applying _as_bool's ASCII-trim + case-fold.
-root_token() {
-    local v="$1"
-    v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"   # ASCII-trim both ends
-    v="$(printf '%s' "$v" | tr '[:upper:]' '[:lower:]')"            # case-fold
-    case "$v" in true|1|yes|on) echo true ;; false|0|no|off) echo false ;; *) echo unknown ;; esac
-}
-ROOT_MODE="$(root_token "${AZARCH_TESTS_ROOT:-}")"
+# root_env_token (defined up near conf_bool, also used by --status) echoes true|false|unknown after
+# _as_bool's ASCII-trim + case-fold -- the single source of truth for parsing this env var.
+ROOT_MODE="$(root_env_token "${AZARCH_TESTS_ROOT:-}")"
 [ "$ROOT_MODE" = unknown ] && ROOT_MODE="$(conf_bool root)"   # env abstained -> the conf decides
 if [ "$ROOT_MODE" = true ] && [ "$(id -u)" -ne 0 ] && [ -z "${AZARCH_ALLOW_NONROOT:-}" ]; then
     echo "[tests] the root test tier is ENABLED but you are not root." >&2
