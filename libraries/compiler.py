@@ -96,17 +96,18 @@ import system
 # final FOUR weights belong, in order, to: the package-cache giant, the makepkg
 # stage (our own calamares/librewolf; heavy in the default tier, VERY heavy with
 # --full-compile), and the TWO mkarchiso giants -- one per POSSIBLE ISO variant.
-# The bar is sized for the MAXIMUM (base + sshd); a base-only build (no --ssh) simply
-# runs one mkarchiso pass and finalize() snaps the bar to full, so over-sizing is safe.
+# Every run builds exactly ONE variant (base OR ssh -- see _variants_for), so only one
+# of those two mkarchiso passes runs; the bar is sized for the MAXIMUM of two and
+# finalize() snaps it to full after the single pass, so over-sizing is safe.
 STEP_WEIGHTS = [0] + [8] * 12 + [250, 120, 270, 270]
 
-# The ISO variants a build CAN produce, in assembly order -- the canonical MAX set that
-# sizes STEP_WEIGHTS's two mkarchiso weights. Every step up to mkarchiso is variant-
-# independent (same packages, same airootfs). WHICH of these actually build is decided
-# at runtime by _variants_for(): the base `azarch-desktop` medium ALWAYS, and the
-# `azarch-desktop-ssh` medium ONLY when --ssh="<PASSWORD>" opts in (no default password
-# is ever shipped). The variant KEYS stay base/sshd; profile.ISO_NAMES maps them to the
-# product-line artifact names.
+# The ISO variants a build CAN produce -- the canonical MAX set that sizes STEP_WEIGHTS's
+# two mkarchiso weights. Every step up to mkarchiso is variant-independent (same packages,
+# same airootfs). WHICH ONE actually builds is decided at runtime by _variants_for(), and
+# it is always exactly one: the base `azarch-desktop` medium WITHOUT --ssh, or the
+# `azarch-desktop-ssh` medium (INDIVIDUALLY, not alongside base) WHEN --ssh="<PASSWORD>"
+# opts in (no default password is ever shipped). The variant KEYS stay base/sshd;
+# profile.ISO_NAMES maps them to the product-line artifact names.
 VARIANTS = ("base", "sshd")
 
 # PGID of the currently-running mkarchiso child (0 = none). mkarchiso is spawned in
@@ -169,12 +170,10 @@ def check_ssh_flag(argv: list[str]) -> str | None:
     Pure (argv in, message out) so main() can print+exit on it and tests can assert it."""
     if ssh_flag_present(argv) and parse_ssh_flag(argv) is None:
         return (
-            'The --ssh flag needs a password: --ssh="<PASSWORD>". You passed --ssh with '
-            "no value, so there is nothing to set as the ssh desktop's login password. "
-            "No default password is ever shipped, so the ssh ISO was NOT built and "
-            "nothing was changed. Re-run with a real password, e.g. "
-            'compile.sh --ssh="mysecret", or drop --ssh entirely to build just the base '
-            "desktop ISO (ssh disabled)."
+            'The --ssh flag needs a password: --ssh="<PASSWORD>". You passed --ssh with no '
+            "value, and no default password is ever shipped, so nothing was built. Re-run "
+            'with a real password, e.g. compile.sh --ssh="mysecret", or drop --ssh to build '
+            "the base desktop ISO (ssh disabled)."
         )
     return None
 
@@ -208,11 +207,18 @@ def ssh_password_hash(password: str) -> str:
 
 
 def _variants_for(ssh_hash: str | None) -> tuple[str, ...]:
-    """The ISO variants a build ACTUALLY produces this run. The base/desktop ISO is
-    ALWAYS built; the sshd ISO is built ONLY when an --ssh password (already hashed)
-    was supplied. Preserves VARIANTS order (base first)."""
+    """The ISO variants a build ACTUALLY produces this run -- exactly ONE.
+
+    --ssh outputs the SSH-type medium INDIVIDUALLY: when an --ssh password (already
+    hashed) is supplied, ONLY the `azarch-desktop-ssh` ISO is built -- NOT the base ISO
+    alongside it. Without --ssh, ONLY the base `azarch-desktop` ISO is built. So a plain
+    run and an --ssh run each produce a single, distinct medium; the base ISO is simply
+    what you get when you do not opt into ssh.
+
+    (VARIANTS stays the canonical MAX set of BOTH variants -- it sizes the progress bar's
+    two mkarchiso weights -- but only one of them is ever selected per run.)"""
     if ssh_hash:
-        return VARIANTS
+        return ("sshd",)
     return ("base",)
 
 
@@ -241,16 +247,16 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     makepkg stage below.
 
     ssh_password_hash: the operator's --ssh password ALREADY HASHED (sha-512 crypt),
-    or None. It decides whether the OPT-IN sshd ISO is built (DECISION 2: no default
-    password is ever shipped -- the sshd variant's credential comes from the operator
-    at build time). None -> ONLY the base/desktop ISO is built. A hash -> the base ISO
-    PLUS the `azarch-sshd` medium, whose /etc/shadow carries that hash for `main` and
-    which auto-runs `azarch --sshd-hypervisor` at boot.
+    or None. It selects WHICH single ISO is built (DECISION 2: no default password is
+    ever shipped -- the sshd variant's credential comes from the operator at build time).
+    None -> ONLY the base/desktop ISO. A hash -> ONLY the `azarch-desktop-ssh` medium
+    (built INDIVIDUALLY, NOT alongside the base ISO), whose /etc/shadow carries that hash
+    for `main` and which auto-runs `azarch --sshd-hypervisor` at boot.
 
     Every step up to mkarchiso is variant-independent -- same packages, same shared
     airootfs -- so the shared, heavy work (package cache, own-package build) happens
-    exactly once. The per-variant differences (profiledef iso_name, the sshd-hypervisor
-    auto-setup service, and the variant's /etc/shadow) plus a per-variant mkarchiso
+    exactly once. The selected variant's differences (profiledef iso_name, the
+    sshd-hypervisor auto-setup service, and its /etc/shadow) plus its single mkarchiso
     pass run in the finalize loop at the end.
     """
     W = paths.WORKDIR
@@ -445,16 +451,17 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     bar._arm(); bar.draw()
     _refold_own_packages_into_repo(W, full_compile)
 
-    # 14/15 -- Assemble the selected ISO variant(s) (one GIANT mkarchiso pass each,
-    # weight 270). The base ISO always builds; the sshd ISO only when --ssh opted in
-    # (_variants_for). Every step above is variant-independent, so we overlay each
-    # variant's tiny differences (its profiledef iso_name, its /etc/shadow, and whether
-    # the sshd-hypervisor auto-setup service is emitted/enabled) onto the shared airootfs
-    # and run one mkarchiso pass per variant. mkarchiso re-copies the profile's airootfs
-    # overlay into its work tree at the start of each pass, so toggling the shadow /
-    # sshd enable-symlink between passes is correctly reflected in each ISO. The base
-    # pass runs first, then (if selected) the sshd pass; each lands in output/ with its
-    # distinct iso_name.
+    # 14/15 -- Assemble the selected ISO variant (one GIANT mkarchiso pass, weight 270).
+    # Exactly ONE variant is selected per run: the base ISO WITHOUT --ssh, or the ssh ISO
+    # (INDIVIDUALLY) WHEN --ssh opted in (_variants_for). Every step above is variant-
+    # independent, so we overlay the selected variant's tiny differences (its profiledef
+    # iso_name, its /etc/shadow, and whether the sshd-hypervisor auto-setup service is
+    # emitted/enabled) onto the shared airootfs and run its single mkarchiso pass.
+    # mkarchiso re-copies the profile's airootfs overlay into its work tree at the start of
+    # the pass, so the shadow / sshd enable-symlink for the selected variant is correctly
+    # reflected in the ISO. (The loop is kept over _variants_for's result -- today one
+    # element -- so nothing breaks if a future run ever selects more than one.) The ISO
+    # lands in output/ with its distinct iso_name.
     isos: list[Path] = []
     for variant in _variants_for(ssh_password_hash):
         _apply_variant(W, airootfs, variant, ssh_password_hash=ssh_password_hash)
@@ -1635,21 +1642,22 @@ def main() -> int:
         print("[*] --full-compile: Az'arch's own packages will be built ENTIRELY from source.")
         print("    This includes a LibreWolf/Firefox compile that can take 1.5-3+ hours.")
 
-    # The base/desktop ISO is ALWAYS built. The `azarch-sshd` ISO is OPT-IN: it is built
-    # ONLY when `--ssh="<PASSWORD>"` supplies a non-empty string (DECISION 2 -- no default
-    # password is ever shipped; the sshd variant's credential comes from the operator at
-    # build time). The password is hashed HERE (sha-512 crypt) and threaded into run();
-    # the plaintext never leaves this process. An empty/missing --ssh -> no sshd ISO.
+    # Each run builds exactly ONE ISO. The base/desktop ISO is the default. The
+    # `azarch-desktop-ssh` ISO is built INDIVIDUALLY (in place of the base ISO, not on top
+    # of it) ONLY when `--ssh="<PASSWORD>"` supplies a non-empty string (DECISION 2 -- no
+    # default password is ever shipped; the ssh variant's credential comes from the operator
+    # at build time). The password is hashed HERE (sha-512 crypt) and threaded into run();
+    # the plaintext never leaves this process. An empty/missing --ssh -> the base ISO.
     ssh_password = parse_ssh_flag(sys.argv[1:])
     ssh_hash = ssh_password_hash(ssh_password) if ssh_password else None
     if ssh_hash:
-        print("[*] --ssh supplied: building the base `azarch-desktop` ISO AND the opt-in "
-              "`azarch-desktop-ssh` ISO")
+        print("[*] --ssh supplied: building ONLY the opt-in `azarch-desktop-ssh` ISO "
+              "(the base ISO is NOT built)")
         print("    (the ssh medium sets `main`'s password from --ssh, enables sshd, and "
               "opens port 22 at boot).")
     else:
-        print("[*] Building the base `azarch-desktop` ISO only (ssh disabled). Pass "
-              "--ssh=\"<PASSWORD>\" to ALSO build the opt-in `azarch-desktop-ssh` ISO.")
+        print("[*] Building ONLY the base `azarch-desktop` ISO (ssh disabled). Pass "
+              "--ssh=\"<PASSWORD>\" to build the opt-in `azarch-desktop-ssh` ISO instead.")
 
     offline = cache_is_complete()
     _stale_cache_notice(offline)
@@ -1707,10 +1715,10 @@ def main() -> int:
 
     bar.subfrac = 1000
     bar.finalize()
-    # Report each ISO actually built with its size. The count is conditional now: the
-    # base ISO always, plus the sshd ISO only when --ssh was supplied (isos is ordered
-    # base first -- see _variants_for). Pluralize honestly so we never claim two ISOs
-    # when only one was built.
+    # Report each ISO actually built with its size. Exactly one ISO is built per run --
+    # the base ISO without --ssh, or the ssh ISO with it (_variants_for). The count/noun
+    # are still derived from len(isos) so the report stays honest if the selected set ever
+    # changes.
     noun = "ISO" if len(isos) == 1 else "ISOs"
     lines = [f"\n[ {bar.total_steps}/{bar.total_steps} ] [OK] {len(isos)} {noun} built successfully:"]
     for iso in isos:

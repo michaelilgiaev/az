@@ -28,8 +28,9 @@ ISO_NAME = "azarch-desktop"
 ISO_NAME_SSHD = "azarch-desktop-ssh"
 
 # The set of recognized build variants -> iso_name. compiler.run loops over the
-# runtime-selected variants (compiler._variants_for), calling iso_name_for per variant
-# to name each ISO. The base ISO is always built; the sshd ISO is opt-in via --ssh.
+# runtime-selected variant (compiler._variants_for), calling iso_name_for to name the ISO.
+# Exactly one is built per run: the base ISO by default, or the sshd ISO INDIVIDUALLY
+# (in place of base, not alongside it) when --ssh is supplied.
 ISO_NAMES = {
     "base": ISO_NAME,
     "sshd": ISO_NAME_SSHD,

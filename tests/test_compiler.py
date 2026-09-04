@@ -38,13 +38,13 @@ import compiler
 
 def test_step_weights_length_and_shape():
     # 13 lightweight setup/emit steps (index 0 unused sentinel + 12 real "8"s) then
-    # the four giants. Total 17 entries. The extra giant vs. before is the SECOND
-    # mkarchiso pass: one build now assembles BOTH ISO variants (base + sshd).
+    # the four giants. Total 17 entries. There are TWO mkarchiso giants because the bar
+    # is sized for the MAX variant set (base + sshd); only one variant builds per run.
     assert len(compiler.STEP_WEIGHTS) == 17
     assert compiler.STEP_WEIGHTS[0] == 0
     assert compiler.STEP_WEIGHTS[1:13] == [8] * 12
     # Final four, in order: package-cache giant, makepkg stage, and the TWO
-    # mkarchiso giants (one per ISO variant).
+    # mkarchiso giants (one per POSSIBLE ISO variant; the run uses one of them).
     assert compiler.STEP_WEIGHTS[-4:] == [250, 120, 270, 270]
 
 

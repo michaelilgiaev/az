@@ -259,9 +259,10 @@ def test_run_calls_brand_boot_menus():
 
 def test_step_weights_match_number_of_steps():
     # run() makes N literal bar.step() calls, but the final one is inside the
-    # per-variant finalize loop and executes once per variant (both ISOs are built in
-    # one run). So the number of EXECUTED milestones is (N - 1) + len(VARIANTS), and
-    # STEP_WEIGHTS must have exactly that many real entries (+ the index-0 sentinel).
+    # per-variant finalize loop. The bar is sized for the MAX variant set, so the
+    # milestone count uses len(VARIANTS): (N - 1) + len(VARIANTS). STEP_WEIGHTS must
+    # have exactly that many real entries (+ the index-0 sentinel). (A given run builds
+    # only one variant, but the bar is over-sized to the max and finalize() snaps it.)
     src = inspect.getsource(compiler.run)
     n_calls = src.count("bar.step(")
     executed = (n_calls - 1) + len(compiler.VARIANTS)
@@ -279,8 +280,8 @@ def test_step_weights_leading_zero():
 
 
 def test_step_weights_giants_are_last_four():
-    # package cache, makepkg, and the TWO mkarchiso passes (one per ISO variant) --
-    # the four heavy tail weights. Both ISOs are assembled in a single compiler.
+    # package cache, makepkg, and the TWO mkarchiso passes (one per POSSIBLE ISO variant)
+    # -- the four heavy tail weights. The bar is sized for the max; one variant per run.
     assert compiler.STEP_WEIGHTS[-4:] == [250, 120, 270, 270]
 
 

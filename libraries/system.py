@@ -44,8 +44,8 @@ def shadow_for(main_password_hash: str | None = None) -> str:
     """Return the /etc/shadow contents for a build variant.
 
     * main_password_hash is None  -> the base/default SHADOW: BOTH accounts LOCKED.
-      This is what the always-built desktop ISO ships (DECISION 1): no password login
-      is possible for anyone, autologin still works.
+      This is what the base desktop ISO ships (the one built when --ssh is NOT supplied,
+      DECISION 1): no password login is possible for anyone, autologin still works.
 
     * main_password_hash is a crypt hash (starts with `$`) -> the sshd variant's
       shadow: `main` carries that real sha-512 hash (the operator's --ssh password,

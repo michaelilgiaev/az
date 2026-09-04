@@ -1,15 +1,16 @@
-"""The `sshd` build variant: the opt-in second ISO named azarch-desktop-ssh-<ver>-
+"""The `sshd` build variant: the opt-in ISO named azarch-desktop-ssh-<ver>-
 x86_64.iso, identical to the base `azarch-desktop` one but with ssh ENABLED (it
 auto-runs `azarch --sshd-hypervisor` at boot) and `main` carrying the operator's
 build-time --ssh password.
 
-The base/desktop ISO is ALWAYS built; the ssh ISO is OPT-IN via `--ssh="<PASSWORD>"`
-(no default password is ever shipped -- see data/PROMPT.md DECISION 2). A bare/blank
-`--ssh` is a HARD ERROR, not a silent base-only build (see check_ssh_flag). The flow is
+Each run builds exactly ONE ISO: the base/desktop ISO by default, or the ssh ISO
+INDIVIDUALLY (on its own, NOT alongside the base ISO) via `--ssh="<PASSWORD>"` (no
+default password is ever shipped -- see data/PROMPT.md DECISION 2). A bare/blank `--ssh`
+is a HARD ERROR, not a silent base-only build (see check_ssh_flag). The flow is
 compile.sh -> compiler.py -> compiler.run(), which loops over the RUNTIME-selected
-variants (compiler._variants_for: base always, sshd only with a password) applying each
-variant's tiny differences via compiler._apply_variant and running one mkarchiso pass
-each.
+variant (compiler._variants_for: base without --ssh, sshd with a password -- one, never
+both) applying that variant's tiny differences via compiler._apply_variant and running
+its single mkarchiso pass.
 
 The observable per-variant effects, checked here as pure data/emit (no mkarchiso):
 
@@ -42,9 +43,9 @@ import system
 # --- VARIANTS is the canonical MAX set; the sshd ISO is OPT-IN ----------------
 
 def test_variants_are_base_and_sshd():
-    # VARIANTS is the canonical MAXIMUM set a build can produce (base first). It sizes
-    # the progress bar's two mkarchiso weights. Which variants ACTUALLY build is decided
-    # at runtime by _variants_for(): base always, sshd only with --ssh (see below).
+    # VARIANTS is the canonical MAXIMUM set a build can produce. It sizes the progress
+    # bar's two mkarchiso weights. Which single variant ACTUALLY builds is decided at
+    # runtime by _variants_for(): base without --ssh, sshd (individually) with it (below).
     assert compiler.VARIANTS == ("base", "sshd")
 
 
@@ -185,9 +186,17 @@ def test_variants_for_base_only_without_ssh():
     assert compiler._variants_for(None) == ("base",)
 
 
-def test_variants_for_includes_sshd_with_hash():
-    # A real hash -> both the base and the sshd ISO, base first (VARIANTS order).
-    assert compiler._variants_for("$6$salt$digest") == ("base", "sshd")
+def test_variants_for_is_sshd_only_with_hash():
+    # A real hash -> the ssh ISO ONLY (built INDIVIDUALLY). --ssh outputs the SSH-type
+    # medium on its own; it does NOT also build the base ISO. The base ISO is what you
+    # get WITHOUT --ssh, so an --ssh run and a plain run each produce exactly one ISO.
+    assert compiler._variants_for("$6$salt$digest") == ("sshd",)
+
+
+def test_variants_for_never_builds_base_alongside_ssh():
+    # Pin the "individually" contract explicitly: when --ssh opts in, the base variant
+    # must NOT be in the built set (that would be the old base+ssh pairing).
+    assert "base" not in compiler._variants_for("$6$salt$digest")
 
 
 def test_run_threads_ssh_hash_into_variant_selection():
@@ -469,21 +478,21 @@ def test_apply_variant_base_after_sshd_removes_the_leftover(tmp_path):
 
 
 def test_run_signature_has_no_variant_param():
-    # There is no build-time variant flag anymore: run() always builds both ISOs, so
-    # it must NOT take a `variant` argument (a stray one would resurrect the old
-    # one-ISO-per-run behaviour).
+    # run() takes NO `variant` argument: the single variant it builds is chosen at
+    # runtime from the --ssh hash (via _variants_for), not passed in by the caller. A
+    # stray `variant` param would let a caller override that selection out of band.
     import inspect
     params = inspect.signature(compiler.run).parameters
     assert "variant" not in params
 
 
 def test_run_calls_mkarchiso_once_per_variant():
-    # run() must invoke _run_mkarchiso once per variant (both ISOs in one build), and
-    # append each returned ISO. Assert the finalize loop iterates VARIANTS and calls
-    # _run_mkarchiso inside it.
+    # run() must invoke _run_mkarchiso once per selected variant (one ISO per run) and
+    # append each returned ISO. Assert the finalize loop iterates the runtime selection
+    # and calls _run_mkarchiso inside it.
     src = inspect.getsource(compiler.run)
-    # Iterates the RUNTIME-selected variants (base always; sshd only with --ssh), not
-    # the static VARIANTS tuple.
+    # Iterates the RUNTIME-selected variant (base without --ssh; sshd individually with
+    # it), not the static VARIANTS tuple.
     assert "for variant in " in src
     assert "_variants_for(" in src
     assert "_run_mkarchiso(" in src
