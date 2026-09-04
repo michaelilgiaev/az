@@ -28,7 +28,7 @@ LIVE_USER = "main"
 # entry in the application menu (/usr/share/applications/azarch-install.desktop), and its
 # OpenBox autostart (~/.config/openbox/autostart) opens Calamares once at login AND sets
 # a fixed us,il keyboard. The OFFLINE install copies the live /home/main and the live
-# system tree VERBATIM via unpackfs (and reuseHome:true keeps the home), so WITHOUT the
+# system tree VERBATIM via unpackfs (and `useradd -m` reuses that home), so WITHOUT the
 # cleanup below the INSTALLED system would still carry the installer icon on its Desktop,
 # STILL show "Az'arch Linux Installer" in the application menu, re-launch the installer on
 # every login, AND force US+Hebrew regardless of the region the user chose. This
@@ -426,8 +426,9 @@ def shellprocess_conf() -> str:
        passwd/shadow/gshadow/group databases via `userdel`/`groupdel` rather than
        trusting one tool: `userdel main` removes the user line and its per-user
        primary group; a follow-up `groupdel` handles a lingering group. We do NOT
-       pass `-r`/`--remove`: /home/main (uid 1000) must stay so users.conf
-       reuseHome:true reuses it. `-f` forces removal on a freshly unpacked target.
+       pass `-r`/`--remove`: /home/main (uid 1000) must stay so the users module's
+       `useradd -m` reuses it (it warns on an existing home, exit 0). `-f` forces
+       removal on a freshly unpacked target.
 
     2. Make the target's initramfs buildable: reinstate /boot/vmlinuz-linux
        (mkarchiso emptied /boot; the kernel survives only under /usr/lib/modules)

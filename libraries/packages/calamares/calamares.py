@@ -48,16 +48,16 @@ module schemas we build from source -- these were bugs caught in review):
     module then unconditionally runs `useradd -m -U -s /bin/bash -c <name> main`
     inside the target and ABORTS with exit code 9 ("user 'main' already exists")
     -- the users module has NO skip/reuse-existing-account option (verified
-    against the 3.4.2 users.so: only reuseHome/userShell/sudoersGroup/... exist).
-    So a shellprocess step (dontChroot:false -> runs in the target chroot) drops
-    the baked-in `main` account/group BEFORE `users` runs, letting the users
-    module recreate `main` with the user-chosen password. Its home /home/main is
-    left intact: Calamares' users module runs `useradd -m` unconditionally, which
-    on an already-existing home merely WARNS ("home directory already exists ...
-    not copying skel") and still exits 0 -- so the account is recreated and the
-    files are reused. (users.conf also sets reuseHome:true to state that intent;
-    in 3.4.2 that key gates a dotfiles backup, not the useradd flags, so it is
-    belt-and-suspenders rather than the load-bearing part.) shellprocess `script`
+    against the 3.4.2 users.so). So a shellprocess step (dontChroot:false -> runs
+    in the target chroot) drops the baked-in `main` account/group BEFORE `users`
+    runs, letting the users module recreate `main` with the user-chosen password.
+    Its home /home/main is left intact: Calamares' users module runs `useradd -m`
+    unconditionally, which on an already-existing home merely WARNS ("home directory
+    already exists ... not copying skel") and still exits 0 -- so the account is
+    recreated and the files are reused, with no config key needed. (The `reuseHome`
+    GlobalStorage flag the module can act on is set by the PARTITION module, never
+    from users.conf; a users.conf `reuseHome` key is not in the schema and is
+    ignored -- see users_conf().) shellprocess `script`
     is a list of command strings; a leading "-" ignores that command's failure so
     a variant rootfs (no such line) never aborts the install.
 """
@@ -352,12 +352,26 @@ def users_conf() -> str:
     settable in the UI, NO autologin (the live ISO autologins; the installed
     system should not).
 
-    reuseHome:true -- the shellprocess step removed the live `main` ACCOUNT but
-    left /home/main (uid 1000) on the target. `useradd -m` (which the users module
-    always runs) does NOT fail on an existing home -- it warns and skips copying
-    skel, exiting 0 -- so the recreated `main` (again the first free uid >= 1000,
-    i.e. 1000) just reuses those files. reuseHome is set to declare that intent;
-    in Calamares 3.4.2 it gates a dotfiles backup rather than the useradd flags."""
+    Every key here is one the shipped 3.4.2 users.so actually reads. The module does
+    NOT validate this file against users.schema.yaml at runtime (an unknown key is
+    silently dropped, a missing required key silently defaults), so three keys that
+    LOOKED meaningful used to ride along here and did nothing:
+      - `reuseHome`: Calamares only ever reads reuseHome from GlobalStorage, and only
+        the PARTITION module writes it -- never this file. `useradd -m` already reuses
+        the surviving /home/main on its own (it warns on an existing home and exits 0),
+        so no config key is needed for the reuse to happen.
+      - `setHostname`: only the `hostname` submap is read (Config.cpp getSubMap
+        "hostname"); `setHostname` was a dead mirror.
+      - top-level `userShell`: the shell is read from `user: { shell: ... }`, so a
+        top-level spelling was ignored and the account fell back to the useradd default.
+    They are gone; the shell now lives under `user:` where it is read.
+
+    The Full Name ("What is your name?") field IS shown and the user MUST fill it:
+    the users page's Next button is `Config::isReady()`, which hard-requires a non-empty
+    full name (`!fullName().isEmpty()`). An earlier revision tried to HIDE that field via
+    a UsersPage source patch WITHOUT also relaxing isReady() -- so fullName stayed empty,
+    isReady() never returned true, and Next was permanently greyed (the "Users section
+    broke" report). The fix keeps the field visible so readiness is reachable."""
     return """\
 # User account configuration for the installed system.
 ---
@@ -372,6 +386,16 @@ defaultGroups:
     - input
     - power
 
+# The `user:` submap. The shell is read ONLY from here (top-level `userShell` is not a
+# schema key and is silently ignored), so the created account gets /bin/bash.
+user:
+    shell: /bin/bash
+
+# autologinGroup is a schema-REQUIRED key (the group added to the user when autologin is
+# on). doAutologin is false on the installed system, so this group is never actually
+# applied -- but the key must be present for the file to match the module's contract.
+autologinGroup: autologin
+
 # Grant sudo to members of this group (a /etc/sudoers.d/10-installer drop-in is
 # written enabling it).
 sudoersGroup: wheel
@@ -380,12 +404,6 @@ doReusePassword: false
 
 # Autologin OFF on the installed system (live ISO autologins, installed does not).
 doAutologin: false
-
-# The live rootfs's /home/main survives on the target (the shellprocess step
-# only removed the ACCOUNT, not the home). `useradd -m` recreates `main` and
-# reuses that directory (it only warns on an existing home, exit 0). reuseHome
-# declares the reuse intent (in 3.4.2 it gates a dotfiles backup, not useradd).
-reuseHome: true
 
 # Let the user pick the hostname on the users page, seeded with this template.
 # writeHostsFile keeps /etc/hosts in sync with the chosen name.
@@ -399,22 +417,19 @@ reuseHome: true
 # default and stays "azarch" as the other inputs change. (Upstream default is
 # "${first}-${product}", which recomputes the hostname on every name keystroke --
 # that reactive default is exactly what the patch/template override disables.)
-setHostname:
-    location: EtcFile
-    writeHostsFile: true
-    template: "azarch"
+# `location: EtcFile` is the schema's enum spelling (enum: [None, EtcFile, Hostnamed,
+# Transient]); the runtime lookup is case-insensitive so it resolves to EtcHostname.
 hostname:
     location: EtcFile
     writeHostsFile: true
     template: "azarch"
 
-# Password hashing for the created accounts.
-userShell: /bin/bash
+# Password policy. minLength:1 requires a non-empty password; maxLength:-1 is "no max".
+# allowWeakPasswords lets a short/weak password through (marked Weak, not Invalid), so
+# the Next button is not blocked on password strength.
 passwordRequirements:
     minLength: 1
     maxLength: -1
-
-# The account's full name field is optional.
 allowWeakPasswords: true
 allowWeakPasswordsDefault: false
 """

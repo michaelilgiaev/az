@@ -1070,12 +1070,17 @@ def test_desparse_full_chain_yields_grub_readable_kernel_on_zstd_btrfs(tmp_path)
 
 # --- users.conf (reuse the surviving /home/main) ----------------------------
 
-def test_users_reuse_home_true():
+def test_users_no_autologin_on_installed_system():
     # After shellprocess removes the account, /home/main (uid 1000) remains on the
-    # target; reuseHome makes useradd -m reuse it instead of erroring/wiping.
+    # target; the users module's `useradd -m` recreates `main` and simply reuses that
+    # directory (it only WARNS on an existing home, exit 0), so no config key is needed
+    # to "reuse" it. (The `reuseHome` GlobalStorage flag Calamares acts on is set by the
+    # PARTITION module, never from users.conf -- a top-level `reuseHome` here is dead and
+    # the schema rejects it; see test_users_conf_only_uses_schema_keys.)
+    #
+    # The one policy this file must pin: the live ISO autologins, the INSTALLED system
+    # must NOT.
     d = yaml.safe_load(calamares.users_conf())
-    assert d["reuseHome"] is True
-    # The live user must NOT be autologin on the installed system.
     assert d["doAutologin"] is False
 
 
@@ -1089,9 +1094,77 @@ def test_users_hostname_template_is_literal_azarch():
     d = yaml.safe_load(calamares.users_conf())
     assert d["hostname"]["template"] == "azarch"
     assert "$" not in d["hostname"]["template"]  # no ${first}/${product}/... macros
-    # The (dead but historically-present) setHostname mirror carries it too, so the
-    # two never drift.
-    assert d["setHostname"]["template"] == "azarch"
+
+
+# The 3.4.2 users.so contract, transcribed from src/modules/users/users.schema.yaml
+# (additionalProperties:false + a `required` list). The users module does NOT validate
+# its config against this schema at runtime -- an unknown key is silently ignored and a
+# missing required key silently defaults -- so a drift here type-checks in Python, builds,
+# boots, and only misbehaves at install time. These two frozen sets are the ONLY place
+# that contract is enforced; keep them in sync with the pinned schema on a version bump.
+_USERS_SCHEMA_TOPLEVEL_KEYS = {
+    "user", "defaultGroups", "autologinGroup", "sudoersGroup",
+    "sudoersConfigureWithGroup", "displayAutologin", "doAutologin",
+    "setRootPassword", "doReusePassword", "allowWeakPasswords",
+    "allowWeakPasswordsDefault", "passwordRequirements", "hostname",
+    "allowActiveDirectory", "presets",
+}
+_USERS_SCHEMA_REQUIRED_KEYS = {"defaultGroups", "autologinGroup", "sudoersGroup"}
+
+
+def test_users_conf_only_uses_schema_keys():
+    # additionalProperties:false -> any top-level key the schema does not list is
+    # silently dropped by the users module. Historically users.conf carried
+    # `reuseHome` (only ever read from GlobalStorage, set by the PARTITION module --
+    # never from this file), a `setHostname` mirror (only the `hostname` submap is
+    # read), and a top-level `userShell` (the shell is read from `user:{shell}`), so
+    # all three were dead weight the schema rejects. Pin the emitted keys to the
+    # schema's allowed set so no ignored key creeps back in.
+    d = yaml.safe_load(calamares.users_conf())
+    unexpected = set(d) - _USERS_SCHEMA_TOPLEVEL_KEYS
+    assert not unexpected, f"users.conf has keys the 3.4.2 schema rejects: {sorted(unexpected)}"
+
+
+def test_users_conf_has_all_required_keys():
+    # The schema's `required:` list. A missing required key defaults silently at
+    # runtime (autologinGroup -> "", etc.), so it never errors -- but it means the
+    # emitted file no longer matches the contract the module was built against. Assert
+    # every required key is present so the config is a faithful, complete users.conf.
+    d = yaml.safe_load(calamares.users_conf())
+    missing = _USERS_SCHEMA_REQUIRED_KEYS - set(d)
+    assert not missing, f"users.conf is missing schema-required keys: {sorted(missing)}"
+
+
+def test_users_conf_shell_is_under_user_submap():
+    # The user shell is read ONLY from the `user:` submap's `shell` (Config.cpp
+    # getSubMap("user") -> getString("shell")); a top-level `userShell` is not a
+    # schema key and is never read, so the installed account would silently fall back
+    # to the useradd default. Pin the shell to the place Calamares actually reads.
+    d = yaml.safe_load(calamares.users_conf())
+    assert d["user"]["shell"] == "/bin/bash"
+    assert "userShell" not in d  # the dead top-level spelling must not return
+
+
+def test_users_conf_validates_against_shipped_schema_when_present():
+    # When the pinned calamares source tree is extracted in the makepkg cache, validate
+    # the emitted users.conf against the REAL users.schema.yaml with jsonschema -- the
+    # authoritative check. Skipped (not failed) when the build cache is absent, since the
+    # extracted source is a build artifact; the transcribed-contract tests above always run.
+    import jsonschema  # noqa: PLC0415  (optional, only needed for this authoritative check)
+    from conftest import REPO  # noqa: PLC0415
+
+    schema_path = (
+        REPO / "cache" / "makepkg" / "calamares" / ".build" / "calamares" / "src"
+        / "calamares-3.4.2" / "src" / "modules" / "users" / "users.schema.yaml"
+    )
+    if not schema_path.exists():
+        pytest.skip("calamares source not extracted in makepkg cache; schema unavailable")
+    schema = yaml.safe_load(schema_path.read_text())
+    cfg = yaml.safe_load(calamares.users_conf())
+    errors = sorted(jsonschema.Draft7Validator(schema).iter_errors(cfg), key=lambda e: list(e.path))
+    assert not errors, "users.conf fails the shipped schema:\n" + "\n".join(
+        f"  [{'/'.join(str(p) for p in e.path) or '(root)'}] {e.message}" for e in errors
+    )
 
 
 # --- locale.conf timezone default -------------------------------------------
