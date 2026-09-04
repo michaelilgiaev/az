@@ -366,19 +366,21 @@ def users_conf() -> str:
         top-level spelling was ignored and the account fell back to the useradd default.
     They are gone; the shell now lives under `user:` where it is read.
 
-    The Full Name ("What is your name?") field is now HIDDEN (Az'arch source patch in
-    pkgbuild.calamares_defaults_patch): the account's GECOS/full name is not asked for.
-    Hiding it required TWO coordinated source changes -- the field is hidden in UsersPage
-    AND `Config::isReady()` no longer requires a non-empty full name -- because isReady()
-    hard-requires a non-empty full name by default (`!fullName().isEmpty()`), so hiding
-    the field WITHOUT relaxing isReady() leaves fullName empty forever and Next
-    permanently greyed (the original "Users section broke" report). The same patch seeds
-    the login name to "main" so isReady()'s non-empty-login requirement still holds with
-    the Full Name row gone. Defaults, all Az'arch: login "main", hostname "azarch", the
-    user password empty (skippable -> a skipped/empty password becomes a LOCKED "*"
-    account via the SetPasswordJob patch), and the "Use the same password for root."
-    checkbox CHECKED (doReusePassword: true). The "Require strong passwords." checkbox is
-    removed (allowWeakPasswords: false + the patch force-hides it)."""
+    The Full Name ("What is your name?") field is PRESENT (upstream behaviour): the
+    account's GECOS/full name is asked for, and `Config::isReady()` keeps its pristine
+    non-empty-full-name gate. The Az'arch source patch (pkgbuild.calamares_defaults_patch)
+    RENAMES the four field-prompt labels to short captions -- "Username:", "Hostname:",
+    "Username Password:", "Root Password:" -- and makes an empty username or hostname a
+    required-field error ("User parameter must include at least one character." /
+    "Hostname parameter must include at least two characters."), which shows the field
+    error and disables Next until filled. The login name is NOT seeded (it starts EMPTY,
+    so its error shows until the user types a name); the hostname is seeded to "azarch"
+    (so its error only appears if the field is cleared). Defaults, all Az'arch: login
+    empty, hostname "azarch", the user password empty (skippable -> a skipped/empty
+    password becomes a LOCKED "*" account via the SetPasswordJob patch), and the "Use the
+    same password for the administrator account." checkbox CHECKED (doReusePassword: true).
+    The "Require strong passwords." checkbox is removed (allowWeakPasswords: false + the
+    patch force-hides it)."""
     return """\
 # User account configuration for the installed system.
 ---
@@ -408,8 +410,8 @@ autologinGroup: autologin
 sudoersGroup: wheel
 setRootPassword: true
 
-# doReusePassword: true makes the "Use the same password for root." checkbox on the
-# users page START CHECKED (UsersPage seeds the checkbox from Config's
+# doReusePassword: true makes the "Use the same password for the administrator account."
+# checkbox on the users page START CHECKED (UsersPage seeds the checkbox from Config's
 # m_reuseUserPasswordForRoot, which this key sets). So by default root reuses the
 # user's password: the user fills ONE password box and root mirrors it. With the user
 # password left empty (the Az'arch default -- the field is skippable), root reuses that
@@ -430,7 +432,7 @@ doAutologin: false
 # the Full Name / Login fields. Combined with our calamares source patch
 # (azarch-calamares-defaults.patch), which seeds this template as the INITIAL
 # hostname at module load AND marks it "custom" so the auto-derive path is
-# skipped, the "What is the name of this computer?" field shows "azarch" by
+# skipped, the hostname field (relabelled "Hostname:") shows "azarch" by
 # default and stays "azarch" as the other inputs change. (Upstream default is
 # "${first}-${product}", which recomputes the hostname on every name keystroke --
 # that reactive default is exactly what the patch/template override disables.)

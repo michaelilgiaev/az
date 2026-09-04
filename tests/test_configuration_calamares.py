@@ -1147,7 +1147,7 @@ def test_users_conf_shell_is_under_user_submap():
 
 def test_users_conf_password_is_skippable_and_reuse_for_root_default_checked():
     # Az'arch PROMPT: the user password defaults EMPTY and is SKIPPABLE, and the
-    # "Use the same password for root." checkbox defaults CHECKED.
+    # "Use the same password for the administrator account." checkbox defaults CHECKED.
     #
     # 1. NO passwordRequirements block. A `minLength: 1` (or any length check) would
     #    register a check that marks an EMPTY password Invalid, and Config::isReady()

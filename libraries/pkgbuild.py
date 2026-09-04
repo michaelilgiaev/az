@@ -94,25 +94,34 @@ THUNAR_RESOLVE_SYMLINK_PATCH_NAME = "azarch-thunar-resolve-symlink.patch"
 #      shows "azarch" by default and stays "azarch" regardless of the other inputs.
 #      (Config.cpp, the @@ -1020 hunk.)
 #
-#   3. Users page -- REMOVE the "What is your name?" (Full Name) row. The GECOS/full
-#      name is not asked for. This needs TWO coordinated edits: UsersPage.cpp hides
-#      the label + the field's widgets (the QHBoxLayout is not a widget, so each child
-#      is hidden individually), AND Config::isReady() drops its `!fullName().isEmpty()`
-#      requirement -- because isReady() hard-requires a non-empty full name, hiding the
-#      field WITHOUT relaxing isReady() leaves fullName empty forever and Next
-#      permanently greyed (the original "Users section broke" regression).
-#      (UsersPage.cpp + Config.cpp @@ -763 hunk.)
+#   3. Users page -- RENAME the four field-prompt labels in page_usersetup.ui to short
+#      "Field:" captions (the QLabel objectNames are username_label_2, hostnameLabel,
+#      password_label_2 and labelChooseRootPassword):
+#        "What name do you want to use to log in?"          -> "Username:"
+#        "What is the name of this computer?"               -> "Hostname:"
+#        "Choose a password to keep your account safe."     -> "Username Password:"
+#        "Choose a password for the administrator account." -> "Root Password:"
+#      The "What is your name?" (Full Name) row and the "Use the same password for the
+#      administrator account." checkbox are LEFT at their pristine wording/visibility --
+#      the Full Name row is present and Config::isReady() keeps its pristine full-name
+#      gate. (An earlier revision hid the Full Name row, relaxed isReady() and seeded
+#      the login to "main"; the New Prompt reverts all three.) (page_usersetup.ui.)
 #
-#   4. Users page -- default the LOGIN name to "main". With the Full Name row gone the
-#      login is never derived from a typed name, so it is seeded directly (setLoginName
-#      marks it "custom" so nothing later recomputes it) -- which also satisfies
-#      isReady()'s non-empty-login requirement. (Config.cpp @@ -1020 hunk.)
+#   4. Users page -- an empty LOGIN or HOSTNAME is a required-field error. Upstream's
+#      loginNameStatus()/hostnameStatus() treat an empty value as "ok" (they return an
+#      empty status), so Next would be reachable with a blank name. The patch makes the
+#      empty branch return a message instead -- "User parameter must include at least
+#      one character." / "Hostname parameter must include at least two characters." --
+#      which both shows the field error AND (via isReady()'s
+#      loginNameStatus().isEmpty()/hostnameStatus().isEmpty() gates) disables Next until
+#      filled. The login is NOT seeded (starts empty); the hostname is seeded to "azarch"
+#      by edit 2, so its error only appears if the user clears the field. (Config.cpp
+#      @@ -236 / @@ -301 hunks.)
 #
 #   5. Users page -- REMOVE the "Require strong passwords." checkbox (UsersPage.cpp
-#      force-hides it) and re-word the two password strings in page_usersetup.ui:
-#      "Choose a password to keep your account safe." -> "Choose a password for your
-#      user." and "Use the same password for the administrator account." -> "Use the
-#      same password for root." (page_usersetup.ui + UsersPage.cpp.)
+#      force-hides it: setVisible(false) regardless of the config value). Password-
+#      strength enforcement is not offered (no libpwquality checks in users.conf).
+#      (UsersPage.cpp.)
 #
 #   6. SetPasswordJob -- a SKIPPED (empty) password locks the account. Upstream locks
 #      only root on an empty password (usermod -p '!'); the installer lets the user
@@ -133,11 +142,21 @@ CALAMARES_DEFAULTS_PATCH_NAME = "azarch-calamares-defaults.patch"
 def calamares_defaults_patch() -> str:
     r"""Unified diff (-p1) applied to the extracted calamares-3.4.2 source in the
     recipe's prepare(): default the keyboard group-switcher to Alt+Shift, seed a fixed
-    non-reactive hostname and a "main" login, remove the Full Name row + the strong-
-    password checkbox, re-word the two password strings, and lock a skipped (empty)
-    password. See the block comment above for the per-edit rationale and why these live
-    in a source patch rather than a module .conf. Paths are a/ b/ prefixed so
-    `patch -p1` (run from the source root) applies them.
+    non-reactive hostname (the login is LEFT empty by default), hide the strong-
+    password checkbox, RENAME the four Users-page field labels (login prompt ->
+    "Username:", hostname prompt -> "Hostname:", user-password prompt -> "Username
+    Password:", root-password prompt -> "Root Password:"), make an empty login /
+    hostname report a required-field error, and lock a skipped (empty) password. See
+    the block comment above for the per-edit rationale and why these live in a source
+    patch rather than a module .conf. Paths are a/ b/ prefixed so `patch -p1` (run
+    from the source root) applies them.
+
+    The Full Name ("What is your name?") row is INTENTIONALLY left intact (upstream
+    behaviour) -- it is NOT hidden and Config::isReady() keeps its pristine full-name
+    gate. The "Use the same password for the administrator account." checkbox label is
+    likewise left at its pristine wording. (An earlier revision hid the Full Name row,
+    relaxed isReady(), and seeded the login to "main"; the New Prompt reverts all
+    three -- the row is present, isReady() is pristine, the login starts empty.)
 
     The diff is built line-by-line rather than as one big triple-quoted literal
     ON PURPOSE: a unified diff's CONTEXT lines (unchanged surrounding source) must
@@ -146,10 +165,11 @@ def calamares_defaults_patch() -> str:
     space-only lines invisible and trivially corrupted by an editor that strips
     trailing whitespace -- which silently breaks `patch`. Assembling from a list
     keeps every context line's leading space explicit and greppable. The hunk
-    headers (@@ -284,4 / @@ -322,7 / @@ -469,7 / @@ -105,6 / @@ -153,7 / @@ -763,12 /
-    @@ -1020,8 / @@ -81,12 ...) were generated by `diff -u` against the pinned 3.4.2
-    source (edit a pristine extraction, then diff) and verified to apply with
-    `patch -p1`; regenerate them the same way on a version bump."""
+    headers (@@ -284,4 / @@ -123,3 (x2) / @@ -222,3 / @@ -324,3 / @@ -494,3 /
+    @@ -156,1 / @@ -236,5 (x2) / @@ -1020,7 / @@ -81,12 ...) were generated by
+    `diff -u` against the pinned 3.4.2 source (edit a pristine extraction, then diff)
+    and verified to apply with `patch -p1`; regenerate them the same way on a version
+    bump."""
     # Each entry is one full diff line. Context lines start with " " (space),
     # additions with "+", hunk headers with "@@", file headers with ---/+++.
     lines = [
@@ -174,79 +194,92 @@ def calamares_defaults_patch() -> str:
         "+        }",
         "+    }",
         " }",
+        # --- page_usersetup.ui: RENAME the four field-prompt labels ----------
+        # Each hunk keeps 1 line of context above/below the changed <string> so
+        # the anchors are unambiguous. The reuse-password checkbox and the Full
+        # Name label are deliberately NOT touched (left at pristine wording).
         "--- a/src/modules/users/page_usersetup.ui",
         "+++ b/src/modules/users/page_usersetup.ui",
-        "@@ -322,7 +322,7 @@",
-        "    <item>",
-        '     <widget class="QLabel" name="password_label_2">',
+        # login prompt "What name do you want to use to log in?" -> "Username:"
+        "@@ -123,3 +123,3 @@",
+        '      <property name="text">',
+        "-      <string>What name do you want to use to log in?</string>",
+        "+      <string>Username:</string>",
+        "      </property>",
+        # hostname prompt "What is the name of this computer?" -> "Hostname:"
+        "@@ -222,3 +222,3 @@",
+        '      <property name="text">',
+        "-      <string>What is the name of this computer?</string>",
+        "+      <string>Hostname:</string>",
+        "      </property>",
+        # user-password prompt "Choose a password ... safe." -> "Username Password:"
+        "@@ -324,3 +324,3 @@",
         '      <property name="text">',
         "-      <string>Choose a password to keep your account safe.</string>",
-        "+      <string>Choose a password for your user.</string>",
+        "+      <string>Username Password:</string>",
         "      </property>",
-        '      <property name="wordWrap">',
-        "       <bool>false</bool>",
-        "@@ -469,7 +469,7 @@",
-        "    <item>",
-        '     <widget class="QCheckBox" name="checkBoxReusePassword">',
+        # root-password prompt "Choose a password ... administrator account." -> "Root Password:"
+        "@@ -494,3 +494,3 @@",
         '      <property name="text">',
-        "-      <string>Use the same password for the administrator account.</string>",
-        "+      <string>Use the same password for root.</string>",
+        "-      <string>Choose a password for the administrator account.</string>",
+        "+      <string>Root Password:</string>",
         "      </property>",
-        "     </widget>",
-        "    </item>",
+        # --- UsersPage.cpp: hide ONLY the strong-password checkbox -----------
+        # The Full Name row is left visible (New Prompt: "What is your name?"
+        # present). Only the "Require strong passwords." checkbox is force-hidden.
+        # A one-line replacement hunk: 1 old line -> 5 new lines, no context.
         "--- a/src/modules/users/UsersPage.cpp",
         "+++ b/src/modules/users/UsersPage.cpp",
-        "@@ -105,6 +105,16 @@",
-        "     connect( ui->textBoxFullName, &QLineEdit::textEdited, config, &Config::setFullName );",
-        "     connect( config, &Config::fullNameChanged, this, &UsersPage::onFullNameTextEdited );",
-        " ",
-        '+    // Az\'arch: hide the "What is your name?" (Full Name) row entirely. The account\'s',
-        '+    // GECOS/full name is not asked for; the login defaults to "main" (seeded in',
-        "+    // Config.cpp) and Config::isReady() no longer requires a non-empty full name, so",
-        "+    // Next stays reachable with these widgets gone. The QHBoxLayout that holds the",
-        "+    // field is not a widget, so each child widget is hidden individually.",
-        "+    ui->labelWhatIsYourName->setVisible( false );",
-        "+    ui->textBoxFullName->setVisible( false );",
-        "+    ui->labelFullName->setVisible( false );",
-        "+    ui->labelFullNameError->setVisible( false );",
-        "+",
-        "     // If the hostname is going to be written out, then show the field",
-        "     if ( ( m_config->hostnameAction() == HostNameAction::EtcHostname )",
-        "          || ( m_config->hostnameAction() == HostNameAction::SystemdHostname ) )",
-        "@@ -153,7 +163,11 @@",
-        "         connect( ui->checkBoxReusePassword, Calamares::checkBoxStateChangedSignal, this, &UsersPage::onReuseUserPasswordChanged );",
-        "     }",
-        " ",
+        "@@ -156,1 +156,5 @@",
         "-    ui->checkBoxRequireStrongPassword->setVisible( m_config->permitWeakPasswords() );",
         '+    // Az\'arch: never show the "Require strong passwords." checkbox. Password-strength',
         "+    // enforcement is not offered on this installer (no libpwquality checks are",
         "+    // configured in users.conf, so any password -- including an empty one -- is",
         "+    // accepted). Force the checkbox hidden regardless of the config value.",
         "+    ui->checkBoxRequireStrongPassword->setVisible( false );",
-        "     ui->checkBoxRequireStrongPassword->setChecked( m_config->requireStrongPasswords() );",
-        "     if ( m_config->permitWeakPasswords() )",
-        "     {",
+        # --- Config.cpp: required-field errors + fixed hostname seed ---------
+        # isReady() is LEFT pristine (still gates on a non-empty full name AND a
+        # non-empty login), so there is NO isReady() hunk. Two status functions
+        # get a required-field message on empty; the hostname is still seeded to
+        # the template default. The login is NOT seeded (starts empty by design).
         "--- a/src/modules/users/Config.cpp",
         "+++ b/src/modules/users/Config.cpp",
-        "@@ -763,12 +763,15 @@",
-        " bool",
-        " Config::isReady() const",
-        " {",
-        "-    bool readyFullName = !fullName().isEmpty();  // Needs some text",
-        '+    // Az\'arch: the "What is your name?" (Full Name) field is hidden (see UsersPage.cpp),',
-        "+    // so the full name is always empty by design. Do NOT gate readiness on it, or Next",
-        '+    // would be permanently disabled. Login name (seeded to "main" below), hostname and',
-        "+    // password validity still gate as usual.",
-        "     bool readyHostname = hostnameStatus().isEmpty();  // .. no warning message",
-        "     bool readyUsername = !loginName().isEmpty() && loginNameStatus().isEmpty();  // .. no warning message",
-        "     bool readyUserPassword = userPasswordValidity() != Config::PasswordValidity::Invalid;",
-        "     bool readyRootPassword = rootPasswordValidity() != Config::PasswordValidity::Invalid;",
-        "-    return readyFullName && readyHostname && readyUsername && readyUserPassword && readyRootPassword;",
-        "+    return readyHostname && readyUsername && readyUserPassword && readyRootPassword;",
-        " }",
+        # loginNameStatus(): empty login -> required-field error (was "ok" / "")
+        # 1 leading + 1 trailing context line; old=6 (1+4+1), new=9 (1+7+1).
+        "@@ -236,6 +236,9 @@",
+        '     // An empty login is "ok", even if it isn\'t really',
+        "-    if ( m_loginName.isEmpty() )",
+        "-    {",
+        "-        return QString();",
+        "-    }",
+        "+    // Az'arch: an empty login is NOT ok -- a username is required. Returning a",
+        "+    // non-empty status both surfaces this as the field error and (via isReady()'s",
+        "+    // loginNameStatus().isEmpty() gate) keeps Next disabled until a name is typed.",
+        "+    if ( m_loginName.isEmpty() )",
+        "+    {",
+        '+        return tr( "User parameter must include at least one character." );',
+        "+    }",
         " ",
-        " /** @brief Update ready status and emit signal",
-        "@@ -1020,8 +1023,29 @@",
+        # hostnameStatus(): empty hostname -> required-field error (was "ok" / "")
+        # 1 leading + 1 trailing context line; old=6 (1+4+1), new=10 (1+8+1).
+        "@@ -301,6 +304,10 @@",
+        '     // An empty hostname is "ok", even if it isn\'t really',
+        "-    if ( m_hostname.isEmpty() )",
+        "-    {",
+        "-        return QString();",
+        "-    }",
+        "+    // Az'arch: an empty hostname is NOT ok -- a hostname is required. The default",
+        '+    // template seeds "azarch", but if the user clears the field this shows the error',
+        "+    // and (via isReady()'s hostnameStatus().isEmpty() gate) blocks Next. Two-char",
+        "+    // minimum mirrors HOSTNAME_MIN_LENGTH.",
+        "+    if ( m_hostname.isEmpty() )",
+        "+    {",
+        '+        return tr( "Hostname parameter must include at least two characters." );',
+        "+    }",
+        " ",
+        # Seed the fixed hostname from the template (login NOT seeded).
+        # old=6 (3 ctx + } + blank + setConfig ctx); new=19 (6 ctx + 13 added).
+        "@@ -1020,6 +1027,19 @@",
         '         m_forbiddenHostNames = Calamares::getStringList( hostnameSettings, "forbidden_names" );',
         "         m_forbiddenHostNames << alwaysForbiddenHostNames();",
         "         tidy( m_forbiddenHostNames );",
@@ -254,11 +287,10 @@ def calamares_defaults_patch() -> str:
         "+        // Az'arch: seed a fixed default hostname and take it off the auto-derive",
         "+        // path. Upstream leaves the hostname empty until the user types a name, then",
         "+        // re-expands m_hostnameTemplate on every keystroke -- so the hostname keeps",
-        "+        // changing as the Full Name / Login fields change. Expanding the template",
-        "+        // once here (with no user data) gives the initial value, and setHostName()",
-        '+        // marks it "custom" (m_customHostName = true) so setFullName() never',
-        '+        // recomputes it. With a literal template ("azarch") the field shows "azarch"',
-        "+        // by default and stays \"azarch\" no matter what else is typed.",
+        "+        // changing as the Login field changes. Expanding the template once here (with",
+        '+        // no user data) gives the initial value, and setHostName() marks it "custom"',
+        "+        // (m_customHostName = true) so nothing later recomputes it. With a literal",
+        '+        // template ("azarch") the field shows "azarch" by default and stays "azarch".',
         "+        const QString seededHostname = makeHostnameSuggestion( m_hostnameTemplate, QStringList(), QString() );",
         "+        if ( !seededHostname.isEmpty() )",
         "+        {",
@@ -266,16 +298,7 @@ def calamares_defaults_patch() -> str:
         "+        }",
         "     }",
         " ",
-        '+    // Az\'arch: seed a fixed default login name ("main"). The "What is your name?"',
-        "+    // field is hidden, so the login is never derived from a typed full name;",
-        "+    // setLoginName() marks it custom (m_customLoginName = true) so it is not later",
-        "+    // recomputed, and it satisfies Config::isReady()'s non-empty-login requirement",
-        "+    // with the Full Name row gone. Users can still edit the Login field on the page.",
-        '+    setLoginName( QStringLiteral( "main" ) );',
-        "+",
         "     setConfigurationDefaultGroups( configurationMap, m_defaultGroups );",
-        " ",
-        "     // Renaming of Autologin -> AutoLogin in 4ffa79d4cf also affected",
         "--- a/src/modules/users/SetPasswordJob.cpp",
         "+++ b/src/modules/users/SetPasswordJob.cpp",
         "@@ -81,12 +81,17 @@",

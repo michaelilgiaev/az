@@ -243,9 +243,9 @@ def test_calamares_patch_is_unified_diff_touching_all_files():
     # Az'arch installer-UI refactor touches. Missing any file means one of the requested
     # changes was dropped:
     #   KeyboardLayoutModel.cpp -- Alt+Shift group-switcher default
-    #   page_usersetup.ui       -- the two re-worded password strings
-    #   UsersPage.cpp           -- hide Full Name row + hide strong-password checkbox
-    #   Config.cpp              -- isReady() relax + hostname seed + login "main" seed
+    #   page_usersetup.ui       -- rename the four field-prompt labels
+    #   UsersPage.cpp           -- hide strong-password checkbox
+    #   Config.cpp              -- empty login/hostname errors + hostname seed
     #   SetPasswordJob.cpp      -- empty password locks any account
     p = pkgbuild.calamares_defaults_patch()
     for rel in (
@@ -257,9 +257,9 @@ def test_calamares_patch_is_unified_diff_touching_all_files():
     ):
         assert f"--- a/{rel}" in p, rel
         assert f"+++ b/{rel}" in p, rel
-    # Eight hunks total (kbd 1, ui 2, UsersPage 2, Config 2, SetPasswordJob 1);
-    # each hunk header carries two "@@" markers, so at least 16.
-    assert p.count("@@") >= 16
+    # Ten hunks total (kbd 1, ui 4, UsersPage 1, Config 3, SetPasswordJob 1);
+    # each hunk header carries two "@@" markers, so at least 20.
+    assert p.count("@@") >= 20
 
 
 def test_calamares_patch_keyboard_selects_alt_shift_toggle():
@@ -357,10 +357,14 @@ def test_calamares_defaults_patch_applies_to_pinned_source():
         pristine_ui = (work / "src/modules/users/page_usersetup.ui").read_text()
         assert "alt_shift_toggle" not in pristine_kbd
         assert "seededHostname" not in pristine_users
-        # Pristine still has the OLD strings / the root-only lock / the full-name gate.
+        # Pristine still has the ORIGINAL upstream field-prompt strings, the
+        # root-only lock, and the empty-is-ok status branches (the patch changes all).
+        assert "What name do you want to use to log in?" in pristine_ui
+        assert "What is the name of this computer?" in pristine_ui
         assert "Choose a password to keep your account safe." in pristine_ui
-        assert "Use the same password for the administrator account." in pristine_ui
-        assert 'readyFullName' in pristine_users  # isReady() still gates on full name
+        assert "Choose a password for the administrator account." in pristine_ui
+        assert "User parameter must include" not in pristine_users
+        assert "Hostname parameter must include" not in pristine_users
 
         patch_text = pkgbuild.calamares_defaults_patch()
         # Dry-run first (pure check), then a real apply (proves the result is
@@ -392,19 +396,31 @@ def test_calamares_defaults_patch_applies_to_pinned_source():
         users = (work / "src/modules/users/Config.cpp").read_text()
         assert "makeHostnameSuggestion(" in users
         assert "setHostName( seededHostname )" in users
-        # Full Name row removed from readiness + login seeded to "main".
-        assert 'setLoginName( QStringLiteral( "main" ) )' in users
-        assert "readyFullName" not in users  # the full-name gate is gone
-        assert "return readyHostname && readyUsername" in users
-        # Password strings re-worded in the .ui.
+        # isReady() is LEFT pristine: the full-name gate is preserved and the
+        # login is NOT seeded to "main" (it starts empty by design).
+        assert 'setLoginName( QStringLiteral( "main" ) )' not in users
+        assert "readyFullName" in users  # the full-name gate is preserved
+        assert "return readyFullName && readyHostname && readyUsername" in users
+        # Empty login / hostname now report a required-field error (was "ok").
+        assert 'return tr( "User parameter must include at least one character." )' in users
+        assert 'return tr( "Hostname parameter must include at least two characters." )' in users
+        # The four field-prompt labels are RENAMED to short captions in the .ui;
+        # the Full Name row and the reuse checkbox keep their pristine wording.
         ui = (work / "src/modules/users/page_usersetup.ui").read_text()
-        assert "Choose a password for your user." in ui
-        assert "Use the same password for root." in ui
+        assert "<string>Username:</string>" in ui
+        assert "<string>Hostname:</string>" in ui
+        assert "<string>Username Password:</string>" in ui
+        assert "<string>Root Password:</string>" in ui
+        assert "What name do you want to use to log in?" not in ui
+        assert "What is the name of this computer?" not in ui
         assert "Choose a password to keep your account safe." not in ui
-        assert "Use the same password for the administrator account." not in ui
-        # Full Name row + strong-password checkbox hidden in UsersPage.
+        assert "Choose a password for the administrator account." not in ui
+        # Left pristine: the Full Name prompt and the reuse-password checkbox label.
+        assert "<string>What is your name?</string>" in ui
+        assert "Use the same password for the administrator account." in ui
+        # Full Name row is NOT hidden; only the strong-password checkbox is hidden.
         page = (work / "src/modules/users/UsersPage.cpp").read_text()
-        assert "ui->labelWhatIsYourName->setVisible( false )" in page
+        assert "ui->labelWhatIsYourName->setVisible( false )" not in page
         assert "ui->checkBoxRequireStrongPassword->setVisible( false )" in page
         # Empty password locks any account (root-only condition broadened).
         spj = (work / "src/modules/users/SetPasswordJob.cpp").read_text()
