@@ -984,6 +984,70 @@ def test_calamares_networkq_patch_applies_to_pinned_source():
         assert 'gs->insert( QStringLiteral( "networkIpv4" )' in cfg
 
 
+def _networkq_qml_body() -> str:
+    """The added lines of ONLY the networkq.qml hunk (between its `+++ b/...networkq.qml`
+    header and the next file's `--- ` header), de-prefixed. Lets the QML-content tests below
+    assert on the page markup without re-reading the whole patch."""
+    lines = pkgbuild.calamares_networkq_patch().splitlines()
+    start = lines.index("+++ b/src/modules/networkq/networkq.qml") + 1
+    out = []
+    for ln in lines[start:]:
+        if ln.startswith("--- "):
+            break
+        if ln.startswith("+") and not ln.startswith("+++"):
+            out.append(ln[1:])
+    return "\n".join(out)
+
+
+def test_calamares_networkq_qml_paints_an_opaque_dark_background():
+    # Issue: the Network page's background did not match the other pages, so it was
+    # impossible to read/navigate. Root cause: the QML was a bare transparent Item with no
+    # background, while every other installer page shows the dark (#030712) body. The page
+    # must paint its OWN opaque background rectangle in that exact colour, with light text,
+    # matching branding.desc / show.qml. This pins the fix so it cannot regress to a
+    # transparent page.
+    qml = _networkq_qml_body()
+    assert "Rectangle {" in qml                      # a real background rect exists
+    assert "#030712" in qml                          # the exact page-body colour
+    assert 'color: networkPage.bgColor' in qml       # the rect is filled with it
+    # Light foreground colours so text is readable on the dark background.
+    assert "#ffffff" in qml                          # white headings
+    assert "#3b82f6" in qml                           # blue accent (matches the wordmark)
+
+
+def test_calamares_networkq_qml_does_not_import_kirigami():
+    # The Az'arch ISO ships qt6-declarative (QtQuick/Controls/Layouts) but NOT kirigami --
+    # only the widget `users` module is used, so kirigami was never added to the manifest.
+    # The stock usersq-qt6.qml uses org.kde.kirigami, but this page must NOT: an
+    # `import org.kde.kirigami` would fail to resolve at runtime on the ISO and the page
+    # would not render. Only ISO-present QML modules may be imported.
+    qml = _networkq_qml_body()
+    imports = [l.strip() for l in qml.splitlines() if l.strip().startswith("import ")]
+    assert not any("kirigami" in i.lower() for i in imports), imports
+    # The imports it DOES use are all shipped on the ISO.
+    assert "import QtQuick" in qml
+    assert "import QtQuick.Controls" in qml
+    assert "import QtQuick.Layouts" in qml
+    assert "import io.calamares.ui 1.0" in qml
+
+
+def test_calamares_networkq_qml_fields_write_back_on_edit():
+    # Issue: could not enter any data into the parameters. The five manual fields must be
+    # two-way bound -- reading config.<field> AND writing it back as the user types via
+    # onTextChanged (the stock usersq idiom), so keystrokes reach the C++ Config and thus
+    # GlobalStorage. Guards against a field that displays but silently drops input (and the
+    # earlier onTextEdited, which did not fire reliably in this context).
+    qml = _networkq_qml_body()
+    for setter in ("config.setIpv4(text)", "config.setSubnetMask(text)",
+                   "config.setGateway(text)", "config.setDns1(text)", "config.setDns2(text)"):
+        assert setter in qml, setter
+    assert "onTextChanged:" in qml
+    # The manual section is gated on the Manual radio (DHCP is the default), and picking
+    # Manual enables it -- so the radios must set the method.
+    assert 'config.setMethod("manual")' in qml
+    assert 'config.setMethod("dhcp")' in qml
+
+
 # --- calamares source patch (networkcfg writes a static NM profile) ------------
 
 def test_calamares_networkcfg_static_patch_name_is_a_distinct_patch_file():

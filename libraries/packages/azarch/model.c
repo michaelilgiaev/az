@@ -486,6 +486,82 @@ const char *az_status_network(char *buf, size_t n)
     return buf;
 }
 
+const char *az_status_ip(char *buf, size_t n)
+{
+    /* The IP Address screen's one "Current:" line: the ACTIVE interface's IPv4 method and
+     * address, e.g. "wired: manual 192.168.1.50/24" or "wired: dhcp 10.0.2.15/24". This is
+     * the read side of `azarch network ip` (static/dynamic), so the terminal user interface
+     * and the CLI never disagree. Finds the first CONNECTED device (ethernet preferred, as in
+     * az_net_scan's one-or-the-other rule), reads its connection's ipv4.method and its live
+     * IP4.ADDRESS[1]. Degrades to "no active connection" (never blank) when nothing is up or
+     * nmcli is missing. */
+    if (!az_have("nmcli")) { snprintf(buf, n, "unavailable"); return buf; }
+
+    /* Find the connected device + its connection name (DEVICE:TYPE:STATE:CONNECTION). Prefer a
+     * connected ethernet; fall back to any other connected device (e.g. wifi). */
+    const char *dargv[] = {"nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device", NULL};
+    char raw[1024] = {0};
+    if (az_capture_all(dargv, raw, sizeof raw) != 0 || !raw[0]) {
+        snprintf(buf, n, "no active connection");
+        return buf;
+    }
+    char dev[64] = {0}, conn[128] = {0}, kind[32] = {0};
+    char fdev[64] = {0}, fconn[128] = {0}, fkind[32] = {0};  /* first non-ethernet fallback */
+    for (char *line = strtok(raw, "\n"); line; line = strtok(NULL, "\n")) {
+        /* fields are colon-separated; we only need device, type, state, connection. nmcli
+         * escapes literal ':' as '\:' but device/type/state never contain one, and we only
+         * read the connection name for display, so a plain split is sufficient here. */
+        char tmp[256]; snprintf(tmp, sizeof tmp, "%s", line);
+        char *d = strtok(tmp, ":");
+        char *t = d ? strtok(NULL, ":") : NULL;
+        char *st = t ? strtok(NULL, ":") : NULL;
+        char *cn = st ? strtok(NULL, "") : NULL;   /* rest is the connection name */
+        if (!d || !t || !st) continue;
+        if (strcmp(st, "connected") != 0) continue;
+        if (strcmp(t, "ethernet") == 0) {
+            snprintf(dev, sizeof dev, "%s", d);
+            snprintf(kind, sizeof kind, "%s", t);
+            snprintf(conn, sizeof conn, "%s", cn ? cn : "");
+            break;                                 /* ethernet wins */
+        } else if (!fdev[0]) {
+            snprintf(fdev, sizeof fdev, "%s", d);
+            snprintf(fkind, sizeof fkind, "%s", t);
+            snprintf(fconn, sizeof fconn, "%s", cn ? cn : "");
+        }
+    }
+    if (!dev[0] && fdev[0]) {                       /* no ethernet -> use the fallback */
+        snprintf(dev, sizeof dev, "%s", fdev);
+        snprintf(kind, sizeof kind, "%s", fkind);
+        snprintf(conn, sizeof conn, "%s", fconn);
+    }
+    if (!dev[0]) { snprintf(buf, n, "no active connection"); return buf; }
+
+    /* ipv4.method for the connection (manual/auto); label it dhcp for "auto". */
+    const char *label = kind[0] ? (strcmp(kind, "ethernet") == 0 ? "wired" : kind) : "net";
+    char method[32] = {0};
+    if (conn[0]) {
+        const char *margv[] = {"nmcli", "-g", "ipv4.method", "connection", "show", conn, NULL};
+        az_capture(margv, method, sizeof method);
+    }
+    const char *meth = strcmp(method, "manual") == 0 ? "manual"
+                     : (method[0] ? "dhcp" : "");
+
+    /* The live IPv4 address on the device (first IP4.ADDRESS). */
+    const char *aargv[] = {"nmcli", "-g", "IP4.ADDRESS", "device", "show", dev, NULL};
+    char addr[128] = {0};
+    az_capture(aargv, addr, sizeof addr);
+    /* IP4.ADDRESS can be multi-valued ("a/24 | b/64"); keep the first entry. */
+    char *bar = strchr(addr, '|'); if (bar) *bar = '\0';
+    char *sp = addr; while (*sp == ' ') sp++;
+    char *end = sp + strlen(sp); while (end > sp && (end[-1] == ' ')) *--end = '\0';
+
+    if (meth[0] && sp[0])      snprintf(buf, n, "%s: %s %s", label, meth, sp);
+    else if (sp[0])            snprintf(buf, n, "%s: %s", label, sp);
+    else if (meth[0])          snprintf(buf, n, "%s: %s", label, meth);
+    else                       snprintf(buf, n, "%s: up", label);
+    return buf;
+}
+
 const char *az_status_machine(char *buf, size_t n)
 {
     /* The EFFECTIVE machine type as the command line interface reports it -- honouring any hard override --

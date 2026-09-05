@@ -197,6 +197,11 @@ const char *az_status_firewall_policy(char *buf, size_t n);
  * vs "no timer"), read from `systemctl list-timers`. The "Current:" line of the Power screen. */
 const char *az_status_power(char *buf, size_t n);
 const char *az_status_network(char *buf, size_t n);
+/* IP Address: the active interface's IPv4 method + address ("wired: manual 192.168.1.50/24"
+ * or "wired: dhcp 10.0.2.15/24"), read from nmcli. The "Current:" line of the Network > IP
+ * Address screen -- the read side of `azarch network ip static|dynamic`. "no active
+ * connection" when nothing is up, "unavailable" without nmcli. */
+const char *az_status_ip(char *buf, size_t n);
 const char *az_status_machine(char *buf, size_t n);
 const char *az_status_gpu(char *buf, size_t n);
 const char *az_status_timedate(char *buf, size_t n);

@@ -56,7 +56,7 @@ static void test_screen_set_is_exactly_expected(void)
 {
     const char *want[] = {
         "main", "theme", "wallpaper", "network",
-        "network.wifi", "network.wired", "network.bluetooth",
+        "network.wifi", "network.wired", "network.ip", "network.bluetooth",
         "network.airplane", "network.firewall", "network.ssh",
         "volume", "brightness", "machine", "timedate", "language", "hypervisor",
         "power", "backup",
@@ -484,6 +484,66 @@ static void test_network_rows_descend(void)
     }
 }
 
+/* IP Address screen: the live twin of the Calamares installer "Network" page (static IPv4 vs
+ * DHCP). It hangs off the Network parent, shows the active address ONCE via az_status_ip, has a
+ * plain "Show" read (no root) and two AZ_ACT_PROMPT setters wrapping `azarch network ip
+ * static|dynamic` (needs_root; they edit the NM connection). The setters teach a "<value>"
+ * placeholder in BOTH the wrapper and the base command, like the firewall port / backup enable
+ * rows. This backs the user's "the terminal UI must also have these [network] settings". */
+static void test_ip_address_screen(void)
+{
+    /* Reachable from the Network parent, and the parent row carries the live status. */
+    const AzScreen *net = az_screen_find("network");
+    CHECK(net != NULL);
+    int parent_has_ip = 0;
+    for (int i = 0; i < net->nrows; i++)
+        if (strcmp(net->rows[i].target, "network.ip") == 0) {
+            parent_has_ip = 1;
+            CHECK(net->rows[i].kind == AZ_ACT_SCREEN);
+            CHECK(strcmp(net->rows[i].label, "IP Address") == 0);
+            CHECK(net->rows[i].status == az_status_ip);   /* at-a-glance summary on the parent */
+        }
+    CHECK(parent_has_ip == 1);
+
+    const AzScreen *ip = az_screen_find("network.ip");
+    CHECK(ip != NULL);
+    CHECK(strcmp(ip->title, "IP Address") == 0);
+    CHECK(ip->current == az_status_ip);                   /* active address shown once, up top */
+    CHECK(ip->nrows >= 3);
+
+    int has_show = 0, has_static = 0, has_dynamic = 0;
+    for (int i = 0; i < ip->nrows; i++) {
+        const AzRow *r = &ip->rows[i];
+        CHECK(r->status == NULL);                         /* no per-row echo (Current: shows it) */
+        if (strcmp(r->target, "azarch network ip show") == 0) {
+            has_show = 1;
+            CHECK(r->kind == AZ_ACT_APPLY);
+            CHECK(r->needs_root == 0);                    /* a read: no sudo */
+            CHECK(r->show_output == 1);                   /* the table lands in the overlay */
+        }
+        if (strcmp(r->target, "azarch network ip static") == 0) {
+            has_static = 1;
+            CHECK(r->kind == AZ_ACT_PROMPT);              /* type the iface/addr/gw/dns line */
+            CHECK(r->needs_root == 1);                    /* edits the NM connection */
+            CHECK(r->prompt != NULL);                     /* PROMPT rows carry their own label */
+            CHECK(strstr(az_row_command(r), "<value>") != NULL);  /* wrapper placeholder */
+            CHECK(strstr(az_row_base(r), "<value>") != NULL);     /* base placeholder too */
+            CHECK(strstr(az_row_base(r), "nmcli") != NULL);       /* the real tool it wraps */
+        }
+        if (strcmp(r->target, "azarch network ip dynamic") == 0) {
+            has_dynamic = 1;
+            CHECK(r->kind == AZ_ACT_PROMPT);
+            CHECK(r->needs_root == 1);
+            CHECK(r->prompt != NULL);
+            CHECK(strstr(az_row_command(r), "<value>") != NULL);
+            CHECK(strstr(az_row_base(r), "ipv4.method auto") != NULL);  /* DHCP switch */
+        }
+    }
+    CHECK(has_show == 1);
+    CHECK(has_static == 1);
+    CHECK(has_dynamic == 1);
+}
+
 /* Theme rows are APPLIES that run the tested `azarch theme` subcommand. */
 static void test_theme_rows_are_applies(void)
 {
@@ -648,7 +708,7 @@ static void test_current_is_screen_level_not_per_row(void)
 static void test_network_subscreens_have_current_and_no_row_spam(void)
 {
     const char *subs[] = {
-        "network.wifi", "network.wired", "network.bluetooth",
+        "network.wifi", "network.wired", "network.ip", "network.bluetooth",
         "network.airplane", "network.firewall", "network.ssh",
     };
     for (size_t i = 0; i < sizeof subs / sizeof subs[0]; i++) {
@@ -842,7 +902,12 @@ static void test_resolve_screens(void)
 static void test_row_matches(void)
 {
     const AzScreen *net = az_screen_find("network");
-    const AzRow *fw = &net->rows[4];    /* Firewall */
+    /* Look the Firewall row up by LABEL, not a fixed index, so inserting a new network
+     * sub-screen (e.g. "IP Address") never silently shifts this test onto the wrong row. */
+    const AzRow *fw = NULL;
+    for (int i = 0; i < net->nrows; i++)
+        if (strcmp(net->rows[i].label, "Firewall") == 0) fw = &net->rows[i];
+    CHECK(fw != NULL);
     CHECK(strcmp(fw->label, "Firewall") == 0);
     CHECK(az_row_matches(fw, "") == 1);        /* empty -> all */
     CHECK(az_row_matches(fw, NULL) == 1);
@@ -876,6 +941,7 @@ int main(void)
     test_default_applications_screens();
     test_display_screens();
     test_network_rows_descend();
+    test_ip_address_screen();
     test_theme_rows_are_applies();
     test_row_command();
     test_row_base_command();

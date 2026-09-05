@@ -137,14 +137,18 @@ def test_settings_exec_ordering_constraints():
     assert execs.index("grubcfg") < execs.index("bootloader")
 
 
-def test_network_page_in_show_sequence_after_users_before_summary():
+def test_network_page_in_show_sequence_before_users():
     # The Az'arch "Network" page (networkq QML view module, added by the
-    # azarch-calamares-networkq source patch) is shown after `users` and before the
-    # install `summary`, so the static-IP choice is the last thing picked before the
-    # summary. It is a `show` (UI) step, not an exec step.
+    # azarch-calamares-networkq source patch) is shown immediately BEFORE `users` (per the
+    # user's request), so the page order reads partition -> network -> user account ->
+    # summary. It is a `show` (UI) step, not an exec step. Show-order is independent of the
+    # exec order: `networkcfg` still runs at exec time regardless of where the page sits.
     show = _settings_show_list()
     assert "networkq" in show
-    assert show.index("users") < show.index("networkq") < show.index("summary")
+    assert show.index("partition") < show.index("networkq") < show.index("users")
+    assert show.index("users") < show.index("summary")
+    # Immediately before users -- nothing between them in the show sequence.
+    assert show.index("networkq") + 1 == show.index("users")
 
 
 def test_network_static_job_runs_at_exec_after_users():

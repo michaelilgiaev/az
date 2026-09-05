@@ -92,6 +92,11 @@ static const AzRow ROWS_WALLPAPER[] = {
 static const AzRow ROWS_NETWORK[] = {
     {.label="Wifi",          .kind=AZ_ACT_SCREEN, .target="network.wifi",      .status=az_status_wifi},
     {.label="Wired",         .kind=AZ_ACT_SCREEN, .target="network.wired",     .status=az_status_wired},
+    /* IP Address: static (manual IPv4/subnet/gateway/DNS) vs dynamic (DHCP) on an interface --
+     * the live control-surface twin of the Calamares installer "Network" page. Its own screen
+     * (network.ip) shows the active address and sets a static/dynamic address via `azarch
+     * network ip`. */
+    {.label="IP Address",    .kind=AZ_ACT_SCREEN, .target="network.ip",        .status=az_status_ip},
     {.label="Bluetooth",     .kind=AZ_ACT_SCREEN, .target="network.bluetooth", .status=az_status_bluetooth},
     {.label="Airplane mode", .kind=AZ_ACT_SCREEN, .target="network.airplane",  .status=az_status_airplane},
     {.label="Firewall",      .kind=AZ_ACT_SCREEN, .target="network.firewall",  .status=az_status_firewall},
@@ -137,6 +142,28 @@ static const AzRow ROWS_AIRPLANE[] = {
      .base="sudo nmcli networking off"},
     {.label="Turn airplane mode off", .kind=AZ_ACT_APPLY, .target="azarch network airplane off", .needs_root=1,
      .base="sudo nmcli networking on"},
+};
+
+/* IP Address: the live twin of the Calamares installer "Network" page (static IPv4 vs DHCP),
+ * so a fresh machine can pin ipv4/subnet/gateway/DNS from the terminal user interface too.
+ * "Show" is a plain read (no root). The two setters are AZ_ACT_PROMPT rows: the UI collects
+ * a free-text argument line and appends it to the wrapper (mirroring the firewall port prompts
+ * and the Backup enable rows), so no dropping to a shell. They wrap `azarch network ip
+ * static|dynamic`, which edits the device's NetworkManager connection (needs_root=1). The
+ * static row takes the whole "<iface> <addr/prefix> <gateway> [dns...]" line; dynamic takes
+ * just "<iface>". The subnet mask is expressed as the CIDR prefix (e.g. /24), exactly as
+ * `azarch network ip static` documents. */
+static const AzRow ROWS_IP[] = {
+    {.label="Show IP configuration", .kind=AZ_ACT_APPLY, .target="azarch network ip show", .show_output=1,
+     .base="nmcli -f DEVICE,TYPE,STATE,CONNECTION device status"},
+    {.label="Set static IPv4 (type: iface addr/prefix gateway [dns...])",
+     .kind=AZ_ACT_PROMPT, .target="azarch network ip static", .needs_root=1, .show_output=1,
+     .prompt="iface addr/prefix gateway [dns...]:",
+     .base="sudo nmcli connection modify <conn> ipv4.method manual ipv4.addresses ... && sudo nmcli connection up <conn>"},
+    {.label="Set dynamic / DHCP (type: iface)",
+     .kind=AZ_ACT_PROMPT, .target="azarch network ip dynamic", .needs_root=1, .show_output=1,
+     .prompt="interface:",
+     .base="sudo nmcli connection modify <conn> ipv4.method auto && sudo nmcli connection up <conn>"},
 };
 
 /* Firewall: enable/disable, LIST the port rules right here in the overlay (show_output=1),
@@ -570,6 +597,12 @@ static const AzScreen SCREENS[] = {
     {.id="network.wired",     .title="Wired",
      .subtitle="Wraps nmcli device connect/disconnect on the ethernet interface.",
      .current=az_status_wired,     .rows=ROWS_WIRED,     .nrows=AZN(ROWS_WIRED)},
+    {.id="network.ip",        .title="IP Address",
+     .subtitle="Static (manual IPv4 + subnet prefix + gateway + DNS) vs dynamic (DHCP) on an "
+               "interface -- the live twin of the installer's Network page. Wraps `azarch "
+               "network ip`, which edits the device's NetworkManager connection. Active "
+               "address shown above; type `azarch network ip show` for the full list.",
+     .current=az_status_ip,        .rows=ROWS_IP,        .nrows=AZN(ROWS_IP)},
     {.id="network.bluetooth", .title="Bluetooth",
      .subtitle="Wraps systemctl (enable/disable bluetooth) + rfkill; bluetoothctl to scan. "
                "Off by default.",
