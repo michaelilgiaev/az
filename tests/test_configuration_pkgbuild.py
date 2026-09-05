@@ -1076,32 +1076,22 @@ def test_calamares_networkq_qml_radios_use_native_text_not_custom_contentitem():
 
 
 def test_calamares_networkq_qml_guards_every_config_access_against_null():
-    # Root cause of the LIVE "everything is greyed out, radios do nothing" bug: `config` is
-    # a QObject CONTEXT PROPERTY (QmlViewStep.cpp: rootContext()->setContextProperty("config",
-    # ...)) and the component is created ASYNCHRONOUSLY, so `config` is momentarily null when
-    # the bindings first evaluate. An unguarded `config.method` then throws
-    #   TypeError: Cannot read property 'method' of null
-    # at construction; Qt6 leaves that binding dead. The previous code hoisted
-    #   property bool manual: config.method === "manual"
-    # and bound the manual grid's `enabled` to it -- so the dead binding pinned `manual`
-    # false forever and clicking Manual (which flips config.method) never revived it. Fix:
-    # (1) drop the hoisted property and bind enable/opacity directly to a null-guarded
-    #     `config ? config.method === "manual" : false` (the stock usersq-qt6 idiom of
-    #     binding straight to config.*), and
-    # (2) null-guard EVERY other config access (`config &&` for checked, `config ? ... : ""`
-    #     for reads, `if ( config )` for setters).
-    # This test pins both halves so the page can never regress to the null-throwing form.
+    # Defensive null-guarding of the `config` context property. `config` is a QObject
+    # CONTEXT PROPERTY and QML bindings are re-evaluated across the component's life, so
+    # every access is guarded (`config &&` for checked, `config ? ... : ""` for reads,
+    # `if ( config )` for setters) rather than assuming a bare `config.method` never sees
+    # null. (Note: this guarding is defensive, NOT the fix for the greyed-out bug -- see
+    # test_calamares_networkq_qml_enables_fields_per_field_not_via_layout for that. The
+    # earlier hoisted `property bool manual: config.method === "manual"` is gone regardless.)
     qml = _networkq_qml_body()
     # CODE-only view: strip // comments (they quote the old buggy code to explain the fix,
     # and would otherwise trip the "must be gone" assertions below).
     code = "\n".join(raw.split("//", 1)[0] for raw in qml.splitlines())
 
-    # The fragile hoisted intermediate property must be gone; enable/opacity bind to config.
+    # The fragile hoisted intermediate property must be gone; isManual reads config directly.
     assert "property bool manual:" not in code, "hoisted manual property reintroduced"
     assert "enabled: networkPage.manual" not in code
     assert 'config ? config.method === "manual" : false' in code
-    assert "enabled: isManual" in code
-    assert "opacity: isManual ? 1.0 : 0.4" in code
 
     # No BARE `config.<name>` may remain: every occurrence must be preceded by a guard
     # (`config ?`, `config &&`) or be a guarded call (`if ( config ) config.setX`). We scan
@@ -1123,6 +1113,36 @@ def test_calamares_networkq_qml_guards_every_config_access_against_null():
     # And the guarded read form is actually used for the five fields.
     for field in ("ipv4", "subnetMask", "gateway", "dns1", "dns2"):
         assert ("config ? config.%s : \"\"" % field) in qml, field
+
+
+def test_calamares_networkq_qml_enables_fields_per_field_not_via_layout():
+    # ROOT CAUSE of the LIVE "clicking Manual never un-greys the five inputs" bug: the manual
+    # section's `enabled` was bound on the GridLayout (`manualGrid`) itself. On the real Qt6
+    # build a QtQuick.Layouts item's `enabled` does NOT reliably cascade to the children it
+    # positions, so the fields stayed disabled even after Manual flipped config.method. (An
+    # offscreen PySide6 harness could not reproduce this -- it only ever asserted the LAYOUT's
+    # own `enabled` flipping, never the fields' EFFECTIVE enabled -- which is why the bug
+    # survived multiple "verified offscreen" passes.) EVERY stock Qt6 Calamares page sets
+    # `enabled:` on the leaf control (usersq-qt6.qml: `enabled: config.isEditable(...)` on
+    # each TextField) and NEVER on a Layout. Fix: bind `enabled: manualGrid.isManual` on each
+    # of the five TextFields; keep only `opacity` on the GridLayout (opacity DOES cascade, so
+    # the whole section still dims when DHCP is selected).
+    qml = _networkq_qml_body()
+    code = "\n".join(raw.split("//", 1)[0] for raw in qml.splitlines())
+
+    # opacity stays on the layout (cascades fine); `enabled` must NOT be on the layout.
+    assert "opacity: isManual ? 1.0 : 0.4" in code
+    assert "enabled: isManual" not in code, "layout-level enabled reintroduced (does not cascade on Qt6)"
+
+    # Each of the five fields gates its OWN enabled on the shared isManual flag.
+    field_enable = "enabled: manualGrid.isManual"
+    assert code.count(field_enable) == 5, (
+        "expected all 5 TextFields to bind %r, found %d" % (field_enable, code.count(field_enable)))
+
+    # Structural belt-and-suspenders: the `enabled: manualGrid.isManual` lines sit inside the
+    # TextField blocks (each field has an id), not on the GridLayout declaration line.
+    for fid in ("ipv4Field", "subnetField", "gatewayField", "dns1Field", "dns2Field"):
+        assert ("id: " + fid) in code, fid
 
 
 def test_calamares_networkq_qml_has_no_descriptive_paragraph():
