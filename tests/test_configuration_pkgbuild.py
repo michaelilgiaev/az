@@ -1002,17 +1002,18 @@ def _networkq_qml_body() -> str:
 def test_calamares_networkq_qml_paints_an_opaque_dark_background():
     # Issue: the Network page's background did not match the other pages, so it was
     # impossible to read/navigate. Root cause: the QML was a bare transparent Item with no
-    # background, while every other installer page shows the dark (#030712) body. The page
-    # must paint its OWN opaque background rectangle in that exact colour, with light text,
-    # matching branding.desc / show.qml. This pins the fix so it cannot regress to a
-    # transparent page.
+    # background. The page must paint its OWN opaque background rectangle in the SAME colour
+    # every other installer page body uses -- #323232 (the user explicitly asked for
+    # "323232") -- with light text. This pins the fix so it cannot regress to a transparent
+    # page NOR to the earlier near-black #030712 that did not match the other sections.
     qml = _networkq_qml_body()
     assert "Rectangle {" in qml                      # a real background rect exists
-    assert "#030712" in qml                          # the exact page-body colour
+    assert "#323232" in qml                          # the exact page-body colour the user asked for
+    assert "#030712" not in qml                      # the old mismatched near-black is gone
     assert 'color: networkPage.bgColor' in qml       # the rect is filled with it
     # Light foreground colours so text is readable on the dark background.
     assert "#ffffff" in qml                          # white headings
-    assert "#3b82f6" in qml                           # blue accent (matches the wordmark)
+    assert "#3b82f6" in qml                           # blue accent
 
 
 def test_calamares_networkq_qml_does_not_import_kirigami():
@@ -1037,15 +1038,142 @@ def test_calamares_networkq_qml_fields_write_back_on_edit():
     # onTextChanged (the stock usersq idiom), so keystrokes reach the C++ Config and thus
     # GlobalStorage. Guards against a field that displays but silently drops input (and the
     # earlier onTextEdited, which did not fire reliably in this context).
+    #
+    # The write-backs are null-GUARDED (`if ( config ) config.setX(text)`): config is a
+    # context property that is momentarily null during async QML load, and an unguarded
+    # call there throws and can kill the binding (see the null-safety test below).
     qml = _networkq_qml_body()
     for setter in ("config.setIpv4(text)", "config.setSubnetMask(text)",
                    "config.setGateway(text)", "config.setDns1(text)", "config.setDns2(text)"):
         assert setter in qml, setter
+        assert ("if ( config ) " + setter) in qml, "unguarded setter: " + setter
     assert "onTextChanged:" in qml
     # The manual section is gated on the Manual radio (DHCP is the default), and picking
-    # Manual enables it -- so the radios must set the method.
-    assert 'config.setMethod("manual")' in qml
-    assert 'config.setMethod("dhcp")' in qml
+    # Manual enables it -- so the radios must set the method (also null-guarded).
+    assert 'if ( config ) config.setMethod("manual")' in qml
+    assert 'if ( config ) config.setMethod("dhcp")' in qml
+
+
+def test_calamares_networkq_qml_radios_use_native_text_not_custom_contentitem():
+    # Issue: "Automatic (DHCP) / Manual and their toggle buttons are not positioned
+    # correctly" -- the indicator circle rendered ON TOP of the label. Root cause: each
+    # RadioButton set a custom `contentItem: Text {...}` and left the control's own `text`
+    # property EMPTY. The Basic style positions the indicator with
+    #   x: control.text ? leftPadding : leftPadding + (availableWidth - width)/2
+    # so with empty text the indicator is CENTRED over the available width, landing over the
+    # label. The fix is to use each RadioButton's NATIVE `text` (indicator stays pinned left,
+    # label beside it) and colour it via the palette. Pin both halves of the fix so it can
+    # neither regress to a custom contentItem nor drop the native text.
+    qml = _networkq_qml_body()
+    assert 'text: qsTr("Automatic (DHCP)")' in qml
+    assert 'text: qsTr("Manual")' in qml
+    # No custom contentItem override on the controls (that was the defect).
+    assert "contentItem: Text" not in qml
+    # The label/indicator colours come from the palette so the dark theme is preserved
+    # without fighting the control's own layout.
+    assert "palette.windowText: networkPage.headingColor" in qml
+    assert "palette.text: networkPage.accentColor" in qml
+
+
+def test_calamares_networkq_qml_guards_every_config_access_against_null():
+    # Root cause of the LIVE "everything is greyed out, radios do nothing" bug: `config` is
+    # a QObject CONTEXT PROPERTY (QmlViewStep.cpp: rootContext()->setContextProperty("config",
+    # ...)) and the component is created ASYNCHRONOUSLY, so `config` is momentarily null when
+    # the bindings first evaluate. An unguarded `config.method` then throws
+    #   TypeError: Cannot read property 'method' of null
+    # at construction; Qt6 leaves that binding dead. The previous code hoisted
+    #   property bool manual: config.method === "manual"
+    # and bound the manual grid's `enabled` to it -- so the dead binding pinned `manual`
+    # false forever and clicking Manual (which flips config.method) never revived it. Fix:
+    # (1) drop the hoisted property and bind enable/opacity directly to a null-guarded
+    #     `config ? config.method === "manual" : false` (the stock usersq-qt6 idiom of
+    #     binding straight to config.*), and
+    # (2) null-guard EVERY other config access (`config &&` for checked, `config ? ... : ""`
+    #     for reads, `if ( config )` for setters).
+    # This test pins both halves so the page can never regress to the null-throwing form.
+    qml = _networkq_qml_body()
+    # CODE-only view: strip // comments (they quote the old buggy code to explain the fix,
+    # and would otherwise trip the "must be gone" assertions below).
+    code = "\n".join(raw.split("//", 1)[0] for raw in qml.splitlines())
+
+    # The fragile hoisted intermediate property must be gone; enable/opacity bind to config.
+    assert "property bool manual:" not in code, "hoisted manual property reintroduced"
+    assert "enabled: networkPage.manual" not in code
+    assert 'config ? config.method === "manual" : false' in code
+    assert "enabled: isManual" in code
+    assert "opacity: isManual ? 1.0 : 0.4" in code
+
+    # No BARE `config.<name>` may remain: every occurrence must be preceded by a guard
+    # (`config ?`, `config &&`) or be a guarded call (`if ( config ) config.setX`). We scan
+    # the CODE lines only (skip // comments, which discuss the fix and mention config.*).
+    import re
+    bare = []
+    for raw in qml.splitlines():
+        line = raw.split("//", 1)[0]          # strip trailing/whole-line comments
+        for m in re.finditer(r"config\.", line):
+            before = line[: m.start()]
+            # allowed immediately-preceding guards on the same line
+            if before.rstrip().endswith("config ?") or before.rstrip().endswith("config &&"):
+                continue
+            if "if ( config ) config." in line:
+                continue
+            bare.append(raw.strip())
+    assert not bare, "un-guarded config access(es): " + repr(bare)
+
+    # And the guarded read form is actually used for the five fields.
+    for field in ("ipv4", "subnetMask", "gateway", "dns1", "dns2"):
+        assert ("config ? config.%s : \"\"" % field) in qml, field
+
+
+def test_calamares_networkq_qml_has_no_descriptive_paragraph():
+    # The user explicitly asked to remove the "Choose how this computer gets its network
+    # address..." paragraph. Only the "Network" heading, the two radios, and the fields
+    # remain. Pin its removal so it cannot creep back.
+    qml = _networkq_qml_body()
+    assert "Choose how this computer" not in qml
+    assert "asks the network for one" not in qml
+
+
+def test_calamares_networkq_qml_textfield_backgrounds_reference_field_by_id():
+    # A TextField's inline `background:` delegate must NOT use `parent.activeFocus`: inside
+    # the delegate `parent` is not reliably the control on Qt6, so the focus highlight bound
+    # to the wrong item. Each field carries an id and its background references that id.
+    qml = _networkq_qml_body()
+    assert "parent.activeFocus" not in qml
+    for fid in ("ipv4Field", "subnetField", "gatewayField", "dns1Field", "dns2Field"):
+        assert ("id: " + fid) in qml, fid
+        assert (fid + ".activeFocus") in qml, fid
+
+
+def test_calamares_networkq_qml_flickable_does_not_overscroll_when_content_fits():
+    # Issue: "you can scroll up and down a tiny bit which is completely stupid" -- the page
+    # jiggled even though its content fits the viewport. Root cause: the Flickable used the
+    # DEFAULT boundsBehavior (DragAndOvershootBounds), which lets the user drag past the
+    # bounds regardless of content size, PLUS a phantom `contentHeight: implicitHeight + 48`
+    # that inflated the scrollable range. The fix pins boundsBehavior to StopAtBounds and
+    # sizes contentHeight to the content's real bottom edge (y + implicitHeight + margin).
+    qml = _networkq_qml_body()
+    assert "boundsBehavior: Flickable.StopAtBounds" in qml
+    # contentHeight is the real content bottom, not implicitHeight + a phantom pad.
+    assert "contentHeight: content.y + content.implicitHeight + 24" in qml
+    assert "implicitHeight + 48" not in qml
+    # contentWidth pinned to the viewport so it never scrolls sideways either.
+    assert "contentWidth: width" in qml
+
+
+def test_calamares_networkq_qml_root_size_is_intrinsic_not_hardcoded():
+    # Inside Calamares the QmlViewStep BINDS the root item's width/height to the embedding
+    # window's content item (Qt6 path in QmlViewStep.cpp), so a hard-coded `width: 800 /
+    # height: 520` on the root is just overwritten -- and worse, mixing a fixed size with a
+    # Flickable + Layout made the content geometry ambiguous. Use implicitWidth/Height as a
+    # standalone-preview fallback and let Calamares drive the real size.
+    qml = _networkq_qml_body()
+    assert "implicitWidth: 800" in qml
+    assert "implicitHeight: 520" in qml
+    # The root Item must NOT hard-code width/height (that was overwritten and misleading).
+    root = qml.split("Item {", 1)[1].split("Rectangle {", 1)[0]
+    assert "width: 800" not in root, root
+    assert "height: 520" not in root, root
 
 
 # --- calamares source patch (networkcfg writes a static NM profile) ------------
