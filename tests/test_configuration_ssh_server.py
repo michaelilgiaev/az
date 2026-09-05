@@ -195,6 +195,9 @@ def test_ssh_root_on_writes_on_dropin_and_reloads(monkeypatch):
     calls: list = []
     monkeypatch.setattr(cli, "_sudo", lambda *a, **k: calls.append(("sudo",) + a) or 0)
     monkeypatch.setattr(cli, "_sudo_write", lambda p, c: calls.append(("write", p, c)))
+    # sshd is only reloaded when it is running; pin that here so the reload assertion below
+    # is deterministic and does not depend on whether the test host happens to run sshd.
+    monkeypatch.setattr(cli, "sshd_is_active", lambda: True)
     assert cli.cmd_ssh(["root", "on"]) == 0
     # Wrote the ON drop-in to the root-login file...
     w = next(c for c in calls if c[0] == "write")
@@ -209,11 +212,31 @@ def test_ssh_root_off_writes_off_dropin_and_reloads(monkeypatch):
     calls: list = []
     monkeypatch.setattr(cli, "_sudo", lambda *a, **k: calls.append(("sudo",) + a) or 0)
     monkeypatch.setattr(cli, "_sudo_write", lambda p, c: calls.append(("write", p, c)))
+    # sshd is only reloaded when it is running; pin that here so the reload assertion below
+    # is deterministic and does not depend on whether the test host happens to run sshd.
+    monkeypatch.setattr(cli, "sshd_is_active", lambda: True)
     assert cli.cmd_ssh(["root", "off"]) == 0
     w = next(c for c in calls if c[0] == "write")
     assert "20-azarch-root-login.conf" in w[1]
     assert "PermitRootLogin no" in w[2]
     assert any(c[:1] == ("sudo",) and "reload" in c and "sshd" in c for c in calls), calls
+
+
+def test_ssh_root_toggle_skips_reload_when_sshd_not_running(monkeypatch):
+    # Inverse of the two tests above: when sshd is NOT active there is nothing to reload,
+    # so the drop-in is still written but no `systemctl reload sshd` is issued (the on-disk
+    # file is simply read when sshd next starts). This is the branch CI runners hit -- they
+    # have no running sshd -- so pin it explicitly rather than leaving it host-dependent.
+    cli = _cli()
+    calls: list = []
+    monkeypatch.setattr(cli, "_sudo", lambda *a, **k: calls.append(("sudo",) + a) or 0)
+    monkeypatch.setattr(cli, "_sudo_write", lambda p, c: calls.append(("write", p, c)))
+    monkeypatch.setattr(cli, "sshd_is_active", lambda: False)
+    assert cli.cmd_ssh(["root", "on"]) == 0
+    # The drop-in is still written...
+    assert any(c[0] == "write" and "20-azarch-root-login.conf" in c[1] for c in calls), calls
+    # ...but nothing was reloaded, because there was no live sshd to reload.
+    assert not any("reload" in c for c in calls), calls
 
 
 def test_ssh_root_status_reports_enabled_from_dropin(monkeypatch, tmp_path, capsys):
