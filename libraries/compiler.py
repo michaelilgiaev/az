@@ -1183,6 +1183,105 @@ def _copy_releng(W: Path) -> None:
     _strip_releng_wants(W)
 
 
+# The archiso stock network stack Az'arch must NOT run: the releng profile enables
+# systemd-networkd + systemd-resolved (its airootfs ships them enabled and drops
+# /etc/systemd/network/20-{ethernet,wlan,wwan}.network DHCP match files, plus
+# /etc/resolv.conf -> the resolved stub). Az'arch networks via NetworkManager
+# (enabled in _link_services), so shipping BOTH stacks makes them RACE for every
+# interface: networkd matches the device first, DHCPs it, and NetworkManager then
+# sees the link as `managed-type: 'external'` and never applies its own profiles.
+#
+# THE BUG this fixes (found by installing then booting the target): a MANUAL/static
+# IPv4 chosen on the Calamares Network page IS written to the target as
+# /etc/NetworkManager/system-connections/azarch-static.nmconnection (the networkcfg
+# patch works), but the installed system still comes up on a networkd DHCP lease --
+# "ip, subnet mask, nothing was modified" -- because networkd won the race and NM's
+# static profile stayed inactive. (It also affected the live session, benignly:
+# both stacks DHCP'd, so nobody noticed until a static address was pinned.)
+#
+# We MASK the units (symlink -> /dev/null) rather than delete releng's enable-links:
+# a mask wins no matter how (or where) the unit was pulled in -- a lingering .socket,
+# a dbus activation, or a systemd preset can re-pull a merely-`disable`d unit, but a
+# masked unit cannot start at all. The list covers, for BOTH networkd and resolved:
+# the .service, the wait-online unit (networkd's wait-online is masked; _link_services
+# separately enables NetworkManager-wait-online.service into network-online.target so a
+# NM-managed link -- not a dead networkd wait -- is what that target waits on), the
+# generator, AND every
+# socket that socket-activates them. Masking the .service alone is enough to stop the
+# race (a socket then just fails to activate a masked service), but every one of these
+# sockets is WantedBy=sockets.target -- so if we leave them un-masked they still START
+# at boot and log a failed activation of the masked service each time something probes
+# the socket. Masking the sockets too keeps `systemctl` clean and honours the "mask
+# anything that can re-pull it" rule above. Masking a unit a given systemd build does
+# not ship is a harmless no-op (a /dev/null symlink shadowing nothing), so the varlink/
+# monitor/resolve-hook sockets (newer systemd) are safe to list unconditionally. These
+# masks live in the airootfs, so unpackfs carries them onto the installed target too --
+# one fix for the live session, the GUI install, and the CLI install alike.
+_ARCHISO_NETWORK_UNITS_TO_MASK = (
+    # systemd-networkd + everything that can start or re-pull it.
+    "systemd-networkd.service",
+    "systemd-networkd.socket",
+    "systemd-networkd-wait-online.service",
+    "systemd-networkd-varlink.socket",
+    "systemd-networkd-varlink-metrics.socket",
+    "systemd-networkd-resolve-hook.socket",
+    "systemd-network-generator.service",
+    # systemd-resolved + its socket-activation entry points.
+    "systemd-resolved.service",
+    "systemd-resolved-varlink.socket",
+    "systemd-resolved-monitor.socket",
+)
+
+
+def _neutralize_archiso_network_stack(airootfs: Path) -> None:
+    """Make NetworkManager the SOLE network manager on the live medium AND (via
+    unpackfs) the installed target, by neutralizing the archiso stock networkd/resolved
+    stack the releng profile ships enabled. See _ARCHISO_NETWORK_UNITS_TO_MASK for the
+    full rationale (the static-IPv4 install bug). Three parts, all in the airootfs:
+
+      1. MASK each networkd/resolved unit (/etc/systemd/system/<unit> -> /dev/null) so
+         it can never start, regardless of how it was enabled.
+      2. REMOVE releng's /etc/systemd/network/*.network DHCP match files, so nothing
+         (e.g. a manual `systemctl start systemd-networkd`) can still grab an interface
+         from them; NetworkManager owns every device instead.
+      3. REPLACE the inherited /etc/resolv.conf -> /run/systemd/resolve/stub-resolv.conf
+         symlink (dead once resolved is masked) with an empty real file NetworkManager
+         (dns=default) rewrites at runtime -- so DNS works without systemd-resolved.
+
+    Idempotent and defensive: masks overwrite any existing link (emit.link), the
+    .network removal is per-file missing_ok, and the resolv.conf reset unlinks a
+    symlink-or-file before writing. Called from _link_services (the unit/policy step)."""
+    base = airootfs / "etc/systemd/system"
+    emit.mkdir(base)
+    for unit in _ARCHISO_NETWORK_UNITS_TO_MASK:
+        # Mask: the enable-link/socket/preset is overridden by a /dev/null symlink.
+        emit.link("/dev/null", base / unit)
+    # Drop releng's DHCP-on-everything match files so no networkd config lingers.
+    netdir = airootfs / "etc/systemd/network"
+    if netdir.is_dir():
+        for netfile in netdir.glob("*.network"):
+            netfile.unlink(missing_ok=True)
+    # Replace the resolved stub symlink with an empty file NetworkManager will own.
+    # (A dangling symlink would leave the system with no DNS once resolved is masked.)
+    resolv = airootfs / "etc/resolv.conf"
+    if resolv.is_symlink() or resolv.exists():
+        resolv.unlink()
+    emit.write_text(resolv, RESOLV_CONF_PLACEHOLDER)
+
+
+# The placeholder /etc/resolv.conf shipped in place of archiso's resolved-stub symlink.
+# NetworkManager (dns=default, the default backend) rewrites this file with the active
+# connection's nameservers at runtime; until then it is a harmless empty resolver. A
+# real (non-symlink) file is REQUIRED: NetworkManager's default rc-manager refuses to
+# clobber a symlink it does not own, so a leftover dangling stub symlink would leave the
+# installed system with no working DNS.
+RESOLV_CONF_PLACEHOLDER = (
+    "# Managed by NetworkManager (Az'arch networks via NetworkManager, not\n"
+    "# systemd-resolved). This file is rewritten at runtime with the active\n"
+    "# connection's DNS servers. See compiler._neutralize_archiso_network_stack.\n"
+)
+
+
 def _brand_boot_menus(W: Path) -> None:
     """Rebrand the copied releng boot menus (systemd-boot UEFI + syslinux BIOS) and
     SKIP the first-boot menu -- boot straight into the default Az'arch entry.
@@ -1265,6 +1364,29 @@ def _link_services(airootfs: Path) -> None:
     # via unpackfs, the installed system.
     for svc in ("NetworkManager.service", "org.cups.cupsd.service", "spice-vdagentd.service"):
         emit.link(f"/usr/lib/systemd/system/{svc}", base / f"multi-user.target.wants/{svc}")
+    # We enable NetworkManager with a MANUAL .wants symlink (above), which -- unlike a
+    # real `systemctl enable` -- does NOT process NetworkManager.service's
+    # `[Install] Also=NetworkManager-wait-online.service`. Since we ALSO mask
+    # systemd-networkd-wait-online.service, nothing would otherwise be pulled into
+    # network-online.target on the LIVE ISO, so locale-setup.service (which
+    # Wants=+After=network-online.target -- see system.py; its IP-geo locale step wants
+    # connectivity first) would proceed before the network is actually up. Enable NM's
+    # own wait-online explicitly so network-online.target waits for a NetworkManager-
+    # managed link. This is a background wait only -- the autologin console/desktop path
+    # orders on network.target, not network-online.target, so an offline live boot is
+    # NOT blocked (and nm-online caps at 60s, shorter than the masked networkd wait's
+    # ~120s). (On the installed target Calamares runs a real `systemctl enable
+    # NetworkManager`, which processes Also= and produces the identical symlink; this one
+    # makes the live ISO behave the same and is a harmless idempotent duplicate there.)
+    emit.link("/usr/lib/systemd/system/NetworkManager-wait-online.service",
+              base / "network-online.target.wants/NetworkManager-wait-online.service")
+    # NetworkManager is the SOLE network stack: neutralize archiso's stock
+    # systemd-networkd/systemd-resolved (releng ships them enabled), which would
+    # otherwise RACE NetworkManager for every interface and leave a static-IPv4
+    # install stuck on a networkd DHCP lease. Masks + config removal live in the
+    # airootfs, so unpackfs carries them onto the installed target too. See
+    # _neutralize_archiso_network_stack for the full rationale.
+    _neutralize_archiso_network_stack(airootfs)
     emit.link("/etc/systemd/system/locale-setup.service", base / "multi-user.target.wants/locale-setup.service")
     emit.link("/etc/systemd/system/pkgs-setup.service", base / "multi-user.target.wants/pkgs-setup.service")
     # PC-vs-laptop idle-sleep policy oneshot: enabled on BOTH ISOs (and, via unpackfs,

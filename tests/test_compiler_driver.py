@@ -161,6 +161,114 @@ def test_link_services_enables_shared_virtiofs_mount(tmp_path):
     assert os.readlink(link) == "/etc/systemd/system/home-main-shared.mount"
 
 
+def test_link_services_masks_archiso_networkd_stack(tmp_path):
+    # BEHAVIORAL + the crux of the "static IP not applied on the installed system" fix:
+    # _link_services must MASK archiso's stock systemd-networkd/systemd-resolved units
+    # (symlink -> /dev/null) so NetworkManager is the SOLE network manager. Without this
+    # networkd wins the race for the interface, DHCPs it, and NM's static profile stays
+    # inactive. Masks live in the airootfs and reach the installed target via unpackfs.
+    import os
+    airootfs = tmp_path / "airootfs"
+    (airootfs / "etc/systemd/system").mkdir(parents=True)
+    compiler._link_services(airootfs)
+    base = airootfs / "etc/systemd/system"
+    # Every unit in the mask list must be a symlink to /dev/null (a real mask).
+    assert compiler._ARCHISO_NETWORK_UNITS_TO_MASK  # non-empty contract
+    for unit in compiler._ARCHISO_NETWORK_UNITS_TO_MASK:
+        link = base / unit
+        assert link.is_symlink(), f"{unit} must be masked (symlink)"
+        assert os.readlink(link) == "/dev/null", f"{unit} must be masked -> /dev/null"
+    # The units we mask must cover BOTH stacks' .service, the wait-online unit, the
+    # generator, AND every socket that socket-activates them -- each such socket is
+    # WantedBy=sockets.target, so leaving one un-masked lets it start at boot and log a
+    # failed activation of the (masked) service. Masking them all keeps the rule "mask
+    # anything that can re-pull it" complete. (Verified against the releng systemd unit
+    # surface: these are the enabled networkd/resolved sockets.)
+    for expected in (
+        "systemd-networkd.service",
+        "systemd-networkd.socket",
+        "systemd-networkd-wait-online.service",
+        "systemd-networkd-varlink.socket",
+        "systemd-networkd-varlink-metrics.socket",
+        "systemd-networkd-resolve-hook.socket",
+        "systemd-network-generator.service",
+        "systemd-resolved.service",
+        "systemd-resolved-varlink.socket",
+        "systemd-resolved-monitor.socket",
+    ):
+        assert expected in compiler._ARCHISO_NETWORK_UNITS_TO_MASK
+    # NetworkManager itself must NOT be masked (it is the stack we keep).
+    nm_mask = base / "NetworkManager.service"
+    assert not (nm_mask.is_symlink() and os.readlink(nm_mask) == "/dev/null")
+
+
+def test_link_services_enables_nm_wait_online_into_network_online_target(tmp_path):
+    # BEHAVIORAL: because _link_services enables NetworkManager via a MANUAL .wants
+    # symlink (not `systemctl enable`), NM.service's `Also=NetworkManager-wait-online`
+    # is NOT processed, and we mask systemd-networkd-wait-online. So without an explicit
+    # enable, nothing feeds network-online.target on the LIVE ISO and locale-setup
+    # (Wants=+After=network-online.target) would race an un-configured network.
+    # _link_services must enable NM's own wait-online into network-online.target.wants.
+    import os
+    airootfs = tmp_path / "airootfs"
+    (airootfs / "etc/systemd/system").mkdir(parents=True)
+    compiler._link_services(airootfs)
+    link = (airootfs / "etc/systemd/system/network-online.target.wants"
+            / "NetworkManager-wait-online.service")
+    assert link.is_symlink(), "NetworkManager-wait-online must be enabled for network-online.target"
+    assert os.readlink(link) == "/usr/lib/systemd/system/NetworkManager-wait-online.service"
+    # And it must NOT be masked (that would defeat the point).
+    assert "NetworkManager-wait-online.service" not in compiler._ARCHISO_NETWORK_UNITS_TO_MASK
+
+
+def test_link_services_removes_archiso_network_configs(tmp_path):
+    # BEHAVIORAL: _link_services must remove releng's /etc/systemd/network/*.network
+    # DHCP match files -- with resolved/networkd masked, a lingering match file could
+    # still grab an interface if networkd were ever started manually. NetworkManager
+    # owns every device instead.
+    airootfs = tmp_path / "airootfs"
+    netdir = airootfs / "etc/systemd/network"
+    netdir.mkdir(parents=True)
+    # Stand in for the releng files.
+    for name in ("20-ethernet.network", "20-wlan.network", "20-wwan.network"):
+        (netdir / name).write_text("[Network]\nDHCP=yes\n")
+    # A non-.network file must be left untouched (only match files are removed).
+    (netdir / "keep.conf").write_text("x")
+    (airootfs / "etc/systemd/system").mkdir(parents=True)
+    compiler._link_services(airootfs)
+    assert sorted(p.name for p in netdir.glob("*.network")) == []
+    assert (netdir / "keep.conf").exists()
+
+
+def test_link_services_resets_resolv_conf_to_real_file(tmp_path):
+    # BEHAVIORAL: _link_services must replace archiso's /etc/resolv.conf -> resolved
+    # stub SYMLINK with a real (non-symlink) file. Once resolved is masked the stub
+    # symlink dangles (no DNS); NetworkManager (dns=default) refuses to clobber a
+    # symlink it does not own, so a REAL file is required for runtime DNS to work.
+    import os
+    airootfs = tmp_path / "airootfs"
+    etc = airootfs / "etc"
+    (etc / "systemd/system").mkdir(parents=True)
+    # Simulate archiso's inherited stub symlink (dangling target is fine for the test).
+    resolv = etc / "resolv.conf"
+    os.symlink("/run/systemd/resolve/stub-resolv.conf", resolv)
+    assert resolv.is_symlink()
+    compiler._link_services(airootfs)
+    assert resolv.exists()
+    assert not resolv.is_symlink(), "resolv.conf must be a real file, not a symlink"
+    # It carries the NetworkManager-managed placeholder content.
+    assert resolv.read_text() == compiler.RESOLV_CONF_PLACEHOLDER
+
+
+def test_run_calls_neutralize_via_link_services():
+    # The neutralization must run as part of the always-on unit/policy step so it
+    # applies to BOTH ISOs and (via unpackfs) the installed target. Guard that
+    # _link_services delegates to the helper (prevents the wiring from silently
+    # regressing back to a networkd-vs-NM race).
+    src = inspect.getsource(compiler._link_services)
+    assert "_neutralize_archiso_network_stack(airootfs)" in src
+
+
 def test_emit_shared_mount_writes_unit_and_mountpoint(tmp_path):
     # BEHAVIORAL: the emitter writes the virtiofs .mount unit body and creates the
     # /home/main/shared mountpoint so systemd has somewhere to mount onto.

@@ -272,6 +272,16 @@ def services_conf() -> str:
     live ISO, where compiler._link_services leaves bluetooth.service out of
     multi-user.target.wants; `azarch network bluetooth on` turns it on on demand).
 
+    The archiso stock systemd-networkd/systemd-resolved stack is NOT disabled here:
+    it is MASKED (and its /etc/systemd/network/*.network + resolv.conf stub removed)
+    in the airootfs by compiler._neutralize_archiso_network_stack, which unpackfs then
+    carries onto the installed target. A mask beats a services-systemd `disable` action
+    (which a lingering .socket / dbus-activation / preset can defeat) and needs no
+    per-target step -- so this module only asserts the POSITIVE side (NetworkManager on).
+    Without that neutralization networkd would RACE NetworkManager for every interface
+    and a static-IPv4 install would come up on a networkd DHCP lease instead (the
+    "ip/subnet mask not applied" install bug).
+
     NOTE: in Calamares 3.4.2 this module's real name is `services-systemd` (its
     module.desc `name:` field, verified against the installed module). The configuration
     file must therefore be modules/services-systemd.conf and the exec-sequence
