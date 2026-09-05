@@ -1293,6 +1293,27 @@ def _write_build_pacman_conf(W: Path, offline: bool, bar: ProgressBar) -> None:
 
 
 def _probe_and_maybe_switch(W: Path, conf: str, localrepo: Path, bar: ProgressBar) -> None:
+    # A PRESENT local repo index means step 13 already fetched every manifest package
+    # (from the SAME pinned ALA snapshot) into cache/pkgs/repo/ AND the makepkg stage
+    # folded our own packages (calamares/librewolf/...) into it -- so the file:// repo
+    # can serve the ENTIRE pacstrap on its own. Install from it offline and DO NOT reach
+    # the network, whether or not mirrors are up. This is not just an optimisation: the
+    # download step caches package BODIES with SigLevel=Never and so ships NO detached
+    # .sig files, while the network [core]/[extra] carry SigLevel=Required. Keeping the
+    # network repos as a pacstrap source therefore forces pacman to fetch each
+    # .pkg.tar.zst.sig from the pinned archive host (archive.archlinux.org) purely to
+    # satisfy the signature policy -- and that single throttled host stalls ("Operation
+    # too slow. Less than 1 bytes/sec"), aborting the whole transaction (the observed
+    # compile failure on linux-firmware-marvell's .sig). The offline conf is all-file://
+    # SigLevel=Never, so there is nothing to fetch and nothing to verify remotely.
+    if paths.LOCALREPO_INDEX.exists():
+        print(f"    [+] Local repo present -- building OFFLINE from {localrepo} "
+              "(pinned packages already cached; no archive fetch).")
+        _switch_offline(W, conf, localrepo)
+        return
+    # No local repo yet -- the only case that genuinely needs the network. Probe the
+    # mirrors and, if reachable, keep the network [core]/[extra] so pacstrap can fetch
+    # from them (nothing is cached to serve the build otherwise).
     sudo = _sudo()
     probe = W / ".netprobe-db"
     subprocess.run(["rm", "-rf", str(probe)], check=False)
@@ -1305,17 +1326,17 @@ def _probe_and_maybe_switch(W: Path, conf: str, localrepo: Path, bar: ProgressBa
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     ).returncode == 0
     if ok:
-        print("    [+] Mirrors reachable -- building online (new packages will be fetched).")
-        # Online build still needs the LOCAL repo for Az'arch's own packages
-        # (calamares, librewolf) -- they exist on no mirror. Append it alongside
-        # the network repos so pacstrap resolves Arch pkgs from mirrors and ours
-        # from file://. The packages themselves are dropped in by the makepkg step
-        # (13) before mkarchiso (14) runs.
+        print("    [+] No local repo cached, mirrors reachable -- building online "
+              "(Arch packages fetched; our own from the local repo).")
+        # Even here the local file:// repo must be appended: our OWN packages
+        # (calamares, librewolf) live on no mirror and are built into this repo by the
+        # makepkg stage (14) BEFORE mkarchiso (15) runs, so pacstrap resolves Arch
+        # packages from the mirrors and ours from file://. Listed last, so the network
+        # repos win any shared name (they do not overlap). SigLevel=Never on the local
+        # repo, so our unsigned built packages need no .sig. This is the ONLY branch
+        # that still contacts the network, and only because nothing is cached yet.
         conf = pacman.append_local_repo(conf, str(localrepo))
         emit.write_text(W / "pacman.conf", conf)
-    elif paths.LOCALREPO_INDEX.exists():
-        print(f"    [!] Mirrors unreachable -- building OFFLINE from {localrepo}.")
-        _switch_offline(W, conf, localrepo)
     else:
         sys.stderr.write(
             f"    [!] Mirrors unreachable and no local repo cached at {localrepo} --\n"

@@ -447,3 +447,102 @@ def test_cache_complete_false_when_no_synced_db(monkeypatch, tmp_path):
     monkeypatch.setattr(compiler.paths, "PKG_REPO", repo)
     monkeypatch.setattr(compiler.paths, "PKG_SYNC_DB", sync)
     assert compiler.cache_is_complete() is False
+
+
+# --- _probe_and_maybe_switch: the mkarchiso pacstrap repo resolution ---------
+#
+# The build profile's network [core]/[extra] carry SigLevel = Required, but the
+# package-cache download step (downloader.py) runs SigLevel=Never and so caches
+# package BODIES with NO detached .sig files. If the mkarchiso pacstrap keeps the
+# network repos as a package source, pacman must fetch each .pkg.tar.zst.sig from
+# the pinned archive host (archive.archlinux.org) to satisfy SigLevel=Required --
+# and that single throttled host stalls ("Operation too slow. Less than 1 bytes/
+# sec"), aborting the whole transaction. That is exactly the observed compile
+# failure (logs/: linux-firmware-marvell-...pkg.tar.zst.sig).
+#
+# The invariant these tests pin: once the local file:// repo index exists, EVERY
+# pinned package is already on disk, so the pacstrap conf must install purely from
+# the local repo (SigLevel=Never, no network Include) -- never re-reaching the
+# archive host for signatures. Mirror reachability is irrelevant when the cache
+# can already serve the build.
+
+
+def _stub_probe(monkeypatch, *, reachable: bool):
+    """Make _probe_and_maybe_switch's helpers side-effect-free for a unit test:
+    _sudo() returns [] (no privilege wrapper) and every subprocess.run (the rm -rf
+    scratch calls and the mirror -Sy probe) is faked. The probe's returncode is
+    driven by ``reachable`` so we exercise both the reachable and unreachable arms
+    without touching the network."""
+    monkeypatch.setattr(compiler, "_sudo", lambda: [])
+
+    class _Result:
+        def __init__(self, rc):
+            self.returncode = rc
+
+    def fake_run(argv, **kwargs):
+        # The mirror probe is the only `pacman -Sy ...` invocation here.
+        if "pacman" in argv and "-Sy" in argv:
+            return _Result(0 if reachable else 1)
+        return _Result(0)
+
+    monkeypatch.setattr(compiler.subprocess, "run", fake_run)
+
+
+def _active(conf: str, line: str) -> list[str]:
+    """Lines equal to ``line`` once stripped -- i.e. UNCOMMENTED, active directives.
+    The profile header/tail carry commented `#Include`/`#[core-testing]` examples, so
+    a plain substring test would false-match; an exact stripped-equality is what tells
+    an active network repo from a commented example."""
+    return [ln for ln in conf.splitlines() if ln.strip() == line]
+
+
+def _build_profile_conf_with_localrepo(monkeypatch, tmp_path, *, reachable: bool):
+    """Drive _probe_and_maybe_switch with a PRESENT local repo index and return the
+    pacman.conf it wrote to W."""
+    W = tmp_path / "profile"
+    W.mkdir()
+    localrepo = tmp_path / "repo"
+    localrepo.mkdir()
+    idx = localrepo / "pacstrap-azarch-repo.db"
+    idx.write_text("")
+    monkeypatch.setattr(compiler.paths, "LOCALREPO_INDEX", idx)
+    _stub_probe(monkeypatch, reachable=reachable)
+    conf = compiler.pacman.build_profile_conf(cachedir=str(tmp_path / "pacman-pkg") + "/")
+    compiler._probe_and_maybe_switch(W, conf, localrepo, bar=None)
+    return (W / "pacman.conf").read_text()
+
+
+def test_probe_builds_offline_from_local_repo_when_cache_present(monkeypatch, tmp_path):
+    # Mirrors reachable, but the local repo index EXISTS: the written conf must be
+    # the offline (file://-only) form -- no ACTIVE network Include forcing a .sig fetch.
+    written = _build_profile_conf_with_localrepo(monkeypatch, tmp_path, reachable=True)
+    assert "[pacstrap-azarch-repo]" in written
+    assert _active(written, "Include = /etc/pacman.d/mirrorlist") == []
+    assert _active(written, "[core]") == [] and _active(written, "[extra]") == []
+
+
+def test_probe_offline_when_cache_present_even_if_mirrors_unreachable(monkeypatch, tmp_path):
+    # Same offline outcome when mirrors are down -- the cache is authoritative.
+    written = _build_profile_conf_with_localrepo(monkeypatch, tmp_path, reachable=False)
+    assert "[pacstrap-azarch-repo]" in written
+    assert _active(written, "Include = /etc/pacman.d/mirrorlist") == []
+
+
+def test_probe_goes_online_only_when_no_local_repo(monkeypatch, tmp_path):
+    # No local repo cached AND mirrors reachable: the only case that legitimately
+    # needs the network -- keep the network repos so pacstrap can fetch from them.
+    W = tmp_path / "profile"
+    W.mkdir()
+    localrepo = tmp_path / "repo"  # deliberately NOT created -> index absent
+    monkeypatch.setattr(compiler.paths, "LOCALREPO_INDEX", localrepo / "pacstrap-azarch-repo.db")
+    _stub_probe(monkeypatch, reachable=True)
+    conf = compiler.pacman.build_profile_conf(cachedir=str(tmp_path / "pacman-pkg") + "/")
+    compiler._probe_and_maybe_switch(W, conf, localrepo, bar=None)
+    written = (W / "pacman.conf").read_text()
+    assert _active(written, "Include = /etc/pacman.d/mirrorlist") != []
+    # The local file:// repo MUST still be appended: our own packages (calamares/
+    # librewolf/thunar) live on no mirror and are built into it at step 14, so a cold
+    # build would fail to resolve them without this. Guards against a future edit that
+    # drops append_local_repo from the online branch (the one thing the network-repo
+    # assertion above would not catch).
+    assert "[pacstrap-azarch-repo]" in written
