@@ -678,6 +678,7 @@ static void test_ssh_server_screen(void)
     CHECK(strstr(s->subtitle, "ssh") != NULL || strstr(s->subtitle, "SSH") != NULL);
     CHECK(strstr(s->subtitle, "22") != NULL);       /* mentions the port */
     int has_start = 0, has_stop = 0, has_hyper = 0, has_open = 0;
+    int has_root_on = 0, has_root_off = 0;
     for (int i = 0; i < s->nrows; i++) {
         CHECK(s->rows[i].kind == AZ_ACT_APPLY);
         CHECK(s->rows[i].needs_root == 1);          /* every ssh action secures sudo first */
@@ -687,11 +688,25 @@ static void test_ssh_server_screen(void)
         if (strcmp(s->rows[i].target, "azarch network ssh stop") == 0) has_stop = 1;
         if (strcmp(s->rows[i].target, "azarch --sshd-hypervisor") == 0) has_hyper = 1;
         if (strcmp(s->rows[i].target, "azarch network firewall port open 22/tcp") == 0) has_open = 1;
+        /* root SSH login toggle (off by default) -- both directions must be present */
+        if (strcmp(s->rows[i].target, "azarch network ssh root on") == 0) has_root_on = 1;
+        if (strcmp(s->rows[i].target, "azarch network ssh root off") == 0) has_root_off = 1;
     }
     CHECK(has_start == 1);
     CHECK(has_stop == 1);
     CHECK(has_hyper == 1);                           /* the "button" for azarch --sshd-hypervisor */
     CHECK(has_open == 1);
+    CHECK(has_root_on == 1);                         /* Enable root SSH login (INSECURE) */
+    CHECK(has_root_off == 1);                        /* Disable root SSH login (default) */
+    /* root-login state read: with no drop-in present (the test host), it must report the
+     * shipped default -- "denied" -- and NEVER "allowed". Also proves the status line's
+     * root half is a pure read (no fork, no root). */
+    CHECK(strcmp(az_root_login_state(), "denied") == 0);
+    /* and the combined Current: line embeds the root-login state so the user sees it. */
+    char sb[128];
+    az_status_ssh(sb, sizeof sb);
+    CHECK(strstr(sb, "root login") != NULL);
+    CHECK(strstr(sb, "denied") != NULL);
     /* the Network parent has an "SSH Server" row that descends here, with the sshd status */
     const AzScreen *net = az_screen_find("network");
     int found = 0;

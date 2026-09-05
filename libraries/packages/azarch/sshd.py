@@ -21,6 +21,94 @@ SSHD_HARDENING_CONF = (
     "PermitEmptyPasswords no\n"
 )
 
+# Root-login policy lives in its OWN drop-in, SEPARATE from the always-on hardening
+# above, because it is TOGGLEABLE at runtime (`azarch network ssh root on|off`, surfaced
+# in the TUI). data/PROMPT.md: root ssh login is OFF by default -- only the end user's own
+# account (resolved dynamically via SUDO_USER) may log in. `PermitRootLogin no` denies root
+# for ALL auth methods (key and password), so even the hypervisor-staged host key cannot
+# reach root. Keeping this in a separate file lets the toggle rewrite JUST this file
+# (no <-> yes) without ever touching 10-azarch-hardening.conf's empty-password pin.
+SSHD_ROOT_LOGIN_DROPIN = "/etc/ssh/sshd_config.d/20-azarch-root-login.conf"
+
+SSHD_ROOT_LOGIN_OFF = (
+    "# Az'arch root-login policy -- default DENY (`azarch network ssh root off`).\n"
+    "# Only the end user's own account may log in over ssh; root is refused for all\n"
+    "# auth methods (key and password). Flip with `azarch network ssh root on`.\n"
+    "PermitRootLogin no\n"
+)
+
+SSHD_ROOT_LOGIN_ON = (
+    "# Az'arch root-login policy -- OPT-IN ALLOW (`azarch network ssh root on`).\n"
+    "# INSECURE: this lets root log in over ssh. Turn it back off with\n"
+    "# `azarch network ssh root off` (the default) as soon as you are done.\n"
+    "PermitRootLogin yes\n"
+)
+
+
+def _root_login_dropin_path() -> str:
+    """Path of the toggleable root-login drop-in. A function (not just the constant) so
+    tests can point the status read at a temp file without a real /etc write."""
+    return SSHD_ROOT_LOGIN_DROPIN
+
+
+def sshd_root_login_is_enabled() -> bool:
+    """True if root ssh login is currently ALLOWED per our drop-in. Pure read (no root):
+    the sshd_config.d files are world-readable. Absent file -> disabled (the shipped
+    default). Only our own drop-in is consulted -- the last effective `PermitRootLogin`
+    directive in it wins, mirroring sshd's own last-match-in-a-file behaviour."""
+    path = _root_login_dropin_path()
+    try:
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError:
+        return False
+    enabled = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        parts = stripped.split()
+        if len(parts) >= 2 and parts[0].lower() == "permitrootlogin":
+            # Anything other than an explicit "no"/"prohibit-password"/"forced-commands-only"
+            # opens root to interactive login; we only ever write "yes"/"no", but be robust.
+            enabled = parts[1].lower() == "yes"
+    return enabled
+
+
+def _sshd_reload_if_running() -> None:
+    """Reload sshd so a root-login toggle takes effect WITHOUT dropping live sessions
+    (reload, never restart). Best-effort: if sshd is not running there is nothing to
+    reload and the on-disk drop-in will simply be read when it next starts."""
+    if sshd_is_active():
+        _sudo("systemctl", "reload", "sshd", check=False)
+
+
+def sshd_root_login_enable() -> int:
+    """Turn root ssh login ON (opt-in, INSECURE): write the `PermitRootLogin yes` drop-in
+    and reload sshd. Returns 0. Prints a security reminder because this widens exposure."""
+    _sudo_write(SSHD_ROOT_LOGIN_DROPIN, SSHD_ROOT_LOGIN_ON)
+    _sshd_reload_if_running()
+    print("root ssh login ENABLED (insecure) -- run `azarch network ssh root off` to "
+          "disable it again when done.")
+    return 0
+
+
+def sshd_root_login_disable() -> int:
+    """Turn root ssh login OFF (the default): write the `PermitRootLogin no` drop-in and
+    reload sshd. Returns 0. Safe to run repeatedly."""
+    _sudo_write(SSHD_ROOT_LOGIN_DROPIN, SSHD_ROOT_LOGIN_OFF)
+    _sshd_reload_if_running()
+    print("root ssh login disabled -- only your own account may log in over ssh.")
+    return 0
+
+
+def sshd_root_login_status() -> int:
+    """Print whether root ssh login is currently enabled or disabled (a plain read of the
+    drop-in). Returns 0 when enabled, 1 when disabled, so a probe can branch on the code."""
+    enabled = sshd_root_login_is_enabled()
+    print(f"root ssh login: {'enabled' if enabled else 'disabled'}")
+    return 0 if enabled else 1
+
 
 def _install_hypervisor_pubkey(target_user: str, target_home: str) -> None:
     """BEST-EFFORT: if the virtiofs `shared` folder carries a host pubkey, install it into
@@ -115,6 +203,11 @@ def sshd_hypervisor() -> int:
     # future default change cannot silently weaken us). A sshd_config.d drop-in is the
     # non-destructive way to set it (leaves the stock sshd_config untouched).
     _sudo_write("/etc/ssh/sshd_config.d/10-azarch-hardening.conf", SSHD_HARDENING_CONF)
+    # Deny root ssh login by DEFAULT (data/PROMPT.md): only the end user's own account
+    # (target_user, resolved above via SUDO_USER) may log in. Written as its own drop-in so
+    # the `azarch network ssh root on|off` toggle can flip just this file later. Done before
+    # `systemctl enable` so the shipped/enabled sshd starts with root already denied.
+    _sudo_write(SSHD_ROOT_LOGIN_DROPIN, SSHD_ROOT_LOGIN_OFF)
     rc = _sudo("systemctl", "enable", "--now", "sshd", check=False)
     if rc != 0:
         return rc

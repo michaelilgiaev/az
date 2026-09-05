@@ -324,6 +324,39 @@ def test_sshd_service_guarded_on_cli_presence():
     assert "ConditionPathExists=/usr/local/bin/azarch" in system.SSHD_HYPERVISOR_SETUP_SERVICE
 
 
+# --- base airootfs bakes in `PermitRootLogin no` (survives a Calamares install) --
+# The reported bug: a Calamares-installed box was reachable as ROOT over ssh. The base
+# ISO locks all shadow fields, but a Calamares install SETS a real root password
+# (config_system.py), and sshd's default is `prohibit-password` -- so without an
+# explicit policy root is reachable. The runtime `--sshd-hypervisor` bring-up writes the
+# deny drop-in, but that NEVER runs on a base-ISO Calamares install. So the deny must be
+# BAKED into the airootfs, where the offline unpackfs copies it to the installed target.
+
+def test_base_airootfs_bakes_root_login_denied(tmp_path):
+    airootfs = tmp_path / "airootfs"
+    compiler._provision_sshd_hardening(airootfs)
+    dropin = airootfs / system.SSHD_ROOT_LOGIN_DROPIN_PATH
+    assert dropin.is_file(), "base airootfs must bake in the root-login drop-in"
+    body = dropin.read_text()
+    assert "PermitRootLogin no" in body
+    assert "PermitRootLogin yes" not in body
+
+
+def test_provision_sshd_hardening_uses_the_system_constant(tmp_path):
+    # The baked file body must be exactly the system.py source of truth (no drift).
+    airootfs = tmp_path / "airootfs"
+    compiler._provision_sshd_hardening(airootfs)
+    dropin = airootfs / system.SSHD_ROOT_LOGIN_DROPIN_PATH
+    assert dropin.read_text() == system.SSHD_ROOT_LOGIN_OFF
+
+
+def test_run_provisions_sshd_hardening_for_the_base_airootfs():
+    # run() must actually CALL the hardening provisioner as part of building the airootfs,
+    # or the baked drop-in would never make it onto the ISO.
+    src = inspect.getsource(compiler.run)
+    assert "_provision_sshd_hardening(" in src
+
+
 # --- base headed ISO ships ssh DISABLED everywhere ------------------------------
 
 def test_link_services_never_enables_stock_sshd():

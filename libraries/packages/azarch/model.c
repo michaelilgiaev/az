@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>   /* strncasecmp (root-login drop-in scan) */
 #include <unistd.h>
 #include <sys/wait.h>
 #include <fcntl.h>
@@ -392,18 +393,52 @@ const char *az_status_power(char *buf, size_t n)
     return buf;
 }
 
+/* Path of the toggleable root-login sshd drop-in (baked default-deny; the TUI/CLI flip
+ * it). Kept as a macro so az_root_login_state() and any test read the same file. */
+#define AZ_ROOT_LOGIN_DROPIN "/etc/ssh/sshd_config.d/20-azarch-root-login.conf"
+
+const char *az_root_login_state(void)
+{
+    /* "allowed" / "denied" -- a PURE read of our sshd_config.d drop-in (world-readable,
+     * no root, no fork). Absent file -> "denied" (the shipped default). We scan for the
+     * last effective `PermitRootLogin` line and report allowed only for an explicit "yes",
+     * mirroring sshd's own last-match-in-a-file behaviour. Returned as a static string so
+     * callers can embed it in a status line without owning a buffer. */
+    FILE *f = fopen(AZ_ROOT_LOGIN_DROPIN, "r");
+    if (!f) return "denied";
+    const char *state = "denied";
+    char line[256];
+    while (fgets(line, sizeof line, f)) {
+        char *p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == '#' || *p == '\0' || *p == '\n') continue;
+        /* case-insensitive match of the directive keyword */
+        if (strncasecmp(p, "PermitRootLogin", 15) != 0) continue;
+        char *v = p + 15;
+        while (*v == ' ' || *v == '\t') v++;
+        state = (strncasecmp(v, "yes", 3) == 0) ? "allowed" : "denied";
+    }
+    fclose(f);
+    return state;
+}
+
 const char *az_status_ssh(char *buf, size_t n)
 {
-    /* The SSH Server screen's "Current:" line: whether sshd is running. `systemctl
-     * is-active sshd` prints "active"/"inactive"/"failed" and exits 0 only when active, so
-     * we key off the printed word (falling back to the exit code). Needs no root -- it is a
-     * plain read. Degrades to "unknown" so the cell is never blank. */
-    if (!az_have("systemctl")) { snprintf(buf, n, "systemctl not found"); return buf; }
+    /* The SSH Server screen's "Current:" line: whether sshd is running AND whether root
+     * login is allowed (the second half is the drift-proof default-deny state the user
+     * asked to see at a glance). `systemctl is-active sshd` prints "active"/"inactive"/
+     * "failed" and exits 0 only when active, so we key off the printed word (falling back
+     * to the exit code). The root-login half is a pure drop-in read. Degrades gracefully so
+     * the cell is never blank. */
+    const char *root = az_root_login_state();
+    if (!az_have("systemctl")) {
+        snprintf(buf, n, "systemctl not found; root login %s", root);
+        return buf;
+    }
     const char *argv[] = {"systemctl", "is-active", "sshd", NULL};
     char raw[32] = {0};
     az_capture(argv, raw, sizeof raw);   /* is-active exits non-zero when inactive */
-    if (raw[0]) { snprintf(buf, n, "sshd %s", raw); return buf; }
-    snprintf(buf, n, "sshd unknown");
+    snprintf(buf, n, "sshd %s; root login %s", raw[0] ? raw : "unknown", root);
     return buf;
 }
 

@@ -597,14 +597,16 @@ def cmd_ip(args: list[str]) -> int:
 # ssh server (sshd) -- start/stop/status
 # ---------------------------------------------------------------------------
 def cmd_ssh(args: list[str]) -> int:
-    """`azarch network ssh <start|stop|status>` -- the SSH SERVER front-end.
+    """`azarch network ssh <start|stop|status|root>` -- the SSH SERVER front-end.
 
     start  -> `azarch --sshd-hypervisor` bring-up: install the host pubkey (if the
               virtiofs shared folder is present), generate host keys, OPEN port 22/tcp in the
               firewall, then enable+start sshd. So one command makes the box reachable
-              over ssh with the firewall opened for it.
+              over ssh with the firewall opened for it. The bring-up also denies ROOT
+              login by default (see _cmd_ssh_root for the toggle).
     stop   -> disable+stop sshd and CLOSE port 22 again (sshd_stop).
     status -> whether sshd is active + whether :22 is allowed (sshd_status).
+    root   -> on/off/status for ROOT ssh login (off by default); see _cmd_ssh_root.
 
     This is the CLI behind the TUI's Network > SSH Server screen. The default headed ISO
     ships ssh OFF; this is how a user turns it on/off deliberately."""
@@ -615,18 +617,45 @@ def cmd_ssh(args: list[str]) -> int:
         return sshd_stop()
     if verb == "status":
         return sshd_status()
+    if verb == "root":
+        return _cmd_ssh_root(args[1:])
     if verb in ("--help", "-h", "help"):
-        print("Usage: azarch network ssh <start|stop|status>\n"
+        print("Usage: azarch network ssh <start|stop|status|root>\n"
               "\n"
-              "  start   Open port 22/tcp and enable+start the ssh server (sshd).\n"
-              "  stop    Disable+stop sshd and close port 22 again.\n"
-              "  status  Show whether sshd is running and whether :22 is allowed.\n"
+              "  start          Open port 22/tcp and enable+start the ssh server (sshd).\n"
+              "  stop           Disable+stop sshd and close port 22 again.\n"
+              "  status         Show whether sshd is running and whether :22 is allowed.\n"
+              "  root <on|off|status>  Allow/deny ROOT ssh login (off by default).\n"
               "\n"
               "Security: exposing ssh to an untrusted network lets anyone who can reach\n"
               "this machine attempt to log in. Use a strong password or key auth, and\n"
-              "only open :22 when you need remote access.")
+              "only open :22 when you need remote access. Root login is denied by\n"
+              "default; enabling it widens exposure -- turn it back off when done.")
         return 0
     _err(f"azarch network ssh: unknown command: {verb}")
+    return 2
+
+
+def _cmd_ssh_root(args: list[str]) -> int:
+    """`azarch network ssh root <on|off|status>` -- the ROOT-login switch behind the TUI's
+    two SSH Server rows. Root ssh login is DENIED by default (only the end user's own
+    account may log in); `on` opts into the insecure allow, `off` restores the default,
+    `status` reports the current drop-in state. Backed by sshd.sshd_root_login_*."""
+    verb = args[0] if args else "status"
+    if verb == "on":
+        return sshd_root_login_enable()
+    if verb == "off":
+        return sshd_root_login_disable()
+    if verb == "status":
+        return sshd_root_login_status()
+    if verb in ("--help", "-h", "help"):
+        print("Usage: azarch network ssh root <on|off|status>\n"
+              "\n"
+              "  on      Allow root to log in over ssh (INSECURE; off by default).\n"
+              "  off     Deny root ssh login -- only your own account may log in.\n"
+              "  status  Show whether root ssh login is currently allowed.")
+        return 0
+    _err(f"azarch network ssh root: unknown command: {verb}")
     return 2
 
 
@@ -648,8 +677,8 @@ def network_usage() -> None:
         "  airplane [on|off|toggle|status] Kill or restore ALL radios at once.\n"
         "  firewall ...                    status, enable/disable, default <in> <out>, "
         "port list|open|close|delete.\n"
-        "  ssh <start|stop|status>         Start/stop the ssh server (opens/closes "
-        ":22/tcp).\n"
+        "  ssh <start|stop|status|root>    Start/stop the ssh server (opens/closes "
+        ":22/tcp); root on/off toggles root login.\n"
         "  ip ...                          show, static <iface> <addr/prefix> <gw> "
         "[dns...], dynamic <iface>.\n"
         "  --help                          Show this help.\n"

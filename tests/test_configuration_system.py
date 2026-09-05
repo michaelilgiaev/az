@@ -51,6 +51,27 @@ def test_shadow_passwords_locked():
         assert not field.startswith("$"), f"base shadow must never ship a real hash: {line}"
 
 
+# --- root SSH login denied by default, baked into the airootfs ----------------
+
+def test_root_login_dropin_denies_root():
+    # data/PROMPT.md: root ssh login OFF by default. The baked drop-in must set
+    # `PermitRootLogin no` (denies root for key AND password), so a Calamares-installed
+    # box -- which DOES get a real root password -- is not reachable as root over ssh.
+    assert "PermitRootLogin no" in system.SSHD_ROOT_LOGIN_OFF
+    assert "PermitRootLogin yes" not in system.SSHD_ROOT_LOGIN_OFF
+
+
+def test_root_login_dropin_path_sorts_before_arch_stock():
+    # The file is a sshd_config.d drop-in whose numeric prefix (20) sorts BEFORE Arch's
+    # stock 99-archlinux.conf, so with sshd's first-match-wins-per-keyword our directive
+    # is authoritative. It is a RELATIVE airootfs path (no leading slash) so the compiler
+    # can join it under airootfs/.
+    p = system.SSHD_ROOT_LOGIN_DROPIN_PATH
+    assert p == "etc/ssh/sshd_config.d/20-azarch-root-login.conf"
+    assert not p.startswith("/"), "airootfs-relative path must not start with /"
+    assert p.rsplit("/", 1)[1] < "99-archlinux.conf"
+
+
 def test_shadow_for_locks_by_default():
     # shadow_for() with no hash reproduces the locked base SHADOW exactly -- the
     # single source of truth for the base variant's shadow file.

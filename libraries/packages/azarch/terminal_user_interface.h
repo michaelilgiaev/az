@@ -180,10 +180,15 @@ const char *az_status_wired(char *buf, size_t n);
 const char *az_status_bluetooth(char *buf, size_t n);
 const char *az_status_airplane(char *buf, size_t n);
 const char *az_status_firewall(char *buf, size_t n);
-/* SSH Server: whether sshd is running ("sshd active"/"sshd inactive"). `systemctl is-active
- * sshd` -- a plain read, no root. This is the "Current:" line of the Network > SSH Server
- * screen the user asked for. */
+/* SSH Server: whether sshd is running AND whether root login is allowed
+ * ("sshd active; root login denied"). sshd state via `systemctl is-active sshd`; the
+ * root-login half is a pure read of the baked default-deny drop-in. This is the "Current:"
+ * line of the Network > SSH Server screen the user asked for. */
 const char *az_status_ssh(char *buf, size_t n);
+/* "allowed"/"denied" root ssh login, read from the sshd_config.d drop-in (no root, no
+ * fork; absent file -> "denied", the shipped default). Exposed for the status line and
+ * for tests. */
+const char *az_root_login_state(void);
 /* Firewall DEFAULT policy: the incoming/outgoing default summary ("deny (incoming), allow
  * (outgoing), ...") pulled from `ufw status verbose`'s Default: line. Reports "needs sudo"
  * when no cached credential. Backs the firewall default-policy control the user asked for. */

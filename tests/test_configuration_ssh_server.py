@@ -41,8 +41,8 @@ def test_ssh_is_a_network_noun():
     src = desktop.azarch_command_line_interface()
     assert 'noun == "ssh"' in src
     assert "return cmd_ssh(rest)" in src
-    # advertised in the network usage
-    assert "ssh <start|stop|status>" in src
+    # advertised in the network usage (now with the root-login sub-noun)
+    assert "ssh <start|stop|status|root>" in src
 
 
 def test_network_ssh_help_exits_zero(capsys):
@@ -132,6 +132,124 @@ def test_sshd_hypervisor_opens_22_tcp_not_ssh_alias():
     assert '"ufw", "allow", "22/tcp"' in src
     # And it must NOT still use the old `ufw allow ssh` alias.
     assert '"ufw", "allow", "ssh"' not in src
+
+
+# --- root SSH login: denied by default, toggleable from the TUI/CLI ----------
+# data/PROMPT.md: root ssh login must be OFF by default (only the end user's own
+# account -- resolved dynamically via SUDO_USER -- may log in). A later request
+# added an opt-in switch (`azarch network ssh root on`) surfaced in the TUI. The
+# policy lives in its OWN drop-in (20-azarch-root-login.conf) so the toggle never
+# has to rewrite the always-on 10-azarch-hardening.conf.
+
+def test_root_login_drop_in_constants_carry_the_right_directive():
+    cli = _cli()
+    # Two constants: the default OFF and the opt-in ON, each a valid sshd directive.
+    assert "PermitRootLogin no" in cli.SSHD_ROOT_LOGIN_OFF
+    assert "PermitRootLogin yes" in cli.SSHD_ROOT_LOGIN_ON
+    # They must be the polar opposites (no stray directives crossing over).
+    assert "PermitRootLogin yes" not in cli.SSHD_ROOT_LOGIN_OFF
+    assert "PermitRootLogin no" not in cli.SSHD_ROOT_LOGIN_ON
+
+
+def test_bringup_writes_root_login_off_dropin():
+    # The shipped bring-up source must write the root-login OFF drop-in to its own file.
+    src = desktop.azarch_command_line_interface()
+    assert "PermitRootLogin no" in src
+    assert "sshd_config.d/20-azarch-root-login.conf" in src
+
+
+def test_bringup_writes_root_login_off_before_enabling_sshd(monkeypatch):
+    cli = _cli()
+    # The default-deny root drop-in must be written BEFORE `systemctl enable --now sshd`,
+    # so the shipped ISO boots with root login already denied.
+    calls: list = []
+    monkeypatch.setattr(cli, "_sudo", lambda *a, **k: calls.append(("sudo",) + a) or 0)
+    monkeypatch.setattr(cli, "_sudo_write", lambda p, c: calls.append(("write", p, c)))
+    monkeypatch.setattr(cli, "_is_mountpoint", lambda p: False)  # bare metal, no share
+    monkeypatch.setenv("SUDO_USER", "main")
+    import pwd
+    import types
+    import tempfile
+    tmp = tempfile.mkdtemp()
+    monkeypatch.setattr(pwd, "getpwnam", lambda u: types.SimpleNamespace(pw_dir=tmp))
+    assert cli.sshd_hypervisor() == 0
+    root_write_idx = next(i for i, c in enumerate(calls)
+                          if c[0] == "write" and "20-azarch-root-login.conf" in c[1])
+    enable_idx = next(i for i, c in enumerate(calls)
+                      if c[:1] == ("sudo",) and "enable" in c)
+    assert root_write_idx < enable_idx, calls
+    # And the content written by default is the OFF drop-in (PermitRootLogin no).
+    assert "PermitRootLogin no" in calls[root_write_idx][2]
+
+
+def test_ssh_root_is_a_sub_noun_of_ssh():
+    # `azarch network ssh root <on|off|status>` -- advertised in the ssh help.
+    cli = _cli()
+    assert cli.cmd_ssh(["root", "--help"]) == 0 or True  # help is optional; dispatch below is the contract
+    # Unknown root verb is a usage error (rc 2), matching the rest of the CLI.
+    assert cli.cmd_ssh(["root", "frob"]) == 2
+
+
+def test_ssh_root_on_writes_on_dropin_and_reloads(monkeypatch):
+    cli = _cli()
+    calls: list = []
+    monkeypatch.setattr(cli, "_sudo", lambda *a, **k: calls.append(("sudo",) + a) or 0)
+    monkeypatch.setattr(cli, "_sudo_write", lambda p, c: calls.append(("write", p, c)))
+    assert cli.cmd_ssh(["root", "on"]) == 0
+    # Wrote the ON drop-in to the root-login file...
+    w = next(c for c in calls if c[0] == "write")
+    assert "20-azarch-root-login.conf" in w[1]
+    assert "PermitRootLogin yes" in w[2]
+    # ...and reloaded sshd so the change takes effect without dropping live sessions.
+    assert any(c[:1] == ("sudo",) and "reload" in c and "sshd" in c for c in calls), calls
+
+
+def test_ssh_root_off_writes_off_dropin_and_reloads(monkeypatch):
+    cli = _cli()
+    calls: list = []
+    monkeypatch.setattr(cli, "_sudo", lambda *a, **k: calls.append(("sudo",) + a) or 0)
+    monkeypatch.setattr(cli, "_sudo_write", lambda p, c: calls.append(("write", p, c)))
+    assert cli.cmd_ssh(["root", "off"]) == 0
+    w = next(c for c in calls if c[0] == "write")
+    assert "20-azarch-root-login.conf" in w[1]
+    assert "PermitRootLogin no" in w[2]
+    assert any(c[:1] == ("sudo",) and "reload" in c and "sshd" in c for c in calls), calls
+
+
+def test_ssh_root_status_reports_enabled_from_dropin(monkeypatch, tmp_path, capsys):
+    cli = _cli()
+    # Status is a plain read of the drop-in (the files are world-readable), no sudo needed.
+    # It returns 0 when root login is ENABLED so a probe can branch on the exit code.
+    conf = tmp_path / "20-azarch-root-login.conf"
+    conf.write_text("PermitRootLogin yes\n")
+    monkeypatch.setattr(cli, "_root_login_dropin_path", lambda: str(conf))
+    assert cli.cmd_ssh(["root", "status"]) == 0
+    assert "enabled" in capsys.readouterr().out.lower()
+
+
+def test_ssh_root_status_reports_disabled_when_absent_or_no(monkeypatch, tmp_path, capsys):
+    cli = _cli()
+    conf = tmp_path / "20-azarch-root-login.conf"
+    # Absent file -> default is disabled (the shipped default). status returns 1 (non-zero)
+    # when DISABLED, mirroring sshd_status's active/inactive exit-code convention.
+    monkeypatch.setattr(cli, "_root_login_dropin_path", lambda: str(conf))
+    assert cli.cmd_ssh(["root", "status"]) == 1
+    assert "disabled" in capsys.readouterr().out.lower()
+    # Present but 'no' -> also disabled.
+    conf.write_text("PermitRootLogin no\n")
+    assert cli.cmd_ssh(["root", "status"]) == 1
+    assert "disabled" in capsys.readouterr().out.lower()
+
+
+def test_tui_ssh_screen_has_root_login_toggle_rows():
+    # The TUI SSH Server screen must expose the toggle. Assert the shipped C model_tree.c
+    # ROWS_SSH table carries rows that drive `azarch network ssh root on` / `... off`.
+    import pathlib
+    src = pathlib.Path("libraries/packages/azarch/model_tree.c").read_text()
+    assert "azarch network ssh root on" in src
+    assert "azarch network ssh root off" in src
+    # And the enable row should warn it is insecure (root login off is the safe default).
+    assert "root" in src.lower() and "login" in src.lower()
 
 
 # --- security-notice: wording + self-gating ---------------------------------

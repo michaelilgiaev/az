@@ -306,6 +306,11 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     home = airootfs / "home/main"
     emit.mkdir(home)
     subprocess.run(sudo + ["chown", "-R", "1000:998", str(home)], check=False)
+    # Bake the default-deny root-login sshd drop-in so root cannot log in over ssh -- on
+    # the live ISO AND on any Calamares-installed target (the offline unpackfs copies it).
+    # This is the root-cause fix for a Calamares install being reachable as root; the
+    # runtime bring-up never runs there. See _provision_sshd_hardening.
+    _provision_sshd_hardening(airootfs)
 
     # 7 -- Overlay branding and locale into airootfs.
     # One coherent overlay-population act: locale setup-script + service, the fastfetch
@@ -472,6 +477,24 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
 
 
 # --- helpers ---------------------------------------------------------------
+
+def _provision_sshd_hardening(airootfs: Path) -> None:
+    """Bake the DEFAULT-DENY root-login policy into the airootfs (both variants).
+
+    data/PROMPT.md: root ssh login is OFF by default. The base ISO locks every shadow
+    field, but a Calamares INSTALL sets a real root password (config_system.py), and
+    sshd's compiled default is `prohibit-password` -- so on an installed box with sshd up
+    root would otherwise be reachable. Writing `PermitRootLogin no` as a sshd_config.d
+    drop-in HERE (in the airootfs, not just the runtime `--sshd-hypervisor` bring-up) means
+    it ships on the live ISO AND is copied to every installed target by the offline
+    unpackfs -- closing the gap on a Calamares install, which never runs the bring-up. The
+    `20-` prefix sorts before Arch's stock `99-archlinux.conf` and sshd is first-match-wins
+    per keyword, so this is authoritative. The azarch TUI/CLI toggle rewrites this file.
+    New file (openssh does not own `20-azarch-root-login.conf`), so no pacstrap file
+    conflict -- it can live in the overlay directly."""
+    emit.write_text(airootfs / system.SSHD_ROOT_LOGIN_DROPIN_PATH,
+                    system.SSHD_ROOT_LOGIN_OFF)
+
 
 def _apply_variant(W: Path, airootfs: Path, variant: str,
                    ssh_password_hash: str | None = None) -> None:

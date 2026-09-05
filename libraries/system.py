@@ -39,6 +39,27 @@ root:{LOCKED_PASSWORD}:14871::::::
 main:{LOCKED_PASSWORD}:14871::::::
 """
 
+# --- root SSH login: DENIED by default, baked into the airootfs ----------------
+# data/PROMPT.md: root ssh login must be OFF by default -- only the end user's own
+# account may log in. The base ISO locks all shadow fields (above), but a Calamares
+# INSTALL sets a real root password (config_system.py: setRootPassword/doReusePassword),
+# so on an installed system root has a valid password. sshd's compiled default is
+# `prohibit-password` (root can still log in by KEY), so without an explicit policy an
+# installed box with sshd up is reachable as root. We therefore BAKE `PermitRootLogin no`
+# into the airootfs as a sshd_config.d drop-in: it ships on the live ISO AND is copied to
+# every installed target by the offline unpackfs, closing the gap independent of the
+# runtime `--sshd-hypervisor` bring-up. The `20-` prefix sorts BEFORE Arch's stock
+# `99-archlinux.conf` (which sets no PermitRootLogin), and sshd is first-match-wins per
+# keyword, so this is authoritative. The azarch TUI/CLI toggle rewrites this same file.
+SSHD_ROOT_LOGIN_DROPIN_PATH = "etc/ssh/sshd_config.d/20-azarch-root-login.conf"
+
+SSHD_ROOT_LOGIN_OFF = (
+    "# Az'arch root-login policy -- default DENY (`azarch network ssh root off`).\n"
+    "# Only the end user's own account may log in over ssh; root is refused for all\n"
+    "# auth methods (key and password). Flip with `azarch network ssh root on`.\n"
+    "PermitRootLogin no\n"
+)
+
 
 def shadow_for(main_password_hash: str | None = None) -> str:
     """Return the /etc/shadow contents for a build variant.
