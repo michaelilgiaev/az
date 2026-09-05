@@ -28,6 +28,8 @@ if they are not -- exactly like the rest of the cache-first design.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import os
 import pwd
@@ -247,9 +249,122 @@ def _sanitize_build_path(path: str, home: str) -> str:
 
 
 def _repo_has_all(pkg_repo: Path, names: tuple[str, ...]) -> bool:
-    """True if a built package file exists for every name this tier produces."""
+    """True if a built package file exists for every name this tier produces.
+
+    Existence ONLY -- says nothing about whether the file matches the CURRENT
+    recipe. The staleness gates (cache_is_complete / the offline-skip in
+    build_own_packages) call _repo_is_current instead, which pairs this with a
+    recipe-fingerprint check so a package built from an OLDER recipe is not reused.
+    Kept as the low-level primitive (its name-prefix match is still what those
+    callers need)."""
     for name in names:
         if not any(pkg_repo.glob(f"{name}-*.pkg.tar.zst")):
+            return False
+    return True
+
+
+# --- own-package recipe fingerprinting --------------------------------------
+# The offline default tier SKIPS makepkg when the own packages are already in the
+# repo (the fast rerun). That skip used to be content-BLIND: _repo_has_all only
+# checked that a file named `calamares-*.pkg.tar.zst` existed, never whether it was
+# built from the CURRENT recipe. So editing a recipe -- e.g. adding the networkq
+# source patch to the calamares PKGBUILD -- did NOT invalidate the cached package:
+# the stale binary (built before the patch existed) was reused, and the ISO shipped
+# a calamares whose settings.conf listed `networkq` but whose modules dir had no
+# such module, so Calamares aborted at startup with "networkq@networkq could not be
+# loaded". This mirrors the manifest-coverage bug cache_is_complete() already guards
+# (a warm cache that nonetheless lacks a newly-added package): the fix is the same
+# shape -- treat a recipe change as an incomplete cache so the run goes ONLINE and
+# `makepkg -f` rebuilds the package from the new recipe.
+#
+# The fingerprint is a hash of every file in the recipe (PKGBUILD + all companion
+# files, e.g. the five calamares patches), so ANY change to the recipe -- including
+# an edit to a single patch -- flips it. It is written next to the built package as
+# a sidecar and re-checked on reuse.
+FINGERPRINT_SUFFIX = ".recipe-fingerprint"
+
+
+def _recipe_fingerprint(files: dict[str, str]) -> str:
+    """A stable content hash of one recipe (the {filename: content} dict emitted by
+    pkgbuild.recipe_dirs). Sorted by filename so the digest is order-independent, and
+    both names and bodies are folded in so adding/removing/renaming a companion file
+    (a patch) changes the result. Pure -- unit-tested."""
+    h = hashlib.sha256()
+    for name in sorted(files):
+        h.update(name.encode("utf-8"))
+        h.update(b"\0")
+        h.update(files[name].encode("utf-8"))
+        h.update(b"\0")
+    return h.hexdigest()
+
+
+def _current_recipe_fingerprints(full_compile: bool) -> dict[str, str]:
+    """Map each produced package name -> the fingerprint of the recipe that would
+    build it right now. The recipe DIR name (recipe_dirs' first tuple element) is the
+    package name for our recipes (calamares/librewolf/thunar), which is the key the
+    sidecar files and produced_names use."""
+    return {
+        dirname: _recipe_fingerprint(files)
+        for dirname, files in pkgbuild_cfg.recipe_dirs(full_compile)
+    }
+
+
+def _fingerprint_dir() -> Path:
+    """Where the recipe-fingerprint sidecars live -- a dedicated dir, NOT PKG_REPO
+    (which is cp -r'd wholesale into the ISO payload; build metadata stays out of it).
+    Read at call time so tests that monkeypatch paths.PKG_FINGERPRINTS take effect."""
+    return paths.PKG_FINGERPRINTS
+
+
+def _fingerprint_path(fp_dir: Path, name: str) -> Path:
+    return fp_dir / f"{name}{FINGERPRINT_SUFFIX}"
+
+
+def _write_recipe_fingerprint(fp_dir: Path, name: str, fingerprint: str) -> None:
+    """Record the recipe fingerprint for a freshly built package so a later run can
+    tell whether the cached package still matches the recipe. Best-effort: a write
+    failure just means the next run treats the cache as stale and rebuilds (safe --
+    never ships a stale package), so it must not abort the build."""
+    try:
+        fp_dir.mkdir(parents=True, exist_ok=True)
+        _fingerprint_path(fp_dir, name).write_text(
+            json.dumps({"name": name, "fingerprint": fingerprint}) + "\n"
+        )
+    except OSError as e:
+        print(f"    [!] Could not write recipe fingerprint for {name}: {e} "
+              "(cache will be treated as stale next run).")
+
+
+def _read_recipe_fingerprint(fp_dir: Path, name: str) -> str | None:
+    """The fingerprint recorded for a previously built package, or None if the
+    sidecar is absent/unreadable/malformed (any of which means 'can't prove it's
+    current' -> caller must rebuild)."""
+    try:
+        data = json.loads(_fingerprint_path(fp_dir, name).read_text())
+    except (OSError, ValueError):
+        return None
+    fp = data.get("fingerprint") if isinstance(data, dict) else None
+    return fp if isinstance(fp, str) else None
+
+
+def _repo_is_current(pkg_repo: Path, full_compile: bool,
+                     fp_dir: Path | None = None) -> bool:
+    """True iff, for EVERY produced package, a package file exists in pkg_repo AND its
+    recorded recipe fingerprint matches the recipe that would build it now. This is the
+    staleness gate: a missing package, a missing/old fingerprint sidecar, or a changed
+    recipe all make it False, so the caller goes online and rebuilds. fp_dir defaults
+    to the real fingerprint dir; it is injectable so tests can point it at a tmp dir.
+
+    A package cached by an OLDER build of Az'arch (before fingerprints existed) has
+    no sidecar -> None != current -> False -> rebuilt once, after which the sidecar
+    is present and offline reruns are fast again."""
+    if fp_dir is None:
+        fp_dir = _fingerprint_dir()
+    wanted = _current_recipe_fingerprints(full_compile)
+    if not _repo_has_all(pkg_repo, tuple(wanted)):
+        return False
+    for name, current in wanted.items():
+        if _read_recipe_fingerprint(fp_dir, name) != current:
             return False
     return True
 
@@ -376,17 +491,24 @@ def build_own_packages(offline: bool, full_compile: bool, progress: ProgressCb,
         if not full_compile:
             # DEFAULT tier, offline: the own packages are deterministic cached
             # artifacts (calamares from a pinned source, librewolf repackaged from a
-            # verified tarball). Present -> SKIP makepkg (the fast rerun the user
-            # wants). Absent -> fail loudly (unchanged).
-            if _repo_has_all(pkg_repo, names):
+            # verified tarball). Present AND built from the CURRENT recipe -> SKIP
+            # makepkg (the fast rerun the user wants). A recipe change (e.g. a new
+            # calamares patch) flips the fingerprint so this is False and we fall
+            # through to the loud error, which sends the next run online to rebuild --
+            # cache_is_complete() uses the same _repo_is_current check, so an offline
+            # run only ever reaches here when the recipe is unchanged; a changed recipe
+            # is demoted to online BEFORE this function is called offline.
+            if _repo_is_current(pkg_repo, full_compile):
                 print("    [+] Own packages already present in the offline repo -- skipping makepkg.")
                 progress(1000)
                 return
             raise MakepkgError(
-                f"Offline build but the built package(s) {', '.join(names)} are not in the cache.\n"
-                "    Wipe cache/ (or `git clean -Xdf`) so the next run rebuilds them online.\n"
-                "    (An incomplete cache already forces an online run automatically; this\n"
-                "    fires only when the cache LOOKS complete but the own packages are absent.)"
+                f"Offline build but the built package(s) {', '.join(names)} are absent or\n"
+                "    were built from an OLDER recipe (their recipe fingerprint no longer\n"
+                "    matches). Re-run online (FORCE_ONLINE=1) so makepkg rebuilds them from\n"
+                "    the current recipe, or wipe cache/ (or `git clean -Xdf`).\n"
+                "    (An incomplete/stale cache already forces an online run automatically;\n"
+                "    this fires only if an offline run is forced past that demotion.)"
             )
         # FULL tier, offline: the user asked for a from-source rerun to actually
         # RE-COMPILE, not trust the cached package. Rebuild librewolf (and calamares)
@@ -434,7 +556,8 @@ def build_own_packages(offline: bool, full_compile: bool, progress: ProgressCb,
     if paths.is_root():
         _run(["chown", "-R", f"{builder}:{builder}", str(scratch)], check=True)
 
-    _build_recipe_dirs(builder, dirs, pkg_repo, progress, phase, offline=False)
+    _build_recipe_dirs(builder, dirs, pkg_repo, progress, phase,
+                       offline=False, full_compile=full_compile)
 
     progress(1000)
     print("[✓] Az'arch's own packages built and staged into the offline repo.")
@@ -442,12 +565,20 @@ def build_own_packages(offline: bool, full_compile: bool, progress: ProgressCb,
 
 def _build_recipe_dirs(builder: str, dirs: list[Path], pkg_repo: Path,
                        progress: ProgressCb, phase: Callable[[str], None],
-                       offline: bool) -> None:
+                       offline: bool, full_compile: bool) -> None:
     """Build each recipe dir with makepkg, copy the resulting *.pkg.tar.zst into
     the offline repo, and hand the repo back to the invoking user. Shared by the
     online build tail and the offline --full-compile recompile; only the makepkg
     invocation differs (offline adds --noextract/--nocheck + AZARCH_OFFLINE so it
-    reuses the already-fetched scratch tree and never touches the network)."""
+    reuses the already-fetched scratch tree and never touches the network).
+
+    `full_compile` names the tier so the recipe fingerprints stamped below reflect
+    the recipe set actually being built (it is NOT inferable from `offline`: the
+    online path can be either tier, while the offline recompile is always full)."""
+    # Fingerprint of the recipe that produces each package NOW, keyed by dir/pkg
+    # name -- stamped next to each built package so a later run can detect a recipe
+    # change and rebuild instead of reusing a stale binary.
+    fingerprints = _current_recipe_fingerprints(full_compile=full_compile)
     total = len(dirs)
     for i, d in enumerate(dirs):
         name = d.name
@@ -461,6 +592,13 @@ def _build_recipe_dirs(builder: str, dirs: list[Path], pkg_repo: Path,
         for pkgfile in built:
             shutil.copy2(pkgfile, pkg_repo / pkgfile.name)
             print(f"    [+] {pkgfile.name} -> offline repo")
+        # Record which recipe built this package (see _repo_is_current), in the
+        # dedicated fingerprint dir (NOT pkg_repo -- that gets staged into the ISO).
+        # Keyed by the recipe dir name; a name absent from the map (should not happen
+        # -- dirs come from the same recipe_dirs) simply gets no stamp and is rebuilt
+        # next run.
+        if name in fingerprints:
+            _write_recipe_fingerprint(_fingerprint_dir(), name, fingerprints[name])
         progress(260 + (i + 1) * 700 // total)
 
     # hand the repo back to the invoking user (parity with packages.build_cache).
@@ -503,7 +641,9 @@ def _offline_full_recompile(scratch: Path, pkg_repo: Path, progress: ProgressCb,
     if paths.is_root():
         _run(["chown", "-R", f"{builder}:{builder}", str(scratch)], check=True)
     progress(260)
-    _build_recipe_dirs(builder, dirs, pkg_repo, progress, phase, offline=True)
+    # The offline recompile path is the --full-compile rerun, so the tier is full.
+    _build_recipe_dirs(builder, dirs, pkg_repo, progress, phase,
+                       offline=True, full_compile=True)
     progress(1000)
     print("[✓] Az'arch's own packages recompiled offline and staged into the repo.")
 

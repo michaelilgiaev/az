@@ -15,7 +15,23 @@ from __future__ import annotations
 import inspect
 
 import compiler
+import makepkg
 import paths
+
+
+def _use_fingerprint_dir(monkeypatch, repo, *, stamp_current):
+    """Point paths.PKG_FINGERPRINTS at `repo` for the test, and (when stamp_current)
+    write the current-recipe fingerprint sidecar for each own package there.
+
+    cache_is_complete() now treats an own package as "present" only if it was built
+    from the CURRENT recipe (a recipe-fingerprint match), which is what stops a stale
+    calamares -- one built before the networkq patch -- from being reused. A test that
+    wants a genuinely up-to-date cache must stamp the matching fingerprints (exactly as
+    a real makepkg build does); one simulating an old cache leaves them absent."""
+    monkeypatch.setattr(compiler.paths, "PKG_FINGERPRINTS", repo)
+    if stamp_current:
+        for name, fp in makepkg._current_recipe_fingerprints(full_compile=False).items():
+            makepkg._write_recipe_fingerprint(repo, name, fp)
 
 
 def test_ckbcomp_asset_is_vendored_python_script():
@@ -312,6 +328,9 @@ def test_cache_complete_true_when_all_present(monkeypatch, tmp_path):
     (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "librewolf-1.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "thunar-4.20.9-2-x86_64.pkg.tar.zst").write_text("")
+    # The own packages count as present only if built from the CURRENT recipe, so a
+    # genuinely complete cache also carries their matching recipe fingerprints.
+    _use_fingerprint_dir(monkeypatch, repo, stamp_current=True)
     (sync / "core.db").write_text("")
     # Every DOWNLOADED manifest package must also have a file in the repo (the
     # coverage clause). Point the manifest at a tiny file whose one entry is
@@ -325,6 +344,68 @@ def test_cache_complete_true_when_all_present(monkeypatch, tmp_path):
     monkeypatch.setattr(compiler.paths, "PACKAGES_FILE", manifest)
     monkeypatch.setattr(compiler.downloader.paths, "PACKAGES_FILE", manifest)
     assert compiler.cache_is_complete() is True
+
+
+def test_cache_complete_false_when_own_recipe_changed(monkeypatch, tmp_path):
+    # The networkq regression, at the cache-first predicate: structure, synced DB, and
+    # ALL own-package FILES are present, but calamares was built from an OLDER recipe
+    # (its fingerprint sidecar no longer matches -- e.g. the networkq patch was added
+    # since). This MUST read as incomplete so the run goes ONLINE and rebuilds
+    # calamares from the current recipe, instead of shipping the stale binary whose
+    # settings.conf lists `networkq` but whose modules dir has no such module.
+    monkeypatch.setenv("FORCE_ONLINE", "0")
+    repo = tmp_path / "repo"
+    sync = tmp_path / "db" / "sync"
+    repo.mkdir(parents=True)
+    sync.mkdir(parents=True)
+    idx = repo / "pacstrap-azarch-repo.db"
+    idx.write_text("")
+    (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
+    (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
+    (repo / "librewolf-1.0-1-x86_64.pkg.tar.zst").write_text("")
+    (repo / "thunar-4.20.9-2-x86_64.pkg.tar.zst").write_text("")
+    # Stamp CURRENT fingerprints, then corrupt calamares' to simulate its recipe change.
+    _use_fingerprint_dir(monkeypatch, repo, stamp_current=True)
+    makepkg._write_recipe_fingerprint(repo, "calamares", "old_recipe_before_networkq")
+    (sync / "core.db").write_text("")
+    manifest = tmp_path / "packages.x86_64"
+    manifest.write_text("# header\nsomepkg\n")
+
+    monkeypatch.setattr(compiler.paths, "LOCALREPO_INDEX", idx)
+    monkeypatch.setattr(compiler.paths, "PKG_REPO", repo)
+    monkeypatch.setattr(compiler.paths, "PKG_SYNC_DB", sync)
+    monkeypatch.setattr(compiler.paths, "PACKAGES_FILE", manifest)
+    monkeypatch.setattr(compiler.downloader.paths, "PACKAGES_FILE", manifest)
+    assert compiler.cache_is_complete() is False
+
+
+def test_cache_complete_false_when_own_fingerprint_absent(monkeypatch, tmp_path):
+    # A cache warmed by an OLDER Az'arch (before fingerprints existed): own-package
+    # files present but no sidecar at all. "Can't prove it's current" -> incomplete ->
+    # rebuild once (after which the sidecar exists and offline reruns are fast again).
+    monkeypatch.setenv("FORCE_ONLINE", "0")
+    repo = tmp_path / "repo"
+    sync = tmp_path / "db" / "sync"
+    repo.mkdir(parents=True)
+    sync.mkdir(parents=True)
+    idx = repo / "pacstrap-azarch-repo.db"
+    idx.write_text("")
+    (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
+    (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
+    (repo / "librewolf-1.0-1-x86_64.pkg.tar.zst").write_text("")
+    (repo / "thunar-4.20.9-2-x86_64.pkg.tar.zst").write_text("")
+    # Point the fingerprint dir at the (sidecar-free) repo -> no stamps -> stale.
+    _use_fingerprint_dir(monkeypatch, repo, stamp_current=False)
+    (sync / "core.db").write_text("")
+    manifest = tmp_path / "packages.x86_64"
+    manifest.write_text("# header\nsomepkg\n")
+
+    monkeypatch.setattr(compiler.paths, "LOCALREPO_INDEX", idx)
+    monkeypatch.setattr(compiler.paths, "PKG_REPO", repo)
+    monkeypatch.setattr(compiler.paths, "PKG_SYNC_DB", sync)
+    monkeypatch.setattr(compiler.paths, "PACKAGES_FILE", manifest)
+    monkeypatch.setattr(compiler.downloader.paths, "PACKAGES_FILE", manifest)
+    assert compiler.cache_is_complete() is False
 
 
 def test_cache_complete_false_when_manifest_package_missing(monkeypatch, tmp_path):
@@ -344,6 +425,10 @@ def test_cache_complete_false_when_manifest_package_missing(monkeypatch, tmp_pat
     (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "librewolf-1.0-1-x86_64.pkg.tar.zst").write_text("")
+    (repo / "thunar-4.20.9-2-x86_64.pkg.tar.zst").write_text("")
+    # Everything UPSTREAM of the manifest clause must pass so this test isolates it:
+    # current own-package fingerprints present, so the run reaches the coverage check.
+    _use_fingerprint_dir(monkeypatch, repo, stamp_current=True)
     (sync / "core.db").write_text("")
     # Manifest names a second package that has NO file in the repo.
     manifest = tmp_path / "packages.x86_64"
@@ -376,6 +461,8 @@ def test_cache_complete_ignores_own_packages_absent_from_repo_files(monkeypatch,
     (repo / "librewolf-1.0-1-x86_64.pkg.tar.zst").write_text("")
     # thunar is an own-built package too (rebuilt from source): in the manifest AND present.
     (repo / "thunar-4.20.9-2-x86_64.pkg.tar.zst").write_text("")
+    # Up-to-date cache -> own packages carry their current recipe fingerprints.
+    _use_fingerprint_dir(monkeypatch, repo, stamp_current=True)
     (sync / "core.db").write_text("")
     manifest = tmp_path / "packages.x86_64"
     manifest.write_text("# header\nsomepkg\ncalamares\nlibrewolf\nthunar\n")

@@ -1573,9 +1573,20 @@ def cache_is_complete() -> bool:
         return False
     if not paths.PKG_SYNC_DB.is_dir() or not any(paths.PKG_SYNC_DB.glob("*.db")):
         return False
-    # produced_names is tier-independent (both own packages are always built), so
-    # full_compile=False is correct regardless of the eventual --full-compile flag.
-    if not makepkg._repo_has_all(paths.PKG_REPO, makepkg.produced_names(full_compile=False)):
+    # Own-packages clause, recipe-AWARE: the offline repo must hold a package for
+    # every own package (calamares, librewolf, thunar) AND that package must have
+    # been built from the CURRENT recipe. _repo_is_current pairs the existence check
+    # with a recipe-fingerprint match, so EDITING a recipe -- e.g. adding the networkq
+    # source patch to the calamares PKGBUILD -- demotes this run to online and rebuilds
+    # the package, instead of silently reusing the stale binary (which shipped a
+    # calamares that listed `networkq` in settings.conf but had no such module, so it
+    # aborted at startup with "networkq@networkq could not be loaded"). Same spirit as
+    # the manifest-coverage clause below. produced_names is tier-independent, and
+    # _repo_is_current derives the fingerprint set from recipe_dirs the same way, so
+    # full_compile=False is correct regardless of the eventual --full-compile flag
+    # (the recipe FILES are identical across tiers for calamares/thunar; librewolf's
+    # differ, but a librewolf-recipe change correctly forces a rebuild either way).
+    if not makepkg._repo_is_current(paths.PKG_REPO, full_compile=False):
         return False
     # Manifest-coverage clause (same spirit as the own-packages clause above): the
     # offline repo must hold a package file for EVERY downloadable package the

@@ -187,10 +187,10 @@ def test_librewolf_src_shares_pkgver_and_lwver():
 def test_calamares_pkgver_and_sha():
     s = pkgbuild.pkgbuild_calamares()
     assert "pkgver=3.4.2" in s
-    # The tarball hash is pinned; the THREE shipped-in-repo patches (defaults +
-    # region-keyboard + finish-buttons) are each SKIP (local files, matched by position
-    # to the second, third and fourth source() entries).
-    assert ("sha256sums=('%s' 'SKIP' 'SKIP' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
+    # The tarball hash is pinned; the FIVE shipped-in-repo patches (defaults +
+    # region-keyboard + finish-buttons + networkq + networkcfg-static) are each SKIP
+    # (local files, matched by position to source() entries two through six).
+    assert ("sha256sums=('%s' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
 
 
 def test_calamares_pkgver_var_survives_brace_collapse():
@@ -245,6 +245,8 @@ def test_calamares_pkgbuild_references_patch_in_source_and_prepare():
         pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME,
         pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME,
         pkgbuild.CALAMARES_FINISH_BUTTONS_PATCH_NAME,
+        pkgbuild.CALAMARES_NETWORKQ_PATCH_NAME,
+        pkgbuild.CALAMARES_NETWORKCFG_STATIC_PATCH_NAME,
     ):
         assert ("'%s'" % name) in s                        # listed in source=()
         assert ("patch -p1 < \"$srcdir/%s\"" % name) in s  # applied, -p1, from srcdir
@@ -252,10 +254,11 @@ def test_calamares_pkgbuild_references_patch_in_source_and_prepare():
 
 def test_calamares_patch_skip_aligned_after_tarball_hash():
     # sha256sums matches source() by POSITION: real tarball hash first, then SKIP for
-    # each local patch file. Three SKIPs (defaults + region + finish-buttons patches).
+    # each local patch file. Five SKIPs (defaults + region + finish-buttons + networkq +
+    # networkcfg-static patches).
     s = pkgbuild.pkgbuild_calamares()
-    assert ("sha256sums=('%s' 'SKIP' 'SKIP' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
-    assert s.count("'SKIP'") == 3
+    assert ("sha256sums=('%s' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
+    assert s.count("'SKIP'") == 5
 
 
 def test_calamares_patch_name_is_a_patch_file():
@@ -483,9 +486,9 @@ def test_calamares_pkgbuild_references_region_patch_in_source_and_prepare():
     name = pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME
     assert ("'%s'" % name) in s
     assert ("patch -p1 < \"$srcdir/%s\"" % name) in s
-    # Three patches present in source() -> now THREE local files -> three SKIPs.
-    assert ("sha256sums=('%s' 'SKIP' 'SKIP' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
-    assert s.count("'SKIP'") == 3
+    # Five patches present in source() -> five local files -> five SKIPs.
+    assert ("sha256sums=('%s' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')" % pkgbuild.CALAMARES_SHA256) in s
+    assert s.count("'SKIP'") == 5
 
 
 def test_calamares_region_patch_touches_keyboard_and_locale_modules():
@@ -855,6 +858,320 @@ def test_all_three_calamares_patches_apply_in_sequence_to_pinned_source():
         ).read_text().count("updateBackAndNextVisibility( false )") == 2
 
 
+# --- calamares source patch (the "Network" page: networkq QML view module) -----
+
+def test_calamares_networkq_patch_name_is_a_distinct_patch_file():
+    n = pkgbuild.CALAMARES_NETWORKQ_PATCH_NAME
+    assert n.endswith(".patch")
+    # Distinct from every other calamares patch (five separate files now).
+    assert n not in (
+        pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME,
+        pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME,
+        pkgbuild.CALAMARES_FINISH_BUTTONS_PATCH_NAME,
+        pkgbuild.CALAMARES_NETWORKCFG_STATIC_PATCH_NAME,
+    )
+
+
+def test_calamares_networkq_patch_creates_the_module_files():
+    # The patch CREATES a whole new QML view module by way of `--- /dev/null` new-file
+    # hunks (it edits no existing file). Every file the module needs must be created, or
+    # the module fails to build / load.
+    p = pkgbuild.calamares_networkq_patch()
+    for f in (
+        "src/modules/networkq/Config.h",
+        "src/modules/networkq/Config.cpp",
+        "src/modules/networkq/NetworkQmlViewStep.h",
+        "src/modules/networkq/NetworkQmlViewStep.cpp",
+        "src/modules/networkq/networkq.qml",
+        "src/modules/networkq/networkq.qrc",
+        "src/modules/networkq/networkq.conf",
+        "src/modules/networkq/CMakeLists.txt",
+    ):
+        assert ("+++ b/%s" % f) in p, f
+    # New-file hunks: the OLD side is /dev/null and the hunk header starts at old-line 0.
+    assert "--- /dev/null" in p
+    assert "@@ -0,0 +1," in p
+    # It must NOT touch any existing file (no `--- a/...`).
+    assert "--- a/" not in p
+
+
+def test_calamares_networkq_patch_publishes_five_fields_to_globalstorage():
+    # The page's Config must publish the DHCP/manual method and, for manual, the five
+    # static-IPv4 fields to GlobalStorage under the exact keys the networkcfg job reads.
+    p = pkgbuild.calamares_networkq_patch()
+    added = [ln[1:] for ln in p.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
+    body = "\n".join(added)
+    for key in (
+        "networkMethod",
+        "networkIpv4",
+        "networkSubnetMask",
+        "networkGateway",
+        "networkDns1",
+        "networkDns2",
+    ):
+        assert key in body, key
+    # The values reach GlobalStorage via gs->insert(...) in Config::finalizeGlobalStorage,
+    # which the view step calls from onLeave().
+    assert "finalizeGlobalStorage" in body
+    assert "gs->insert(" in body
+    assert "void\nNetworkQmlViewStep::onLeave()" in body or "NetworkQmlViewStep::onLeave()" in body
+    # DHCP is the default method (so a user who never touches the page keeps stock DHCP).
+    assert 'm_method = QStringLiteral( "dhcp" )' in body
+    # The CMake plugin is a QML viewmodule guarded on WITH_QML.
+    assert "calamares_add_plugin(networkq" in body
+    assert "TYPE viewmodule" in body
+
+
+def test_calamares_networkq_patch_context_lines_have_leading_space():
+    # Same unified-diff hygiene as the sibling patches: every body line begins with
+    # exactly one of " ", "+", "-" (new-file hunks are all "+"/ header lines).
+    p = pkgbuild.calamares_networkq_patch()
+    for ln in p.splitlines():
+        if ln.startswith(("--- ", "+++ ", "@@ ")):
+            continue
+        assert ln[:1] in (" ", "+", "-"), repr(ln)
+
+
+def test_calamares_networkq_patch_emitted_with_recipe():
+    # recipe_dirs must emit the networkq patch under its filename in BOTH tiers.
+    for tier in (False, True):
+        files = dict(pkgbuild.recipe_dirs(tier))["calamares"]
+        assert files[pkgbuild.CALAMARES_NETWORKQ_PATCH_NAME] == (
+            pkgbuild.calamares_networkq_patch()
+        )
+
+
+def test_calamares_networkq_patch_applies_to_pinned_source():
+    # Integration guard: the new-file patch must apply cleanly to the real pinned source
+    # with `patch -p1` (catches a bad hunk header / drift), and the created module must be
+    # a directory the src/modules CMake glob will pick up.
+    tarball = _find_calamares_tarball()
+    if tarball is None:
+        pytest.skip("pinned calamares tarball not present under cache/ (CI checkout)")
+    if shutil.which("patch") is None:
+        pytest.skip("`patch` not available on this host")
+
+    import tempfile
+
+    top = f"calamares-{pkgbuild.CALAMARES_VERSION}"
+    with tempfile.TemporaryDirectory() as td:
+        work = Path(td)
+        # The patch only creates files under src/modules/networkq/; it needs no existing
+        # file extracted. But the parent src/modules/ must exist for `patch` to create into
+        # it, so make it.
+        (work / "src/modules").mkdir(parents=True)
+        # Pristine guard: the module must not already exist.
+        assert not (work / "src/modules/networkq").exists()
+
+        patch_text = pkgbuild.calamares_networkq_patch()
+        dry = subprocess.run(
+            ["patch", "-p1", "--fuzz=0", "--dry-run"],
+            input=patch_text, text=True, cwd=work, capture_output=True, timeout=30,
+        )
+        assert dry.returncode == 0, f"dry-run failed:\n{dry.stdout}\n{dry.stderr}"
+        real = subprocess.run(
+            ["patch", "-p1", "--fuzz=0"],
+            input=patch_text, text=True, cwd=work, capture_output=True, timeout=30,
+        )
+        assert real.returncode == 0, f"apply failed:\n{real.stdout}\n{real.stderr}"
+
+        base = work / "src/modules/networkq"
+        assert (base / "CMakeLists.txt").is_file()  # glob discovers dirs with a CMakeLists
+        # The view step wires the config into GlobalStorage on leave.
+        assert "finalizeGlobalStorage" in (base / "NetworkQmlViewStep.cpp").read_text()
+        cfg = (base / "Config.cpp").read_text()
+        assert 'gs->insert( QStringLiteral( "networkMethod" )' in cfg
+        assert 'gs->insert( QStringLiteral( "networkIpv4" )' in cfg
+
+
+# --- calamares source patch (networkcfg writes a static NM profile) ------------
+
+def test_calamares_networkcfg_static_patch_name_is_a_distinct_patch_file():
+    n = pkgbuild.CALAMARES_NETWORKCFG_STATIC_PATCH_NAME
+    assert n.endswith(".patch")
+    assert n not in (
+        pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME,
+        pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME,
+        pkgbuild.CALAMARES_FINISH_BUTTONS_PATCH_NAME,
+        pkgbuild.CALAMARES_NETWORKQ_PATCH_NAME,
+    )
+
+
+def test_calamares_networkcfg_static_patch_touches_only_networkcfg_main():
+    # The patch EDITS exactly one existing file: the networkcfg python job.
+    p = pkgbuild.calamares_networkcfg_static_patch()
+    assert "--- a/src/modules/networkcfg/main.py" in p
+    assert "+++ b/src/modules/networkcfg/main.py" in p
+    # Disjoint from the other patches -> no other file is touched.
+    assert p.count("--- a/") == 1
+
+
+def test_calamares_networkcfg_static_patch_writes_0600_manual_profile():
+    # The added job logic must: gate on method == "manual", convert the dotted netmask to
+    # a CIDR prefix, write /etc/NetworkManager/system-connections/azarch-static.nmconnection
+    # at 0600 (NetworkManager ignores world-readable system-connections), and format the
+    # keyfile with method=manual + address1=<ip>/<prefix>,<gateway> + dns=...;.
+    p = pkgbuild.calamares_networkcfg_static_patch()
+    added = [ln[1:] for ln in p.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
+    body = "\n".join(added)
+    assert 'gs.value("networkMethod") != "manual"' in body      # DHCP short-circuit
+    assert "_azarch_netmask_to_prefix" in body                   # mask -> prefix helper
+    assert "azarch-static.nmconnection" in body                  # target keyfile
+    assert "0o600" in body                                       # NM requires 0600
+    assert "method=manual" in body
+    assert '"address1="' in body
+    assert "dns=" in body
+    # A blank gateway must NOT leave a trailing comma on address1 (NM rejects it).
+    assert '("," + gateway if gateway else "")' in body
+    # The five GlobalStorage keys the page publishes are all consumed here.
+    for key in (
+        "networkIpv4",
+        "networkSubnetMask",
+        "networkGateway",
+        "networkDns1",
+        "networkDns2",
+    ):
+        assert key in body, key
+    # It reads the target root (already read at the top of run()) and is CALLED from run().
+    assert "_azarch_write_static_connection(root_mount_point)" in body
+
+
+def test_calamares_networkcfg_static_patch_context_lines_have_leading_space():
+    p = pkgbuild.calamares_networkcfg_static_patch()
+    for ln in p.splitlines():
+        if ln.startswith(("--- ", "+++ ", "@@ ")):
+            continue
+        assert ln[:1] in (" ", "+", "-"), repr(ln)
+
+
+def test_calamares_networkcfg_static_patch_emitted_with_recipe():
+    for tier in (False, True):
+        files = dict(pkgbuild.recipe_dirs(tier))["calamares"]
+        assert files[pkgbuild.CALAMARES_NETWORKCFG_STATIC_PATCH_NAME] == (
+            pkgbuild.calamares_networkcfg_static_patch()
+        )
+
+
+def test_calamares_networkcfg_static_patch_applies_and_main_compiles():
+    # Integration guard: the patch applies to the pinned networkcfg/main.py and the result
+    # is still valid Python (a broken insertion would only surface here, at exec time on
+    # the target, not at build time).
+    tarball = _find_calamares_tarball()
+    if tarball is None:
+        pytest.skip("pinned calamares tarball not present under cache/ (CI checkout)")
+    if shutil.which("patch") is None:
+        pytest.skip("`patch` not available on this host")
+
+    import py_compile
+    import tempfile
+
+    rel = "src/modules/networkcfg/main.py"
+    top = f"calamares-{pkgbuild.CALAMARES_VERSION}"
+    with tempfile.TemporaryDirectory() as td:
+        work = Path(td)
+        with tarfile.open(tarball, "r:gz") as tf:
+            member = tf.getmember(f"{top}/{rel}")
+            fobj = tf.extractfile(member)
+            assert fobj is not None, f"missing {rel} in tarball"
+            dst = work / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(fobj.read())
+
+        pristine = (work / rel).read_text()
+        assert "_azarch_write_static_connection" not in pristine
+
+        patch_text = pkgbuild.calamares_networkcfg_static_patch()
+        dry = subprocess.run(
+            ["patch", "-p1", "--fuzz=0", "--dry-run"],
+            input=patch_text, text=True, cwd=work, capture_output=True, timeout=30,
+        )
+        assert dry.returncode == 0, f"dry-run failed:\n{dry.stdout}\n{dry.stderr}"
+        real = subprocess.run(
+            ["patch", "-p1", "--fuzz=0"],
+            input=patch_text, text=True, cwd=work, capture_output=True, timeout=30,
+        )
+        assert real.returncode == 0, f"apply failed:\n{real.stdout}\n{real.stderr}"
+
+        patched = (work / rel).read_text()
+        assert "azarch-static.nmconnection" in patched
+        assert "_azarch_write_static_connection(root_mount_point)" in patched
+        # The patched job must still compile.
+        py_compile.compile(str(work / rel), doraise=True)
+
+
+def test_all_five_calamares_patches_apply_in_sequence_to_pinned_source():
+    # THE full integration guard: all FIVE calamares patches must apply cleanly, IN
+    # prepare() ORDER (defaults, region-keyboard, finish-buttons, networkq,
+    # networkcfg-static), to the real pinned source. The two network patches touch a NEW
+    # module dir and networkcfg/main.py respectively -- disjoint from the first three and
+    # from each other -- so this also proves the five do not conflict.
+    tarball = _find_calamares_tarball()
+    if tarball is None:
+        pytest.skip("pinned calamares tarball not present under cache/ (CI checkout)")
+    if shutil.which("patch") is None:
+        pytest.skip("`patch` not available on this host")
+
+    import py_compile
+    import tempfile
+
+    # Files the EDIT patches need extracted (the networkq patch only creates files).
+    rels = (
+        "src/modules/keyboard/KeyboardLayoutModel.cpp",
+        "src/modules/users/page_usersetup.ui",
+        "src/modules/users/UsersPage.cpp",
+        "src/modules/users/Config.cpp",
+        "src/modules/users/SetPasswordJob.cpp",
+        "src/modules/keyboard/Config.h",
+        "src/modules/keyboard/Config.cpp",
+        "src/modules/locale/Config.cpp",
+        "src/libcalamaresui/ViewManager.cpp",
+        "src/modules/networkcfg/main.py",
+    )
+    top = f"calamares-{pkgbuild.CALAMARES_VERSION}"
+
+    with tempfile.TemporaryDirectory() as td:
+        work = Path(td)
+        with tarfile.open(tarball, "r:gz") as tf:
+            for rel in rels:
+                member = tf.getmember(f"{top}/{rel}")
+                fobj = tf.extractfile(member)
+                assert fobj is not None, f"missing {rel} in tarball"
+                dst = work / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_bytes(fobj.read())
+
+        # Pristine guards for the two new features.
+        assert not (work / "src/modules/networkq").exists()
+        assert "_azarch_write_static_connection" not in (
+            work / "src/modules/networkcfg/main.py"
+        ).read_text()
+
+        for patch_text in (
+            pkgbuild.calamares_defaults_patch(),
+            pkgbuild.calamares_region_keyboard_patch(),
+            pkgbuild.calamares_finish_buttons_patch(),
+            pkgbuild.calamares_networkq_patch(),
+            pkgbuild.calamares_networkcfg_static_patch(),
+        ):
+            dry = subprocess.run(
+                ["patch", "-p1", "--fuzz=0", "--dry-run"],
+                input=patch_text, text=True, cwd=work, capture_output=True, timeout=30,
+            )
+            assert dry.returncode == 0, f"dry-run failed:\n{dry.stdout}\n{dry.stderr}"
+            real = subprocess.run(
+                ["patch", "-p1", "--fuzz=0"],
+                input=patch_text, text=True, cwd=work, capture_output=True, timeout=30,
+            )
+            assert real.returncode == 0, f"apply failed:\n{real.stdout}\n{real.stderr}"
+
+        # The Network feature landed: the page module exists and the job writes the profile.
+        assert (work / "src/modules/networkq/CMakeLists.txt").is_file()
+        assert "azarch-static.nmconnection" in (
+            work / "src/modules/networkcfg/main.py"
+        ).read_text()
+        py_compile.compile(str(work / "src/modules/networkcfg/main.py"), doraise=True)
+
+
 # --- brace-doubling invariant across every generator -----------------------
 
 def test_no_leftover_double_braces():
@@ -998,9 +1315,9 @@ def test_overrides_delivered_to_profile_path_not_opt():
 def test_recipe_dirs_default_tier():
     # DEFAULT tier: calamares first (Arch dropped extra/calamares, so it must be
     # built here now), then thunar (rebuilt from source with the symlink-resolve
-    # patch), then librewolf. calamares carries its PKGBUILD + the three source patches
-    # (installer UI defaults, region keyboard, finish-page buttons); thunar carries its
-    # PKGBUILD + the resolve patch;
+    # patch), then librewolf. calamares carries its PKGBUILD + the five source patches
+    # (installer UI defaults, region keyboard, finish-page buttons, the Network page, and
+    # the networkcfg static-profile job); thunar carries its PKGBUILD + the resolve patch;
     # the librewolf dir carries PKGBUILD + the .desktop, its PKGBUILD the repackage
     # recipe (no bsys6 make targets).
     dirs = pkgbuild.recipe_dirs(False)
@@ -1011,6 +1328,8 @@ def test_recipe_dirs_default_tier():
         pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME,
         pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME,
         pkgbuild.CALAMARES_FINISH_BUTTONS_PATCH_NAME,
+        pkgbuild.CALAMARES_NETWORKQ_PATCH_NAME,
+        pkgbuild.CALAMARES_NETWORKCFG_STATIC_PATCH_NAME,
     }
     assert set(dict(dirs)["thunar"]) == {
         "PKGBUILD",
@@ -1035,6 +1354,8 @@ def test_recipe_dirs_full_tier():
         pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME,
         pkgbuild.CALAMARES_REGION_KEYBOARD_PATCH_NAME,
         pkgbuild.CALAMARES_FINISH_BUTTONS_PATCH_NAME,
+        pkgbuild.CALAMARES_NETWORKQ_PATCH_NAME,
+        pkgbuild.CALAMARES_NETWORKCFG_STATIC_PATCH_NAME,
     }
     assert set(dict(dirs)["thunar"]) == {
         "PKGBUILD",
@@ -1067,11 +1388,15 @@ _MOVED_CONSTANTS = (
     "CALAMARES_DEFAULTS_PATCH_NAME",
     "CALAMARES_REGION_KEYBOARD_PATCH_NAME",
     "CALAMARES_FINISH_BUTTONS_PATCH_NAME",
+    "CALAMARES_NETWORKQ_PATCH_NAME",
+    "CALAMARES_NETWORKCFG_STATIC_PATCH_NAME",
 )
 _MOVED_FUNCTIONS = (
     "calamares_defaults_patch",
     "calamares_region_keyboard_patch",
     "calamares_finish_buttons_patch",
+    "calamares_networkq_patch",
+    "calamares_networkcfg_static_patch",
     "pkgbuild_calamares",
 )
 
@@ -1091,43 +1416,55 @@ def test_calamares_names_reexported_from_pkgbuild_calamares():
 
 def test_calamares_module_is_self_contained():
     # pkgbuild_calamares builds the full recipe with NO dependency on pkgbuild.py: the
-    # PKGBUILD text is authored here and the three patches are re-exported from their
+    # PKGBUILD text is authored here and the five patches are re-exported from their
     # own modules -- so the whole recipe resolves without importing pkgbuild.py.
     import pkgbuild_calamares as pc
 
     assert pc.CALAMARES_VERSION == "3.4.2"
-    assert ("sha256sums=('%s' 'SKIP' 'SKIP' 'SKIP')" % pc.CALAMARES_SHA256) in pc.pkgbuild_calamares()
+    assert ("sha256sums=('%s' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')" % pc.CALAMARES_SHA256) in pc.pkgbuild_calamares()
+    # The four EDIT patches start at `--- a/`; the networkq patch CREATES files, so its
+    # first hunk header is `--- /dev/null`. Both are valid unified-diff openings.
     for patch in (
         pc.calamares_defaults_patch(),
         pc.calamares_region_keyboard_patch(),
         pc.calamares_finish_buttons_patch(),
+        pc.calamares_networkcfg_static_patch(),
     ):
-        assert patch.startswith("--- a/"), "each patch is a unified diff starting at --- a/"
+        assert patch.startswith("--- a/"), "each edit patch is a unified diff starting at --- a/"
+    assert pc.calamares_networkq_patch().startswith("--- /dev/null"), (
+        "the networkq patch creates files, so it opens with --- /dev/null"
+    )
 
 
 def test_each_patch_lives_in_its_own_module_and_is_reexported():
-    # Each of the three source patches is authored in its OWN focused module (they are
+    # Each of the FIVE source patches is authored in its OWN focused module (they are
     # large unified diffs). pkgbuild_calamares re-exports them (same object, not a copy),
     # and pkgbuild re-exports that -- so there is exactly one source of truth per patch
     # and a future edit opens one small file.
     import calamares_patch_defaults as pd
     import calamares_patch_finish_buttons as pf
+    import calamares_patch_networkcfg_static as pn
+    import calamares_patch_networkq as pq
     import calamares_patch_region_keyboard as pr
     import pkgbuild_calamares as pc
 
+    # Each entry: (func, const, module, diff-opening). The networkq patch CREATES files so
+    # it opens with `--- /dev/null`; the four EDIT patches open with `--- a/`.
     chain = [
-        ("calamares_defaults_patch", "CALAMARES_DEFAULTS_PATCH_NAME", pd),
-        ("calamares_region_keyboard_patch", "CALAMARES_REGION_KEYBOARD_PATCH_NAME", pr),
-        ("calamares_finish_buttons_patch", "CALAMARES_FINISH_BUTTONS_PATCH_NAME", pf),
+        ("calamares_defaults_patch", "CALAMARES_DEFAULTS_PATCH_NAME", pd, "--- a/"),
+        ("calamares_region_keyboard_patch", "CALAMARES_REGION_KEYBOARD_PATCH_NAME", pr, "--- a/"),
+        ("calamares_finish_buttons_patch", "CALAMARES_FINISH_BUTTONS_PATCH_NAME", pf, "--- a/"),
+        ("calamares_networkq_patch", "CALAMARES_NETWORKQ_PATCH_NAME", pq, "--- /dev/null"),
+        ("calamares_networkcfg_static_patch", "CALAMARES_NETWORKCFG_STATIC_PATCH_NAME", pn, "--- a/"),
     ]
-    for func_name, const_name, module in chain:
+    for func_name, const_name, module, opening in chain:
         # The patch module is the definition site.
         assert getattr(pc, func_name) is getattr(module, func_name)
         assert getattr(pkgbuild, func_name) is getattr(module, func_name)
         assert getattr(pc, const_name) == getattr(module, const_name)
         assert getattr(pkgbuild, const_name) == getattr(module, const_name)
         # And it actually produces a valid unified diff.
-        assert getattr(module, func_name)().startswith("--- a/")
+        assert getattr(module, func_name)().startswith(opening)
 
 
 def test_recipe_dirs_calamares_uses_the_extracted_builders():
@@ -1141,3 +1478,5 @@ def test_recipe_dirs_calamares_uses_the_extracted_builders():
         assert files[pc.CALAMARES_DEFAULTS_PATCH_NAME] == pc.calamares_defaults_patch()
         assert files[pc.CALAMARES_REGION_KEYBOARD_PATCH_NAME] == pc.calamares_region_keyboard_patch()
         assert files[pc.CALAMARES_FINISH_BUTTONS_PATCH_NAME] == pc.calamares_finish_buttons_patch()
+        assert files[pc.CALAMARES_NETWORKQ_PATCH_NAME] == pc.calamares_networkq_patch()
+        assert files[pc.CALAMARES_NETWORKCFG_STATIC_PATCH_NAME] == pc.calamares_networkcfg_static_patch()

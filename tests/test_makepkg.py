@@ -165,6 +165,80 @@ def test_repo_has_all_false_for_wrong_extension(tmp_path):
     assert makepkg._repo_has_all(tmp_path, ("librewolf",)) is False
 
 
+# --- recipe fingerprinting: reuse a cached own package ONLY if its recipe is unchanged
+# The networkq regression: an offline default rerun reused a calamares package built
+# before the networkq patch existed (the presence check is content-blind), so the ISO
+# shipped a calamares that listed `networkq` in settings.conf but had no such module.
+# These pin the fingerprint that now guards reuse.
+def test_recipe_fingerprint_is_order_independent():
+    # The digest folds files in sorted order, so emitting the same files in a
+    # different dict order yields the same fingerprint.
+    a = {"PKGBUILD": "body", "z.patch": "z", "a.patch": "a"}
+    b = {"a.patch": "a", "PKGBUILD": "body", "z.patch": "z"}
+    assert makepkg._recipe_fingerprint(a) == makepkg._recipe_fingerprint(b)
+
+
+def test_recipe_fingerprint_changes_on_content_change():
+    base = {"PKGBUILD": "body", "p.patch": "orig"}
+    edited = {"PKGBUILD": "body", "p.patch": "EDITED"}
+    assert makepkg._recipe_fingerprint(base) != makepkg._recipe_fingerprint(edited)
+
+
+def test_recipe_fingerprint_changes_when_patch_added():
+    # Adding a companion file (exactly the networkq/networkcfg-static case) must flip
+    # the fingerprint even though every pre-existing file is byte-identical.
+    before = {"PKGBUILD": "body", "a.patch": "a"}
+    after = {"PKGBUILD": "body", "a.patch": "a", "networkq.patch": "new"}
+    assert makepkg._recipe_fingerprint(before) != makepkg._recipe_fingerprint(after)
+
+
+def test_fingerprint_sidecar_round_trips(tmp_path):
+    makepkg._write_recipe_fingerprint(tmp_path, "calamares", "abc123")
+    assert makepkg._read_recipe_fingerprint(tmp_path, "calamares") == "abc123"
+
+
+def test_read_fingerprint_none_when_absent(tmp_path):
+    assert makepkg._read_recipe_fingerprint(tmp_path, "calamares") is None
+
+
+def test_read_fingerprint_none_when_malformed(tmp_path):
+    # A truncated/garbage sidecar must read as "unknown" (None) so the caller rebuilds
+    # rather than trusting a corrupt stamp.
+    makepkg._fingerprint_path(tmp_path, "calamares").write_text("{not json")
+    assert makepkg._read_recipe_fingerprint(tmp_path, "calamares") is None
+
+
+def test_repo_is_current_false_when_package_missing(tmp_path):
+    # No package files at all -> not current (nothing to reuse).
+    assert makepkg._repo_is_current(tmp_path, full_compile=False, fp_dir=tmp_path) is False
+
+
+def test_repo_is_current_false_when_fingerprint_absent(tmp_path):
+    # Package present but no sidecar (a cache from an older Az'arch, or the networkq
+    # regression) -> not current -> rebuild.
+    for name in makepkg.produced_names(full_compile=False):
+        (tmp_path / f"{name}-1-1-x86_64.pkg.tar.zst").write_text("")
+    assert makepkg._repo_is_current(tmp_path, full_compile=False, fp_dir=tmp_path) is False
+
+
+def test_repo_is_current_true_when_fingerprints_match(tmp_path):
+    fps = makepkg._current_recipe_fingerprints(full_compile=False)
+    for name, fp in fps.items():
+        (tmp_path / f"{name}-1-1-x86_64.pkg.tar.zst").write_text("")
+        makepkg._write_recipe_fingerprint(tmp_path, name, fp)
+    assert makepkg._repo_is_current(tmp_path, full_compile=False, fp_dir=tmp_path) is True
+
+
+def test_repo_is_current_false_when_one_fingerprint_stale(tmp_path):
+    # One package's recipe changed (its stamp no longer matches) -> whole set is stale.
+    fps = makepkg._current_recipe_fingerprints(full_compile=False)
+    for name, fp in fps.items():
+        (tmp_path / f"{name}-1-1-x86_64.pkg.tar.zst").write_text("")
+        makepkg._write_recipe_fingerprint(tmp_path, name, fp)
+    makepkg._write_recipe_fingerprint(tmp_path, "calamares", "changed")
+    assert makepkg._repo_is_current(tmp_path, full_compile=False, fp_dir=tmp_path) is False
+
+
 def test_sudo_root_vs_nonroot(monkeypatch):
     # _sudo() prepends nothing when already root (already privileged), and a bare
     # "sudo" (no -n, unlike steps/build) when not -- so an interactive password
@@ -245,20 +319,65 @@ def test_scratch_has_sources_false_missing_pkgbuild(tmp_path):
 
 
 # --- build_own_packages offline branch, per tier ----------------------------
+def _stage_current_own_packages(pkg_repo, full_compile=False):
+    """Populate pkg_repo with a package file AND a matching current-recipe fingerprint
+    sidecar for every own package -- i.e. a cache that is genuinely up to date, which
+    the offline default tier is allowed to reuse without rebuilding."""
+    fps = makepkg._current_recipe_fingerprints(full_compile=full_compile)
+    for name, fp in fps.items():
+        (pkg_repo / f"{name}-1-1-x86_64.pkg.tar.zst").write_text("")
+        makepkg._write_recipe_fingerprint(pkg_repo, name, fp)
+
+
 def test_offline_default_skips_makepkg(monkeypatch, tmp_path):
-    # DEFAULT tier + complete cache -> skip makepkg entirely (the fast rerun). All THREE built
-    # packages (calamares, librewolf, thunar) must be present for the cache to look complete.
+    # DEFAULT tier + complete AND up-to-date cache -> skip makepkg entirely (the fast
+    # rerun). All THREE built packages must be present with a matching recipe
+    # fingerprint for the cache to count as current.
     monkeypatch.setattr(makepkg.paths, "PKG_REPO", tmp_path)
+    monkeypatch.setattr(makepkg.paths, "PKG_FINGERPRINTS", tmp_path)
     monkeypatch.setattr(makepkg.paths, "is_root", lambda: False)
-    (tmp_path / "calamares-1-1-x86_64.pkg.tar.zst").write_text("")
-    (tmp_path / "librewolf-1-1-x86_64.pkg.tar.zst").write_text("")
-    (tmp_path / "thunar-4.20.9-2-x86_64.pkg.tar.zst").write_text("")
+    _stage_current_own_packages(tmp_path)
 
     def must_not_build(*a, **k):
         raise AssertionError("default offline rerun must not run makepkg")
     monkeypatch.setattr(makepkg, "_makepkg_one", must_not_build)
 
     makepkg.build_own_packages(offline=True, full_compile=False, progress=lambda _p: None)
+
+
+def test_offline_default_stale_recipe_raises(monkeypatch, tmp_path):
+    # DEFAULT tier offline, package files present but built from an OLDER recipe (a
+    # stale/absent fingerprint) -> must NOT silently reuse the stale binary. This is
+    # the networkq regression: a calamares package built before the networkq patch was
+    # reused, so the ISO shipped a calamares whose settings listed a module it did not
+    # have. The offline path fails loudly (the online path is what actually rebuilds;
+    # cache_is_complete demotes a stale cache to online before we get here offline).
+    monkeypatch.setattr(makepkg.paths, "PKG_REPO", tmp_path)
+    monkeypatch.setattr(makepkg.paths, "PKG_FINGERPRINTS", tmp_path)
+    monkeypatch.setattr(makepkg.paths, "is_root", lambda: False)
+    # Package files exist but with NO fingerprint sidecars -> looks like an old cache.
+    (tmp_path / "calamares-1-1-x86_64.pkg.tar.zst").write_text("stale")
+    (tmp_path / "librewolf-1-1-x86_64.pkg.tar.zst").write_text("stale")
+    (tmp_path / "thunar-4.20.9-2-x86_64.pkg.tar.zst").write_text("stale")
+    monkeypatch.setattr(makepkg, "_makepkg_one",
+                        lambda *a, **k: pytest.fail("must not reuse a stale-recipe package"))
+    with pytest.raises(makepkg.MakepkgError):
+        makepkg.build_own_packages(offline=True, full_compile=False, progress=lambda _p: None)
+
+
+def test_offline_default_changed_recipe_raises(monkeypatch, tmp_path):
+    # Same as above but the sidecar EXISTS with a non-matching hash (a recipe was
+    # edited since the package was built, e.g. adding the networkq patch). Still stale.
+    monkeypatch.setattr(makepkg.paths, "PKG_REPO", tmp_path)
+    monkeypatch.setattr(makepkg.paths, "PKG_FINGERPRINTS", tmp_path)
+    monkeypatch.setattr(makepkg.paths, "is_root", lambda: False)
+    _stage_current_own_packages(tmp_path)
+    # Break just calamares' fingerprint to simulate its recipe changing.
+    makepkg._write_recipe_fingerprint(tmp_path, "calamares", "stale_recipe_hash")
+    monkeypatch.setattr(makepkg, "_makepkg_one",
+                        lambda *a, **k: pytest.fail("must rebuild after a recipe change"))
+    with pytest.raises(makepkg.MakepkgError):
+        makepkg.build_own_packages(offline=True, full_compile=False, progress=lambda _p: None)
 
 
 def test_offline_full_missing_source_raises(monkeypatch, tmp_path):
@@ -279,9 +398,11 @@ def test_offline_full_recompiles_and_preserves_scratch(monkeypatch, tmp_path):
     # never wipe the scratch, or the next rerun loses the Firefox source).
     scratch = tmp_path / "makepkg"
     repo = tmp_path / "repo"
+    fps = tmp_path / "fps"
     repo.mkdir(parents=True)
     monkeypatch.setattr(makepkg.paths, "CACHEDIR", tmp_path)
     monkeypatch.setattr(makepkg.paths, "PKG_REPO", repo)
+    monkeypatch.setattr(makepkg.paths, "PKG_FINGERPRINTS", fps)
     monkeypatch.setattr(makepkg.paths, "is_root", lambda: False)
     monkeypatch.setattr(makepkg, "_ensure_builder_user", lambda: "me")
 
@@ -304,6 +425,10 @@ def test_offline_full_recompiles_and_preserves_scratch(monkeypatch, tmp_path):
     assert all(off is True for _name, off in calls), "recompile must pass offline=True"
     # scratch (and its fetched source tree) must survive the recompile.
     assert (scratch / "librewolf" / ".build" / "sentinel").exists()
+    # A recompile RE-STAMPS the recipe fingerprints (in the dedicated dir, full tier)
+    # so the next run can detect a recipe change. calamares is one of the own packages.
+    assert makepkg._read_recipe_fingerprint(fps, "calamares") == \
+        makepkg._current_recipe_fingerprints(full_compile=True)["calamares"]
 
 
 # --- _harden_dlagents: retry/stall-recovery flags on network curl agents -----

@@ -98,6 +98,14 @@ else:
 PKG_REPO = CACHEDIR / "pkgs" / "repo"
 PKG_DB = CACHEDIR / "pkgs" / "db"
 PKG_SYNC_DB = PKG_DB / "sync"
+# Recipe fingerprints for OUR built packages (calamares/librewolf/thunar): one small
+# JSON sidecar per package recording the hash of the recipe that produced its cached
+# .pkg.tar.zst. makepkg reuses a cached own package only if this still matches the
+# current recipe (see makepkg._repo_is_current) -- that is what stops a stale
+# calamares, built before a new source patch, from being shipped. Kept OUT of PKG_REPO
+# on purpose: PKG_REPO (and PKG_DB) are cp -r'd wholesale into the ISO payload, and
+# build-only metadata has no business on the installed target's offline repo.
+PKG_FINGERPRINTS = CACHEDIR / "pkgs" / "recipe-fingerprints"
 LOCALREPO_INDEX = PKG_REPO / "pacstrap-azarch-repo.db"
 LOCALREPO_INDEX_TAR = PKG_REPO / "pacstrap-azarch-repo.db.tar.gz"
 

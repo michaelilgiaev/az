@@ -57,6 +57,14 @@ sequence:
   - keyboard
   - partition
   - users
+  # Az'arch "Network" page (networkq QML view module, added by the
+  # azarch-calamares-networkq source patch): Automatic (DHCP, the default) vs a
+  # Manual static IPv4 (address / subnet mask / gateway / DNS 1 / DNS 2). It writes
+  # its choice to GlobalStorage; the patched `networkcfg` exec job (below) turns a
+  # manual choice into a 0600 static NetworkManager profile on the target. Placed
+  # after `users` and before `summary` so the static config is the last thing chosen
+  # before the install summary.
+  - networkq
   - summary
 - exec:
   - partition

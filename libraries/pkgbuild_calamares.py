@@ -13,11 +13,15 @@ This module is self-contained: pkgbuild_calamares() references only the pinned
 constants here and the three patch-name constants re-exported below, so there is no
 import back into pkgbuild.py (which would be circular).
 
-The three patches (each in its own module, all applied in the recipe's prepare(), all
+The five patches (each in its own module, all applied in the recipe's prepare(), all
 VERIFIED against the pinned calamares-3.4.2 tarball):
-  calamares_patch_defaults        installer UI defaults + the Users-page refactor
-  calamares_patch_region_keyboard region-driven English+region two-layout keyboard
-  calamares_patch_finish_buttons  hide Back/Next on the Finish page
+  calamares_patch_defaults           installer UI defaults + the Users-page refactor
+  calamares_patch_region_keyboard    region-driven English+region two-layout keyboard
+  calamares_patch_finish_buttons     hide Back/Next on the Finish page
+  calamares_patch_networkq           add the "Network" installer page (new networkq QML
+                                     view module -- CREATES files under src/modules/networkq/)
+  calamares_patch_networkcfg_static  networkcfg job writes a 0600 static NM profile on the
+                                     target from the Network page's GlobalStorage values
 """
 
 from __future__ import annotations
@@ -36,6 +40,14 @@ from calamares_patch_region_keyboard import (  # noqa: F401  (re-exported)
 from calamares_patch_finish_buttons import (  # noqa: F401  (re-exported)
     CALAMARES_FINISH_BUTTONS_PATCH_NAME,
     calamares_finish_buttons_patch,
+)
+from calamares_patch_networkq import (  # noqa: F401  (re-exported)
+    CALAMARES_NETWORKQ_PATCH_NAME,
+    calamares_networkq_patch,
+)
+from calamares_patch_networkcfg_static import (  # noqa: F401  (re-exported)
+    CALAMARES_NETWORKCFG_STATIC_PATCH_NAME,
+    calamares_networkcfg_static_patch,
 )
 
 # ---------------------------------------------------------------------------
@@ -112,10 +124,12 @@ source=(
   '{CALAMARES_DEFAULTS_PATCH_NAME}'
   '{CALAMARES_REGION_KEYBOARD_PATCH_NAME}'
   '{CALAMARES_FINISH_BUTTONS_PATCH_NAME}'
+  '{CALAMARES_NETWORKQ_PATCH_NAME}'
+  '{CALAMARES_NETWORKCFG_STATIC_PATCH_NAME}'
 )
 # Tarball: pinned sha256 (makepkg aborts on mismatch). Patches: shipped in-repo,
-# reviewed in packages.pkgbuild (SKIP -- local files, not downloaded).
-sha256sums=('{CALAMARES_SHA256}' 'SKIP' 'SKIP' 'SKIP')
+# reviewed in packages.pkgbuild (SKIP -- local files, not downloaded). FIVE patches now.
+sha256sums=('{CALAMARES_SHA256}' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 prepare() {{
   cd "calamares-${{pkgver}}"
@@ -135,6 +149,15 @@ prepare() {{
   # ViewManager). Independent of the two patches above (touches only ViewManager.cpp),
   # so order is not load-bearing. Same fail-loud-on-drift contract.
   patch -p1 < "$srcdir/{CALAMARES_FINISH_BUTTONS_PATCH_NAME}"
+  # Az'arch: add the "Network" installer page -- a NEW QML view module created under
+  # src/modules/networkq/ (all `--- /dev/null` new-file hunks; auto-discovered by the
+  # src/modules CMake glob, so no top-level CMake edit). Touches no existing file, so
+  # order is not load-bearing. Same fail-loud-on-drift contract.
+  patch -p1 < "$srcdir/{CALAMARES_NETWORKQ_PATCH_NAME}"
+  # Az'arch: teach the networkcfg job to write a 0600 static NetworkManager profile on
+  # the target from the values the Network page published to GlobalStorage. Edits only
+  # src/modules/networkcfg/main.py (disjoint from every other patch). Same contract.
+  patch -p1 < "$srcdir/{CALAMARES_NETWORKCFG_STATIC_PATCH_NAME}"
 }}
 
 build() {{

@@ -47,11 +47,15 @@ from __future__ import annotations
 from pkgbuild_calamares import (  # noqa: F401  (re-exported for the public API)
     CALAMARES_DEFAULTS_PATCH_NAME,
     CALAMARES_FINISH_BUTTONS_PATCH_NAME,
+    CALAMARES_NETWORKCFG_STATIC_PATCH_NAME,
+    CALAMARES_NETWORKQ_PATCH_NAME,
     CALAMARES_REGION_KEYBOARD_PATCH_NAME,
     CALAMARES_SHA256,
     CALAMARES_VERSION,
     calamares_defaults_patch,
     calamares_finish_buttons_patch,
+    calamares_networkcfg_static_patch,
+    calamares_networkq_patch,
     calamares_region_keyboard_patch,
     pkgbuild_calamares,
 )
@@ -551,6 +555,8 @@ def recipe_dirs(full_compile: bool) -> list[tuple[str, dict[str, str]]]:
         CALAMARES_DEFAULTS_PATCH_NAME: calamares_defaults_patch(),
         CALAMARES_REGION_KEYBOARD_PATCH_NAME: calamares_region_keyboard_patch(),
         CALAMARES_FINISH_BUTTONS_PATCH_NAME: calamares_finish_buttons_patch(),
+        CALAMARES_NETWORKQ_PATCH_NAME: calamares_networkq_patch(),
+        CALAMARES_NETWORKCFG_STATIC_PATCH_NAME: calamares_networkcfg_static_patch(),
     })
     # thunar: rebuilt (same version as extra/) with the symlink-resolve patch, in EVERY tier --
     # the patched location-bar behaviour is not optional. Built from source like calamares.

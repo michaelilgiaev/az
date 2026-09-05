@@ -137,6 +137,36 @@ def test_settings_exec_ordering_constraints():
     assert execs.index("grubcfg") < execs.index("bootloader")
 
 
+def test_network_page_in_show_sequence_after_users_before_summary():
+    # The Az'arch "Network" page (networkq QML view module, added by the
+    # azarch-calamares-networkq source patch) is shown after `users` and before the
+    # install `summary`, so the static-IP choice is the last thing picked before the
+    # summary. It is a `show` (UI) step, not an exec step.
+    show = _settings_show_list()
+    assert "networkq" in show
+    assert show.index("users") < show.index("networkq") < show.index("summary")
+
+
+def test_network_static_job_runs_at_exec_after_users():
+    # The target-side write is done by the STOCK `networkcfg` exec job (patched to also
+    # emit a static profile from the page's GlobalStorage values). It must already be in
+    # the exec sequence, after `users` (the page ran) -- we do NOT add a second job.
+    execs = _settings_exec_list()
+    assert "networkcfg" in execs
+    assert execs.index("users") < execs.index("networkcfg")
+    # And there is exactly one networkcfg entry (no accidental duplicate job).
+    assert execs.count("networkcfg") == 1
+
+
+def test_networkq_page_ships_no_emitted_conf():
+    # networkq is a compiled-in view module whose networkq.conf is shipped INSIDE the
+    # calamares package (by the source patch), NOT emitted under /etc/calamares by
+    # emit_map(). So it is deliberately absent from emit_map() -- which is why the page
+    # does not appear in EXPECTED_FILES and the emit-map count stays 19. This pins that
+    # intent so a future change that adds a stray modules/networkq.conf is caught.
+    assert "modules/networkq.conf" not in calamares.emit_map()
+
+
 def test_luksbootkeyfile_runs_before_fstab_and_initcpiocfg():
     # The double-password fix: luksbootkeyfile creates /crypto_keyfile.bin +
     # luksAddKey. It MUST run before fstab (which points crypttab at the keyfile
