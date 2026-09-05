@@ -1428,3 +1428,84 @@ def test_qml_and_branding_use_minimal_dark_palette():
     assert style["SidebarBackground"] == "#070e1b"
     assert style["SidebarTextHighlight"] == "#3b82f6"
     assert style["SidebarTextSelect"] == "#ffffff"
+
+
+# --- module split: facade re-export + submodule boundaries ------------------
+# calamares.py is a thin FACADE: the builders live in config_settings /
+# config_storage / config_system / config_branding and are re-exported so the flat
+# `calamares.X` surface (which compiler.py and every test above use) is unchanged.
+# These tests lock that structure so a future edit that breaks a re-export, moves a
+# builder without re-exporting it, or drifts a builder's output fails LOUDLY here.
+
+# Every emitted file -> the facade builder that produces it. Mirrors emit_map(); kept
+# explicit so a rename/move that forgets the re-export is caught (AttributeError).
+_BUILDER_FOR_FILE = {
+    "settings.conf": "settings_conf",
+    "modules/partition.conf": "partition_conf",
+    "modules/unpackfs.conf": "unpackfs_conf",
+    "modules/shellprocess.conf": "shellprocess_conf",
+    "modules/shellprocess-desparse.conf": "shellprocess_desparsify_conf",
+    "modules/users.conf": "users_conf",
+    "modules/packages.conf": "packages_conf",
+    "modules/mount.conf": "mount_conf",
+    "modules/fstab.conf": "fstab_conf",
+    "modules/locale.conf": "locale_conf",
+    "modules/keyboard.conf": "keyboard_conf",
+    "modules/initcpiocfg.conf": "initcpiocfg_conf",
+    "modules/luksbootkeyfile.conf": "luksbootkeyfile_conf",
+    "modules/services-systemd.conf": "services_conf",
+    "modules/grubcfg.conf": "grubcfg_conf",
+    "modules/bootloader.conf": "bootloader_conf",
+    "modules/finished.conf": "finished_conf",
+    "branding/azarch/branding.desc": "branding_desc",
+    "branding/azarch/show.qml": "branding_show_qml",
+}
+
+
+def test_every_builder_reachable_via_facade_and_matches_emit_map():
+    # Each builder is callable as calamares.<name>() (re-export works) AND the value
+    # emit_map() stores for its file equals calling that builder directly. This is the
+    # core guard that the split preserved the flat surface and the assembly point.
+    m = calamares.emit_map()
+    assert set(_BUILDER_FOR_FILE) == set(m) == EXPECTED_FILES
+    for rel, builder_name in _BUILDER_FOR_FILE.items():
+        builder = getattr(calamares, builder_name)  # AttributeError if not re-exported
+        assert callable(builder), f"calamares.{builder_name} must be callable"
+        assert m[rel] == builder(), f"emit_map[{rel!r}] must equal calamares.{builder_name}()"
+
+
+def test_shared_constants_reexported_from_config_constants():
+    # The 4 shared constants are DEFINED in config_constants and re-exported by the
+    # facade; callers use calamares.BRANDING etc. Assert both resolve and agree.
+    from packages.calamares import config_constants
+
+    for name in ("BRANDING", "PRODUCT", "PRODUCT_ICON_FILE", "ARCHISO_SFS"):
+        assert getattr(calamares, name) == getattr(config_constants, name)
+    assert calamares.BRANDING == "azarch"
+
+
+def test_config_submodules_are_independently_importable():
+    # Each builder submodule imports and exposes its own builders WITHOUT importing the
+    # facade (no circular import), so a future edit can work on one file in isolation.
+    from packages.calamares import (
+        config_branding,
+        config_settings,
+        config_storage,
+        config_system,
+    )
+
+    assert config_settings.settings_conf().startswith("# Calamares master configuration")
+    assert "btrfs" in config_storage.partition_conf()
+    assert config_storage.unpackfs_conf().count("squashfs") == 1
+    assert "doReusePassword: true" in config_system.users_conf()
+    assert "systemctl -i reboot" in config_system.finished_conf()
+    assert "componentName: azarch" in config_branding.branding_desc()
+
+
+def test_facade_builders_are_the_submodule_builders():
+    # The names on the facade ARE the submodule's functions (re-export, not re-def), so
+    # there is exactly one source of truth per builder.
+    from packages.calamares import config_storage, config_system
+
+    assert calamares.users_conf is config_system.users_conf
+    assert calamares.partition_conf is config_storage.partition_conf

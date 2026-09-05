@@ -1052,3 +1052,92 @@ def test_recipe_dirs_companion_files_shared_across_tiers():
     assert default_lw["librewolf.desktop"] == pkgbuild.librewolf_desktop()
     assert "librewolf.overrides.cfg" not in default_lw
     assert "librewolf.overrides.cfg" not in full_lw
+
+
+# --- calamares recipe extracted to its own module (pkgbuild_calamares) ------
+# The calamares recipe (pinned facts + the 3 Az'arch source patches + the PKGBUILD
+# text) lives in libraries/pkgbuild_calamares.py; pkgbuild.py re-exports every name so
+# the flat `pkgbuild.X` surface these tests use is unchanged, and recipe_dirs() still
+# assembles the calamares dir from them. These tests lock that re-export.
+
+# Names moved into pkgbuild_calamares and re-exported by pkgbuild.
+_MOVED_CONSTANTS = (
+    "CALAMARES_VERSION",
+    "CALAMARES_SHA256",
+    "CALAMARES_DEFAULTS_PATCH_NAME",
+    "CALAMARES_REGION_KEYBOARD_PATCH_NAME",
+    "CALAMARES_FINISH_BUTTONS_PATCH_NAME",
+)
+_MOVED_FUNCTIONS = (
+    "calamares_defaults_patch",
+    "calamares_region_keyboard_patch",
+    "calamares_finish_buttons_patch",
+    "pkgbuild_calamares",
+)
+
+
+def test_calamares_names_reexported_from_pkgbuild_calamares():
+    # Every moved name resolves on BOTH modules and is the SAME object (a re-export,
+    # not a copy) -- so there is exactly one source of truth for the calamares recipe.
+    import pkgbuild_calamares
+
+    for name in _MOVED_CONSTANTS:
+        assert getattr(pkgbuild, name) == getattr(pkgbuild_calamares, name)
+    for name in _MOVED_FUNCTIONS:
+        assert getattr(pkgbuild, name) is getattr(pkgbuild_calamares, name), (
+            f"pkgbuild.{name} must BE pkgbuild_calamares.{name} (re-export, not re-def)"
+        )
+
+
+def test_calamares_module_is_self_contained():
+    # pkgbuild_calamares builds the full recipe with NO dependency on pkgbuild.py: the
+    # PKGBUILD text is authored here and the three patches are re-exported from their
+    # own modules -- so the whole recipe resolves without importing pkgbuild.py.
+    import pkgbuild_calamares as pc
+
+    assert pc.CALAMARES_VERSION == "3.4.2"
+    assert ("sha256sums=('%s' 'SKIP' 'SKIP' 'SKIP')" % pc.CALAMARES_SHA256) in pc.pkgbuild_calamares()
+    for patch in (
+        pc.calamares_defaults_patch(),
+        pc.calamares_region_keyboard_patch(),
+        pc.calamares_finish_buttons_patch(),
+    ):
+        assert patch.startswith("--- a/"), "each patch is a unified diff starting at --- a/"
+
+
+def test_each_patch_lives_in_its_own_module_and_is_reexported():
+    # Each of the three source patches is authored in its OWN focused module (they are
+    # large unified diffs). pkgbuild_calamares re-exports them (same object, not a copy),
+    # and pkgbuild re-exports that -- so there is exactly one source of truth per patch
+    # and a future edit opens one small file.
+    import calamares_patch_defaults as pd
+    import calamares_patch_finish_buttons as pf
+    import calamares_patch_region_keyboard as pr
+    import pkgbuild_calamares as pc
+
+    chain = [
+        ("calamares_defaults_patch", "CALAMARES_DEFAULTS_PATCH_NAME", pd),
+        ("calamares_region_keyboard_patch", "CALAMARES_REGION_KEYBOARD_PATCH_NAME", pr),
+        ("calamares_finish_buttons_patch", "CALAMARES_FINISH_BUTTONS_PATCH_NAME", pf),
+    ]
+    for func_name, const_name, module in chain:
+        # The patch module is the definition site.
+        assert getattr(pc, func_name) is getattr(module, func_name)
+        assert getattr(pkgbuild, func_name) is getattr(module, func_name)
+        assert getattr(pc, const_name) == getattr(module, const_name)
+        assert getattr(pkgbuild, const_name) == getattr(module, const_name)
+        # And it actually produces a valid unified diff.
+        assert getattr(module, func_name)().startswith("--- a/")
+
+
+def test_recipe_dirs_calamares_uses_the_extracted_builders():
+    # recipe_dirs() (still in pkgbuild.py) wires the calamares dir to the extracted
+    # builders. The emitted files must equal the extracted module's output verbatim.
+    import pkgbuild_calamares as pc
+
+    for tier in (False, True):
+        files = dict(pkgbuild.recipe_dirs(tier))["calamares"]
+        assert files["PKGBUILD"] == pc.pkgbuild_calamares()
+        assert files[pc.CALAMARES_DEFAULTS_PATCH_NAME] == pc.calamares_defaults_patch()
+        assert files[pc.CALAMARES_REGION_KEYBOARD_PATCH_NAME] == pc.calamares_region_keyboard_patch()
+        assert files[pc.CALAMARES_FINISH_BUTTONS_PATCH_NAME] == pc.calamares_finish_buttons_patch()
