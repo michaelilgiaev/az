@@ -505,17 +505,47 @@ def cmd_airplane(args: list[str]) -> int:
 # ---------------------------------------------------------------------------
 # ip (static / dynamic IPv4 on a device's NetworkManager connection)
 # ---------------------------------------------------------------------------
+def _prefix_to_netmask(prefix: str) -> str:
+    """A CIDR prefix ('24') -> dotted subnet mask ('255.255.255.0'), or '' if it is not a
+    valid 0..32 integer. nmcli reports IP4.ADDRESS as '<ip>/<prefix>'; users expect the
+    dotted mask too (what the installer's 'Subnet mask' field takes), so we show BOTH."""
+    if not prefix.isdigit():
+        return ""
+    n = int(prefix)
+    if n < 0 or n > 32:
+        return ""
+    bits = (0xFFFFFFFF << (32 - n)) & 0xFFFFFFFF if n else 0
+    return ".".join(str((bits >> shift) & 0xFF) for shift in (24, 16, 8, 0))
+
+
 def _ip_show() -> int:
     if not _need("nmcli", "NetworkManager"):
         return 1
     rc, out = _run("nmcli", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device", "status")
     if rc == 0:
         print(out.rstrip("\n"))
+    # For every CONNECTED device print the full IPv4 picture -- address (with prefix),
+    # the dotted subnet mask, gateway and DNS -- not just the address (the old output hid
+    # the subnet mask, gateway and DNS the user actually needs to examine).
     for dev, _t, state, _c in _nm_field("DEVICE,TYPE,STATE,CONNECTION", "device"):
-        if state == "connected":
-            rc2, addr = _run("nmcli", "-g", "IP4.ADDRESS", "device", "show", dev)
-            if rc2 == 0 and addr.strip():
-                print(f"  {dev}: {addr.strip()}")
+        if state != "connected":
+            continue
+        # -g gives the raw value(s); IP4.ADDRESS / IP4.DNS may hold several, one per line.
+        def _g(field: str) -> list[str]:
+            rc2, val = _run("nmcli", "-g", field, "device", "show", dev)
+            return [v for v in val.splitlines() if v.strip()] if rc2 == 0 else []
+        addrs = _g("IP4.ADDRESS")
+        if not addrs:
+            continue
+        gateway = (_g("IP4.GATEWAY") or [""])[0]
+        dns = _g("IP4.DNS")
+        print(f"  {dev}:")
+        for a in addrs:
+            prefix = a.split("/", 1)[1] if "/" in a else ""
+            mask = _prefix_to_netmask(prefix)
+            print(f"    address: {a}" + (f"  (subnet mask {mask})" if mask else ""))
+        print(f"    gateway: {gateway or '(none)'}")
+        print(f"    dns:     {', '.join(dns) if dns else '(none)'}")
     return 0
 
 

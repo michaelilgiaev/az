@@ -454,6 +454,72 @@ def test_ip_static_without_connection_is_rc_one(monkeypatch, capsys):
     assert "no NetworkManager connection" in capsys.readouterr().err
 
 
+def test_prefix_to_netmask_conversion():
+    command_line_interface = _command_line_interface()
+    f = command_line_interface._prefix_to_netmask
+    assert f("24") == "255.255.255.0"
+    assert f("16") == "255.255.0.0"
+    assert f("8") == "255.0.0.0"
+    assert f("32") == "255.255.255.255"
+    assert f("25") == "255.255.255.128"
+    assert f("0") == "0.0.0.0"
+    # Invalid prefixes yield "" (so the caller just omits the mask, never crashes).
+    assert f("33") == ""
+    assert f("x") == ""
+    assert f("") == ""
+
+
+def test_ip_show_reports_address_mask_gateway_and_dns(monkeypatch, capsys):
+    # Regression: `azarch network ip show` used to print ONLY the address, hiding the subnet
+    # mask, gateway and DNS the user needs to examine. It must now print all four for every
+    # CONNECTED device, and derive the dotted subnet mask from the CIDR prefix.
+    command_line_interface = _command_line_interface()
+    monkeypatch.setattr(command_line_interface, "_have", lambda prog: True)
+    # One connected ethernet device + a loopback that must be ignored (not "connected").
+    monkeypatch.setattr(command_line_interface, "_nm_field",
+        lambda fields, *a: [["enp0s6", "ethernet", "connected", "Wired connection 1"],
+                            ["lo", "loopback", "unmanaged", ""]])
+
+    def fake_run(*a):
+        # device status table
+        if a[:2] == ("nmcli", "-f"):
+            return (0, "DEVICE  TYPE      STATE      CONNECTION\nenp0s6  ethernet  connected  Wired connection 1\n")
+        # per-field -g reads
+        if a[:3] == ("nmcli", "-g", "IP4.ADDRESS"):
+            return (0, "10.0.2.15/24\n")
+        if a[:3] == ("nmcli", "-g", "IP4.GATEWAY"):
+            return (0, "10.0.2.2\n")
+        if a[:3] == ("nmcli", "-g", "IP4.DNS"):
+            return (0, "10.0.2.3\n8.8.8.8\n")
+        return (0, "")
+    monkeypatch.setattr(command_line_interface, "_run", fake_run)
+
+    rc = command_line_interface.main(["network", "ip", "show"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "enp0s6:" in out
+    assert "address: 10.0.2.15/24" in out
+    assert "subnet mask 255.255.255.0" in out
+    assert "gateway: 10.0.2.2" in out
+    # Multiple DNS servers are joined, in order.
+    assert "dns:     10.0.2.3, 8.8.8.8" in out
+
+
+def test_ip_show_handles_connected_device_without_ipv4(monkeypatch, capsys):
+    # A connected device that has no IPv4 lease yet must not crash and must not print a
+    # half-empty block -- it is simply skipped (no address -> nothing to show).
+    command_line_interface = _command_line_interface()
+    monkeypatch.setattr(command_line_interface, "_have", lambda prog: True)
+    monkeypatch.setattr(command_line_interface, "_nm_field",
+        lambda fields, *a: [["enp0s6", "ethernet", "connected", "Wired connection 1"]])
+    monkeypatch.setattr(command_line_interface, "_run",
+        lambda *a: (0, "") if a[:2] == ("nmcli", "-g") or a[:3][1:2] == ("-g",) else (0, "hdr\n"))
+    rc = command_line_interface.main(["network", "ip", "show"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "enp0s6:" not in out  # no address -> device block skipped
+
+
 # --- port token validator (unit) -------------------------------------------
 
 def test_port_spec_validator():

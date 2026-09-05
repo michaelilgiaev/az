@@ -1039,19 +1039,29 @@ def test_calamares_networkq_qml_fields_write_back_on_edit():
     # GlobalStorage. Guards against a field that displays but silently drops input (and the
     # earlier onTextEdited, which did not fire reliably in this context).
     #
-    # The write-backs are null-GUARDED (`if ( config ) config.setX(text)`): config is a
-    # context property that is momentarily null during async QML load, and an unguarded
-    # call there throws and can kill the binding (see the null-safety test below).
+    # The write-backs assign the PROPERTY (`config.<field> = text`), NOT the C++ setter
+    # method. The Config setters (setIpv4/...) are plain Qt property WRITE accessors, NOT
+    # Q_INVOKABLE/slots, so QML cannot call them by name: `config.setIpv4(text)` throws
+    # "Property 'setIpv4' ... is not a function" at runtime. Assigning the property invokes
+    # the same WRITE setter the supported way. Each is null-GUARDED (`if ( config ) ...`):
+    # config is a context property momentarily null during async QML load.
     qml = _networkq_qml_body()
-    for setter in ("config.setIpv4(text)", "config.setSubnetMask(text)",
-                   "config.setGateway(text)", "config.setDns1(text)", "config.setDns2(text)"):
-        assert setter in qml, setter
-        assert ("if ( config ) " + setter) in qml, "unguarded setter: " + setter
+    for field in ("ipv4", "subnetMask", "gateway", "dns1", "dns2"):
+        assign = "config.%s = text" % field
+        assert assign in qml, assign
+        assert ("if ( config ) " + assign) in qml, "unguarded write-back: " + assign
     assert "onTextChanged:" in qml
+    # The C++ setter METHODS must never be called by name from QML -- they are not invokable
+    # and doing so is exactly what left every field greyed (the onClicked handler threw
+    # before config.method ever changed). This is the regression guard for the live fix.
+    import re
+    code = "\n".join(raw.split("//", 1)[0] for raw in qml.splitlines())
+    bad = re.findall(r"config\.set[A-Z]\w*\s*\(", code)
+    assert not bad, "non-invokable C++ setter called from QML: " + repr(bad)
     # The manual section is gated on the Manual radio (DHCP is the default), and picking
-    # Manual enables it -- so the radios must set the method (also null-guarded).
-    assert 'if ( config ) config.setMethod("manual")' in qml
-    assert 'if ( config ) config.setMethod("dhcp")' in qml
+    # Manual enables it -- so the radios assign the method property (null-guarded).
+    assert 'if ( config ) config.method = "manual"' in qml
+    assert 'if ( config ) config.method = "dhcp"' in qml
 
 
 def test_calamares_networkq_qml_radios_use_native_text_not_custom_contentitem():
@@ -1116,17 +1126,18 @@ def test_calamares_networkq_qml_guards_every_config_access_against_null():
 
 
 def test_calamares_networkq_qml_enables_fields_per_field_not_via_layout():
-    # ROOT CAUSE of the LIVE "clicking Manual never un-greys the five inputs" bug: the manual
-    # section's `enabled` was bound on the GridLayout (`manualGrid`) itself. On the real Qt6
-    # build a QtQuick.Layouts item's `enabled` does NOT reliably cascade to the children it
-    # positions, so the fields stayed disabled even after Manual flipped config.method. (An
-    # offscreen PySide6 harness could not reproduce this -- it only ever asserted the LAYOUT's
-    # own `enabled` flipping, never the fields' EFFECTIVE enabled -- which is why the bug
-    # survived multiple "verified offscreen" passes.) EVERY stock Qt6 Calamares page sets
-    # `enabled:` on the leaf control (usersq-qt6.qml: `enabled: config.isEditable(...)` on
-    # each TextField) and NEVER on a Layout. Fix: bind `enabled: manualGrid.isManual` on each
-    # of the five TextFields; keep only `opacity` on the GridLayout (opacity DOES cascade, so
-    # the whole section still dims when DHCP is selected).
+    # The TRUE root cause of the LIVE "clicking Manual never un-greys the five inputs" bug was
+    # that the radio onClicked handler called `config.setMethod("manual")` -- a non-invokable
+    # C++ setter -- which threw before config.method ever changed, so isManual stayed false.
+    # That is fixed by property assignment (see test_..._fields_write_back_on_edit). This test
+    # pins a SECOND, independent hardening from the same investigation: bind `enabled` on each
+    # leaf TextField rather than on the GridLayout. On the real Qt6 build a QtQuick.Layouts
+    # item's `enabled` does NOT reliably cascade to the children it positions, so gating the
+    # layout alone could leave fields disabled; EVERY stock Qt6 Calamares page sets `enabled:`
+    # on the leaf control (usersq-qt6.qml: `enabled: config.isEditable(...)` on each TextField)
+    # and NEVER on a Layout. So: bind `enabled: manualGrid.isManual` on each of the five
+    # TextFields; keep only `opacity` on the GridLayout (opacity DOES cascade, so the whole
+    # section still dims when DHCP is selected).
     qml = _networkq_qml_body()
     code = "\n".join(raw.split("//", 1)[0] for raw in qml.splitlines())
 
