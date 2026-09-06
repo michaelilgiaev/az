@@ -232,7 +232,15 @@ echo "Cloning the live system onto the target (this is the whole desktop)..."
 # matches the live desktop instead of booting to a gray screen. -aAXH preserves perms/owners,
 # ACLs, xattrs and hardlinks; --exclude keeps the virtual/runtime trees and the target itself
 # out (see LIVE_ROOTFS_RSYNC_EXCLUDES).
-rsync -aAXH %RSYNC_EXCLUDES% / /mnt/
+#
+# PROGRESS: this clone is the long step (the whole desktop -- gigabytes -- so it can sit for
+# a minute or two). A bare rsync prints nothing, so the "Cloning..." line looked frozen and
+# the user could not tell it apart from a hang. --info=progress2 gives the standard current-
+# out-of-total readout: ONE rewriting line with the overall percentage, bytes transferred and
+# transfer rate for the whole operation (NOT per-file spam like --progress). No pre-count scan
+# is needed -- rsync tracks the total itself -- so it adds progress without a second traversal.
+echo "  (this is the large step -- overall progress is shown below)"
+rsync -aAXH --info=progress2 %RSYNC_EXCLUDES% / /mnt/
 
 echo "Regenerating fstab for the installed disk..."
 # The cloned /etc/fstab is the archiso live one (its root is the SquashFS/cow overlay, wrong

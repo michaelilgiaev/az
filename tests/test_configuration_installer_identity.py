@@ -51,6 +51,45 @@ def test_collect_reads_passwords_hidden_and_confirms():
     assert "Passwords did not match" in s
 
 
+def test_collect_skips_fullname_prompt_under_star_password():
+    # `azarch-install --auto` leaves the full name blank (spec: full_name=NULL, skip). An empty
+    # AZ_INSTALL_FULLNAME cannot survive run_cli()'s `${VAR:+...}` sudo forwarding, so the collect
+    # step must instead skip the full-name prompt under the auto/unattended marker
+    # (AZ_INSTALL_STAR_PASSWORD) -- otherwise --auto blocks on "Your full name (optional):".
+    s = idy.identity_collect_sh()
+    # The full-name block gates on the star/auto marker and leaves az_fullname empty there.
+    assert 'elif [ -n "$AZ_INSTALL_STAR_PASSWORD" ]; then' in s
+    assert "Full name: (skipped)" in s
+    # The interactive `read` fallback for a plain `--cli` run is still present.
+    assert 'read -rp "Your full name' in s
+
+
+def test_collect_fullname_skipped_noninteractively_under_star(tmp_path):
+    # Behavioural: with AZ_INSTALL_STAR_PASSWORD set and AZ_INSTALL_FULLNAME UNSET (exactly how
+    # --auto arrives after run_cli drops the empty fullname), the collect step must run to
+    # completion WITHOUT reading the full name from stdin. Driven with stdin closed it must exit
+    # 0 and leave az_fullname empty. A regression that re-prompts here would hang/fail on the
+    # empty stdin, catching the reported "--auto prompts: Your full name (optional):" bug.
+    import subprocess, os
+    s = idy.identity_collect_sh()
+    zdir = tmp_path / "zoneinfo" / "Asia"
+    zdir.mkdir(parents=True)
+    (zdir / "Jerusalem").write_text("")
+    s = s.replace("/usr/share/zoneinfo", str(tmp_path / "zoneinfo"))
+    driver = tmp_path / "collect.sh"
+    driver.write_text("#!/bin/bash\nexport LIGHT_BLUE='' RESET=''\n" + s
+                      + '\necho "FULL=[$az_fullname] USER=$az_username"\n')
+    env = dict(os.environ,
+               AZ_INSTALL_STAR_PASSWORD="1", AZ_INSTALL_USERNAME="main",
+               AZ_INSTALL_HOSTNAME="azarch", AZ_INSTALL_TIMEZONE="Asia/Jerusalem")
+    env.pop("AZ_INSTALL_FULLNAME", None)  # UNSET, as --auto's dropped empty value arrives.
+    r = subprocess.run(["bash", str(driver)], capture_output=True, text=True,
+                       env=env, stdin=subprocess.DEVNULL, timeout=30)
+    assert r.returncode == 0, f"collect blocked/failed on fullname under star mode: {r.stderr}"
+    assert "FULL=[] USER=main" in r.stdout, r.stdout
+    assert "Your full name" not in r.stdout
+
+
 def test_collect_skips_password_prompts_under_star_password():
     # STAR-PASSWORD convention (`--auto` sets AZ_INSTALL_STAR_PASSWORD): the password prompts
     # must be SKIPPED entirely (they would block an unattended run) and a marker exported so

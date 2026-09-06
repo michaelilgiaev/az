@@ -327,7 +327,7 @@ INCLUDE archiso_tail.cfg
 
 LOCALE_SETUP_SERVICE = """\
 [Unit]
-Description=Auto-detect locale, keyboard, and timezone
+Description=Configure locale, keyboard, and timezone
 After=network-online.target
 Wants=network-online.target
 

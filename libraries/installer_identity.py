@@ -71,10 +71,18 @@ else
     az_hostname="${az_hostname:-azarch}"
 fi
 
-# Full name (optional, cosmetic GECOS field).
+# Full name (optional, cosmetic GECOS field). Skipped entirely under the unattended/auto
+# marker (AZ_INSTALL_STAR_PASSWORD, which `azarch-install --auto` sets): the full name is
+# intentionally blank there (spec: full_name=NULL, skip), and an empty AZ_INSTALL_FULLNAME
+# cannot survive run_cli()'s `${VAR:+...}` sudo forwarding, so it would arrive UNSET and
+# fall through to this interactive prompt -- blocking the "no questions asked" auto run.
+# Gate on the same auto marker the password prompts use, then leave az_fullname empty.
 if [ -n "$AZ_INSTALL_FULLNAME" ]; then
     az_fullname="$AZ_INSTALL_FULLNAME"
     echo "Full name: $az_fullname (pre-seeded)"
+elif [ -n "$AZ_INSTALL_STAR_PASSWORD" ]; then
+    az_fullname=
+    echo "Full name: (skipped)"
 else
     read -rp "Your full name (optional): " az_fullname
 fi

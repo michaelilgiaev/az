@@ -345,6 +345,19 @@ def test_installer_sh_clones_live_rootfs_into_target():
     assert "/mnt" in s
 
 
+def test_installer_sh_clone_shows_overall_progress():
+    # The clone is the long step (the whole desktop -- gigabytes). A bare rsync prints nothing,
+    # so "Cloning the live system..." looked frozen for a minute or two and was indistinguishable
+    # from a hang (the reported "visually stuck ... add current out of total progress bar"). The
+    # clone MUST show overall current-out-of-total progress: rsync --info=progress2 gives exactly
+    # that (one rewriting line with the total percentage + bytes + rate), without the per-file
+    # spam of --progress. Assert the flag rides on the clone rsync.
+    s = installer.installer_sh()
+    assert "--info=progress2" in s
+    # It must be part of the clone command, not a stray token.
+    assert "rsync -aAXH --info=progress2" in s
+
+
 def test_installer_sh_rsync_excludes_virtual_filesystems():
     # A rootfs rsync MUST exclude the kernel/virtual and runtime trees or it will try to copy
     # /proc, /sys, /dev, /run (the archiso cow/bootmnt overlay lives under /run/archiso) and
