@@ -94,7 +94,7 @@ Easy-to-use interactive graph of every component (render is hosted by GitHub Pag
      Run `lsblk` to find `<DEVICE>`:
 
      ```bash
-     lsblk -o NAME,SIZE,TYPE,TRAN,MOUNTPOINTS
+     lsblk -o NAME,SIZE,TYPE,TRAN,FSTYPE,MOUNTPOINTS
      ```
 
      The USB is the whole-disk entry (such as `sdb`) whose size matches the stick,
