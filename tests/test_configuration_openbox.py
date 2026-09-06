@@ -137,36 +137,73 @@ def test_install_wrapper_entry_is_root_owned_exec():
     assert entry["builder"] is desktop.install_wrapper_sh
 
 
-def test_install_wrapper_has_gui_cli_and_help():
-    # azarch-install is now a dispatcher: GUI (Calamares) by default with a display, a
-    # scripted CLI installer for SSH (--cli / no display), and a --help. Assert all three
-    # surfaces are present in the generated launcher.
+def test_install_wrapper_has_gui_cli_auto_and_help():
+    # azarch-install is a dispatcher over three explicit modes -- GUI (Calamares), the
+    # scripted CLI installer, and the fully-unattended --auto -- plus a --help. There is NO
+    # default action: a bare invocation shows help (see below). Assert all surfaces exist.
     w = desktop.install_wrapper_sh()
     assert "--help" in w and "Usage: azarch-install" in w
-    assert "--gui" in w and "--cli" in w
+    assert "--gui" in w and "--cli" in w and "--auto" in w
     # GUI path still launches Calamares the same way.
     assert "calamares" in w
     # CLI path runs the scripted installer baked under /root/azarch.
     assert desktop.INSTALL_CLI_SCRIPT_PATH in w
-    assert "INSTALL_CLI_SCRIPT_PATH" or "/root/azarch/azarch-install-cli.sh" in w
 
 
-def test_install_wrapper_cli_is_the_ssh_path_when_no_display():
-    # The whole point of the CLI path: with NO display (an SSH session) `azarch-install`
-    # must fall back to the scripted installer, not try to open a GUI. Assert the launcher
-    # branches on DISPLAY/WAYLAND_DISPLAY and calls the CLI runner otherwise.
+def test_install_wrapper_has_no_default_action_and_shows_help_on_no_args():
+    # PROMPT.md: `azarch-install` (no option) and `--help`/`-h` must ECHO the help text,
+    # NOT start an install. The wrapper therefore has NO display-detection default anymore;
+    # a mode must be named explicitly (-g/-c/-a). Assert the dispatch defaults to `usage`
+    # (the `*)` arm) and that the old auto-detect branch is gone.
     w = desktop.install_wrapper_sh()
-    assert 'if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; then' in w
-    assert "run_cli" in w and "run_gui" in w
+    assert "run_cli" in w and "run_gui" in w and "run_auto" in w
+    # The bare-invocation dispatch prints help and exits 0 (no install).
+    assert "*) usage; exit 0 ;;" in w
+    # The removed behaviour: no DISPLAY/WAYLAND_DISPLAY auto-detect default.
+    assert 'if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; then' not in w
 
 
-def test_install_wrapper_auto_and_disk_preseed_the_installer():
-    # --auto and --disk pre-seed the scripted installer's disk selection (via
-    # AZ_INSTALL_CHOICE / AZ_INSTALL_DISK) so an SSH install can run unattended.
+def test_install_wrapper_mode_flag_aliases():
+    # PROMPT.md requires short + long aliases for each mode:
+    #   -g / --gui / --graphical-user-interface
+    #   -c / --cli / --command-line-interface
+    #   -a / --auto / --automatic
     w = desktop.install_wrapper_sh()
-    assert "AZ_INSTALL_CHOICE=1" in w                 # --auto -> largest disk
+    assert "-g|--gui|--graphical-user-interface) mode=gui" in w
+    assert "-c|--cli|--command-line-interface) mode=cli" in w
+    assert "-a|--auto|--automatic) mode=auto" in w
+    # -h / --help still print help.
+    assert "-h|--help) usage; exit 0 ;;" in w
+
+
+def test_install_wrapper_disk_preseeds_the_installer():
+    # --disk pre-seeds the scripted installer's disk selection (AZ_INSTALL_CHOICE=2 +
+    # AZ_INSTALL_DISK) so a --cli install can target a named device without the disk prompt.
+    w = desktop.install_wrapper_sh()
     assert "AZ_INSTALL_DISK=" in w                    # --disk <dev>
     assert "--disk" in w
+
+
+def test_install_wrapper_auto_is_fully_unattended_with_fixed_defaults():
+    # PROMPT.md: `--auto` applies the FIXED defaults with no prompts. run_auto must export
+    # every one of them, then delegate to the same scripted-installer path (run_cli). Assert
+    # each fixed default is set: largest disk, hostname azarch, user main, empty full name,
+    # Asia/Jerusalem, btrfs, and the '*'-password (Ubuntu/casper) knob. DHCP is the installed
+    # default (NetworkManager, no static profile), so there is nothing to assert for network.
+    w = desktop.install_wrapper_sh()
+    assert "run_auto()" in w
+    assert "export AZ_INSTALL_CHOICE=1" in w              # largest fixed disk (skips USB)
+    assert "export AZ_INSTALL_HOSTNAME=azarch" in w
+    assert "export AZ_INSTALL_USERNAME=main" in w
+    assert "export AZ_INSTALL_FULLNAME=" in w             # empty -> skipped
+    assert "export AZ_INSTALL_TIMEZONE=Asia/Jerusalem" in w
+    assert "export AZ_INSTALL_FILESYSTEM=btrfs" in w      # parity with the Calamares GUI
+    assert "export AZ_INSTALL_STAR_PASSWORD=1" in w       # '*' for user + root
+    # run_auto funnels into the single install path.
+    assert "run_cli" in w
+    # run_cli forwards the two new knobs across the sudo boundary too.
+    assert "AZ_INSTALL_FILESYSTEM=$AZ_INSTALL_FILESYSTEM" in w
+    assert "AZ_INSTALL_STAR_PASSWORD=$AZ_INSTALL_STAR_PASSWORD" in w
 
 
 def test_install_wrapper_forwards_identity_env_across_sudo():
@@ -250,7 +287,9 @@ def test_desktop_launcher_content_names_installer_and_wrapper_and_icon():
     body = desktop.desktop_installer_launcher()
     assert "[Desktop Entry]" in body
     assert "Name=Az'arch Linux Installer" in body
-    assert f"Exec={desktop.INSTALL_WRAPPER_PATH}" in body
+    # Exec names `--gui` explicitly (azarch-install has no default action now, so a bare
+    # invocation would only print help -- the launcher must ask for the GUI installer).
+    assert f"Exec={desktop.INSTALL_WRAPPER_PATH} --gui" in body
     assert f"Icon={desktop.INSTALLER_ICON_NAME}" in body
     assert "Type=Application" in body
 
@@ -265,6 +304,17 @@ def test_installer_launchers_all_use_the_azarch_icon():
         assert f"Icon={desktop.INSTALLER_ICON_NAME}" in body
         assert "system-software-install" not in body
         assert "Name=Az'arch Linux Installer" in body
+
+
+def test_installer_launchers_all_invoke_gui_mode():
+    # Neither .desktop launcher may rely on a default action -- azarch-install has none now.
+    # Both the Desktop launcher and the application-menu entry must Exec `--gui` so a
+    # double-click / menu-open starts the Calamares GUI (not the help text).
+    for body in (
+        desktop.desktop_installer_launcher(),
+        desktop.install_menu_desktop(),
+    ):
+        assert f"Exec={desktop.INSTALL_WRAPPER_PATH} --gui" in body
 
 
 def test_installer_icon_paths_are_standard_system_locations():
@@ -939,10 +989,12 @@ def test_autostart_starts_the_application_menu_daemon():
 
 
 def test_autostart_launches_the_installer_once():
-    # The Calamares installer auto-opens ONCE, a couple seconds in (Manjaro-style
-    # first-run), via the privileged wrapper -- the same wrapper the menu/Desktop launchers use.
+    # The Calamares installer auto-opens ONCE, a couple seconds in (Manjaro-style first-run),
+    # via the privileged wrapper -- the same wrapper the menu/Desktop launchers use. It must
+    # name `--gui` explicitly now: azarch-install has NO default action (a bare invocation
+    # only prints help), so the first-run autostart must ask for GUI mode by name.
     out = desktop.openbox_autostart()
-    assert f"( sleep 2; '{desktop.INSTALL_WRAPPER_PATH}' )" in out
+    assert f"( sleep 2; '{desktop.INSTALL_WRAPPER_PATH}' --gui )" in out
 
 
 def test_live_autostart_shows_the_security_notice():

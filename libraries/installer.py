@@ -146,6 +146,18 @@ if [ -d "/sys/firmware/efi" ]; then
   is_uefi=1
 fi
 
+# Root filesystem. Defaults to ext4 (a plain `azarch-install --cli` is unchanged); the
+# `--auto` mode pre-seeds AZ_INSTALL_FILESYSTEM=btrfs for parity with the Calamares GUI,
+# whose defaultFileSystemType is btrfs. Only ext4/btrfs are supported by this scripted
+# path (a flat filesystem -- no subvolumes; the rsync clone has no subvolume layout).
+# Validate up front, BEFORE the wipe, so a typo aborts while the disk is still untouched
+# rather than after mkfs picks the wrong type.
+root_fs="${AZ_INSTALL_FILESYSTEM:-ext4}"
+case "$root_fs" in
+    ext4|btrfs) ;;
+    *) echo "azarch-install: unsupported AZ_INSTALL_FILESYSTEM '$root_fs' (use ext4 or btrfs)"; exit 1 ;;
+esac
+
 # Collect the account / hostname / timezone answers (Calamares Users + Location parity) NOW,
 # before anything destructive -- a mistyped answer costs nothing while the disk is untouched.
 %IDENTITY_COLLECT%
@@ -185,7 +197,17 @@ echo "Formatting partitions..."
 if [ $is_uefi -eq 1 ]; then
   mkfs.fat -F32 "$part1"
 fi
-mkfs.ext4 "$part2"
+# Root filesystem per AZ_INSTALL_FILESYSTEM (validated above): ext4 default, or btrfs for
+# `--auto` (parity with the Calamares GUI). -f forces btrfs over any lingering signature
+# (wipefs already ran, but -f is belt-and-braces). Both are flat -- no subvolumes; genfstab
+# below emits the correct entry for whichever type this is, and mkinitcpio/grub pick up
+# btrfs from the installed system's own config, so nothing else needs to change per-fs.
+echo "Formatting $part2 as $root_fs..."
+if [ "$root_fs" = "btrfs" ]; then
+  mkfs.btrfs -f "$part2"
+else
+  mkfs.ext4 "$part2"
+fi
 
 echo "Mounting partitions..."
 mkdir -p /mnt

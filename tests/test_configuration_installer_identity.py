@@ -51,6 +51,46 @@ def test_collect_reads_passwords_hidden_and_confirms():
     assert "Passwords did not match" in s
 
 
+def test_collect_skips_password_prompts_under_star_password():
+    # STAR-PASSWORD convention (`--auto` sets AZ_INSTALL_STAR_PASSWORD): the password prompts
+    # must be SKIPPED entirely (they would block an unattended run) and a marker exported so
+    # the write/chroot steps apply a literal '*'. Assert the collect step gates the whole
+    # password section on the env var and sets az_star_password, exporting it downstream.
+    s = idy.identity_collect_sh()
+    assert 'if [ -n "$AZ_INSTALL_STAR_PASSWORD" ]; then' in s
+    assert "az_star_password=1" in s
+    # az_star_password is exported alongside the other collected answers.
+    assert "az_star_password" in s.split("export ", 1)[1]
+
+
+def test_collect_star_password_flow_is_noninteractive(tmp_path):
+    # Behavioural: with AZ_INSTALL_STAR_PASSWORD (and the other fields pre-seeded, as `--auto`
+    # provides) the collect step must run to completion WITHOUT reading a password from stdin.
+    # Drive it with stdin closed; it must exit 0 and set az_star_password=1. A regression that
+    # re-introduced a password `read` here would hang/fail (empty stdin -> non-zero), catching
+    # the "unattended install blocks on a hidden password prompt" bug.
+    import subprocess, os
+    s = idy.identity_collect_sh()
+    # Point the zoneinfo validation at a stub tree so Asia/Jerusalem validates in the sandbox.
+    zdir = tmp_path / "zoneinfo" / "Asia"
+    zdir.mkdir(parents=True)
+    (zdir / "Jerusalem").write_text("")
+    s = s.replace("/usr/share/zoneinfo", str(tmp_path / "zoneinfo"))
+    driver = tmp_path / "collect.sh"
+    driver.write_text("#!/bin/bash\nexport LIGHT_BLUE='' RESET=''\n" + s
+                      + '\necho "STAR=$az_star_password USER=$az_username TZ=$az_timezone"\n')
+    env = dict(os.environ,
+               AZ_INSTALL_STAR_PASSWORD="1", AZ_INSTALL_USERNAME="main",
+               AZ_INSTALL_HOSTNAME="azarch", AZ_INSTALL_TIMEZONE="Asia/Jerusalem",
+               AZ_INSTALL_FULLNAME="")
+    r = subprocess.run(["bash", str(driver)], capture_output=True, text=True,
+                       env=env, stdin=subprocess.DEVNULL, timeout=30)
+    assert r.returncode == 0, f"collect blocked/failed under star mode: {r.stderr}"
+    assert "STAR=1 USER=main TZ=Asia/Jerusalem" in r.stdout, r.stdout
+    # It must NOT have prompted for a password.
+    assert "Password for" not in r.stdout
+
+
 def test_collect_validates_username_and_timezone():
     s = idy.identity_collect_sh()
     # Username matches a POSIX-ish pattern; timezone must exist in the zoneinfo DB.
@@ -97,10 +137,21 @@ def test_write_persists_fields_and_secures_passwords():
     s = idy.identity_write_sh()
     for f in ("hostname", "username", "fullname", "timezone"):
         assert f"/mnt/etc/install_info/{f}" in s
-    # Passwords written under a restrictive umask (0600-ish), not a plain marker file.
+    # In the NORMAL (non-star) path, passwords are written under a restrictive umask
+    # (0600-ish), not a plain marker file.
     assert "umask 077" in s
     assert "/mnt/etc/install_info/password" in s
     assert "/mnt/etc/install_info/root_password" in s
+
+
+def test_write_persists_only_a_marker_under_star_password():
+    # Under the STAR-PASSWORD convention (`--auto`) NO plaintext password is persisted: the
+    # write step branches on $az_star_password and drops just a `star_password` marker so the
+    # chroot writes a literal '*' for user + root. The plaintext files (and their umask 077
+    # subshells) live only in the else branch, so a star install never lands a secret on disk.
+    s = idy.identity_write_sh()
+    assert 'if [ -n "$az_star_password" ]; then' in s
+    assert "/mnt/etc/install_info/star_password" in s
 
 
 def test_write_is_valid_bash():
@@ -110,12 +161,38 @@ def test_write_is_valid_bash():
 # --- chroot: apply user + root passwords, hostname, timezone -----------------
 
 def test_chroot_sets_both_passwords_via_chpasswd_and_shreds():
+    # The NORMAL (non-star) path: collected user + root passwords applied via chpasswd, then
+    # the plaintext files shredded. This is the else branch of the star-password conditional.
     s = idy.identity_chroot_sh()
     assert "chpasswd" in s
     # Root password is applied too (parity with Calamares setRootPassword).
     assert "printf 'root:%s'" in s
     # Plaintext password files are removed after use.
     assert "rm -f /etc/install_info/password /etc/install_info/root_password" in s
+
+
+def test_chroot_writes_star_password_for_user_and_root_when_requested():
+    # STAR-PASSWORD convention (`--auto`): when the star_password marker is present the chroot
+    # writes a literal '*' into the shadow field for BOTH the chosen login and root via
+    # `usermod -p '*'` (the Ubuntu/casper standard: an invalid hash -> no password login, but
+    # the account is NOT locked, so tty1 autologin + NOPASSWD sudo keep the box usable). It
+    # must NOT run chpasswd in this branch, and it consumes (removes) the marker.
+    s = idy.identity_chroot_sh()
+    assert "if [ -f /etc/install_info/star_password ]; then" in s
+    assert "usermod -p '*' \"$az_login\"" in s
+    assert "usermod -p '*' root" in s
+    assert "rm -f /etc/install_info/star_password" in s
+
+
+def test_chroot_star_and_chpasswd_are_mutually_exclusive():
+    # The star branch and the chpasswd branch are the two arms of ONE if/else: a star install
+    # must never also chpasswd (that would set a real password), and a normal install must
+    # never usermod -p '*'. Assert the chpasswd calls sit in the `else` after the star `if`.
+    s = idy.identity_chroot_sh()
+    star_idx = s.index("if [ -f /etc/install_info/star_password ]; then")
+    else_idx = s.index("else", star_idx)
+    chpasswd_idx = s.index("chpasswd", star_idx)
+    assert star_idx < else_idx < chpasswd_idx, "chpasswd must be in the else arm of the star check"
 
 
 def test_chroot_renames_live_user_preserving_identity():

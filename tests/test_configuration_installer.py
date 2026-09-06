@@ -458,6 +458,54 @@ def test_installer_sh_nvme_vs_sata_partition_suffix():
     assert 'part2="${largest_disk}2"' in s
 
 
+def test_installer_sh_filesystem_knob_defaults_ext4_and_supports_btrfs():
+    # The root filesystem is chosen by AZ_INSTALL_FILESYSTEM: ext4 by default (a plain
+    # `azarch-install --cli` is unchanged) or btrfs when set (what `--auto` pre-seeds, for
+    # parity with the Calamares GUI's defaultFileSystemType). The value is validated up front
+    # (only ext4/btrfs) so a typo aborts BEFORE the wipe, and BOTH mkfs branches must ship.
+    s = installer.installer_sh()
+    assert 'root_fs="${AZ_INSTALL_FILESYSTEM:-ext4}"' in s     # default ext4, honours the env
+    assert 'mkfs.btrfs -f "$part2"' in s                        # btrfs branch (forced)
+    assert 'mkfs.ext4 "$part2"' in s                            # ext4 branch (default)
+    # Validation guard: an unsupported value exits non-zero rather than mkfs the wrong type.
+    assert 'unsupported AZ_INSTALL_FILESYSTEM' in s
+    assert 'ext4|btrfs)' in s
+    # The ESP (mkfs.fat) is orthogonal and still present for the UEFI branch.
+    assert 'mkfs.fat -F32 "$part1"' in s
+
+
+def test_installer_sh_filesystem_validation_runs_before_the_wipe(tmp_path):
+    # Behavioural: the AZ_INSTALL_FILESYSTEM validation must reject a bad value with a
+    # non-zero exit. Drive just the validation snippet through bash for good/bad inputs so a
+    # future edit that drops the guard (and would mkfs an arbitrary/foreign type) fails here.
+    import subprocess
+    s = installer.installer_sh()
+    start = s.index('root_fs="${AZ_INSTALL_FILESYSTEM:-ext4}"')
+    end = s.index('esac', start) + len('esac')
+    snippet = "#!/bin/bash\n" + s[start:end] + '\necho "OK:$root_fs"\n'
+    f = tmp_path / "fsguard.sh"
+    f.write_text(snippet)
+
+    def run(value):
+        env = {"AZ_INSTALL_FILESYSTEM": value} if value is not None else {}
+        return subprocess.run(["bash", str(f)], capture_output=True, text=True, env=env)
+
+    # default (unset) -> ext4, exit 0
+    r = run(None)
+    assert r.returncode == 0 and "OK:ext4" in r.stdout, r.stderr
+    # explicit btrfs -> exit 0
+    r = run("btrfs")
+    assert r.returncode == 0 and "OK:btrfs" in r.stdout, r.stderr
+    # explicit ext4 -> exit 0
+    r = run("ext4")
+    assert r.returncode == 0 and "OK:ext4" in r.stdout
+    # garbage / foreign fs -> non-zero, no OK line (aborts before any mkfs)
+    r = run("xfs")
+    assert r.returncode != 0 and "OK:" not in r.stdout
+    r = run("; rm -rf /")
+    assert r.returncode != 0 and "OK:" not in r.stdout
+
+
 def test_chroot_setup_resets_machine_id_for_the_clone():
     # The rootfs clone copies the LIVE /etc/machine-id verbatim. Shipping a fixed machine-id on
     # every installed system is a real bug (duplicate ids across machines break DHCP leases,

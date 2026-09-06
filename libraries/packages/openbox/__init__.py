@@ -1310,10 +1310,12 @@ command -v setxkbmap >/dev/null 2>&1 && \\
     setxkbmap -layout '{layouts}' -option '{KEYBOARD_TOGGLE}' &
 
 # 7. LIVE-ONLY -- Calamares installer, once, a couple seconds in (Manjaro-style
-#    first-run). The wrapper elevates via passwordless sudo on the live medium. Stripped
-#    from the installed autostart so an installed system never re-opens the installer.
+#    first-run). Launched via `--gui` -- azarch-install has no default action now, so the
+#    GUI mode must be named explicitly. The wrapper elevates via passwordless sudo on the
+#    live medium. Stripped from the installed autostart so an installed system never
+#    re-opens the installer.
 if [ -x '{INSTALL_WRAPPER_PATH}' ]; then
-    ( sleep 2; '{INSTALL_WRAPPER_PATH}' ) &
+    ( sleep 2; '{INSTALL_WRAPPER_PATH}' --gui ) &
 fi
 
 # 8. LIVE-ONLY -- first-run SECURITY NOTICE (once). `azarch security-notice` explains that
@@ -1405,14 +1407,17 @@ def install_menu_desktop() -> str:
     """A launcher in the application menu so the installer can be re-opened after it is
     closed, sharing the same privileged wrapper. Lands in /usr/share/applications
     (system-wide), so it is not a per-user file and is picked up by the Az'arch menu's
-    application scan."""
+    application scan.
+
+    Exec names `--gui` explicitly: azarch-install has no default action, so a bare invocation
+    would only print help. This entry re-opens the Calamares GUI installer."""
     return """\
 [Desktop Entry]
 Type=Application
 Name=Az'arch Linux Installer
 GenericName=System Installer
 Comment=Install Az'arch Linux to disk
-Exec=""" + INSTALL_WRAPPER_PATH + """
+Exec=""" + INSTALL_WRAPPER_PATH + """ --gui
 Icon=""" + INSTALLER_ICON_NAME + """
 Terminal=false
 Categories=System;
@@ -1429,14 +1434,17 @@ def desktop_installer_launcher() -> str:
     Ships EXECUTABLE (PLAN mode 0o755 + a profile.py FILE_PERMISSIONS pin) so any file
     manager that honours the exec bit runs it without a "not trusted" prompt -- archiso
     normalizes overlay modes to 0644 in the squashfs unless a path is pinned (the same
-    gotcha documented for /usr/local/bin/azarch-install), so the pin is required."""
+    gotcha documented for /usr/local/bin/azarch-install), so the pin is required.
+
+    Exec names `--gui` explicitly: azarch-install has no default action, so a bare
+    invocation would only print help. Double-clicking this opens the Calamares GUI."""
     return """\
 [Desktop Entry]
 Type=Application
 Name=Az'arch Linux Installer
 GenericName=System Installer
 Comment=Install Az'arch Linux to disk
-Exec=""" + INSTALL_WRAPPER_PATH + """
+Exec=""" + INSTALL_WRAPPER_PATH + """ --gui
 Icon=""" + INSTALLER_ICON_NAME + """
 Terminal=false
 Categories=System;
@@ -1543,50 +1551,71 @@ def install_wrapper_sh() -> str:
 #!/bin/sh
 # azarch-install -- the Az'arch installer launcher for the live session.
 #
-# TWO front-ends over the SAME install:
-#   * GUI (default when a display is present): the Calamares graphical installer.
-#   * CLI (`--cli`, or automatically when there is no display -- e.g. over SSH): the
-#     scripted terminal installer at {INSTALL_CLI_SCRIPT_PATH}. This is what lets a user
-#     install Az'arch entirely over an SSH session, with no X.
+# Front-ends over the SAME install (a mode must be chosen explicitly; no default action):
+#   * GUI (`-g`/`--gui`): the Calamares graphical installer.
+#   * CLI (`-c`/`--cli`): the scripted terminal installer at {INSTALL_CLI_SCRIPT_PATH}.
+#     This is what lets a user install Az'arch entirely over an SSH session, with no X.
+#   * AUTO (`-a`/`--auto`): the CLI installer with every answer pre-seeded to fixed
+#     defaults (btrfs, user main, host azarch, tz Asia/Jerusalem, '*' passwords, DHCP).
+#   Bare `azarch-install` (or -h/--help) prints help and does nothing else.
 #
 # `main` has passwordless sudo on the live medium, so neither path needs a polkit agent.
 #
 # Usage:
-#   azarch-install                 Launch the installer (GUI if a display exists, else CLI).
-#   azarch-install --gui           Force the Calamares GUI installer.
-#   azarch-install --cli           Force the scripted terminal installer (interactive).
-#   azarch-install --cli --auto    CLI install onto the largest fixed disk, no prompts.
-#   azarch-install --cli --disk sdX CLI install onto /dev/sdX, no prompts.
-#   azarch-install --help          Show this help.
+#   azarch-install                 Show this help (no default action).
+#   azarch-install -g|--gui        Force the Calamares graphical installer.
+#   azarch-install -c|--cli        Force the scripted terminal installer (interactive).
+#   azarch-install -a|--auto       Fully-unattended install with fixed defaults (btrfs).
+#   azarch-install --cli --disk sdX CLI install onto /dev/sdX, no disk prompt.
+#   azarch-install -h|--help       Show this help.
 
 usage() {{
     cat <<'EOF'
-Usage: azarch-install [--gui | --cli [--auto | --disk <dev>]] [--help]
+Usage: azarch-install [ -g | -c | -a | --cli --disk <dev> ] [ -h ]
 
-  (no option)         Launch the installer. Uses the Calamares GUI when a display is
-                      available, otherwise falls back to the scripted terminal installer
-                      (so `azarch-install` over SSH just works).
-  --gui               Force the Calamares graphical installer.
-  --cli               Force the scripted terminal installer. Walks the SAME choices as the
-                      Calamares pages: disk (auto/manual), hostname, your name, username,
-                      user password, root password, and timezone -- then installs.
-  --cli --auto        Pick the largest FIXED disk (skips removable/USB) instead of asking
-                      which disk; the account/hostname/timezone are still asked unless
-                      pre-seeded (see below).
-  --cli --disk <dev>  Use /dev/<dev> (e.g. sda, nvme0n1) instead of asking which disk.
-  --help, -h          Show this help.
+  (no option), -h, --help
+                      Show this help. Running azarch-install with no option does NOT
+                      start an install; pick one of the modes below.
+
+  -g, --gui, --graphical-user-interface
+                      Launch the Calamares graphical installer.
+
+  -c, --cli, --command-line-interface
+                      Launch the scripted terminal installer, with parameter parity to
+                      Calamares: it walks the SAME choices as the Calamares pages -- disk
+                      (auto/manual), hostname, your name, username, user password, root
+                      password, and timezone -- then installs. Works over SSH (no X).
+
+  -a, --auto, --automatic
+                      Fully-unattended install with fixed defaults, no prompts:
+                        timezone   Asia/Jerusalem
+                        language   English
+                        disk       the largest FIXED disk (skips removable/USB), whole
+                                   disk, no swap, btrfs, unencrypted
+                        user       main   (full name skipped)
+                        hostname   azarch
+                        passwords  '*' for user and root (Ubuntu/casper convention: no
+                                   password login, account not locked; console autologin
+                                   + passwordless sudo still work)
+                        network    automatic DHCP
+                      Erases the target disk without asking.
+
+  --cli --disk <dev>  Use /dev/<dev> (e.g. sda, nvme0n1) as the target instead of asking
+                      which disk. Only meaningful with --cli.
 
 The CLI and GUI installers produce the same system (same packages, same chroot setup, a
-real user account with a chosen password, a root password, a hostname, and a timezone).
-Both ERASE the target disk.
+real user account, a root password, a hostname, and a timezone). All install modes ERASE
+the target disk.
 
-Fully unattended over SSH: pre-seed any prompt via the environment, e.g.
+Fully unattended over SSH with your OWN values (instead of --auto's fixed ones): pre-seed
+any prompt via the environment, e.g.
   AZ_INSTALL_DISK=sda AZ_INSTALL_HOSTNAME=box AZ_INSTALL_USERNAME=me \
   AZ_INSTALL_PASSWORD=... AZ_INSTALL_ROOT_PASSWORD=... AZ_INSTALL_TIMEZONE=Europe/London \
   azarch-install --cli
 Recognised: AZ_INSTALL_DISK, AZ_INSTALL_HOSTNAME, AZ_INSTALL_USERNAME, AZ_INSTALL_FULLNAME,
-AZ_INSTALL_PASSWORD, AZ_INSTALL_ROOT_PASSWORD, AZ_INSTALL_TIMEZONE (and AZ_INSTALL_CHOICE).
-Any prompt left un-seeded is asked interactively.
+AZ_INSTALL_PASSWORD, AZ_INSTALL_ROOT_PASSWORD, AZ_INSTALL_TIMEZONE, AZ_INSTALL_FILESYSTEM
+(ext4 default, or btrfs), and AZ_INSTALL_CHOICE. Any prompt left un-seeded is asked
+interactively.
 EOF
 }}
 
@@ -1632,15 +1661,48 @@ run_cli() {{
         ${{AZ_INSTALL_PASSWORD:+AZ_INSTALL_PASSWORD=$AZ_INSTALL_PASSWORD}} \\
         ${{AZ_INSTALL_ROOT_PASSWORD:+AZ_INSTALL_ROOT_PASSWORD=$AZ_INSTALL_ROOT_PASSWORD}} \\
         ${{AZ_INSTALL_TIMEZONE:+AZ_INSTALL_TIMEZONE=$AZ_INSTALL_TIMEZONE}} \\
+        ${{AZ_INSTALL_FILESYSTEM:+AZ_INSTALL_FILESYSTEM=$AZ_INSTALL_FILESYSTEM}} \\
+        ${{AZ_INSTALL_STAR_PASSWORD:+AZ_INSTALL_STAR_PASSWORD=$AZ_INSTALL_STAR_PASSWORD}} \\
         bash '{INSTALL_CLI_SCRIPT_PATH}'
 }}
 
-mode=auto
+run_auto() {{
+    # Fully-unattended install (`-a`/`--auto`/`--automatic`). It is `run_cli` with EVERY answer
+    # pre-seeded to the fixed defaults from the spec, so there is ONE install code path -- the
+    # scripted installer -- and --auto is simply "the CLI installer, no questions asked". Not
+    # gated on a display: it runs on the console and over SSH alike.
+    #
+    #   timezone Asia/Jerusalem   language English (the distro's fixed locale -- nothing to set)
+    #   disk     the largest FIXED disk (AZ_INSTALL_CHOICE=1 skips removable/USB), whole disk,
+    #            no swap, btrfs (AZ_INSTALL_FILESYSTEM=btrfs -- parity with the Calamares GUI's
+    #            defaultFileSystemType), unencrypted (the CLI path never encrypts)
+    #   user     main   full name skipped (empty)   hostname azarch
+    #   passwords '*' for user AND root -- the Ubuntu/casper convention (AZ_INSTALL_STAR_PASSWORD):
+    #            a literal '*' in the shadow field is an INVALID hash, so no password authenticates,
+    #            but the account is NOT locked (unlike '!'). The box stays usable exactly like the
+    #            live medium -- main autologins on tty1 and has NOPASSWD sudo, so the desktop comes
+    #            up; root just has no password login. A dedicated knob is used instead of
+    #            AZ_INSTALL_PASSWORD='*' (which would set the literal string '*' as a real password).
+    #   network  automatic DHCP -- the installed system enables NetworkManager with no static
+    #            profile, which IS DHCP, so there is nothing to configure here.
+    export AZ_INSTALL_CHOICE=1
+    export AZ_INSTALL_HOSTNAME=azarch
+    export AZ_INSTALL_USERNAME=main
+    export AZ_INSTALL_FULLNAME=
+    export AZ_INSTALL_TIMEZONE=Asia/Jerusalem
+    export AZ_INSTALL_FILESYSTEM=btrfs
+    export AZ_INSTALL_STAR_PASSWORD=1
+    run_cli
+}}
+
+# No default action: with no option (or -h/--help) we print help and exit. A mode must be
+# chosen explicitly. `mode` stays empty until a -g/-c/-a flag sets it.
+mode=
 while [ $# -gt 0 ]; do
     case "$1" in
-        --gui) mode=gui ;;
-        --cli) mode=cli ;;
-        --auto) AZ_INSTALL_CHOICE=1; export AZ_INSTALL_CHOICE ;;
+        -g|--gui|--graphical-user-interface) mode=gui ;;
+        -c|--cli|--command-line-interface) mode=cli ;;
+        -a|--auto|--automatic) mode=auto ;;
         --disk) shift; AZ_INSTALL_CHOICE=2; AZ_INSTALL_DISK="$1"
                 export AZ_INSTALL_CHOICE AZ_INSTALL_DISK ;;
         --disk=*) AZ_INSTALL_CHOICE=2; AZ_INSTALL_DISK="${{1#--disk=}}"
@@ -1654,15 +1716,8 @@ done
 case "$mode" in
     gui) run_gui ;;
     cli) run_cli ;;
-    auto)
-        # No explicit mode: GUI when a display is present, else the CLI installer (this is
-        # the SSH path -- no DISPLAY -> scripted installer).
-        if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; then
-            run_gui
-        else
-            run_cli
-        fi
-        ;;
+    auto) run_auto ;;
+    *) usage; exit 0 ;;    # no mode chosen (bare `azarch-install`) -> help, no install.
 esac
 """
 

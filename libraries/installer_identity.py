@@ -25,8 +25,9 @@ entire process through the command line ... the same result"):
 
 Language and console keyboard stay ENGLISH-ONLY ("us") on purpose: that is the distribution's
 deliberate locale policy (see packages/calamares/locale.py), the same policy the GUI enforces
-outside its optional second-layout nicety. Filesystem/LUKS/swap stay as the scripted path's
-ext4 default (the partition editor is the one Calamares page not reimplemented in a TTY).
+outside its optional second-layout nicety. LUKS/swap stay off (the partition editor is the
+one Calamares page not reimplemented in a TTY); the root filesystem is ext4 by default, or
+btrfs when AZ_INSTALL_FILESYSTEM=btrfs (which `azarch-install --auto` sets, matching the GUI).
 
 Everything here is a pure string producer -- no network, no subprocess, no filesystem writes
 -- so it is unit-testable exactly like installer.py. The env pre-seed names are the
@@ -113,41 +114,54 @@ while :; do
     break
 done
 
-# User password (confirmed, hidden). AZ_INSTALL_PASSWORD pre-seeds it for unattended installs.
-if [ -n "$AZ_INSTALL_PASSWORD" ]; then
-    az_password="$AZ_INSTALL_PASSWORD"
-    echo "User password: (pre-seeded)"
+# STAR-PASSWORD convention (`azarch-install --auto` sets AZ_INSTALL_STAR_PASSWORD=1): both the
+# user and root get a literal '*' in the shadow field -- the Ubuntu/casper standard. '*' is an
+# INVALID hash, so no password authenticates, but the account is NOT locked (unlike '!'); the
+# box stays usable via tty1 autologin + NOPASSWD sudo, exactly like the live medium. When set we
+# skip the password prompts ENTIRELY (they would block an unattended run) and defer the '*'
+# write to the chroot step (usermod -p '*'), so no password is collected or persisted here.
+if [ -n "$AZ_INSTALL_STAR_PASSWORD" ]; then
+    az_star_password=1
+    echo "Passwords: '*' for user and root (no password login; Ubuntu/casper standard)"
 else
-    while :; do
-        read -rsp "Password for $az_username: " az_password; echo
-        if [ -z "$az_password" ]; then echo "Password cannot be empty."; continue; fi
-        read -rsp "Repeat password: " az_password2; echo
-        [ "$az_password" = "$az_password2" ] && break
-        echo "Passwords did not match, try again."
-    done
-fi
+    az_star_password=
 
-# Root password. Offer to reuse the user password (common) or set a distinct one. A headless
-# run pre-seeds AZ_INSTALL_ROOT_PASSWORD, or falls back to the user password when unset.
-if [ -n "$AZ_INSTALL_ROOT_PASSWORD" ]; then
-    az_root_password="$AZ_INSTALL_ROOT_PASSWORD"
-    echo "Root password: (pre-seeded)"
-elif [ -n "$AZ_INSTALL_PASSWORD" ]; then
-    az_root_password="$AZ_INSTALL_PASSWORD"
-    echo "Root password: (same as user, pre-seeded)"
-else
-    read -rp "Use the same password for root? [Y/n]: " az_same_root
-    case "$az_same_root" in
-        [nN]*)
-            while :; do
-                read -rsp "Password for root: " az_root_password; echo
-                if [ -z "$az_root_password" ]; then echo "Password cannot be empty."; continue; fi
-                read -rsp "Repeat root password: " az_root_password2; echo
-                [ "$az_root_password" = "$az_root_password2" ] && break
-                echo "Passwords did not match, try again."
-            done ;;
-        *) az_root_password="$az_password" ;;
-    esac
+    # User password (confirmed, hidden). AZ_INSTALL_PASSWORD pre-seeds it for unattended installs.
+    if [ -n "$AZ_INSTALL_PASSWORD" ]; then
+        az_password="$AZ_INSTALL_PASSWORD"
+        echo "User password: (pre-seeded)"
+    else
+        while :; do
+            read -rsp "Password for $az_username: " az_password; echo
+            if [ -z "$az_password" ]; then echo "Password cannot be empty."; continue; fi
+            read -rsp "Repeat password: " az_password2; echo
+            [ "$az_password" = "$az_password2" ] && break
+            echo "Passwords did not match, try again."
+        done
+    fi
+
+    # Root password. Offer to reuse the user password (common) or set a distinct one. A headless
+    # run pre-seeds AZ_INSTALL_ROOT_PASSWORD, or falls back to the user password when unset.
+    if [ -n "$AZ_INSTALL_ROOT_PASSWORD" ]; then
+        az_root_password="$AZ_INSTALL_ROOT_PASSWORD"
+        echo "Root password: (pre-seeded)"
+    elif [ -n "$AZ_INSTALL_PASSWORD" ]; then
+        az_root_password="$AZ_INSTALL_PASSWORD"
+        echo "Root password: (same as user, pre-seeded)"
+    else
+        read -rp "Use the same password for root? [Y/n]: " az_same_root
+        case "$az_same_root" in
+            [nN]*)
+                while :; do
+                    read -rsp "Password for root: " az_root_password; echo
+                    if [ -z "$az_root_password" ]; then echo "Password cannot be empty."; continue; fi
+                    read -rsp "Repeat root password: " az_root_password2; echo
+                    [ "$az_root_password" = "$az_root_password2" ] && break
+                    echo "Passwords did not match, try again."
+                done ;;
+            *) az_root_password="$az_password" ;;
+        esac
+    fi
 fi
 
 # Timezone. Validated against the live /usr/share/zoneinfo tree (the same DB the target has).
@@ -166,7 +180,7 @@ while :; do
     if [ -n "$AZ_INSTALL_TIMEZONE" ]; then echo "Aborting (pre-seeded timezone is invalid)."; exit 1; fi
 done
 
-export az_hostname az_fullname az_username az_password az_root_password az_timezone
+export az_hostname az_fullname az_username az_password az_root_password az_timezone az_star_password
 """
 
 
@@ -182,9 +196,15 @@ printf '%s' "$az_hostname" > {INFO_DIR}/hostname
 printf '%s' "$az_username" > {INFO_DIR}/username
 printf '%s' "$az_fullname" > {INFO_DIR}/fullname
 printf '%s' "$az_timezone" > {INFO_DIR}/timezone
-# Passwords: root-only files (0600), consumed and shredded by the chroot step.
-( umask 077; printf '%s' "$az_password" > {INFO_DIR}/password )
-( umask 077; printf '%s' "$az_root_password" > {INFO_DIR}/root_password )
+# Passwords. Under the STAR-PASSWORD convention (--auto) we persist only a marker and NO
+# plaintext: the chroot writes a literal '*' for user and root. Otherwise the collected
+# passwords go to root-only files (0600) that the chroot consumes and shreds.
+if [ -n "$az_star_password" ]; then
+    printf '%s' "1" > {INFO_DIR}/star_password
+else
+    ( umask 077; printf '%s' "$az_password" > {INFO_DIR}/password )
+    ( umask 077; printf '%s' "$az_root_password" > {INFO_DIR}/root_password )
+fi
 """
 
 
@@ -238,14 +258,24 @@ if [ -d /etc/install_info ]; then
         chfn -f "$az_fullname" "$az_login" 2>/dev/null || usermod -c "$az_fullname" "$az_login" 2>/dev/null || true
     fi
 
-    # Passwords (user + root) via chpasswd, then shred the plaintext files.
-    if [ -f /etc/install_info/password ]; then
-        printf '%s:%s' "$az_login" "$(cat /etc/install_info/password)" | chpasswd
+    # Passwords. STAR-PASSWORD convention (--auto): write a literal '*' into the shadow field
+    # for BOTH the login and root -- the Ubuntu/casper standard. `usermod -p '*'` sets the hash
+    # field verbatim to '*', an INVALID hash: no password authenticates, but the account is NOT
+    # locked (unlike '!' / `passwd -l`), so tty1 autologin + NOPASSWD sudo keep the box usable.
+    # Otherwise apply the collected passwords via chpasswd, then shred the plaintext files.
+    if [ -f /etc/install_info/star_password ]; then
+        usermod -p '*' "$az_login" 2>/dev/null || true
+        usermod -p '*' root 2>/dev/null || true
+        rm -f /etc/install_info/star_password
+    else
+        if [ -f /etc/install_info/password ]; then
+            printf '%s:%s' "$az_login" "$(cat /etc/install_info/password)" | chpasswd
+        fi
+        if [ -f /etc/install_info/root_password ]; then
+            printf 'root:%s' "$(cat /etc/install_info/root_password)" | chpasswd
+        fi
+        rm -f /etc/install_info/password /etc/install_info/root_password
     fi
-    if [ -f /etc/install_info/root_password ]; then
-        printf 'root:%s' "$(cat /etc/install_info/root_password)" | chpasswd
-    fi
-    rm -f /etc/install_info/password /etc/install_info/root_password
 
     # SUDO GRANT for the chosen login. The only sudo rule copied onto the target is
     # /etc/sudoers.d/00-main (`main ALL=(ALL) NOPASSWD: ALL`); after a rename to e.g. "alice"
