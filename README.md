@@ -105,7 +105,7 @@ Easy-to-use interactive graph of every component (render is hosted by GitHub Pag
      </table>
 
      ```bash
-     sudo dd if=<ISO> of=/dev/<DEVICE> bs=4M status=progress && sync
+     sudo dd if=<ISO> of=/dev/<DEVICE> bs=4M oflag=direct status=progress
      ```
 
 3. **Boot from USB**  
