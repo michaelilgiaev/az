@@ -394,17 +394,26 @@ const char *az_status_power(char *buf, size_t n)
 }
 
 /* Path of the toggleable root-login sshd drop-in (baked default-deny; the TUI/CLI flip
- * it). Kept as a macro so az_root_login_state() and any test read the same file. */
-#define AZ_ROOT_LOGIN_DROPIN "/etc/ssh/sshd_config.d/20-azarch-root-login.conf"
+ * it). The `00-` prefix sorts FIRST so, with sshd's first-match-wins resolution, reading
+ * this one file equals the effective policy in the shipped configuration (nothing sorts
+ * before it except the main sshd_config, whose only PermitRootLogin is commented on Arch).
+ * Kept as a macro so az_root_login_state() and any test read the same path. */
+#define AZ_ROOT_LOGIN_DROPIN "/etc/ssh/sshd_config.d/00-azarch-root-login.conf"
 
 const char *az_root_login_state(void)
 {
     /* "allowed" / "denied" -- a PURE read of our sshd_config.d drop-in (world-readable,
      * no root, no fork). Absent file -> "denied" (the shipped default). We scan for the
-     * last effective `PermitRootLogin` line and report allowed only for an explicit "yes",
-     * mirroring sshd's own last-match-in-a-file behaviour. Returned as a static string so
-     * callers can embed it in a status line without owning a buffer. */
-    FILE *f = fopen(AZ_ROOT_LOGIN_DROPIN, "r");
+     * last `PermitRootLogin` line IN THIS FILE and report allowed only for an explicit
+     * "yes". Because the file is the FIRST-sorting `00-` drop-in, this equals sshd's
+     * effective first-match policy in the shipped config (the Python `azarch network ssh
+     * root status` additionally consults `sshd -T` for the effective value in exotic
+     * setups). Returned as a static string so callers can embed it in a status line
+     * without owning a buffer. AZ_ROOT_LOGIN_DROPIN can be overridden via the env var of
+     * the same name so the unit test can point it at a temp fixture (host-independent). */
+    const char *path = getenv("AZ_ROOT_LOGIN_DROPIN");
+    if (!path || !*path) path = AZ_ROOT_LOGIN_DROPIN;
+    FILE *f = fopen(path, "r");
     if (!f) return "denied";
     const char *state = "denied";
     char line[256];

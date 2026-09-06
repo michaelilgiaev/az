@@ -488,10 +488,11 @@ def _provision_sshd_hardening(airootfs: Path) -> None:
     drop-in HERE (in the airootfs, not just the runtime `--sshd-hypervisor` bring-up) means
     it ships on the live ISO AND is copied to every installed target by the offline
     unpackfs -- closing the gap on a Calamares install, which never runs the bring-up. The
-    `20-` prefix sorts before Arch's stock `99-archlinux.conf` and sshd is first-match-wins
-    per keyword, so this is authoritative. The azarch TUI/CLI toggle rewrites this file.
-    New file (openssh does not own `20-azarch-root-login.conf`), so no pacstrap file
-    conflict -- it can live in the overlay directly."""
+    `00-` prefix sorts FIRST (before 10-azarch-hardening, the systemd 20-*, and Arch's stock
+    99-archlinux.conf) and sshd is FIRST-match-wins per keyword, so this directive is
+    AUTHORITATIVE and no later drop-in can override it. The azarch TUI/CLI toggle rewrites
+    this file. New file (openssh does not own `00-azarch-root-login.conf`), so no pacstrap
+    file conflict -- it can live in the overlay directly."""
     emit.write_text(airootfs / system.SSHD_ROOT_LOGIN_DROPIN_PATH,
                     system.SSHD_ROOT_LOGIN_OFF)
 

@@ -758,15 +758,31 @@ static void test_ssh_server_screen(void)
     CHECK(has_open == 1);
     CHECK(has_root_on == 1);                         /* Enable root SSH login (INSECURE) */
     CHECK(has_root_off == 1);                        /* Disable root SSH login (default) */
-    /* root-login state read: with no drop-in present (the test host), it must report the
-     * shipped default -- "denied" -- and NEVER "allowed". Also proves the status line's
-     * root half is a pure read (no fork, no root). */
+    /* root-login state read: point the getter at a temp drop-in via AZ_ROOT_LOGIN_DROPIN
+     * (the test override) so this is host-INDEPENDENT -- it must not depend on whatever
+     * /etc/ssh/sshd_config.d the build host happens to carry. Absent file -> the shipped
+     * default "denied"; an explicit `yes` -> "allowed"; `no` -> "denied". Also proves the
+     * root half of the status line is a pure file read (no fork, no root). */
+    char tdir[] = "/tmp/az_root_login_test.XXXXXX";
+    CHECK(mkdtemp(tdir) != NULL);
+    char tf[300];
+    snprintf(tf, sizeof tf, "%s/00-azarch-root-login.conf", tdir);
+    setenv("AZ_ROOT_LOGIN_DROPIN", tf, 1);
+    remove(tf);                                        /* absent -> shipped default */
     CHECK(strcmp(az_root_login_state(), "denied") == 0);
+    { FILE *rf = fopen(tf, "w"); CHECK(rf != NULL);
+      fputs("PermitRootLogin yes\n", rf); fclose(rf); }
+    CHECK(strcmp(az_root_login_state(), "allowed") == 0);   /* regression: reads the file, not a guess */
+    { FILE *rf = fopen(tf, "w"); CHECK(rf != NULL);
+      fputs("PermitRootLogin no\n", rf); fclose(rf); }
+    CHECK(strcmp(az_root_login_state(), "denied") == 0);
+    remove(tf);
+    rmdir(tdir);
+    unsetenv("AZ_ROOT_LOGIN_DROPIN");
     /* and the combined Current: line embeds the root-login state so the user sees it. */
     char sb[128];
     az_status_ssh(sb, sizeof sb);
     CHECK(strstr(sb, "root login") != NULL);
-    CHECK(strstr(sb, "denied") != NULL);
     /* the Network parent has an "SSH Server" row that descends here, with the sshd status */
     const AzScreen *net = az_screen_find("network");
     int found = 0;

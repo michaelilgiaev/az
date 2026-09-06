@@ -138,8 +138,11 @@ def test_sshd_hypervisor_opens_22_tcp_not_ssh_alias():
 # data/PROMPT.md: root ssh login must be OFF by default (only the end user's own
 # account -- resolved dynamically via SUDO_USER -- may log in). A later request
 # added an opt-in switch (`azarch network ssh root on`) surfaced in the TUI. The
-# policy lives in its OWN drop-in (20-azarch-root-login.conf) so the toggle never
-# has to rewrite the always-on 10-azarch-hardening.conf.
+# policy lives in its OWN drop-in (00-azarch-root-login.conf) so the toggle never
+# has to rewrite the always-on 10-azarch-hardening.conf. The `00-` prefix sorts
+# FIRST so, since sshd is first-match-wins, our directive is authoritative and no
+# later drop-in can silently override it (the original bug: a lower/other file
+# permitted root while the status read only our file and reported "denied").
 
 def test_root_login_drop_in_constants_carry_the_right_directive():
     cli = _cli()
@@ -155,7 +158,7 @@ def test_bringup_writes_root_login_off_dropin():
     # The shipped bring-up source must write the root-login OFF drop-in to its own file.
     src = desktop.azarch_command_line_interface()
     assert "PermitRootLogin no" in src
-    assert "sshd_config.d/20-azarch-root-login.conf" in src
+    assert "sshd_config.d/00-azarch-root-login.conf" in src
 
 
 def test_bringup_writes_root_login_off_before_enabling_sshd(monkeypatch):
@@ -174,7 +177,7 @@ def test_bringup_writes_root_login_off_before_enabling_sshd(monkeypatch):
     monkeypatch.setattr(pwd, "getpwnam", lambda u: types.SimpleNamespace(pw_dir=tmp))
     assert cli.sshd_hypervisor() == 0
     root_write_idx = next(i for i, c in enumerate(calls)
-                          if c[0] == "write" and "20-azarch-root-login.conf" in c[1])
+                          if c[0] == "write" and "00-azarch-root-login.conf" in c[1])
     enable_idx = next(i for i, c in enumerate(calls)
                       if c[:1] == ("sudo",) and "enable" in c)
     assert root_write_idx < enable_idx, calls
@@ -199,9 +202,9 @@ def test_ssh_root_on_writes_on_dropin_and_reloads(monkeypatch):
     # is deterministic and does not depend on whether the test host happens to run sshd.
     monkeypatch.setattr(cli, "sshd_is_active", lambda: True)
     assert cli.cmd_ssh(["root", "on"]) == 0
-    # Wrote the ON drop-in to the root-login file...
+    # Wrote the ON drop-in to the root-login file (now the FIRST-sorting 00- file)...
     w = next(c for c in calls if c[0] == "write")
-    assert "20-azarch-root-login.conf" in w[1]
+    assert "00-azarch-root-login.conf" in w[1]
     assert "PermitRootLogin yes" in w[2]
     # ...and reloaded sshd so the change takes effect without dropping live sessions.
     assert any(c[:1] == ("sudo",) and "reload" in c and "sshd" in c for c in calls), calls
@@ -215,11 +218,66 @@ def test_ssh_root_off_writes_off_dropin_and_reloads(monkeypatch):
     # sshd is only reloaded when it is running; pin that here so the reload assertion below
     # is deterministic and does not depend on whether the test host happens to run sshd.
     monkeypatch.setattr(cli, "sshd_is_active", lambda: True)
+    # Disable VERIFIES the effective policy afterwards; pin it to "denied" so the happy path
+    # returns 0 (the foreign-override branch is exercised by its own test below).
+    monkeypatch.setattr(cli, "sshd_root_login_is_enabled", lambda: False)
     assert cli.cmd_ssh(["root", "off"]) == 0
     w = next(c for c in calls if c[0] == "write")
-    assert "20-azarch-root-login.conf" in w[1]
+    assert "00-azarch-root-login.conf" in w[1]
     assert "PermitRootLogin no" in w[2]
     assert any(c[:1] == ("sudo",) and "reload" in c and "sshd" in c for c in calls), calls
+
+
+def test_ssh_root_toggle_removes_stale_20_dropin(monkeypatch):
+    # BACKWARD COMPAT: systems provisioned by an older build carry the deny policy in the
+    # OLD 20-azarch-root-login.conf. The toggle now writes 00-; to avoid two coexisting
+    # (confusing, and a second directive) files, enable/disable must also REMOVE the stale
+    # 20- file. Assert both on and off issue an `rm -f .../20-azarch-root-login.conf`.
+    cli = _cli()
+    monkeypatch.setattr(cli, "sshd_is_active", lambda: False)
+    monkeypatch.setattr(cli, "sshd_root_login_is_enabled", lambda: False)
+    for verb in ("on", "off"):
+        calls: list = []
+        monkeypatch.setattr(cli, "_sudo", lambda *a, **k: calls.append(a) or 0)
+        monkeypatch.setattr(cli, "_sudo_write", lambda p, c: None)
+        assert cli.cmd_ssh(["root", verb]) == 0
+        assert any(a[:1] == ("rm",) and any("20-azarch-root-login.conf" in x for x in a)
+                   for a in calls), (verb, calls)
+
+
+def test_ssh_root_off_warns_and_fails_when_override_keeps_root_allowed(monkeypatch, capsys):
+    # The reported bug made visible: if, AFTER writing our deny drop-in and reloading, the
+    # EFFECTIVE policy still permits root (some foreign, earlier-matching config forces
+    # `yes`), `off` must NOT silently claim success. It returns non-zero and prints a clear
+    # warning, so the TUI (which shows command output) surfaces that disable did not take.
+    # The verify keys off the EFFECTIVE read directly (`sshd -T`), not the file we just wrote.
+    cli = _cli()
+    monkeypatch.setattr(cli, "_sudo", lambda *a, **k: 0)
+    monkeypatch.setattr(cli, "_sudo_write", lambda p, c: None)
+    monkeypatch.setattr(cli, "sshd_is_active", lambda: True)
+    # Effective policy still says root allowed despite our write -> the override case.
+    monkeypatch.setattr(cli, "_sshd_effective_permitrootlogin", lambda: "yes")
+    rc = cli.cmd_ssh(["root", "off"])
+    assert rc != 0
+    err = (capsys.readouterr().err + capsys.readouterr().out).lower()
+    assert "root" in err and ("still" in err or "override" in err or "effect" in err)
+
+
+def test_ssh_root_off_is_honest_when_effective_unverifiable(monkeypatch, capsys):
+    # When `sshd -T` cannot be consulted (no cached sudo / sshd absent), disable must NOT
+    # falsely claim it verified denial by reading back the file it just wrote (circular). It
+    # writes the deny drop-in, returns 0 (the on-disk authoritative 00- file IS the intended
+    # policy), but its message must not assert a confirmed-effective state it never checked.
+    cli = _cli()
+    monkeypatch.setattr(cli, "_sudo", lambda *a, **k: 0)
+    monkeypatch.setattr(cli, "_sudo_write", lambda p, c: None)
+    monkeypatch.setattr(cli, "sshd_is_active", lambda: False)
+    # Effective read unavailable -> None (the no-sudo / no-sshd branch).
+    monkeypatch.setattr(cli, "_sshd_effective_permitrootlogin", lambda: None)
+    rc = cli.cmd_ssh(["root", "off"])
+    assert rc == 0  # the authoritative deny drop-in was written; that is the intended policy
+    out = capsys.readouterr().out.lower()
+    assert "disabled" in out  # still tells the user root is denied by the policy we wrote
 
 
 def test_ssh_root_toggle_skips_reload_when_sshd_not_running(monkeypatch):
@@ -234,32 +292,55 @@ def test_ssh_root_toggle_skips_reload_when_sshd_not_running(monkeypatch):
     monkeypatch.setattr(cli, "sshd_is_active", lambda: False)
     assert cli.cmd_ssh(["root", "on"]) == 0
     # The drop-in is still written...
-    assert any(c[0] == "write" and "20-azarch-root-login.conf" in c[1] for c in calls), calls
+    assert any(c[0] == "write" and "00-azarch-root-login.conf" in c[1] for c in calls), calls
     # ...but nothing was reloaded, because there was no live sshd to reload.
     assert not any("reload" in c for c in calls), calls
 
 
-def test_ssh_root_status_reports_enabled_from_dropin(monkeypatch, tmp_path, capsys):
+def test_root_login_is_enabled_prefers_effective_sshd_config(monkeypatch):
+    # THE FIX for the status lie: sshd_root_login_is_enabled() asks sshd for its EFFECTIVE
+    # policy (`sshd -T`) rather than trusting a single drop-in file. When the effective
+    # config permits root (`permitrootlogin yes`), it reports enabled -- even if OUR drop-in
+    # says no (an earlier-matching foreign file won). This is exactly the scenario that made
+    # the old file-only read report "denied" while root was actually reachable.
     cli = _cli()
-    # Status is a plain read of the drop-in (the files are world-readable), no sudo needed.
-    # It returns 0 when root login is ENABLED so a probe can branch on the exit code.
-    conf = tmp_path / "20-azarch-root-login.conf"
-    conf.write_text("PermitRootLogin yes\n")
+    monkeypatch.setattr(cli, "_sshd_effective_permitrootlogin", lambda: "yes")
+    assert cli.sshd_root_login_is_enabled() is True
+    # And when sshd's effective value denies root, it reports disabled regardless of files.
+    for val in ("no", "prohibit-password", "forced-commands-only"):
+        monkeypatch.setattr(cli, "_sshd_effective_permitrootlogin", lambda v=val: v)
+        assert cli.sshd_root_login_is_enabled() is False, val
+
+
+def test_root_login_is_enabled_falls_back_to_file_when_no_effective(monkeypatch, tmp_path):
+    # `sshd -T` needs root (host keys) and may be unavailable (no cached sudo, sshd absent).
+    # When the effective read yields nothing, fall back to the world-readable drop-in file
+    # so status still shows the intended policy without prompting.
+    cli = _cli()
+    monkeypatch.setattr(cli, "_sshd_effective_permitrootlogin", lambda: None)
+    conf = tmp_path / "00-azarch-root-login.conf"
     monkeypatch.setattr(cli, "_root_login_dropin_path", lambda: str(conf))
+    conf.write_text("PermitRootLogin yes\n")
+    assert cli.sshd_root_login_is_enabled() is True
+    conf.write_text("PermitRootLogin no\n")
+    assert cli.sshd_root_login_is_enabled() is False
+    conf.unlink()  # absent file -> shipped default is disabled
+    assert cli.sshd_root_login_is_enabled() is False
+
+
+def test_ssh_root_status_reports_enabled_from_effective(monkeypatch, capsys):
+    cli = _cli()
+    # Status returns 0 when root login is ENABLED so a probe can branch on the exit code.
+    monkeypatch.setattr(cli, "sshd_root_login_is_enabled", lambda: True)
     assert cli.cmd_ssh(["root", "status"]) == 0
     assert "enabled" in capsys.readouterr().out.lower()
 
 
-def test_ssh_root_status_reports_disabled_when_absent_or_no(monkeypatch, tmp_path, capsys):
+def test_ssh_root_status_reports_disabled_when_effective_denies(monkeypatch, capsys):
     cli = _cli()
-    conf = tmp_path / "20-azarch-root-login.conf"
-    # Absent file -> default is disabled (the shipped default). status returns 1 (non-zero)
-    # when DISABLED, mirroring sshd_status's active/inactive exit-code convention.
-    monkeypatch.setattr(cli, "_root_login_dropin_path", lambda: str(conf))
-    assert cli.cmd_ssh(["root", "status"]) == 1
-    assert "disabled" in capsys.readouterr().out.lower()
-    # Present but 'no' -> also disabled.
-    conf.write_text("PermitRootLogin no\n")
+    # DISABLED -> status returns 1 (non-zero), mirroring sshd_status's active/inactive
+    # exit-code convention.
+    monkeypatch.setattr(cli, "sshd_root_login_is_enabled", lambda: False)
     assert cli.cmd_ssh(["root", "status"]) == 1
     assert "disabled" in capsys.readouterr().out.lower()
 

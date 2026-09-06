@@ -28,7 +28,23 @@ SSHD_HARDENING_CONF = (
 # for ALL auth methods (key and password), so even the hypervisor-staged host key cannot
 # reach root. Keeping this in a separate file lets the toggle rewrite JUST this file
 # (no <-> yes) without ever touching 10-azarch-hardening.conf's empty-password pin.
-SSHD_ROOT_LOGIN_DROPIN = "/etc/ssh/sshd_config.d/20-azarch-root-login.conf"
+#
+# The `00-` prefix is LOAD-BEARING. sshd resolves each keyword FIRST-match-wins across
+# /etc/ssh/sshd_config and every sshd_config.d/*.conf in LEXICAL order (man sshd_config:
+# "for each keyword, the first obtained value will be used"). A `00-` file is read before
+# every other drop-in (10-azarch-hardening, the systemd 20-*, a stray file, 99-archlinux),
+# so OUR PermitRootLogin is authoritative and nothing later can silently override it. The
+# earlier `20-` name was NOT authoritative: any lower/other drop-in that set
+# `PermitRootLogin yes` won first-match while the status read only our file and wrongly
+# reported "denied" -- the exact bug this fixes.
+SSHD_ROOT_LOGIN_DROPIN = "/etc/ssh/sshd_config.d/00-azarch-root-login.conf"
+
+# The OLD (pre-fix) drop-in name. A box provisioned by an earlier build carries the deny
+# policy here; the toggle removes it on every on/off so the old and new files never coexist
+# (two PermitRootLogin directives in the dir is confusing, and a human reading it could not
+# tell which wins). `00-` sorts before `20-`, so first-match already prefers the new file --
+# the removal is for tidiness and to eliminate the stale, now-dead directive.
+SSHD_ROOT_LOGIN_DROPIN_LEGACY = "/etc/ssh/sshd_config.d/20-azarch-root-login.conf"
 
 SSHD_ROOT_LOGIN_OFF = (
     "# Az'arch root-login policy -- default DENY (`azarch network ssh root off`).\n"
@@ -51,11 +67,34 @@ def _root_login_dropin_path() -> str:
     return SSHD_ROOT_LOGIN_DROPIN
 
 
-def sshd_root_login_is_enabled() -> bool:
-    """True if root ssh login is currently ALLOWED per our drop-in. Pure read (no root):
-    the sshd_config.d files are world-readable. Absent file -> disabled (the shipped
-    default). Only our own drop-in is consulted -- the last effective `PermitRootLogin`
-    directive in it wins, mirroring sshd's own last-match-in-a-file behaviour."""
+def _sshd_effective_permitrootlogin() -> str | None:
+    """The EFFECTIVE `PermitRootLogin` value sshd would use RIGHT NOW, or None if it cannot
+    be determined. Asks sshd itself via `sshd -T` (the extended test mode that prints the
+    fully-resolved config, honouring first-match-wins across sshd_config + every drop-in),
+    so the answer reflects reality -- not a naive read of one file that a foreign directive
+    might override. `sshd -T` needs root (it reads host keys), so it runs under the same
+    non-interactive sudo the rest of the CLI uses; a missing credential or absent sshd
+    yields None and the caller falls back to the world-readable drop-in read. The value is
+    lower-cased (e.g. "yes", "no", "prohibit-password", "forced-commands-only")."""
+    r = subprocess.run([*_sudo_prefix(), "sshd", "-T"],
+                       capture_output=True, text=True, check=False)
+    if r.returncode != 0:
+        return None
+    value = None
+    for line in r.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0].lower() == "permitrootlogin":
+            value = parts[1].lower()   # sshd -T prints one effective line; keep the last
+    return value
+
+
+def _root_login_enabled_from_file() -> bool:
+    """Fallback read used when the effective (`sshd -T`) query is unavailable: True if OUR
+    drop-in ALLOWS root. Pure read (no root): the sshd_config.d files are world-readable.
+    Absent file -> disabled (the shipped default). The last `PermitRootLogin` line in the
+    file wins WITHIN that single file, but note sshd itself is first-match ACROSS files --
+    which is why the drop-in is named `00-` (it wins that cross-file first-match) and why
+    the effective query above is preferred whenever it is available."""
     path = _root_login_dropin_path()
     try:
         with open(path, encoding="utf-8") as fh:
@@ -75,6 +114,20 @@ def sshd_root_login_is_enabled() -> bool:
     return enabled
 
 
+def sshd_root_login_is_enabled() -> bool:
+    """True if root ssh login is currently ALLOWED. Prefers sshd's EFFECTIVE policy
+    (`sshd -T`) so the answer can never lie -- it accounts for every config file and sshd's
+    first-match-wins resolution, catching the case where a foreign directive permits root
+    while our own drop-in says no. Only an explicit effective "yes" counts as enabled;
+    "no"/"prohibit-password"/"forced-commands-only" all deny an interactive root shell.
+    When the effective query is unavailable (no cached sudo, sshd absent), falls back to a
+    world-readable read of our drop-in so status still reflects the intended policy."""
+    effective = _sshd_effective_permitrootlogin()
+    if effective is not None:
+        return effective == "yes"
+    return _root_login_enabled_from_file()
+
+
 def _sshd_reload_if_running() -> None:
     """Reload sshd so a root-login toggle takes effect WITHOUT dropping live sessions
     (reload, never restart). Best-effort: if sshd is not running there is nothing to
@@ -83,10 +136,19 @@ def _sshd_reload_if_running() -> None:
         _sudo("systemctl", "reload", "sshd", check=False)
 
 
+def _remove_legacy_root_login_dropin() -> None:
+    """Remove a stale pre-fix `20-azarch-root-login.conf` if present, so the old and new
+    drop-ins never coexist (see SSHD_ROOT_LOGIN_DROPIN_LEGACY). Best-effort: `rm -f` is a
+    no-op on a fresh install that never had the old file."""
+    _sudo("rm", "-f", SSHD_ROOT_LOGIN_DROPIN_LEGACY, check=False)
+
+
 def sshd_root_login_enable() -> int:
     """Turn root ssh login ON (opt-in, INSECURE): write the `PermitRootLogin yes` drop-in
-    and reload sshd. Returns 0. Prints a security reminder because this widens exposure."""
+    (the authoritative first-sorting 00- file), drop any stale legacy 20- file, and reload
+    sshd. Returns 0. Prints a security reminder because this widens exposure."""
     _sudo_write(SSHD_ROOT_LOGIN_DROPIN, SSHD_ROOT_LOGIN_ON)
+    _remove_legacy_root_login_dropin()
     _sshd_reload_if_running()
     print("root ssh login ENABLED (insecure) -- run `azarch network ssh root off` to "
           "disable it again when done.")
@@ -94,10 +156,28 @@ def sshd_root_login_enable() -> int:
 
 
 def sshd_root_login_disable() -> int:
-    """Turn root ssh login OFF (the default): write the `PermitRootLogin no` drop-in and
-    reload sshd. Returns 0. Safe to run repeatedly."""
+    """Turn root ssh login OFF (the default): write the `PermitRootLogin no` drop-in (the
+    authoritative first-sorting 00- file), drop any stale legacy 20- file, and reload sshd.
+    Then VERIFY it actually took: query sshd's EFFECTIVE policy and, if root is somehow
+    STILL permitted (a foreign, earlier-matching config forcing `yes`), warn loudly and
+    return non-zero instead of silently claiming success -- so 'disable didn't work' is
+    surfaced (in the TUI, which shows command output) rather than hidden. Returns 0 when
+    root ends up denied. Safe to run repeatedly."""
     _sudo_write(SSHD_ROOT_LOGIN_DROPIN, SSHD_ROOT_LOGIN_OFF)
+    _remove_legacy_root_login_dropin()
     _sshd_reload_if_running()
+    # Verify against the EFFECTIVE policy DIRECTLY (`sshd -T`), NOT sshd_root_login_is_enabled
+    # -- the latter would fall back to re-reading the deny file we just wrote and always
+    # "confirm" success (circular). Only a POSITIVE effective "yes" proves an override; a
+    # None (sshd -T unavailable: no sudo / no sshd) means we cannot confirm, so we do not
+    # falsely assert a verified state.
+    effective = _sshd_effective_permitrootlogin()
+    if effective == "yes":
+        _err("azarch: wrote PermitRootLogin no, but sshd STILL permits root login -- another "
+             "sshd_config directive is overriding it. Run `sudo sshd -T | grep -i "
+             "permitrootlogin` and check /etc/ssh/sshd_config and /etc/ssh/sshd_config.d/ "
+             "for a `PermitRootLogin yes` that takes effect first.")
+        return 1
     print("root ssh login disabled -- only your own account may log in over ssh.")
     return 0
 

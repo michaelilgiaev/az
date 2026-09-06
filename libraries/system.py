@@ -48,10 +48,14 @@ main:{LOCKED_PASSWORD}:14871::::::
 # installed box with sshd up is reachable as root. We therefore BAKE `PermitRootLogin no`
 # into the airootfs as a sshd_config.d drop-in: it ships on the live ISO AND is copied to
 # every installed target by the offline unpackfs, closing the gap independent of the
-# runtime `--sshd-hypervisor` bring-up. The `20-` prefix sorts BEFORE Arch's stock
-# `99-archlinux.conf` (which sets no PermitRootLogin), and sshd is first-match-wins per
-# keyword, so this is authoritative. The azarch TUI/CLI toggle rewrites this same file.
-SSHD_ROOT_LOGIN_DROPIN_PATH = "etc/ssh/sshd_config.d/20-azarch-root-login.conf"
+# runtime `--sshd-hypervisor` bring-up. The `00-` prefix sorts FIRST -- before Arch's stock
+# `99-archlinux.conf`, the systemd `20-*` drop-in, and our own `10-azarch-hardening.conf` --
+# and sshd is FIRST-match-wins per keyword (man sshd_config: "the first obtained value will
+# be used"), so this directive is AUTHORITATIVE and no later drop-in can override it. (The
+# earlier `20-` name was not: any lower/other file setting `PermitRootLogin yes` won
+# first-match while the status read only our file and wrongly reported denied.) The azarch
+# TUI/CLI toggle rewrites this same file.
+SSHD_ROOT_LOGIN_DROPIN_PATH = "etc/ssh/sshd_config.d/00-azarch-root-login.conf"
 
 SSHD_ROOT_LOGIN_OFF = (
     "# Az'arch root-login policy -- default DENY (`azarch network ssh root off`).\n"

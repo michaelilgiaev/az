@@ -61,15 +61,20 @@ def test_root_login_dropin_denies_root():
     assert "PermitRootLogin yes" not in system.SSHD_ROOT_LOGIN_OFF
 
 
-def test_root_login_dropin_path_sorts_before_arch_stock():
-    # The file is a sshd_config.d drop-in whose numeric prefix (20) sorts BEFORE Arch's
-    # stock 99-archlinux.conf, so with sshd's first-match-wins-per-keyword our directive
-    # is authoritative. It is a RELATIVE airootfs path (no leading slash) so the compiler
-    # can join it under airootfs/.
+def test_root_login_dropin_path_sorts_first():
+    # The file is a sshd_config.d drop-in whose numeric prefix (00) sorts FIRST -- before
+    # every other drop-in (10-azarch-hardening, 20-systemd-userdb, 99-archlinux, ...). With
+    # sshd's first-match-wins-per-keyword that makes our PermitRootLogin AUTHORITATIVE: no
+    # later drop-in can override it (the original bug had our file overridden by an
+    # earlier/other one while the status read only our file). It is a RELATIVE airootfs path
+    # (no leading slash) so the compiler can join it under airootfs/.
     p = system.SSHD_ROOT_LOGIN_DROPIN_PATH
-    assert p == "etc/ssh/sshd_config.d/20-azarch-root-login.conf"
+    assert p == "etc/ssh/sshd_config.d/00-azarch-root-login.conf"
     assert not p.startswith("/"), "airootfs-relative path must not start with /"
-    assert p.rsplit("/", 1)[1] < "99-archlinux.conf"
+    # Sorts before Arch's stock 99- AND the systemd 20- drop-in AND our own 10- hardening.
+    name = p.rsplit("/", 1)[1]
+    assert name < "10-azarch-hardening.conf"
+    assert name < "99-archlinux.conf"
 
 
 def test_shadow_for_locks_by_default():

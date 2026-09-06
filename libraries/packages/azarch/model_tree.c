@@ -218,17 +218,19 @@ static const AzRow ROWS_SSH[] = {
      .target="azarch network ssh status", .needs_root=1, .show_output=1,
      .base="systemctl is-active sshd; sudo ufw status"},
     /* Root SSH login: DENIED by default (only the end user's own account may log in).
-     * These two rows flip the 20-azarch-root-login.conf drop-in and reload sshd. Enabling
-     * root login widens exposure, so it is labelled INSECURE; "off" restores the default. */
+     * These two rows flip the 00-azarch-root-login.conf drop-in (named `00-` so it sorts
+     * FIRST and, with sshd's first-match-wins, authoritatively wins over any other drop-in)
+     * and reload sshd. Enabling root login widens exposure, so it is labelled INSECURE;
+     * "off" restores the default. */
     {.label="Enable root SSH login (INSECURE)", .kind=AZ_ACT_APPLY,
      .target="azarch network ssh root on", .needs_root=1, .show_output=1,
-     .base="echo 'PermitRootLogin yes' | sudo tee /etc/ssh/sshd_config.d/20-azarch-root-login.conf && sudo systemctl reload sshd"},
+     .base="echo 'PermitRootLogin yes' | sudo tee /etc/ssh/sshd_config.d/00-azarch-root-login.conf && sudo systemctl reload sshd"},
     {.label="Disable root SSH login (default)", .kind=AZ_ACT_APPLY,
      .target="azarch network ssh root off", .needs_root=1, .show_output=1,
-     .base="echo 'PermitRootLogin no' | sudo tee /etc/ssh/sshd_config.d/20-azarch-root-login.conf && sudo systemctl reload sshd"},
+     .base="echo 'PermitRootLogin no' | sudo tee /etc/ssh/sshd_config.d/00-azarch-root-login.conf && sudo systemctl reload sshd"},
     {.label="Echo root login status (allowed or denied)", .kind=AZ_ACT_APPLY,
      .target="azarch network ssh root status", .needs_root=1, .show_output=1,
-     .base="grep -i PermitRootLogin /etc/ssh/sshd_config.d/20-azarch-root-login.conf"},
+     .base="sudo sshd -T | grep -i PermitRootLogin"},
     {.label="Set up for hypervisor (install host key + start sshd)", .kind=AZ_ACT_APPLY,
      .target="azarch --sshd-hypervisor", .needs_root=1, .show_output=1,
      .base="sudo azarch --sshd-hypervisor"},
