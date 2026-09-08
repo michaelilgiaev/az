@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logos/azarch_title_627×230.png" alt="Az'arch">
+  <img src="assets/logos/azzio_title_627×230.png" alt="Azzio">
 </p>
 
 <table width="100%">
@@ -22,11 +22,11 @@ General specifications of the distribution.
 - [documentations/SPECIFICATIONS_GENERAL.md](documentations/SPECIFICATIONS_GENERAL.md)
 
 Brief overview of the components (render is hosted by GitHub Pages).
-- [https://michaelilgiaev.github.io/azarch/documentations/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg](https://michaelilgiaev.github.io/azarch/documentations/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg)  
+- [https://michaelilgiaev.github.io/azzio/documentations/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg](https://michaelilgiaev.github.io/azzio/documentations/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg)  
   (documentations/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg)
 
 Easy-to-use interactive graph of every component (render is hosted by GitHub Pages).
-- [https://michaelilgiaev.github.io/azarch/documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html](https://michaelilgiaev.github.io/azarch/documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)  
+- [https://michaelilgiaev.github.io/azzio/documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html](https://michaelilgiaev.github.io/azzio/documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)  
   (documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
 
 ## Install
@@ -128,11 +128,11 @@ Easy-to-use interactive graph of every component (render is hosted by GitHub Pag
    </tbody>
    </table>
 
-   The ISO boots into a live session and automatically launches the Az'arch
+   The ISO boots into a live session and automatically launches the Azzio
    installer, which is powered by Calamares.
 
    From the live session you can:
-   - Install Az'arch.
+   - Install Azzio.
    - Perform machine rescue tasks.
    - Do general work.
 
@@ -163,12 +163,12 @@ You can clone this repository and compile the ISO yourself. The first compile ne
 
 2. **Clone the repository and enter it**
    ```
-   git clone https://github.com/michaelilgiaev/azarch.git && cd azarch
+   git clone https://github.com/michaelilgiaev/azzio.git && cd azzio
    ```
 
 3. **Compile the Docker image** (creates the Arch compile environment)
    ```
-   sudo docker build -t azarch .
+   sudo docker build -t azzio .
    ```
 
 4. **Compile the ISO.** The finished ISO goes to `output/`, downloaded packages
@@ -200,7 +200,7 @@ You can clone this repository and compile the ISO yourself. The first compile ne
    by your measured speed. Example (estimate a full compile, compute + network):
 
    ```
-   sudo docker run --rm -it azarch --estimate
+   sudo docker run --rm -it azzio --estimate
    ```
 
    </td></tr>
@@ -214,7 +214,7 @@ You can clone this repository and compile the ISO yourself. The first compile ne
      -v "$PWD/cache:/build/cache" \
      -v "$PWD/output:/build/output" \
      -v "$PWD/logs:/build/logs" \
-     azarch
+     azzio
    ```
 
    **Full compile.** Compiles everything from source, which takes hours.
@@ -225,11 +225,11 @@ You can clone this repository and compile the ISO yourself. The first compile ne
      -v "$PWD/cache:/build/cache" \
      -v "$PWD/output:/build/output" \
      -v "$PWD/logs:/build/logs" \
-     azarch --full-compile
+     azzio --full-compile
    ```
 
 5. **Get the ISO.** It's in the `output/` folder. On **Windows (WSL)** that folder
-   opens in File Explorer at `\\wsl$\<distro>\home\<your-username>\azarch\output`.
+   opens in File Explorer at `\\wsl$\<distro>\home\<your-username>\azzio\output`.
 
 - **Wipe the cache** to force a fresh, fully-online recompile. Run `clear.sh`,
   which with no flags deletes the `cache/`, `output/`, and `logs/` directories

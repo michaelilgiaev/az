@@ -159,8 +159,8 @@ def build_cache(workdir: Path, cachedir: Path, offline: bool, progress: Progress
     sudo = _sudo()
     pkg_repo = cachedir / "pkgs" / "repo"
     pkg_db = cachedir / "pkgs" / "db"
-    final_db = workdir / "airootfs/root/azarch/pacstrap-azarch-db"
-    final_cache = workdir / "airootfs/root/azarch/pacstrap-azarch-repo"
+    final_db = workdir / "airootfs/root/azzio/pacstrap-azzio-db"
+    final_cache = workdir / "airootfs/root/azzio/pacstrap-azzio-repo"
     gpgdir = workdir / ".pkgs-gnupg"
     dlconf = _write_download_conf(workdir / ".cache-pkgs-pacman.conf")
 
@@ -273,7 +273,7 @@ def _readd_own_packages(pkg_repo: Path, full_compile: bool = False) -> None:
     immutable per version, so their DB entry from the download is always correct
     and must NOT be forced here."""
     from makepkg import produced_names
-    db = pkg_repo / "pacstrap-azarch-repo.db.tar.gz"
+    db = pkg_repo / "pacstrap-azzio-repo.db.tar.gz"
     files: list[str] = []
     for name in produced_names(full_compile):
         files += [str(p) for p in sorted(pkg_repo.glob(f"{name}-*.pkg.tar.zst"))]
@@ -286,10 +286,10 @@ def _readd_own_packages(pkg_repo: Path, full_compile: bool = False) -> None:
 
 
 def _reconcile_index(pkg_repo: Path, progress: ProgressCb) -> None:
-    """Incrementally reconcile pacstrap-azarch-repo.db with the .pkg files on disk.
+    """Incrementally reconcile pacstrap-azzio-repo.db with the .pkg files on disk.
     Only new/changed packages are added; stale names removed; duplicate older
     versions pruned. Byte-for-byte equivalent to a full rebuild's db."""
-    db = pkg_repo / "pacstrap-azarch-repo.db.tar.gz"
+    db = pkg_repo / "pacstrap-azzio-repo.db.tar.gz"
     pkgfiles = sorted(pkg_repo.glob("*.pkg.tar.zst"))
     if not pkgfiles:
         raise PackageError("no packages in cache to index")
@@ -335,9 +335,9 @@ def _reconcile_index(pkg_repo: Path, progress: ProgressCb) -> None:
 def _seed_fresh_index(pkg_repo, db, have_key, progress) -> None:
     add = [str(pkg_repo / bn) for bn in have_key.values()]
     print(f"    [+] No usable index -- building fresh from {len(add)} package(s) (one-time).")
-    for old in pkg_repo.glob("pacstrap-azarch-repo.db*"):
+    for old in pkg_repo.glob("pacstrap-azzio-repo.db*"):
         old.unlink(missing_ok=True)
-    for old in pkg_repo.glob("pacstrap-azarch-repo.files*"):
+    for old in pkg_repo.glob("pacstrap-azzio-repo.files*"):
         old.unlink(missing_ok=True)
     tot, chunk = len(add), 50
     for i in range(0, tot, chunk):

@@ -1,7 +1,7 @@
 """
 specification_db -- fetch and parse the Arch Linux package databases.
 
-The Az'arch ISO is assembled against the official Arch `core`, `extra` and
+The Azzio ISO is assembled against the official Arch `core`, `extra` and
 `multilib` repositories (the build runs inside `archlinux:latest`). This module
 provides the ground-truth package metadata by reading those repos' real `.db`
 tarballs -- NOT the host's pacman databases, which on a non-Arch host (e.g.

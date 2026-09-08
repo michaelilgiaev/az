@@ -1,4 +1,4 @@
-"""window_switcher - build wiring for the Az'arch alt-tab switcher daemon.
+"""window_switcher - build wiring for the Azzio alt-tab switcher daemon.
 
 Mirrors application_menu.py: constants for the installed paths, build_daemon() (compiles
 the C/GTK3 daemon in a throwaway dir so the repo tree is never dirtied), launcher_py()
@@ -20,14 +20,14 @@ import paths
 
 
 # --- Installed system paths (root-owned) ------------------------------------
-SWITCHER_LIB_DIR = "/usr/local/lib/azarch-window-switcher"
-SWITCHER_DAEMON_BIN_NAME = "azarch-window-switcher-daemon"
+SWITCHER_LIB_DIR = "/usr/local/lib/azzio-window-switcher"
+SWITCHER_DAEMON_BIN_NAME = "azzio-window-switcher-daemon"
 # The resident daemon BINARY the launcher signals (overlay built once, kept hidden, so
 # Alt+Tab is instant). Compiled from the C sources here.
 SWITCHER_DAEMON_BIN_SYSTEM_PATH = f"{SWITCHER_LIB_DIR}/{SWITCHER_DAEMON_BIN_NAME}"
 # The launcher (launcher.py) installed as the bin entry point OpenBox's A-Tab / A-S-Tab
 # run; it finds the daemon binary at its default SWITCHER_DIR (= SWITCHER_LIB_DIR).
-SWITCHER_LAUNCHER_SYSTEM_PATH = "/usr/local/bin/azarch-window-switcher"
+SWITCHER_LAUNCHER_SYSTEM_PATH = "/usr/local/bin/azzio-window-switcher"
 
 # Build-host requirements (compile time only; the live system does not compile anything).
 #   gtk3/pkgconf/gcc  -- the GTK3 dev stack + pkg-config + the compiler (also base-devel).
@@ -97,7 +97,7 @@ def build_daemon(dest: Path, *, make: str = "make") -> Path:
     Returns the destination path.
     """
     dest = Path(dest)
-    with tempfile.TemporaryDirectory(prefix="azarch-switcher-build-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="azzio-switcher-build-") as tmp:
         # Mirror the REPO layout: window_switcher/ and application_menu/ as SIBLINGS, so
         # the Makefile's APP_DIR = ../application_menu resolves exactly as in the tree
         # (make runs from the window_switcher/ subdir, not the scratch root).

@@ -20,7 +20,7 @@ from packages.hypervisor.checks import HypervisorError
 # --- _slugify ---------------------------------------------------------------
 
 @pytest.mark.parametrize("raw,expected", [
-    ("azarch", "azarch"),
+    ("azzio", "azzio"),
     ("My VM", "my-vm"),
     ("Weird__Name!!", "weird-name"),
     ("...", "vm"),            # nothing usable -> the "vm" fallback
@@ -181,9 +181,9 @@ def test_resolve_iso_rejects_non_iso_extension(tmp_path):
 
 
 def test_resolve_iso_bare_filename_in_dir(tmp_path):
-    (tmp_path / "azarch.iso").write_text("x")
+    (tmp_path / "azzio.iso").write_text("x")
     cfg = _make_cfg("d", directory=str(tmp_path))
-    assert cfg.resolve_iso("azarch.iso") == str(tmp_path / "azarch.iso")
+    assert cfg.resolve_iso("azzio.iso") == str(tmp_path / "azzio.iso")
 
 
 def test_resolve_iso_missing_named_file_raises(tmp_path):

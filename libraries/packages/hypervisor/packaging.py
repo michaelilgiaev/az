@@ -1,4 +1,4 @@
-"""Az'arch hypervisor -- build wiring for the `hypervisor` command.
+"""Azzio hypervisor -- build wiring for the `hypervisor` command.
 
 `hypervisor` spins up a per-directory QEMU/KVM VM (the directory you run it in IS the
 VM: name/disk/NVRAM/shared-folder/SSH-port all derive from it). See __init__.py and
@@ -23,15 +23,15 @@ Layers:
       configuration.py                CWD-derived VM identity/paths/config
       configuration_schema.py         typed hypervisor.cfg schema + validation
       configuration_watcher.py        live cfg reload with validate/revert
-      configuration_defaults.py       user-wide default overrides (~/.config/azarch-hypervisor)
+      configuration_defaults.py       user-wide default overrides (~/.config/azzio-hypervisor)
       graphics.py                     DRM render-node selection
       checks.py                       precondition checks + die()/HypervisorError
       qemu_command.py                 the pure QEMU argv assembler
       virtual_machine.py              install/run/share/status/stop logic
       packaging.py                    THIS module -- install paths, launcher, emit_plan()
   * INSTALLED layout (root-owned), all flat in LIB_DIR:
-      /usr/local/lib/azarch-hypervisor/command_line_interface.py       the `hypervisor` entry script
-      /usr/local/lib/azarch-hypervisor/<module>.py  every runtime module (flat)
+      /usr/local/lib/azzio-hypervisor/command_line_interface.py       the `hypervisor` entry script
+      /usr/local/lib/azzio-hypervisor/<module>.py  every runtime module (flat)
       /usr/local/bin/hypervisor                     the launcher (execs command_line_interface.py)
 
 Runtime dependencies (system binaries the app shells out to): `qemu-system-x86_64`
@@ -52,7 +52,7 @@ import paths
 # backup.LIB_DIR. The app is ONE FLAT directory: the entry script (command_line_interface.py) and every
 # module it imports sit side by side here, and the entry does `sys.path.insert(0, <its
 # own dir>)` so the bare `import <module>` calls resolve.
-LIB_DIR = "/usr/local/lib/azarch-hypervisor"
+LIB_DIR = "/usr/local/lib/azzio-hypervisor"
 # The entry script the `hypervisor` launcher execs. It lands in LIB_DIR beside the other
 # modules; its own `sys.path.insert(0, <dir of __file__>)` makes the sibling imports
 # (`import virtual_machine`, `import configuration`, ...) resolve from wherever it is run.

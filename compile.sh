@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# azarch -- ISO build entrypoint (thin shim).
+# azzio -- ISO build entrypoint (thin shim).
 #
 # The build itself is Python: everything (steps, staging, the package cache, the
 # progress bar, the ownership handback) lives as flat modules in libraries/. This
@@ -21,16 +21,16 @@
 #
 # Then it hands off to `python3 -m compiler`, which does the rest.
 #
-# Each run builds EXACTLY ONE medium. By default that is the base `azarch-headed` medium
-# (ssh DISABLED). --ssh="<PASSWORD>" (see ARGS) instead builds the `azarch-headed-ssh`
+# Each run builds EXACTLY ONE medium. By default that is the base `azzio-headed` medium
+# (ssh DISABLED). --ssh="<PASSWORD>" (see ARGS) instead builds the `azzio-headed-ssh`
 # medium INDIVIDUALLY -- on its own, NOT alongside the base ISO: identical contents, but
-# named azarch-headed-ssh-<ver>-x86_64.iso, with `main`'s login password set from --ssh,
+# named azzio-headed-ssh-<ver>-x86_64.iso, with `main`'s login password set from --ssh,
 # sshd ENABLED, and port 22 opened -- in BOTH the live session and the installed system.
 # Without --ssh, ONLY the base ISO is built -- no default password is ever shipped
 # (see data/PROMPT.md DECISION 2).
 #
 # ARGS: any args are passed straight through to the Python build driver.
-#   --ssh="<PASSWORD>"       Build the `azarch-headed-ssh` ISO INDIVIDUALLY (instead of
+#   --ssh="<PASSWORD>"       Build the `azzio-headed-ssh` ISO INDIVIDUALLY (instead of
 #                            the base ISO, not in addition to it), with <PASSWORD> as the
 #                            live `main` user's login password (hashed sha-512 into that
 #                            ISO's /etc/shadow -- never blank, never plaintext-in-image).
@@ -38,7 +38,7 @@
 #                            `--ssh=` is a hard error (it stops the build and explains why
 #                            -- no ssh ISO is silently skipped). Omit --ssh entirely to
 #                            build just the base headed ISO.
-#   --full-compile           build Az'arch's own packages ENTIRELY from source
+#   --full-compile           build Azzio's own packages ENTIRELY from source
 #                            (incl. a multi-hour LibreWolf/Firefox compile) instead
 #                            of the default, which repackages LibreWolf's verified
 #                            upstream binary tarball (sha256 + PGP checked).

@@ -3,7 +3,7 @@
 <linearGradient id="brand" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#03a5fc"/><stop offset="1" stop-color="#0065f9"/></linearGradient>
 </defs>
 <rect width="1600" height="1540" fill="#0d1117"/>
-<text x="32" y="52" font-size="34" font-weight="700" fill="url(#brand)">Az&#39;arch</text>
+<text x="32" y="52" font-size="34" font-weight="700" fill="url(#brand)">Azzio</text>
 <text x="200" y="52" font-size="26" font-weight="600" fill="#e6edf3">Distribution dependency graph</text>
 <text x="32" y="78" font-size="13" fill="#9da7b3">sinks (nothing below, bottom) to leaves (top) &#183; layer = dependency depth &#183; colour = category &#183; mark = edition</text>
 <text x="32" y="108" font-size="13" fill="#9da7b3">Base:</text>
@@ -20,7 +20,7 @@
 <text x="1060" y="148" font-size="13" font-weight="600" fill="#e6edf3">4G writable overlay held in RAM</text>
 <text x="32" y="168" font-size="13" fill="#9da7b3">Packages (full closure):</text>
 <text x="292" y="168" font-size="13" font-weight="600" fill="#e6edf3">1121</text>
-<text x="800" y="168" font-size="13" fill="#9da7b3">Az&#x27;arch Component / Stock Arch:</text>
+<text x="800" y="168" font-size="13" fill="#9da7b3">Azzio Component / Stock Arch:</text>
 <text x="1060" y="168" font-size="13" font-weight="600" fill="#e6edf3">599 / 522</text>
 <text x="32" y="188" font-size="13" fill="#9da7b3">Deepest chain (leaf -&gt; base):</text>
 <text x="292" y="188" font-size="13" font-weight="600" fill="#e6edf3">44 hops</text>
@@ -508,8 +508,8 @@
 <rect x="800" y="1441" width="12" height="12" rx="3" fill="#78716c" fill-opacity="0.35" stroke="#78716c"/>
 <text x="818" y="1452" font-size="11" fill="#e6edf3">System</text>
 <text x="32" y="1488" font-size="14" font-weight="700" fill="#e6edf3">Edition</text>
-<text x="122" y="1488" font-size="11.5" font-weight="700" fill="#03a5fc">★ Az’arch Component</text>
-<text x="242" y="1488" font-size="11" fill="#9da7b3">in the set only because Az’arch added it (a chosen app or its support)</text>
+<text x="122" y="1488" font-size="11.5" font-weight="700" fill="#03a5fc">★ Azzio Component</text>
+<text x="242" y="1488" font-size="11" fill="#9da7b3">in the set only because Azzio added it (a chosen app or its support)</text>
 <text x="122" y="1508" font-size="11.5" font-weight="700" fill="#9da7b3">Stock Arch</text>
-<text x="242" y="1508" font-size="11" fill="#9da7b3">already on the stock archiso releng medium; Az’arch inherits it</text>
+<text x="242" y="1508" font-size="11" fill="#9da7b3">already on the stock archiso releng medium; Azzio inherits it</text>
 </svg>

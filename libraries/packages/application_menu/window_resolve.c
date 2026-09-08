@@ -1,4 +1,4 @@
-/* Az'arch -- shared window identity -> .desktop id resolver. See window_resolve.h.
+/* Azzio -- shared window identity -> .desktop id resolver. See window_resolve.h.
  * Moved verbatim out of window_watch.c (only the public names gained an `az_`
  * prefix); the matching order is: WM_CLASS -> Exec basename / id stem -> the PID's
  * /proc exe + cmdline binaries. */

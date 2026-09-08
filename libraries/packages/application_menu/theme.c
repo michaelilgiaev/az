@@ -1,15 +1,15 @@
-/* Az'arch application menu -- runtime theme colour selection.
+/* Azzio application menu -- runtime theme colour selection.
  *
- * Az'arch has a system-wide dark/light theme (dark by default). This menu follows it: it
+ * Azzio has a system-wide dark/light theme (dark by default). This menu follows it: it
  * reads the freedesktop color-scheme once at startup (az_theme_init) and az_color(role)
  * then returns the dark or light hex string for each colour role. See theme.h for the
  * roles and the AZ_*_COLOR macros that expand to az_color(role).
  *
  * HOW THE THEME IS DETECTED (in priority order, first hit wins):
  *   1. `gsettings get org.gnome.desktop.interface color-scheme` -> 'prefer-dark' / else.
- *      This is the freedesktop appearance standard `azarch theme` writes.
+ *      This is the freedesktop appearance standard `azzio theme` writes.
  *   2. ~/.config/gtk-3.0/settings.ini gtk-application-prefer-dark-theme=1.
- *   3. Default: DARK (the Az'arch default).
+ *   3. Default: DARK (the Azzio default).
  * All best-effort: any probe that fails falls through to the next, then to the dark default.
  */
 #include "theme.h"
@@ -60,7 +60,7 @@ static const char *AZ_PALETTE_LIGHT[AZ_C_COUNT] = {
     [AZ_C_SCROLL_GROOVE]      = "#e6e6e6",
 };
 
-static int az_dark = 1;      /* latched theme; dark is the Az'arch default */
+static int az_dark = 1;      /* latched theme; dark is the Azzio default */
 static int az_inited = 0;
 
 /* Read the whole of a file into buf (NUL-terminated); returns 1 on success. */

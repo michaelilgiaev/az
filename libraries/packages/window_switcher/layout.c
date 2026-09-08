@@ -1,4 +1,4 @@
-/* Az'arch window switcher -- the horizontal tile strip. See layout.h.
+/* Azzio window switcher -- the horizontal tile strip. See layout.h.
  *
  * Look mirrors the application menu's dark Breeze family (theme.c colours): a rounded
  * panel, tiles with a live thumbnail (or the app icon when no pixmap exists yet), the app

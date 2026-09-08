@@ -1,4 +1,4 @@
-/* Az'arch application menu (C port) -- application discovery + category typing.
+/* Azzio application menu (C port) -- application discovery + category typing.
  * One-to-one port of the original applications.py. See applications.h. */
 #include "applications.h"
 
@@ -146,12 +146,12 @@ char *az_category_type(char **categories) {
 /* --- Apps hidden from OUR menu (not uninstalled) ------------------------- *
  * INSTALLER FIX: calamares.desktop (stock "Install System", generic icon,
  * Exec=pkexec calamares which is DEAD in this OpenBox session -- no polkit
- * agent) is now HIDDEN, and azarch-install.desktop (Name "Az'arch Linux
- * Installer", Icon azarch-installer, passwordless-sudo Exec that works) is NO
+ * agent) is now HIDDEN, and azzio-install.desktop (Name "Azzio Linux
+ * Installer", Icon azzio-installer, passwordless-sudo Exec that works) is NO
  * LONGER hidden, so it shows in the menu and re-opening works. */
 static const char *HIDDEN_IDS[] = {
-    "azarch-application-menu.desktop",
-    "azarch-application-menu-shortcut.desktop",
+    "azzio-application-menu.desktop",
+    "azzio-application-menu-shortcut.desktop",
     "bssh.desktop",
     "bvnc.desktop",
     "avahi-discover.desktop",
@@ -184,10 +184,10 @@ gboolean az_is_hidden_desktop_id(const char *desktop_id) {
  * On the archiso live medium the distro is not yet installed, so the installer
  * should be the first thing in the menu. archiso's init creates /run/archiso on
  * the live system (and it is absent once installed), which is the canonical, cheap
- * signal. AZARCH_FORCE_LIVE overrides it either way for testing (1/true = live,
+ * signal. AZZIO_FORCE_LIVE overrides it either way for testing (1/true = live,
  * 0/false = installed). */
 gboolean az_is_live_session(void) {
-    const char *force = g_getenv("AZARCH_FORCE_LIVE");
+    const char *force = g_getenv("AZZIO_FORCE_LIVE");
     if (force && force[0]) {
         char *low = g_ascii_strdown(force, -1);
         gboolean live = (strcmp(low, "1") == 0) || (strcmp(low, "true") == 0) ||
@@ -219,9 +219,9 @@ gboolean az_apps_pin_first(GPtrArray *apps, const char *desktop_id) {
     return FALSE;
 }
 
-/* The .desktop id of the Az'arch installer, pinned to the top in a live session. */
+/* The .desktop id of the Azzio installer, pinned to the top in a live session. */
 const char *az_installer_desktop_id(void) {
-    return "azarch-install.desktop";
+    return "azzio-install.desktop";
 }
 
 /* --- XDG application dirs (most-specific first) -------------------------- */

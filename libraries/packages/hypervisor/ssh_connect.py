@@ -87,7 +87,7 @@ def do_ssh(cfg: Config, extra: list[str]) -> None:
         die("ssh is disabled for this VM (ssh=false in hypervisor.cfg). "
             "Enable it and reboot the VM, then: hypervisor ssh")
     port = select_ssh_port(cfg)
-    # The guest login name inside the VM. Defaults to the Az'arch guest account
+    # The guest login name inside the VM. Defaults to the Azzio guest account
     # (`main`); overridable for a differently-named guest, mirroring do_share_offline.
     user = os.environ.get("GUEST_USER", "main")
     argv = ssh_argv(cfg, user=user, port=port, extra=extra)

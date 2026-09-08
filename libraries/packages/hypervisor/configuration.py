@@ -2,7 +2,7 @@
 
 Everything about a VM is derived from the CURRENT WORKING DIRECTORY:
 
-    cd ~/Hypervisors/azarch && hypervisor install some.iso
+    cd ~/Hypervisors/azzio && hypervisor install some.iso
 
 Config object is built once (Config.from_cwd()) and threaded through every
 subcommand. VM / PROC / DISK are always derived from the directory and are NOT
@@ -106,7 +106,7 @@ def effective_defaults() -> dict:
     """The base defaults a fresh `hypervisor install` starts from: the built-in
     _CFG_DEFAULTS with the user's global overrides (defaults.cfg) layered on top. Coerced
     values, in schema order. This is what `hypervisor --configure --status` reports and what
-    the bare-`azarch` TUI summarises -- deliberately EXCLUDES any per-directory hypervisor.cfg
+    the bare-`azzio` TUI summarises -- deliberately EXCLUDES any per-directory hypervisor.cfg
     and env (those are per-VM, not defaults)."""
     vals = dict(_CFG_DEFAULTS)
     _apply_user_defaults(vals)
@@ -153,7 +153,7 @@ class HypervisorCfg:
     @classmethod
     def from_dir(cls, directory: str) -> "HypervisorCfg":
         # Layering (lowest priority first): built-in defaults -> the user's global
-        # default overrides (~/.config/azarch-hypervisor/defaults.cfg) -> this directory's
+        # default overrides (~/.config/azzio-hypervisor/defaults.cfg) -> this directory's
         # own hypervisor.cfg -> env. So a global default changes what NEW installs and
         # unset keys resolve to, while a directory's own cfg still wins for that VM.
         vals = dict(_CFG_DEFAULTS)
@@ -315,7 +315,7 @@ class Config:
         behaviour, this never auto-discovers: the caller must name the file.
         """
         if not arg:
-            die("an ISO is required -- e.g. 'hypervisor install azarch.iso'")
+            die("an ISO is required -- e.g. 'hypervisor install azzio.iso'")
         if not arg.endswith(".iso"):
             die(f"expected a .iso file, got: {arg}")
         if "/" in arg:
@@ -338,7 +338,7 @@ class Config:
     def resolve_run_disk(self, arg: str) -> str:
         """A .qcow2 file is mandatory. Accepts a path or a bare filename in CWD."""
         if not arg:
-            die("a disk is required -- e.g. 'hypervisor run azarch.qcow2'")
+            die("a disk is required -- e.g. 'hypervisor run azzio.qcow2'")
         if not arg.endswith(".qcow2"):
             die(f"expected a .qcow2 file, got: {arg}")
         if "/" in arg:

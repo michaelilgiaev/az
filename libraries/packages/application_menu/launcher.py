@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Az'arch application menu -- TOGGLE launcher (INSTANT, via a daemon).
+"""Azzio application menu -- TOGGLE launcher (INSTANT, via a daemon).
 
-Installed to /usr/local/bin/azarch-application-menu. Bound to the Super key by
+Installed to /usr/local/bin/azzio-application-menu. Bound to the Super key by
 OpenBox (see packages/openbox) and pointed at by the menu's .desktop
 entry -- opening either runs this.
 
@@ -28,16 +28,16 @@ import subprocess
 import sys
 import time
 
-# Installed daemon binary. Overridable via AZARCH_MENU_DIR / AZARCH_DAEMON_BIN for local
+# Installed daemon binary. Overridable via AZZIO_MENU_DIR / AZZIO_DAEMON_BIN for local
 # testing (the compiled daemon lives directly under MENU_DIR).
-MENU_DIR = os.environ.get("AZARCH_MENU_DIR", "/usr/local/lib/azarch-application-menu")
+MENU_DIR = os.environ.get("AZZIO_MENU_DIR", "/usr/local/lib/azzio-application-menu")
 DAEMON_BIN = os.environ.get(
-    "AZARCH_DAEMON_BIN",
-    os.path.join(MENU_DIR, "azarch-application-menu-daemon"),
+    "AZZIO_DAEMON_BIN",
+    os.path.join(MENU_DIR, "azzio-application-menu-daemon"),
 )
 
 RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
-PID_FILE = os.path.join(RUNTIME_DIR, "azarch-application-menu.pid")
+PID_FILE = os.path.join(RUNTIME_DIR, "azzio-application-menu.pid")
 
 
 def _read_pid() -> int | None:
@@ -63,7 +63,7 @@ def _signal(pid: int, sig: int) -> None:
 
 def main() -> int:
     if not os.path.isfile(DAEMON_BIN):
-        print(f"azarch-application-menu: daemon binary not found at {DAEMON_BIN}",
+        print(f"azzio-application-menu: daemon binary not found at {DAEMON_BIN}",
               file=sys.stderr)
         return 1
 
@@ -97,7 +97,7 @@ def main() -> int:
             return 0
         time.sleep(0.05)
 
-    print("azarch-application-menu: daemon did not come up in time", file=sys.stderr)
+    print("azzio-application-menu: daemon did not come up in time", file=sys.stderr)
     return 1
 
 

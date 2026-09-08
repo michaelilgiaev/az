@@ -20,7 +20,7 @@ They also pin the LIVE-UPDATE fix. Two things must both hold for Places to refre
      And it does NOT rewrite when nothing changed (no needless CHANGED events / flicker).
 
   2. The watcher must actually BE RUNNING. It is launched from the OpenBox autostart behind a
-     `[ -x '/usr/local/lib/azarch/azarch-sidebar-sync' ]` guard -- so it only starts if the
+     `[ -x '/usr/local/lib/azzio/azzio-sidebar-sync' ]` guard -- so it only starts if the
      installed script is EXECUTABLE. archiso's squashfs normalizes overlay file modes to 0644
      unless a path is pinned in profile.FILE_PERMISSIONS; the script was NOT pinned, so it
      shipped 0644, the `[ -x ]` guard failed, the --watch daemon never launched, and Places
@@ -77,7 +77,7 @@ def test_sync_script_is_wired_into_both_autostarts():
 def test_sync_path_lock_step_with_openbox():
     # openbox holds the path as a constant (to avoid importing thunar); it must not drift.
     assert openbox.THUNAR_SIDEBAR_SYNC == live_sidebar.SYNC_SCRIPT_DEST
-    assert live_sidebar.SYNC_SCRIPT_DEST == "/usr/local/lib/azarch/azarch-sidebar-sync"
+    assert live_sidebar.SYNC_SCRIPT_DEST == "/usr/local/lib/azzio/azzio-sidebar-sync"
 
 
 def test_sync_helper_emitted_root_owned_executable():
@@ -96,7 +96,7 @@ def test_sync_helper_is_pinned_executable_in_the_iso():
     then the OpenBox autostart's `[ -x '<script>' ]` guard FAILS, the --watch daemon never
     launches, and Places never updates when a folder is added/removed (the reported bug, confirmed
     on the live box where the installed script was -rw-r--r-- and no watcher ran). SAME normalization
-    as the compiled azarch/osd/menu-daemon binaries, which are all pinned 0755 for the same reason.
+    as the compiled azzio/osd/menu-daemon binaries, which are all pinned 0755 for the same reason.
     Pin the sidebar helper 0755 both in the map and in the rendered profiledef.sh."""
     import profile
     assert profile.FILE_PERMISSIONS[live_sidebar.SYNC_SCRIPT_DEST] == "0:0:755"
@@ -125,7 +125,7 @@ def test_sync_script_is_valid_posix_sh():
 
 def _run_sync(tmp_home, *args):
     """Write the generated script and run it with HOME=tmp_home; return the bookmarks lines."""
-    script = tmp_home / "azarch-sidebar-sync"
+    script = tmp_home / "azzio-sidebar-sync"
     script.write_text(live_sidebar.sync_script())
     env = dict(os.environ, HOME=str(tmp_home))
     subprocess.run(["sh", str(script), *args], env=env, timeout=20, check=False)
@@ -181,7 +181,7 @@ def test_functional_bookmarks_have_no_comment_lines(tmp_path):
 def test_functional_addition_is_tracked_by_watch(tmp_path):
     # Prove --watch regenerates when a new top-level entry appears (the live requirement).
     (tmp_path / "Downloads").mkdir()
-    script = tmp_path / "azarch-sidebar-sync"
+    script = tmp_path / "azzio-sidebar-sync"
     script.write_text(live_sidebar.sync_script())
     env = dict(os.environ, HOME=str(tmp_path))
     proc = subprocess.Popen(["sh", str(script), "--watch"], env=env)
@@ -327,7 +327,7 @@ def test_signature_detects_a_spaced_name_addition(tmp_path):
     """home_sig() must also be space-safe: adding "New Folder" changes the signature (so
     --watch fires a regen). A word-splitting home_sig would miss/misattribute it."""
     (tmp_path / "Downloads").mkdir()
-    script = tmp_path / "azarch-sidebar-sync"
+    script = tmp_path / "azzio-sidebar-sync"
     script.write_text(live_sidebar.sync_script())
     env = dict(os.environ, HOME=str(tmp_path))
 

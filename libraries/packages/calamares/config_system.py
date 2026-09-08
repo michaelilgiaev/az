@@ -38,7 +38,7 @@ def users_conf() -> str:
         top-level spelling was ignored and the account fell back to the useradd default.
     They are gone; the shell now lives under `user:` where it is read.
 
-    The Full Name ("What is your name?") field is HIDDEN (Az'arch source patch in
+    The Full Name ("What is your name?") field is HIDDEN (Azzio source patch in
     pkgbuild.calamares_defaults_patch): the account's GECOS/full name is not asked for.
     Hiding it required TWO coordinated source changes -- the field is hidden in UsersPage
     AND `Config::isReady()` no longer requires a non-empty full name -- because isReady()
@@ -47,15 +47,15 @@ def users_conf() -> str:
     RENAMES the four field-prompt labels to short captions -- "Username:", "Hostname:",
     "Username Password:", "Root Password:" -- re-words the reuse-password checkbox label
     to "Use username password for root password.", sets the hostname field's placeholder
-    to "azarch" and the login field's placeholder to "main", and makes an empty username
+    to "azzio" and the login field's placeholder to "main", and makes an empty username
     or hostname a required-field error ("User parameter must include at least one
     character." / "Hostname parameter must include at least two characters."), which shows
     the field error and disables Next until filled.
     Per PROMPT.md the login name IS SEEDED to "main" (the Username field DEFAULTS to
-    containing "main", not merely hinting it) and the hostname is SEEDED to "azarch"; for
-    each, its "main"/"azarch" placeholder is the fallback hint shown only if the field is
+    containing "main", not merely hinting it) and the hostname is SEEDED to "azzio"; for
+    each, its "main"/"azzio" placeholder is the fallback hint shown only if the field is
     cleared (in which case the required-field error appears and Next is blocked). Defaults,
-    all Az'arch: login "main", hostname "azarch", the user password empty (skippable -> a
+    all Azzio: login "main", hostname "azzio", the user password empty (skippable -> a
     skipped/empty password becomes a LOCKED "*" account via the SetPasswordJob patch), and
     the reuse-password checkbox CHECKED (doReusePassword: true). The "Require strong
     passwords." checkbox is removed (allowWeakPasswords: false + the patch force-hides it)."""
@@ -92,7 +92,7 @@ setRootPassword: true
 # checkbox on the users page START CHECKED (UsersPage seeds the checkbox from Config's
 # m_reuseUserPasswordForRoot, which this key sets). So by default root reuses the
 # user's password: the user fills ONE password box and root mirrors it. With the user
-# password left empty (the Az'arch default -- the field is skippable), root reuses that
+# password left empty (the Azzio default -- the field is skippable), root reuses that
 # empty password and Calamares' SetPasswordJob LOCKS the account (usermod -p '!'),
 # which our source patch broadens from root-only to any empty password -- so a skipped
 # password yields a locked "*" account rather than a passwordless login. The prompt's
@@ -105,13 +105,13 @@ doAutologin: false
 # Let the user pick the hostname on the users page, seeded with this template.
 # writeHostsFile keeps /etc/hosts in sync with the chosen name.
 #
-# `template: "azarch"` is a LITERAL (no ${...} macros), so Calamares' hostname
-# suggestion always expands to exactly "azarch" no matter what the user types in
+# `template: "azzio"` is a LITERAL (no ${...} macros), so Calamares' hostname
+# suggestion always expands to exactly "azzio" no matter what the user types in
 # the Full Name / Login fields. Combined with our calamares source patch
-# (azarch-calamares-defaults.patch), which seeds this template as the INITIAL
+# (azzio-calamares-defaults.patch), which seeds this template as the INITIAL
 # hostname at module load AND marks it "custom" so the auto-derive path is
-# skipped, the hostname field (relabelled "Hostname:") shows "azarch" by
-# default and stays "azarch" as the other inputs change. (Upstream default is
+# skipped, the hostname field (relabelled "Hostname:") shows "azzio" by
+# default and stays "azzio" as the other inputs change. (Upstream default is
 # "${first}-${product}", which recomputes the hostname on every name keystroke --
 # that reactive default is exactly what the patch/template override disables.)
 # `location: EtcFile` is the schema's enum spelling (enum: [None, EtcFile, Hostnamed,
@@ -119,7 +119,7 @@ doAutologin: false
 hostname:
     location: EtcFile
     writeHostsFile: true
-    template: "azarch"
+    template: "azzio"
 
 # Password policy. NO `passwordRequirements` block ON PURPOSE: the user password is
 # SKIPPABLE (the PROMPT wants it to default empty and, if skipped, become a locked "*"
@@ -179,7 +179,7 @@ def locale_conf() -> str:
     return """\
 # Locale + timezone defaults (user can change these on the locale page).
 ---
-# Seed timezone. Az'arch defaults to Asia/Jerusalem; the locale page can still
+# Seed timezone. Azzio defaults to Asia/Jerusalem; the locale page can still
 # override it. (IANA zone name is "Jerusalem".)
 region: "Asia"
 zone: "Jerusalem"
@@ -196,7 +196,7 @@ def keyboard_conf() -> str:
     """Keyboard page: English ("us") is always the active layout; when the user
     picks a NON-English region on the Location page, the region's native layout is
     added as a switchable SECOND (Alt+Shift), live in the installer and persisted to
-    the target. This is driven by the Az'arch region-keyboard SOURCE PATCH
+    the target. This is driven by the Azzio region-keyboard SOURCE PATCH
     (packages/pkgbuild.calamares_region_keyboard_patch), enabled by the
     `regionSecondLayout: true` key below.
 
@@ -224,11 +224,11 @@ def keyboard_conf() -> str:
     Arabic; an English-speaking region -> English only.
 
     useLocale1:false keeps the module reading/writing the plain
-    /etc/X11/xorg.conf.d/00-keyboard.conf (Az'arch is Plasma/X11); the `configure`
+    /etc/X11/xorg.conf.d/00-keyboard.conf (Azzio is Plasma/X11); the `configure`
     block keeps kwin/gnome off (the layout is read from that xkb file directly, so
     no KWin/GNOME keyboard integration is needed)."""
     return """\
-# Keyboard configuration for the Az'arch installer.
+# Keyboard configuration for the Azzio installer.
 ---
 # Where to write the X11 keyboard configuration on the target (systemd-localed default).
 xOrgConfFileName: "/etc/X11/xorg.conf.d/00-keyboard.conf"
@@ -237,18 +237,18 @@ xOrgConfFileName: "/etc/X11/xorg.conf.d/00-keyboard.conf"
 convertedKeymapPath: "/usr/share/kbd/keymaps/xkb"
 
 # Manage the plain xorg.conf.d file directly instead of going through
-# systemd-localed. Az'arch is Plasma/X11 and the layout is read from
+# systemd-localed. Azzio is Plasma/X11 and the layout is read from
 # /etc/X11/xorg.conf.d/00-keyboard.conf.
 useLocale1: false
 
-# Enable the locale/region guess. REQUIRED so the Az'arch region-keyboard patch's
+# Enable the locale/region guess. REQUIRED so the Azzio region-keyboard patch's
 # guessRegionKeyboardLayout() runs (guessLocaleKeyboardLayout() early-returns when
 # this is false). It no longer auto-selects a lone Hebrew layout: English is always
 # force-kept as the primary/active layout and the region language is only ever the
 # switchable SECOND layout (see regionSecondLayout).
 guessLayout: true
 
-# Az'arch: region-driven second keyboard layout. When the user selects a non-English
+# Azzio: region-driven second keyboard layout. When the user selects a non-English
 # region on the Location page, add that region's native xkb layout as a switchable
 # SECOND layout (English "us" stays first/active; group switch is Alt+Shift), applied
 # to the LIVE installer session and persisted to the target. English-speaking regions
@@ -256,7 +256,7 @@ guessLayout: true
 # opt-in switch it reads (upstream/other distros default it to false).
 regionSecondLayout: true
 
-# Az'arch runs Plasma on X11, but the layout is read from the plain xkb
+# Azzio runs Plasma on X11, but the layout is read from the plain xkb
 # xorg.conf.d file we manage (useLocale1:false) -- so no KWin/GNOME keyboard
 # integration needs configuring here.
 configure:
@@ -267,10 +267,10 @@ configure:
 
 # --- 6d. modules/services.conf ---------------------------------------------
 def services_conf() -> str:
-    """Enable NetworkManager on the installed system (Az'arch networks via NM,
+    """Enable NetworkManager on the installed system (Azzio networks via NM,
     not dhcpcd/systemd-networkd), and DISABLE bluetooth (off by default -- matches the
     live ISO, where compiler._link_services leaves bluetooth.service out of
-    multi-user.target.wants; `azarch network bluetooth on` turns it on on demand).
+    multi-user.target.wants; `azzio network bluetooth on` turns it on on demand).
 
     The archiso stock systemd-networkd/systemd-resolved stack is NOT disabled here:
     it is MASKED (and its /etc/systemd/network/*.network + resolv.conf stub removed)
@@ -358,7 +358,7 @@ defaults:
     GRUB_TIMEOUT: 0
     GRUB_DEFAULT: 0
     GRUB_TIMEOUT_STYLE: "hidden"
-    GRUB_DISTRIBUTOR: "Az'arch Linux"
+    GRUB_DISTRIBUTOR: "Azzio Linux"
     GRUB_ENABLE_CRYPTODISK: "y"
 
 # Kernel command line. The module OVERWRITES GRUB_CMDLINE_LINUX_DEFAULT with the
@@ -388,7 +388,7 @@ efiBootLoader: "grub"
 # key, so setting one here is a dead key. partition.conf already supplies /boot/efi.
 
 # Names for the GRUB EFI boot entry and its install directory.
-efiBootloaderId: "azarch"
+efiBootloaderId: "azzio"
 
 # Install GRUB even if an existing entry is present.
 installEFIFallback: true

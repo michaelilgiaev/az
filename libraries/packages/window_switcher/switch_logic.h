@@ -1,4 +1,4 @@
-/* Az'arch window switcher -- pure selection decisions (no GTK/X runtime).
+/* Azzio window switcher -- pure selection decisions (no GTK/X runtime).
  *
  * The two decisions the alt-tab overlay makes, factored out of the GTK key handler and
  * show_switcher() so they can be unit-tested headless (tests/test_switch_logic.c) -- the two

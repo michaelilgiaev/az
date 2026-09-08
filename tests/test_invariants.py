@@ -90,11 +90,11 @@ _EMITTERS = [
     # The LibreWolf AutoConfig override, now delivered as a home file at the profile
     # path (not packaged under /opt) -- exercise its emit_plan builder too.
     *[(f"librewolf:{e['dest']}", e["builder"]) for e in librewolf.emit_plan()],
-    # The Az'arch timedate home page (Flask Time + Calendar at localhost:49154): its 4
+    # The Azzio timedate home page (Flask Time + Calendar at localhost:49154): its 4
     # emit_plan builders (applications.py, page.py, the launcher, the systemd service) all return
     # real content that compiler.py writes into the airootfs.
     *[(f"timedate:{e['dest']}", e["builder"]) for e in timedate.emit_plan()],
-    # The Az'arch passwords manager (the `passwords` command): the app is ONE flat directory
+    # The Azzio passwords manager (the `passwords` command): the app is ONE flat directory
     # now, so its emit_plan builders are the entry script, the optional plaintext importer,
     # every working module (config/cryptography/model/terminal_user_interface/...) and the
     # /usr/local/bin/passwords launcher -- all returning real content compiler.py writes into
@@ -122,17 +122,17 @@ def test_emitter_family_covers_all_config_modules():
     # DARK + LIGHT themercs, the GTK2/3/4 dark theme defaults, the dconf color-scheme keyfile
     # + profile, the "installed" autostart staged for the Calamares overwrite, the
     # application-menu usage.json seed, the system + Desktop installer launchers, the
-    # install wrapper, the azarch command line interface -- plus the appended bash_profile. The
+    # install wrapper, the azzio command line interface -- plus the appended bash_profile. The
     # media OSD is NO LONGER here: it is a compiled binary now (on_screen_display.c), installed by build_osd,
     # not a text emitter. NOW 20: the 19 PLAN entries -- the +2 over the old 17 are the
-    # ~/.Xresources GLOBAL SCALE entry (PROMPT Display/scale task) and the /etc/xdg/azarch-picom.conf
+    # ~/.Xresources GLOBAL SCALE entry (PROMPT Display/scale task) and the /etc/xdg/azzio-picom.conf
     # compositor config (fading OFF + opaque frames -- kills the picom fade + transparent-titlebar
     # defaults) -- plus the appended bash_profile) + 6 installer +
     # locale + profile + 4 pacman + 4 pkgbuild (calamares + librewolf.desktop + the two
     # librewolf PKGBUILD tiers) + 1 librewolf emit_plan builder (the AutoConfig override,
     # now a home file at the profile path, not a packaged /opt file) + 5 timedate
     # emit_plan builders (applications.py, page.py, assets.py, the launcher, the
-    # azarch-timedate.service unit) + 15 passwords emit_plan builders (the app is one flat
+    # azzio-timedate.service unit) + 15 passwords emit_plan builders (the app is one flat
     # directory now: the entry script, the optional plaintext importer, the 12 working modules
     # -- __init__, config, cryptography, model, clipboard, clipboard_owner, forms, new_entry,
     # terminal_user_interface, keyboard, help, and live_keyboard_line (step six: the LIVE
@@ -173,7 +173,7 @@ def test_exactly_one_calamares_file_is_non_yaml():
     # Guards the assumption above: only the branding show.qml is exempt from the
     # YAML-parse contract. A second non-YAML file would slip past the loop.
     non_yaml = [rel for rel in calamares.emit_map() if rel.endswith(".qml")]
-    assert non_yaml == ["branding/azarch/show.qml"]
+    assert non_yaml == ["branding/azzio/show.qml"]
 
 
 # ---------------------------------------------------------------------------
@@ -203,12 +203,12 @@ def test_packages_manifest_no_duplicate_within_additions_block():
     # mkarchiso dedup the manifest). The real editing hazard is the same name
     # typed twice WITHIN the hand-edited additions block, which is what we guard.
     lines = paths.PACKAGES_FILE.read_text().splitlines()
-    banner = max(i for i, l in enumerate(lines) if "AZ'ARCH ADDITIONS" in l)
+    banner = max(i for i, l in enumerate(lines) if "AZZIO ADDITIONS" in l)
     close = next(i for i in range(banner + 1, len(lines))
                  if set(lines[i].strip()) <= set("#= "))
     additions = _tokenize("\n".join(lines[close + 1:]))
     dupes = sorted({t for t in additions if additions.count(t) > 1})
-    assert not dupes, f"duplicate packages within Az'arch-additions block: {dupes}"
+    assert not dupes, f"duplicate packages within Azzio-additions block: {dupes}"
 
 
 # ---------------------------------------------------------------------------
@@ -265,18 +265,18 @@ def test_every_rule_emitted_category_is_in_the_order():
     assert emitted <= order, f"rule categories missing from legend: {emitted - order}"
 
 
-def test_azarch_configured_keys_and_removed_are_stable():
-    # The per-package "Az'arch configured" notes cross-reference real package
+def test_azzio_configured_keys_and_removed_are_stable():
+    # The per-package "Azzio configured" notes cross-reference real package
     # names; every value must be a real note, and the removed set is empty (no
     # package is dropped from the stock baseline in this build).
-    conf = specification_classify.AZARCH_CONFIGURED
+    conf = specification_classify.AZZIO_CONFIGURED
     assert set(conf) == {
         "fastfetch", "filesystem", "grub", "pacman",
         "sudo", "syslinux", "systemd", "ufw",
     }
     for k, v in conf.items():
         assert isinstance(v, str) and v.strip(), f"empty note for {k!r}"
-    assert specification_classify.AZARCH_REMOVED == set()
+    assert specification_classify.AZZIO_REMOVED == set()
 
 
 # ---------------------------------------------------------------------------

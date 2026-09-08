@@ -1,4 +1,4 @@
-/* Az'arch application menu (C port) -- launch-frequency usage tracking.
+/* Azzio application menu (C port) -- launch-frequency usage tracking.
  *
  * Port of usage.py. A JSON map desktop_id -> launch count under the XDG data
  * dir, plus the ordering used to sort the app list: most-launched first, ties

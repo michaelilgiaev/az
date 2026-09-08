@@ -3,8 +3,8 @@
 `hypervisor` is per-directory: every VM's settings live in that folder's
 hypervisor.cfg, and the base values a fresh `hypervisor install` starts from are the
 hardcoded _CFG_DEFAULTS. This module lets the user override those base defaults ONCE,
-globally (~/.config/azarch-hypervisor/defaults.cfg), so every NEW VM inherits them --
-the surface the bare-`azarch` TUI's Hypervisor screen drives via `hypervisor
+globally (~/.config/azzio-hypervisor/defaults.cfg), so every NEW VM inherits them --
+the surface the bare-`azzio` TUI's Hypervisor screen drives via `hypervisor
 --configure`. A directory's own hypervisor.cfg still wins for that VM.
 
 These tests pin: the load/save/set/reset roundtrip (only schema keys, corrupt file ->
@@ -26,7 +26,7 @@ from packages.hypervisor.configuration import HypervisorCfg
 @pytest.fixture(autouse=True)
 def _isolate_config_home(tmp_path, monkeypatch):
     """Point XDG_CONFIG_HOME at a tmp dir so no test ever touches the real
-    ~/.config/azarch-hypervisor/defaults.cfg. The module reads the path lazily
+    ~/.config/azzio-hypervisor/defaults.cfg. The module reads the path lazily
     (via a function, not a module constant) so this env override takes effect."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdgcfg"))
     # Make sure a stray real defaults file / env override never leaks into a test.

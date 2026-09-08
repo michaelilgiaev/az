@@ -3,7 +3,7 @@
 `hypervisor` spins up a QEMU/KVM VM whose whole identity is derived from the directory
 it is run in (name/disk/NVRAM/shared-folder/SSH-port). The app is one flat directory;
 packages/hypervisor/packaging.py is the ISO build wiring. This is a HOST-side tool,
-distinct from the guest-side `azarch --sshd-hypervisor`.
+distinct from the guest-side `azzio --sshd-hypervisor`.
 
 Why these tests matter: like the backup payload, compiler.py never inspects the CONTENT
 of these builders -- it blindly iterates emit_plan() and calls emit.write_text with the
@@ -39,10 +39,10 @@ from packages.hypervisor import packaging as hv
 
 # --- emit_plan() contract ---------------------------------------------------
 EXPECTED_KEY_PLAN = {
-    "/usr/local/lib/azarch-hypervisor/command_line_interface.py": 0o644,
-    "/usr/local/lib/azarch-hypervisor/configuration.py": 0o644,
-    "/usr/local/lib/azarch-hypervisor/virtual_machine.py": 0o644,
-    "/usr/local/lib/azarch-hypervisor/qemu_command.py": 0o644,
+    "/usr/local/lib/azzio-hypervisor/command_line_interface.py": 0o644,
+    "/usr/local/lib/azzio-hypervisor/configuration.py": 0o644,
+    "/usr/local/lib/azzio-hypervisor/virtual_machine.py": 0o644,
+    "/usr/local/lib/azzio-hypervisor/qemu_command.py": 0o644,
     "/usr/local/bin/hypervisor": 0o755,
 }
 

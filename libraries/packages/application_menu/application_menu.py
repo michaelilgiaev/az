@@ -1,4 +1,4 @@
-"""The Az'arch application menu -- baked into the live/installed system.
+"""The Azzio application menu -- baked into the live/installed system.
 
 This is OUR application menu, and it is the WHOLE shell: KDE Plasma was removed and
 the desktop is OpenBox with no panel, so this menu -- a borderless, Breeze-styled
@@ -8,7 +8,7 @@ rc.xml keybind); see packages/openbox.
 
 The menu is a C / GTK3 program (the earlier Tkinter/Python port was replaced): the
 sources live DIRECTLY in this dir (menu.c + siblings, a Makefile), and the build here
-COMPILES them into a single resident binary, azarch-application-menu-daemon, installed
+COMPILES them into a single resident binary, azzio-application-menu-daemon, installed
 under MENU_LIB_DIR. That daemon keeps the window built + hidden so opening it is
 INSTANT, and speaks the same PID-file + SIGUSR1(toggle)/SIGUSR2(show) protocol the old
 Python daemon did -- so launcher.py (the pure-Python bin entry point) drives it
@@ -24,7 +24,7 @@ Layers:
       menu.c                     the GTK3 menu + resident daemon (main())
       {application_list,applications,usage,icons,actions,window_watch,kickoff_scrollbar,power}.{c,h}  its modules
       theme.h                    the shared colours/sizes header
-      Makefile                   builds azarch-application-menu-daemon (+ `make test`)
+      Makefile                   builds azzio-application-menu-daemon (+ `make test`)
       launcher.py                the launcher (signals the daemon), pure Python
   * BUILD wiring -- THIS module (application_menu.py, alongside the source) COMPILES the
     C sources into the daemon binary and copies it to MENU_LIB_DIR, installs launcher.py
@@ -50,15 +50,15 @@ import paths
 
 # --- Installed system paths (root-owned) ------------------------------------
 # Where the menu lands in the live/installed rootfs.
-MENU_LIB_DIR = "/usr/local/lib/azarch-application-menu"
+MENU_LIB_DIR = "/usr/local/lib/azzio-application-menu"
 # The resident daemon BINARY the launcher signals (menu built once, kept hidden, so the
 # menu opens INSTANTLY). Compiled from the C sources here; the launcher starts this.
-MENU_DAEMON_BIN_SYSTEM_PATH = f"{MENU_LIB_DIR}/azarch-application-menu-daemon"
+MENU_DAEMON_BIN_SYSTEM_PATH = f"{MENU_LIB_DIR}/azzio-application-menu-daemon"
 # The launcher (launcher.py) is installed here as the bin entry point the Super key /
 # .desktop run; it finds the daemon binary at its default MENU_DIR (= MENU_LIB_DIR).
-MENU_LAUNCHER_SYSTEM_PATH = "/usr/local/bin/azarch-application-menu"
+MENU_LAUNCHER_SYSTEM_PATH = "/usr/local/bin/azzio-application-menu"
 MENU_DESKTOP_SYSTEM_PATH = (
-    "/usr/local/share/applications/azarch-application-menu.desktop"
+    "/usr/local/share/applications/azzio-application-menu.desktop"
 )
 
 # --- Super/Meta key -> menu (handled by OpenBox, not KDE) --------------------
@@ -82,7 +82,7 @@ MENU_DESKTOP_SYSTEM_PATH = (
 # intended order is unambiguous. Emitted by packages/openbox as a home-owned
 # file (mirrored into /etc/skel).
 MENU_USAGE_SEED_SYSTEM_PATH = (
-    "/home/main/.local/share/azarch-application-menu/usage.json"
+    "/home/main/.local/share/azzio-application-menu/usage.json"
 )
 
 # desktop_id -> starting launch count. Descending so the menu's sort (-count, name) puts
@@ -107,7 +107,7 @@ MENU_ICON_NAME = "application-menu"
 # via the Makefile, which produces the single binary named below. launcher.py (the bin
 # entry point) is pure Python and rides along. The Makefile is the single source of truth
 # for HOW the binary is linked; this module just drives it and installs the result.
-MENU_DAEMON_BIN_NAME = "azarch-application-menu-daemon"
+MENU_DAEMON_BIN_NAME = "azzio-application-menu-daemon"
 
 # The launcher module in the source tree, installed (also) as the bin entry point.
 # The menu source lives DIRECTLY in APPLICATION_MENU_DIR (no nested csrc/ dir anymore).
@@ -150,14 +150,14 @@ def menu_desktop() -> str:
     return f"""\
 [Desktop Entry]
 Type=Application
-Name=Az'arch Menu
+Name=Azzio Menu
 GenericName=Application Menu
-Comment=The Az'arch application menu
+Comment=The Azzio application menu
 Exec={MENU_LAUNCHER_SYSTEM_PATH}
 Icon={MENU_ICON_NAME}
 Terminal=false
 Categories=System;Utility;
-Keywords=menu;launcher;azarch;
+Keywords=menu;launcher;azzio;
 """
 
 
@@ -204,7 +204,7 @@ def build_daemon(dest: Path, *, make: str = "make") -> Path:
     Returns the destination path.
     """
     dest = Path(dest)
-    with tempfile.TemporaryDirectory(prefix="azarch-appmenu-build-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="azzio-appmenu-build-") as tmp:
         build_dir = Path(tmp)
         for src in _csrc_files():
             shutil.copy2(src, build_dir / src.name)

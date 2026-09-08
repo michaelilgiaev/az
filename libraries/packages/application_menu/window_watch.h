@@ -1,4 +1,4 @@
-/* Az'arch application menu (C port) -- system-wide "app opened" detection.
+/* Azzio application menu (C port) -- system-wide "app opened" detection.
  *
  * Port of winwatch.py. Polls the X11 client list on the GTK main loop and
  * records one launch each time a new top-level application window appears,

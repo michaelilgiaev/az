@@ -1,6 +1,6 @@
-"""The `sshd` build variant: the opt-in ISO named azarch-headed-ssh-<ver>-
-x86_64.iso, identical to the base `azarch-headed` one but with ssh ENABLED (it
-auto-runs `azarch --sshd-hypervisor` at boot) and `main` carrying the operator's
+"""The `sshd` build variant: the opt-in ISO named azzio-headed-ssh-<ver>-
+x86_64.iso, identical to the base `azzio-headed` one but with ssh ENABLED (it
+auto-runs `azzio --sshd-hypervisor` at boot) and `main` carrying the operator's
 build-time --ssh password.
 
 Each run builds exactly ONE ISO: the base/headed ISO by default, or the ssh ISO
@@ -14,10 +14,10 @@ its single mkarchiso pass.
 
 The observable per-variant effects, checked here as pure data/emit (no mkarchiso):
 
-  1. profiledef's iso_name flips azarch-headed -> azarch-headed-ssh, so mkarchiso
-     writes the azarch-headed-ssh-*.iso filename.
+  1. profiledef's iso_name flips azzio-headed -> azzio-headed-ssh, so mkarchiso
+     writes the azzio-headed-ssh-*.iso filename.
   2. _apply_variant emits + enables sshd-hypervisor-setup.service (a systemd oneshot that
-     runs `azarch --sshd-hypervisor`) ONLY for the sshd variant; the base ISO gets NEITHER
+     runs `azzio --sshd-hypervisor`) ONLY for the sshd variant; the base ISO gets NEITHER
      the unit nor its enable link, so there it stays ssh-disabled.
   3. the sshd variant's /etc/shadow carries the operator's real hash for `main`; the base
      ISO ships LOCKED accounts (no password login).
@@ -261,24 +261,24 @@ def _iso_name(pd: str) -> str:
 
 def test_iso_name_for_maps_variants():
     # The base/default ISO is the "headed" product line; the ssh flavour is
-    # "headed-ssh" (the "headless" line slots in as azarch-headless without touching
+    # "headed-ssh" (the "headless" line slots in as azzio-headless without touching
     # the base/sshd variant keys). See profile.ISO_NAMES.
-    assert profile.iso_name_for("base") == "azarch-headed"
-    assert profile.iso_name_for("sshd") == "azarch-headed-ssh"
+    assert profile.iso_name_for("base") == "azzio-headed"
+    assert profile.iso_name_for("sshd") == "azzio-headed-ssh"
     # An unknown variant must fall back to the base name, never crash the build.
-    assert profile.iso_name_for("nonsense") == "azarch-headed"
-    assert profile.iso_name_for() == "azarch-headed"
+    assert profile.iso_name_for("nonsense") == "azzio-headed"
+    assert profile.iso_name_for() == "azzio-headed"
 
 
-def test_profiledef_base_is_azarch_headed():
-    assert _iso_name(profile.profiledef_sh("base")) == "azarch-headed"
+def test_profiledef_base_is_azzio_headed():
+    assert _iso_name(profile.profiledef_sh("base")) == "azzio-headed"
     # Default (no arg) is the base ISO.
-    assert _iso_name(profile.profiledef_sh()) == "azarch-headed"
+    assert _iso_name(profile.profiledef_sh()) == "azzio-headed"
 
 
-def test_profiledef_sshd_is_azarch_headed_ssh():
-    # This is what makes mkarchiso name the artifact azarch-headed-ssh-<ver>-x86_64.iso.
-    assert _iso_name(profile.profiledef_sh("sshd")) == "azarch-headed-ssh"
+def test_profiledef_sshd_is_azzio_headed_ssh():
+    # This is what makes mkarchiso name the artifact azzio-headed-ssh-<ver>-x86_64.iso.
+    assert _iso_name(profile.profiledef_sh("sshd")) == "azzio-headed-ssh"
 
 
 def test_only_iso_name_differs_between_variants():
@@ -288,7 +288,7 @@ def test_only_iso_name_differs_between_variants():
     # parity is what "basically like the normal one" requires).
     base = profile.profiledef_sh("base")
     sshd = profile.profiledef_sh("sshd")
-    norm = lambda s: s.replace('iso_name="azarch-headed-ssh"', 'iso_name="azarch-headed"')
+    norm = lambda s: s.replace('iso_name="azzio-headed-ssh"', 'iso_name="azzio-headed"')
     assert norm(sshd) == base
 
 
@@ -297,11 +297,11 @@ def test_only_iso_name_differs_between_variants():
 def test_sshd_service_runs_the_cli_subcommand():
     svc = system.SSHD_HYPERVISOR_SETUP_SERVICE
     # It must invoke exactly the documented subcommand -- this IS "on by default".
-    assert "ExecStart=/usr/local/bin/azarch --sshd-hypervisor" in svc
+    assert "ExecStart=/usr/local/bin/azzio --sshd-hypervisor" in svc
 
 
 def test_sshd_service_targets_main_via_sudo_user():
-    # Run as root with SUDO_USER=main: the azarch command line interface keys off ${SUDO_USER:-...} and
+    # Run as root with SUDO_USER=main: the azzio command line interface keys off ${SUDO_USER:-...} and
     # refuses a bare-root target, so this is what makes the pubkey land in
     # /home/main/.ssh (the account sshd accepts) without needing a PAM session.
     svc = system.SSHD_HYPERVISOR_SETUP_SERVICE
@@ -320,8 +320,8 @@ def test_sshd_service_ordering_is_sane():
 
 
 def test_sshd_service_guarded_on_cli_presence():
-    # ConditionPathExists keeps it from failing loudly if the azarch command line interface is absent.
-    assert "ConditionPathExists=/usr/local/bin/azarch" in system.SSHD_HYPERVISOR_SETUP_SERVICE
+    # ConditionPathExists keeps it from failing loudly if the azzio command line interface is absent.
+    assert "ConditionPathExists=/usr/local/bin/azzio" in system.SSHD_HYPERVISOR_SETUP_SERVICE
 
 
 # --- base airootfs bakes in `PermitRootLogin no` (survives a Calamares install) --
@@ -361,7 +361,7 @@ def test_run_provisions_sshd_hardening_for_the_base_airootfs():
 
 def test_link_services_never_enables_stock_sshd():
     # The default headed ISO must ship with ssh OFF. _link_services enables the curated daemon
-    # set (NetworkManager/CUPS/spice + the azarch oneshots) -- it must NEVER enable the
+    # set (NetworkManager/CUPS/spice + the azzio oneshots) -- it must NEVER enable the
     # stock sshd.service or ssh.socket, or the base ISO would listen on :22 with a LOCKED
     # account (or, worse on an installed system, expose ssh unexpectedly).
     src = inspect.getsource(compiler._link_services)
@@ -441,7 +441,7 @@ def test_ssh_variant_opens_22_tcp_via_sshd_bringup():
     # deny-incoming base. Assert the bring-up path opens 22/tcp (the user's "port 22 allow
     # tcp"). The bring-up lives in the guest CLI; check its shipped source.
     from packages import openbox as desktop
-    src = desktop.azarch_command_line_interface()
+    src = desktop.azzio_command_line_interface()
     assert '"ufw", "allow", "22/tcp"' in src
 
 
@@ -476,13 +476,13 @@ def test_apply_variant_sshd_emits_and_enables_service(tmp_path):
     # The unit file is written...
     svc = _svc_dest(airootfs)
     assert svc.is_file()
-    assert "azarch --sshd-hypervisor" in svc.read_text()
+    assert "azzio --sshd-hypervisor" in svc.read_text()
     # ...and enabled via a multi-user.target.wants symlink to it.
     link = _link_dest(airootfs)
     assert link.is_symlink()
     assert os.readlink(link) == "/etc/systemd/system/sshd-hypervisor-setup.service"
     # profiledef at the profile root carries the sshd iso_name.
-    assert _iso_name((W / "profiledef.sh").read_text()) == "azarch-headed-ssh"
+    assert _iso_name((W / "profiledef.sh").read_text()) == "azzio-headed-ssh"
 
 
 def test_apply_variant_base_has_no_sshd_service_or_link(tmp_path):
@@ -491,7 +491,7 @@ def test_apply_variant_base_has_no_sshd_service_or_link(tmp_path):
     compiler._apply_variant(W, airootfs, "base", ssh_password_hash=None)
     assert not _svc_dest(airootfs).exists()
     assert not _link_dest(airootfs).is_symlink()
-    assert _iso_name((W / "profiledef.sh").read_text()) == "azarch-headed"
+    assert _iso_name((W / "profiledef.sh").read_text()) == "azzio-headed"
 
 
 def test_apply_variant_base_after_sshd_removes_the_leftover(tmp_path):
@@ -537,7 +537,7 @@ def test_mkarchiso_pass_resets_work_dir_before_running():
     # `_run_once` sentinel file under work/ (work/base.<fn>, work/iso.<fn>) and refuses
     # to delete a pre-existing work dir. If the second (sshd) pass reused the first
     # pass's work/, mkarchiso would skip airootfs/squashfs/ISO-write as "already done"
-    # and NEVER write azarch-sshd-*.iso. So each pass MUST wipe work/ before invoking
+    # and NEVER write azzio-sshd-*.iso. So each pass MUST wipe work/ before invoking
     # mkarchiso. Assert the reset (rm -rf of the work dir) happens in _run_mkarchiso
     # BEFORE the mkarchiso subprocess is spawned.
     import inspect
@@ -553,18 +553,18 @@ def test_mkarchiso_pass_resets_work_dir_before_running():
 
 
 def test_iso_selection_glob_distinguishes_base_from_sshd():
-    # output/ can hold BOTH azarch-headed-*.iso and azarch-headed-ssh-*.iso. The base
+    # output/ can hold BOTH azzio-headed-*.iso and azzio-headed-ssh-*.iso. The base
     # pass must never pick up the ssh ISO. mkarchiso names artifacts <iso_name>-<YYYY.MM.DD>-
     # <arch>.iso, so anchoring the glob with a digit after "{iso_name}-" separates
-    # them ("azarch-headed-2026..." matches base; "azarch-headed-ssh-..." does not,
+    # them ("azzio-headed-2026..." matches base; "azzio-headed-ssh-..." does not,
     # since 's' is not a digit). Emulate the exact glob _run_mkarchiso uses.
     import fnmatch
-    both = ["azarch-headed-2026.07.31-x86_64.iso",
-            "azarch-headed-ssh-2026.07.31-x86_64.iso"]
-    base_hits = [f for f in both if fnmatch.fnmatch(f, "azarch-headed-[0-9]*.iso")]
-    sshd_hits = [f for f in both if fnmatch.fnmatch(f, "azarch-headed-ssh-[0-9]*.iso")]
-    assert base_hits == ["azarch-headed-2026.07.31-x86_64.iso"]
-    assert sshd_hits == ["azarch-headed-ssh-2026.07.31-x86_64.iso"]
+    both = ["azzio-headed-2026.07.31-x86_64.iso",
+            "azzio-headed-ssh-2026.07.31-x86_64.iso"]
+    base_hits = [f for f in both if fnmatch.fnmatch(f, "azzio-headed-[0-9]*.iso")]
+    sshd_hits = [f for f in both if fnmatch.fnmatch(f, "azzio-headed-ssh-[0-9]*.iso")]
+    assert base_hits == ["azzio-headed-2026.07.31-x86_64.iso"]
+    assert sshd_hits == ["azzio-headed-ssh-2026.07.31-x86_64.iso"]
     # And the source really uses the digit-anchored glob (not a bare "-*.iso").
     import inspect
     src = inspect.getsource(compiler._run_mkarchiso)

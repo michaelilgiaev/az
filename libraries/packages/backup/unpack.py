@@ -162,7 +162,7 @@ def restore_passwords(enc_path, home):
     passphrase = archive.prompt_passphrase(confirm=False)
     print("Restoring ...")
 
-    tmp_dir = tempfile.mkdtemp(prefix="azarch-unpack-")
+    tmp_dir = tempfile.mkdtemp(prefix="azzio-unpack-")
     try:
         # Extract the archive's members into the temp dir (only Vault/passwords.txt is
         # expected). gpg_decrypt_stream feeds a home-relative extractor rooted at tmp.
@@ -246,7 +246,7 @@ def main(argv=None):
     home = home_dir()
     kind = classify(os.path.basename(arg))
 
-    # MINIMAL output (step five item 4): NO "Az'arch unpack" header, NO rule, and NO
+    # MINIMAL output (step five item 4): NO "Azzio unpack" header, NO rule, and NO
     # Archive:/Restore: rows. The prompt shows just the LIVE keyboard/Caps-Lock line and
     # "Passphrase:" -- both printed inside prompt_passphrase(), right where the user types
     # (the keyboard line repaints itself while the prompt waits; see archive.prompt_passphrase

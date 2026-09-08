@@ -1,6 +1,6 @@
-"""Az'arch calamares source patch -- networkcfg writes a static NetworkManager profile.
+"""Azzio calamares source patch -- networkcfg writes a static NetworkManager profile.
 
-The FIFTH Az'arch source patch applied to the pinned calamares-3.4.2 tarball in the
+The FIFTH Azzio source patch applied to the pinned calamares-3.4.2 tarball in the
 recipe's prepare() (see pkgbuild_calamares). Kept in its own module so each patch is a
 focused, independently-editable unit; pkgbuild_calamares re-exports the name-constant and
 builder below, and pkgbuild.py re-exports them in turn.
@@ -15,14 +15,14 @@ Why a source patch (not a module .conf / a shipped override dir): a module's SCR
 resolved only from the modules-search paths (`local` = build dir, /usr/lib/calamares/
 modules), verified in Settings.cpp/Module.cpp -- an /etc/calamares/modules/<name>.conf can
 override a module's CONFIG but NOT its script. So changing the JOB's logic must be a source
-patch, exactly like the other four Az'arch calamares patches.
+patch, exactly like the other four Azzio calamares patches.
 
 WHAT IT ADDS (all inside networkcfg/main.py, disjoint from the other patches' files):
-  * _azarch_netmask_to_prefix(): dotted mask ("255.255.255.0") -> CIDR prefix (24),
+  * _azzio_netmask_to_prefix(): dotted mask ("255.255.255.0") -> CIDR prefix (24),
     rejecting a non-contiguous/invalid mask (returns None) so no broken profile is written.
-  * _azarch_write_static_connection(root): when GlobalStorage "networkMethod" == "manual"
+  * _azzio_write_static_connection(root): when GlobalStorage "networkMethod" == "manual"
     AND a non-empty IPv4 + valid mask are present, write
-    <root>/etc/NetworkManager/system-connections/azarch-static.nmconnection (mode 0600 --
+    <root>/etc/NetworkManager/system-connections/azzio-static.nmconnection (mode 0600 --
     NetworkManager IGNORES a world-readable system-connection) with method=manual,
     address1=<ip>/<prefix>[,<gateway>], dns=<dns1>;<dns2>;. A blank/partial manual entry
     (no IPv4, or a bad mask) falls back to DHCP rather than bricking connectivity.
@@ -39,7 +39,7 @@ against the new networkcfg/main.py then.
 from __future__ import annotations
 
 
-CALAMARES_NETWORKCFG_STATIC_PATCH_NAME = "azarch-calamares-networkcfg-static.patch"
+CALAMARES_NETWORKCFG_STATIC_PATCH_NAME = "azzio-calamares-networkcfg-static.patch"
 
 
 def calamares_networkcfg_static_patch() -> str:
@@ -60,7 +60,7 @@ def calamares_networkcfg_static_patch() -> str:
         "     return (\"/\" + relative_path, os.path.join(root_mount_point, relative_path))",
         " ",
         " ",
-        "+def _azarch_netmask_to_prefix(netmask):",
+        "+def _azzio_netmask_to_prefix(netmask):",
         "+    \"\"\"Convert a dotted IPv4 subnet mask (\"255.255.255.0\") to a CIDR prefix (24).",
         "+",
         "+    Returns an int 0..32, or None if the mask is not a valid, CONTIGUOUS netmask.",
@@ -90,15 +90,15 @@ def calamares_networkcfg_static_patch() -> str:
         "+    return prefix",
         "+",
         "+",
-        "+def _azarch_write_static_connection(root_mount_point):",
-        "+    \"\"\"Az'arch: when the installer's Network page chose a MANUAL (static) IPv4, write a",
+        "+def _azzio_write_static_connection(root_mount_point):",
+        "+    \"\"\"Azzio: when the installer's Network page chose a MANUAL (static) IPv4, write a",
         "+    NetworkManager keyfile profile on the TARGET so the installed system boots with that",
         "+    fixed address. Reads the five fields the networkq page published to GlobalStorage",
         "+    (networkIpv4/networkSubnetMask/networkGateway/networkDns1/networkDns2, plus the",
         "+    networkMethod gate). No-op unless method == \"manual\" AND a non-empty IPv4 + a valid",
         "+    subnet mask are present -- a blank/partial manual entry falls back to DHCP rather than",
         "+    bricking connectivity. The keyfile is written 0600 (NetworkManager IGNORES a",
-        "+    world-readable system-connection), matching the live `azarch network ip static` tool.",
+        "+    world-readable system-connection), matching the live `azzio network ip static` tool.",
         "+    \"\"\"",
         "+    gs = libcalamares.globalstorage",
         "+    if gs.value(\"networkMethod\") != \"manual\":",
@@ -113,7 +113,7 @@ def calamares_networkcfg_static_patch() -> str:
         "+    if not ipv4:",
         "+        libcalamares.utils.debug(\"networkcfg: manual method but no IPv4 given; leaving DHCP\")",
         "+        return",
-        "+    prefix = _azarch_netmask_to_prefix(netmask) if netmask else None",
+        "+    prefix = _azzio_netmask_to_prefix(netmask) if netmask else None",
         "+    if prefix is None:",
         "+        libcalamares.utils.warning(",
         "+            \"networkcfg: invalid/empty subnet mask {!r}; leaving DHCP\".format(netmask))",
@@ -121,12 +121,12 @@ def calamares_networkcfg_static_patch() -> str:
         "+",
         "+    conn_dir = os.path.join(root_mount_point, \"etc/NetworkManager/system-connections\")",
         "+    os.makedirs(conn_dir, exist_ok=True)",
-        "+    conn_path = os.path.join(conn_dir, \"azarch-static.nmconnection\")",
+        "+    conn_path = os.path.join(conn_dir, \"azzio-static.nmconnection\")",
         "+",
         "+    dns_values = [d for d in (dns1, dns2) if d]",
         "+    lines = [",
         "+        \"[connection]\",",
-        "+        \"id=Az'arch Static\",",
+        "+        \"id=Azzio Static\",",
         "+        # A fixed UUID is fine for a single shipped profile; NetworkManager only needs it",
         "+        # unique on the box, and this profile is the only one this job writes.",
         "+        \"uuid=a0000000-a000-4000-8000-00000000c0de\",",
@@ -163,9 +163,9 @@ def calamares_networkcfg_static_patch() -> str:
         "                 \"Can't copy resolv.conf from {}: {}\".format(source_resolv, err)",
         "                 )",
         " ",
-        "+    # Az'arch: if the Network page chose a manual (static) IPv4, write a fixed-address",
+        "+    # Azzio: if the Network page chose a manual (static) IPv4, write a fixed-address",
         "+    # NetworkManager profile on the target (0600). No-op for DHCP / blank entry.",
-        "+    _azarch_write_static_connection(root_mount_point)",
+        "+    _azzio_write_static_connection(root_mount_point)",
         "+",
         "     return None"
     ]

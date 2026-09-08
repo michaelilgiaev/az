@@ -5,17 +5,17 @@ import json
 import os
 
 # The config (paths only, no secrets) lives in the USER's home, NOT beside the code:
-# Az'arch installs this package root-owned under /usr/local/lib/azarch-passwords, which
+# Azzio installs this package root-owned under /usr/local/lib/azzio-passwords, which
 # a normal user cannot write to, so the setup script's save() must land somewhere the
-# user owns. ~/.config/azarch-passwords/passwords.cfg is that place (XDG-style).
+# user owns. ~/.config/azzio-passwords/passwords.cfg is that place (XDG-style).
 CONFIG_PATH = os.path.join(
     os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config')),
-    'azarch-passwords', 'passwords.cfg')
+    'azzio-passwords', 'passwords.cfg')
 
 # DEFAULT_SOURCE: default plaintext file the setup script encrypts.
 # DEFAULT_SESSION: where `passwords` decrypts the store to for a session.
 # DEFAULT_ENCRYPTED: the encrypted store itself. All three live under ~/Vault
-# (Az'arch ships ~/Vault as a top-level home dir -- see the distribution's
+# (Azzio ships ~/Vault as a top-level home dir -- see the distribution's
 # packages/thunar/home_directory); the encrypted .gpg is the ONLY file that persists
 # between sessions -- the plaintext is decrypted to it and then deleted on every run.
 DEFAULT_SOURCE = os.path.expanduser('~/Vault/passwords.txt')

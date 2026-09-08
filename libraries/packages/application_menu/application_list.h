@@ -1,4 +1,4 @@
-/* Az'arch application menu (C port) -- the scrollable application list.
+/* Azzio application menu (C port) -- the scrollable application list.
  *
  * Port of applist.py CanvasAppList. Draws the whole list with Cairo on a
  * GtkDrawingArea inside a GtkScrolledWindow: every app is painted directly (icon

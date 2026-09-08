@@ -1,4 +1,4 @@
-# pytest configuration for the azarch test suite.
+# pytest configuration for the azzio test suite.
 #
 # The suite is driven by `bash tests.sh` (which builds the venv and sets
 # PYTHONPATH), but this configuration also makes a bare `pytest` invocation work from

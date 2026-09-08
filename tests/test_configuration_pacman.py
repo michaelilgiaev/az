@@ -53,13 +53,13 @@ def test_build_profile_conf_without_cachedir_leaves_it_commented():
 
 
 def test_build_profile_conf_noextracts_os_release():
-    # os-release must be NoExtract'd so the Az'arch branding wins over `filesystem`.
+    # os-release must be NoExtract'd so the Azzio branding wins over `filesystem`.
     conf = pacman.build_profile_conf()
     assert "NoExtract   = usr/lib/os-release" in conf
 
 
 def test_noextract_covers_every_app_override():
-    # Every kitty/gedit system file Az'arch overrides is owned by its package, so it
+    # Every kitty/gedit system file Azzio overrides is owned by its package, so it
     # MUST be NoExtract'd -- otherwise pacstrap's file-conflict check aborts the build with
     # "exists in filesystem" (the exact failure this fix addresses). Guard that BOTH the
     # live-ISO profile conf and the on-disk installer's pacstrap conf list all of them.
@@ -74,20 +74,20 @@ def test_app_override_cp_sh_plants_replacements_and_removes_suppressed():
     # The post-pacstrap hook installs each replacement from the staging dir and removes the
     # suppress-only paths. Prefix distinguishes the live chroot ("") from the installer /mnt.
     live = pacman.app_override_cp_sh()
-    assert "install -Dm644 /root/azarch/apps/kitty.svg "\
+    assert "install -Dm644 /root/azzio/apps/kitty.svg "\
            "/usr/share/icons/hicolor/scalable/apps/kitty.svg" in live
-    assert "install -Dm644 /root/azarch/apps/org.gnome.gedit.desktop "\
+    assert "install -Dm644 /root/azzio/apps/org.gnome.gedit.desktop "\
            "/usr/share/applications/org.gnome.gedit.desktop" in live
     # Suppress-only cat PNGs: removed, never installed.
     assert "rm -f /usr/share/icons/hicolor/256x256/apps/kitty.png" in live
     assert "rm -f /usr/share/pixmaps/kitty.png" in live
-    assert "install -Dm644 /root/azarch/apps/None" not in live  # no body staged for removals
+    assert "install -Dm644 /root/azzio/apps/None" not in live  # no body staged for removals
     # Installer variant targets the mounted new root.
     mnt = pacman.app_override_cp_sh("/mnt")
     assert "/mnt/usr/share/applications/org.gnome.gedit.desktop" in mnt
     assert "rm -f /mnt/usr/share/pixmaps/kitty.png" in mnt
     # Staged basenames of the REPLACEMENT entries must be unique: they all land in the same
-    # /root/azarch/apps/ staging dir, so a collision would silently overwrite one body with
+    # /root/azzio/apps/ staging dir, so a collision would silently overwrite one body with
     # another's (e.g. two locales sharing "thunar.mo"). The en_US/en_GB catalogs are the case
     # that forced per-locale basenames -- guard the invariant.
     staged = [b for b, _t, remove in pacman.ISO_APP_OVERRIDES if not remove and b is not None]
@@ -108,7 +108,7 @@ def test_thunar_and_xviewer_desktop_overrides_are_planted():
         "thunar-volman-settings.desktop",
         "xfce4-about.desktop",
     ):
-        assert (f"install -Dm644 /root/azarch/apps/{name} "
+        assert (f"install -Dm644 /root/azzio/apps/{name} "
                 f"/usr/share/applications/{name}") in live, name
     # Thunar gettext .mo override catalogs: the en_GB path is package-owned, so every locale
     # catalog is planted post-pacstrap from the staging dir (per-locale staged basenames).
@@ -119,7 +119,7 @@ def test_thunar_and_xviewer_desktop_overrides_are_planted():
         ("thunar.en_GB.mo", "/usr/share/locale/en_GB/LC_MESSAGES/thunar.mo"),
         ("thunar.en_IL.mo", "/usr/share/locale/en_IL/LC_MESSAGES/thunar.mo"),
     ):
-        assert (f"install -Dm644 /root/azarch/apps/{basename} {target}") in live, basename
+        assert (f"install -Dm644 /root/azzio/apps/{basename} {target}") in live, basename
 
 
 def test_dolphin_is_gone_from_manifest_and_thunar_present():
@@ -156,7 +156,7 @@ def test_installer_base_conf_enables_multilib():
 
 def test_append_local_repo_adds_section():
     out = pacman.append_local_repo("[options]\n[core]\n", "/mnt/repo")
-    assert "[pacstrap-azarch-repo]" in out
+    assert "[pacstrap-azzio-repo]" in out
     assert "Server = file:///mnt/repo" in out
     assert "SigLevel = Never" in out
     # Network repo is kept.
@@ -167,7 +167,7 @@ def test_append_local_repo_is_idempotent():
     once = pacman.append_local_repo("[core]\n", "/mnt/repo")
     twice = pacman.append_local_repo(once, "/mnt/repo")
     assert once == twice
-    assert once.count("[pacstrap-azarch-repo]") == 1
+    assert once.count("[pacstrap-azzio-repo]") == 1
 
 
 # --- switch_to_local_repo: fully-offline rebuild ---------------------------
@@ -184,7 +184,7 @@ def test_switch_to_local_repo_drops_network_repos():
 def test_switch_to_local_repo_appends_single_local_repo():
     conf = pacman.build_profile_conf()
     out = pacman.switch_to_local_repo(conf, "/srv/azrepo")
-    assert out.count("[pacstrap-azarch-repo]") == 1
+    assert out.count("[pacstrap-azzio-repo]") == 1
     assert "Server = file:///srv/azrepo" in out
     assert out.rstrip().endswith("Server = file:///srv/azrepo")
 
@@ -203,8 +203,8 @@ def test_installer_pacstrap_conf_only_local_repo_active():
     conf = pacman.installer_pacstrap_conf()
     # Network repos all commented, local file:// repo active.
     assert "#[core]" in conf and "#[extra]" in conf
-    assert "[pacstrap-azarch-repo]" in conf
-    assert "Server = file:///mnt/pacstrap-azarch-repo/" in conf
+    assert "[pacstrap-azzio-repo]" in conf
+    assert "Server = file:///mnt/pacstrap-azzio-repo/" in conf
 
 
 # --- _options_block: the [options] header with the two toggled directives ---

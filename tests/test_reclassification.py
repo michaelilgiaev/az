@@ -8,7 +8,7 @@ future edit could silently violate:
                         our own package recipes (pkgbuild.py) and the entry point.
   libraries/packages/   EVERY package the build ships, each its OWN directory module (a dir
                         with an __init__.py). This holds BOTH the things WE author
-                        (application_menu/, azarch/, passwords/, and the critically-modified
+                        (application_menu/, azzio/, passwords/, and the critically-modified
                         calamares/) AND the upstream software we merely tailor (openbox/,
                         librewolf/, kitty/, gedit/, thunar/, fastfetch/, the per-app tweaks).
                         There is NO separate modifications/ tree anymore.
@@ -67,7 +67,7 @@ def test_our_packages_import_from_packages_bucket():
 
 def test_every_packages_subdirectory_is_a_regular_package():
     # Every SUB-directory of libraries/packages/ must carry an __init__.py so it is a real,
-    # importable package that package_discovery loads (application_menu, azarch, calamares,
+    # importable package that package_discovery loads (application_menu, azzio, calamares,
     # passwords, openbox, librewolf, kitty, gedit, thunar, ...). A directory without one would
     # be silently skipped by discovery.
     packages_dir = paths.PACKAGESDIR

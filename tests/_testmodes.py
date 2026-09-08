@@ -1,4 +1,4 @@
-"""Single source of truth for the azarch test suite's TEST MODES -- two independent
+"""Single source of truth for the azzio test suite's TEST MODES -- two independent
 booleans, `network` and `root`, that select which privileged tiers of the suite run.
 
 Why this exists
@@ -39,7 +39,7 @@ own toggles. Because the file may not exist yet on a brand-new clone before the 
 
 Flip the toggles WITHOUT running the suite via `tests.sh --offline/--online` (network) and
 `tests.sh --user/--root` (root) -- they rewrite the file and exit. Environment variables
-`AZARCH_TESTS_NETWORK` / `AZARCH_TESTS_ROOT` override the file for a single run; tests.sh
+`AZZIO_TESTS_NETWORK` / `AZZIO_TESTS_ROOT` override the file for a single run; tests.sh
 exports them to match the file so its run and the two isolated off-screen log-copy runs (whose
 repo copies do not contain the conf) all agree, and CI can set them directly.
 
@@ -47,7 +47,7 @@ The root tier additionally DEMANDS sudo: with `root = true` persisted, a plain `
 run as a non-root user STOPS at the shell layer (in tests.sh) and asks the user to re-run under
 sudo, rather than quietly skipping the root-marked tests. The `os.geteuid()` self-skip in the
 root-marked tests remains as a second layer (for `-m root` selection and the test-only
-`AZARCH_ALLOW_NONROOT` escape hatch, which bypasses the shell-layer demand).
+`AZZIO_ALLOW_NONROOT` escape hatch, which bypasses the shell-layer demand).
 
 Anything unrecognized (a typo in the file, a bad env value) falls back to the SAFE default
 (the tier OFF): an offline run can never hang, and a user-mode run can never need sudo, so an
@@ -69,8 +69,8 @@ from pathlib import Path
 CONFIG_PATH = Path(__file__).resolve().parent / "test_modes.conf"
 
 # The env vars that override the file for one run (tests.sh exports them; CI may set them).
-ENV_NETWORK = "AZARCH_TESTS_NETWORK"
-ENV_ROOT = "AZARCH_TESTS_ROOT"
+ENV_NETWORK = "AZZIO_TESTS_NETWORK"
+ENV_ROOT = "AZZIO_TESTS_ROOT"
 
 # Canonical mode words kept for the network API's public surface (is_offline/is_online).
 OFFLINE = "offline"

@@ -100,7 +100,7 @@ def test_schema_override_enables_the_notepad_plugin():
 
 
 def test_schema_override_sets_editor_font_from_scale():
-    # Az'arch pins a fixed editor font at the STOCK baseline from the single scale source (the
+    # Azzio pins a fixed editor font at the STOCK baseline from the single scale source (the
     # GLOBAL SCALE's DPI channel bumps it -- at 1.35 it renders ~= the old 18pt). use-default-font
     # MUST be false (else gedit ignores editor-font), and editor-font is 'Monospace <stock>'.
     from packages.openbox import scale

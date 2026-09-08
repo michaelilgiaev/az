@@ -1,6 +1,6 @@
-"""Az'arch calamares source patch -- add the "Network" installer page (networkq QML module).
+"""Azzio calamares source patch -- add the "Network" installer page (networkq QML module).
 
-The FOURTH Az'arch source patch applied to the pinned calamares-3.4.2 tarball in the
+The FOURTH Azzio source patch applied to the pinned calamares-3.4.2 tarball in the
 recipe's prepare() (see pkgbuild_calamares). Kept in its own module so each patch is a
 focused, independently-editable unit; pkgbuild_calamares re-exports the name-constant and
 builder below, and pkgbuild.py re-exports them in turn, so callers and recipe_dirs() use
@@ -10,7 +10,7 @@ Unlike the other three patches (which EDIT existing files), this one CREATES a w
 QML view module under src/modules/networkq/ via `--- /dev/null` / `+++ b/...` hunks. No
 top-level CMake edit is needed: src/modules/CMakeLists.txt GLOBS its subdirectories and
 calls calamares_add_module_subdirectory() on each, so a new networkq/ directory is picked
-up automatically. QML is enabled in the Az'arch build (WITH_QML=ON); the module's
+up automatically. QML is enabled in the Azzio build (WITH_QML=ON); the module's
 CMakeLists guards on WITH_QML and skips cleanly if it were ever off.
 
 WHAT THE PAGE DOES. A "Network" page with an "Automatic (DHCP)" (default) vs "Manual"
@@ -32,7 +32,7 @@ feature; regenerate the hunks via `diff -u /dev/null <file>` against the new sou
 from __future__ import annotations
 
 
-CALAMARES_NETWORKQ_PATCH_NAME = "azarch-calamares-networkq.patch"
+CALAMARES_NETWORKQ_PATCH_NAME = "azzio-calamares-networkq.patch"
 
 
 def calamares_networkq_patch() -> str:
@@ -55,7 +55,7 @@ def calamares_networkq_patch() -> str:
         "+ *",
         "+ *   SPDX-License-Identifier: GPL-3.0-or-later",
         "+ *",
-        "+ *   Az'arch: network configuration page (static IPv4 vs DHCP). See networkq.qml.",
+        "+ *   Azzio: network configuration page (static IPv4 vs DHCP). See networkq.qml.",
         "+ */",
         "+",
         "+#ifndef NETWORKQ_CONFIG_H",
@@ -68,7 +68,7 @@ def calamares_networkq_patch() -> str:
         "+#include <QVariantMap>",
         "+",
         "+/**",
-        "+ * Backing object for the Az'arch \"Network\" QML page. Holds the DHCP/manual choice",
+        "+ * Backing object for the Azzio \"Network\" QML page. Holds the DHCP/manual choice",
         "+ * and, for manual, the five static-IPv4 fields, and publishes them to GlobalStorage",
         "+ * on page-leave so the networkcfg job can write a static NetworkManager profile on",
         "+ * the target. Each field is a two-way QML property (READ/WRITE/NOTIFY).",
@@ -137,7 +137,7 @@ def calamares_networkq_patch() -> str:
         "+ *",
         "+ *   SPDX-License-Identifier: GPL-3.0-or-later",
         "+ *",
-        "+ *   Az'arch: network configuration page backing object.",
+        "+ *   Azzio: network configuration page backing object.",
         "+ */",
         "+",
         "+#include \"Config.h\"",
@@ -247,7 +247,7 @@ def calamares_networkq_patch() -> str:
         "+ *",
         "+ *   SPDX-License-Identifier: GPL-3.0-or-later",
         "+ *",
-        "+ *   Az'arch: \"Network\" QML view step (DHCP vs static IPv4). See Config.h / networkq.qml.",
+        "+ *   Azzio: \"Network\" QML view step (DHCP vs static IPv4). See Config.h / networkq.qml.",
         "+ */",
         "+",
         "+#ifndef NETWORKQMLVIEWSTEP_H",
@@ -291,7 +291,7 @@ def calamares_networkq_patch() -> str:
         "+ *",
         "+ *   SPDX-License-Identifier: GPL-3.0-or-later",
         "+ *",
-        "+ *   Az'arch: \"Network\" QML view step.",
+        "+ *   Azzio: \"Network\" QML view step.",
         "+ */",
         "+",
         "+#include \"NetworkQmlViewStep.h\"",
@@ -337,7 +337,7 @@ def calamares_networkq_patch() -> str:
         "+ *",
         "+ *   SPDX-License-Identifier: GPL-3.0-or-later",
         "+ *",
-        "+ *   Az'arch \"Network\" page: choose Automatic (DHCP) or Manual static IPv4.",
+        "+ *   Azzio \"Network\" page: choose Automatic (DHCP) or Manual static IPv4.",
         "+ *   The five manual fields are two-way bound to the C++ Config object exposed",
         "+ *   as `config`; Config.finalizeGlobalStorage() (view step onLeave) hands them",
         "+ *   to the networkcfg job, which writes a static NetworkManager profile on the",
@@ -347,7 +347,7 @@ def calamares_networkq_patch() -> str:
         "+ *   matching the other installer pages' body colour; without this the view renders",
         "+ *   on a transparent/!default surface, so it was unreadable against the rest of the",
         "+ *   installer. It uses ONLY QtQuick + QtQuick.Controls/Layouts (both shipped on the",
-        "+ *   ISO via qt6-declarative) -- NOT org.kde.kirigami, which the Az'arch ISO does not",
+        "+ *   ISO via qt6-declarative) -- NOT org.kde.kirigami, which the Azzio ISO does not",
         "+ *   ship (only the widget `users` module is used, so kirigami was never installed).",
         "+ */",
         "+",
@@ -367,7 +367,7 @@ def calamares_networkq_patch() -> str:
         "+    implicitWidth: 800",
         "+    implicitHeight: 520",
         "+",
-        "+    // Az'arch installer theme: the same #323232 body as every other installer page,",
+        "+    // Azzio installer theme: the same #323232 body as every other installer page,",
         "+    // white headings, slate body text, blue accent. Fields get a slightly lighter",
         "+    // panel so they are visibly editable on the dark background.",
         "+    readonly property color bgColor:      \"#323232\"",
@@ -579,7 +579,7 @@ def calamares_networkq_patch() -> str:
         "@@ -0,0 +1,15 @@",
         "+# SPDX-License-Identifier: CC0-1.0",
         "+#",
-        "+# Az'arch \"Network\" QML page (Automatic/DHCP vs Manual static IPv4). The page has no",
+        "+# Azzio \"Network\" QML page (Automatic/DHCP vs Manual static IPv4). The page has no",
         "+# tunable behaviour of its own; the only configurable thing is the sidebar/progress",
         "+# label, kept here so it stays translatable like the other QML modules.",
         "+---",
@@ -599,7 +599,7 @@ def calamares_networkq_patch() -> str:
         "+#",
         "+#   SPDX-License-Identifier: BSD-2-Clause",
         "+#",
-        "+# Az'arch: \"Network\" QML view module (static IPv4 vs DHCP). Auto-discovered by the",
+        "+# Azzio: \"Network\" QML view module (static IPv4 vs DHCP). Auto-discovered by the",
         "+# src/modules glob, so no top-level CMake edit is needed.",
         "+if(NOT WITH_QML)",
         "+    calamares_skip_module( \"networkq (QML is not supported in this build)\" )",

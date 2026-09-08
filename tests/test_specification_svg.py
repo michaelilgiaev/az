@@ -305,13 +305,13 @@ def test_layer_defs_titles_are_the_expected_ladder_labels():
     ]
 
 
-def test_edition_mark_star_only_for_azarch():
-    # An Az'arch Component gets the star glyph; Stock Arch is unmarked (empty
+def test_edition_mark_star_only_for_azzio():
+    # An Azzio Component gets the star glyph; Stock Arch is unmarked (empty
     # glyph, no colour). The empty-string glyph is what makes render skip the
     # marker draw for stock packages.
-    assert EDITION_MARK["az'arch"] == ("★", specification_svg.BRAND_CYAN)
+    assert EDITION_MARK["azzio"] == ("★", specification_svg.BRAND_CYAN)
     assert EDITION_MARK["stock"] == ("", None)
 
 
 def test_edition_mark_keys_are_exactly_two_editions():
-    assert set(EDITION_MARK) == {"az'arch", "stock"}
+    assert set(EDITION_MARK) == {"azzio", "stock"}

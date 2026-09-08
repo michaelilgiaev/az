@@ -1,12 +1,12 @@
-"""The `azarch wallpaper` desktop-wallpaper picker + the session's pointer-aware paint.
+"""The `azzio wallpaper` desktop-wallpaper picker + the session's pointer-aware paint.
 
-Az'arch ships two wallpapers ("years" the default, "decades") under /usr/share/wallpapers.
-`azarch wallpaper` switches between them, applies the choice to the running session with feh
+Azzio ships two wallpapers ("years" the default, "decades") under /usr/share/wallpapers.
+`azzio wallpaper` switches between them, applies the choice to the running session with feh
 immediately, and persists it to a per-user pointer file the OpenBox session reads on the next
 login. These tests pin:
 
-  * the `azarch wallpaper` subcommand surface (--years.png / --decades.png / --help / bare
-    status) as it is BUNDLED into the shipped /usr/local/bin/azarch script;
+  * the `azzio wallpaper` subcommand surface (--years.png / --decades.png / --help / bare
+    status) as it is BUNDLED into the shipped /usr/local/bin/azzio script;
   * the wallpaper image paths, which MUST stay in lock-step with packages/openbox
     (WALLPAPERS_SYSTEM_DIR / WALLPAPER_IMAGE_RES / the ids) so the command line interface and the emitted images
     cannot drift;
@@ -15,7 +15,7 @@ login. These tests pin:
   * that the OpenBox session (xinitrc + autostart) READS that pointer, falling back to the
     "years" default -- the mechanism that makes the choice survive a re-login.
 
-The command line interface is exercised via its bundle (packages.azarch.bundle.bundle_source) executed in one
+The command line interface is exercised via its bundle (packages.azzio.bundle.bundle_source) executed in one
 namespace -- exactly the artifact the compiler ships -- so tests drive the real functions.
 """
 
@@ -24,23 +24,23 @@ from __future__ import annotations
 import os
 import types
 
-from packages.azarch.bundle import bundle_source
+from packages.azzio.bundle import bundle_source
 from packages import openbox as desktop
 
 
 def _command_line_interface():
-    """Exec the bundled azarch command line interface in a fresh module namespace (as shipped)."""
-    mod = types.ModuleType("azarch_cli_wallpaper_test")
-    exec(compile(bundle_source(), "azarch_command_line_interface", "exec"), mod.__dict__)
+    """Exec the bundled azzio command line interface in a fresh module namespace (as shipped)."""
+    mod = types.ModuleType("azzio_cli_wallpaper_test")
+    exec(compile(bundle_source(), "azzio_command_line_interface", "exec"), mod.__dict__)
     return mod
 
 
-# --- the `azarch wallpaper` subcommand surface ------------------------------
+# --- the `azzio wallpaper` subcommand surface ------------------------------
 
 def test_wallpaper_is_a_dispatch_branch_in_main():
-    # `azarch wallpaper ...` must be a real top-level dispatch branch, and the top-level
+    # `azzio wallpaper ...` must be a real top-level dispatch branch, and the top-level
     # usage must advertise it.
-    src = desktop.azarch_command_line_interface()
+    src = desktop.azzio_command_line_interface()
     assert 'cmd == "wallpaper"' in src
     assert "return cmd_wallpaper(argv[1:])" in src
     assert "wallpaper [--years.png|--decades.png]" in src  # advertised in usage()
@@ -51,7 +51,7 @@ def test_wallpaper_help_prints_usage_and_exits_zero(capsys):
     rc = command_line_interface.main(["wallpaper", "--help"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "Usage: azarch wallpaper" in out
+    assert "Usage: azzio wallpaper" in out
     assert "--years.png" in out and "--decades.png" in out
 
 
@@ -92,11 +92,11 @@ def test_wallpaper_state_file_matches_openbox_pointer():
     command_line_interface = _command_line_interface()
     # _state_file() resolves off ~; compare against openbox's constant with ~ expanded to
     # the same home the session uses (/home/main).
-    expected = desktop.WALLPAPER_POINTER_FILE  # /home/main/.config/azarch/wallpaper
-    assert expected.endswith("/.config/azarch/wallpaper")
-    # The command line interface builds it under $HOME/.config/azarch/wallpaper.
+    expected = desktop.WALLPAPER_POINTER_FILE  # /home/main/.config/azzio/wallpaper
+    assert expected.endswith("/.config/azzio/wallpaper")
+    # The command line interface builds it under $HOME/.config/azzio/wallpaper.
     got = command_line_interface._state_file()
-    assert got.endswith("/.config/azarch/wallpaper")
+    assert got.endswith("/.config/azzio/wallpaper")
 
 
 # --- applying: persist + (stubbed) live paint -------------------------------
@@ -125,7 +125,7 @@ def test_apply_persists_pointer_and_paints_live(tmp_path, monkeypatch):
     rc = command_line_interface.apply_wallpaper("decades")
     assert rc == 0
     # Pointer file written with the decades image path.
-    pointer = tmp_path / ".config" / "azarch" / "wallpaper"
+    pointer = tmp_path / ".config" / "azzio" / "wallpaper"
     assert pointer.is_file()
     assert pointer.read_text().strip() == str(img)
     # Live paint happened with the same image.
@@ -145,12 +145,12 @@ def test_apply_missing_image_warns_but_persists(tmp_path, monkeypatch, capsys):
     err = capsys.readouterr().err
     assert "image not found" in err
     # Still persisted so a later-installed image is honoured.
-    pointer = tmp_path / ".config" / "azarch" / "wallpaper"
+    pointer = tmp_path / ".config" / "azzio" / "wallpaper"
     assert pointer.read_text().strip() == str(missing)
 
 
 def test_bare_wallpaper_prints_current_status(tmp_path, monkeypatch, capsys):
-    # `azarch wallpaper` with no args prints the current wallpaper. With no pointer file it
+    # `azzio wallpaper` with no args prints the current wallpaper. With no pointer file it
     # reports the "years" default.
     command_line_interface = _command_line_interface()
     _point_home(command_line_interface, monkeypatch, tmp_path)
@@ -163,7 +163,7 @@ def test_bare_wallpaper_prints_current_status(tmp_path, monkeypatch, capsys):
 def test_current_id_reflects_a_saved_decades_choice(tmp_path, monkeypatch):
     command_line_interface = _command_line_interface()
     _point_home(command_line_interface, monkeypatch, tmp_path)
-    cfg = tmp_path / ".config" / "azarch"
+    cfg = tmp_path / ".config" / "azzio"
     cfg.mkdir(parents=True)
     (cfg / "wallpaper").write_text(command_line_interface._wallpaper_image("decades") + "\n")
     assert command_line_interface._current_id() == "decades"
@@ -177,6 +177,6 @@ def test_xinitrc_and_autostart_read_the_pointer_with_years_fallback():
     # pointer and fall back to the shipped "years" default.
     for out in (desktop.xinitrc(), desktop.openbox_autostart(),
                 desktop.openbox_autostart_installed()):
-        assert 'cat "$HOME/.config/azarch/wallpaper"' in out
+        assert 'cat "$HOME/.config/azzio/wallpaper"' in out
         assert "|| _azwp='" + desktop.WALLPAPER_IMAGE_FILE + "'" in out
         assert 'feh --no-fehbg --bg-fill "$_azwp"' in out

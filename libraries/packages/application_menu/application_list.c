@@ -1,4 +1,4 @@
-/* Az'arch application menu (C port) -- the scrollable application list.
+/* Azzio application menu (C port) -- the scrollable application list.
  * One-to-one port of applist.py CanvasAppList, drawn with Cairo/Pango. */
 #include "application_list.h"
 #include "theme.h"

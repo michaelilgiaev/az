@@ -1,4 +1,4 @@
-/* Az'arch -- headless C unit tests for the bare-`azarch` terminal user interface ACTION layer (action.c).
+/* Azzio -- headless C unit tests for the bare-`azzio` terminal user interface ACTION layer (action.c).
  *
  * action.c runs an apply INSIDE the UI: it captures a command's output and takes a sudo
  * credential via `sudo -S -v`. Two things here are safety-critical and easy to regress, so

@@ -1,7 +1,7 @@
-"""package_discovery -- find the Az'arch packages the compiler should emit.
+"""package_discovery -- find the Azzio packages the compiler should emit.
 
 ``packages`` is a NAMESPACE package (PEP 420): it is just the directory
-``libraries/packages/`` with NO ``__init__.py`` of its own. Each Az'arch package is its
+``libraries/packages/`` with NO ``__init__.py`` of its own. Each Azzio package is its
 OWN sub-directory with an ``__init__.py`` (kitty/, openbox/, gedit/, thunar/, librewolf/,
 calamares/, application_menu/, ...), and it is those sub-packages that are importable as
 ``from packages import kitty`` etc. A directory WITHOUT an ``__init__.py`` is not a package,
@@ -26,7 +26,7 @@ not leave a dangling ``import`` that aborts the build.
 Note: only the per-application TWEAK packages are meant to be auto-emitted this way. The
 packages the compiler drives BY NAME -- because they expose more than ``emit_plan()``, feed
 the desktop step, or need explicit ordering (openbox, librewolf, application_menu, passwords,
-calamares, and the azarch guest command line interface) -- are handed to ``with_emit_plan()``
+calamares, and the azzio guest command line interface) -- are handed to ``with_emit_plan()``
 as ``exclude`` so they are not emitted twice.
 """
 
@@ -88,7 +88,7 @@ def with_emit_plan(exclude: Iterable[str] = ()) -> dict[str, ModuleType]:
     compiler iterates to write configuration files), MINUS any name in ``exclude``.
 
     ``exclude`` is how the compiler keeps the packages it drives BY NAME (openbox, librewolf,
-    application_menu, passwords, calamares, azarch) out of the auto-discovered app loop so they
+    application_menu, passwords, calamares, azzio) out of the auto-discovered app loop so they
     are not emitted twice -- see the module docstring. A convenience wrapper over discover()."""
     skip = set(exclude)
     plans = discover(lambda m: callable(getattr(m, "emit_plan", None)))

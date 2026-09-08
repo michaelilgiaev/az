@@ -1,5 +1,5 @@
 """Shared help text for `passwords -h` (the in-UI 'h' help screen was removed --
-navigation now mirrors the Az'arch terminal UI: ESC goes back, Q quits)."""
+navigation now mirrors the Azzio terminal UI: ESC goes back, Q quits)."""
 
 HELP = """passwords - encrypted password manager
 
@@ -13,7 +13,7 @@ UNLOCK
   after that      prompts for that master password to unlock the store
   the store is decrypted to a session plaintext only while the UI is open
 
-NAVIGATION (mirrors the Az'arch terminal UI)
+NAVIGATION (mirrors the Azzio terminal UI)
   WASD / HJKL / arrows   move the highlight
   /                      search
   ESC                    jump back to the start of the UI (never quits; spammable)

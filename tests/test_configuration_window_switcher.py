@@ -48,9 +48,9 @@ def _switcher_c() -> str:
 
 def test_install_paths_are_under_usr_local():
     assert ws.SWITCHER_DAEMON_BIN_SYSTEM_PATH == (
-        "/usr/local/lib/azarch-window-switcher/azarch-window-switcher-daemon"
+        "/usr/local/lib/azzio-window-switcher/azzio-window-switcher-daemon"
     )
-    assert ws.SWITCHER_LAUNCHER_SYSTEM_PATH == "/usr/local/bin/azarch-window-switcher"
+    assert ws.SWITCHER_LAUNCHER_SYSTEM_PATH == "/usr/local/bin/azzio-window-switcher"
 
 
 def test_emit_plan_ships_launcher_executable():

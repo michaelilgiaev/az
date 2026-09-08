@@ -16,13 +16,13 @@ THE PROBLEM (two layers).
      reported bug). The regenerator must therefore rewrite the SAME inode IN PLACE so an
      IN_MODIFY/IN_CLOSE_WRITE fires and Thunar reloads.
 
-THE MECHANISM. A tiny POSIX-sh helper (azarch-sidebar-sync) that regenerates the bookmarks file
+THE MECHANISM. A tiny POSIX-sh helper (azzio-sidebar-sync) that regenerates the bookmarks file
 from the CURRENT top-level home contents, in the SAME required order as the static seed
 (PROMPT: directories -> files -> symbolic links -> "Trash" LAST), pointing symlink bookmarks at
 their RESOLVED targets (consistent with the resolved-path behaviour everywhere else). It runs in
 two modes:
-  * `azarch-sidebar-sync` (once)   -- regenerate the bookmarks now.
-  * `azarch-sidebar-sync --watch`  -- regenerate now, then loop: every ~2s recompute a cheap
+  * `azzio-sidebar-sync` (once)   -- regenerate the bookmarks now.
+  * `azzio-sidebar-sync --watch`  -- regenerate now, then loop: every ~2s recompute a cheap
                                       SIGNATURE of the top-level home listing (each entry's name
                                       + type + symlink target) and regenerate only when it
                                       changed. A signature (not the dir mtime) catches an
@@ -37,9 +37,9 @@ two modes:
   refreshes live (see regen()'s install block for the full rationale).
 
 WIRING. The OpenBox session autostart (packages/openbox) launches
-`azarch-sidebar-sync --watch &` -- both the LIVE and the INSTALLED autostart (via the shared
+`azzio-sidebar-sync --watch &` -- both the LIVE and the INSTALLED autostart (via the shared
 _openbox_autostart_common block), so additions are tracked on both. The script is a root-owned
-system helper (like the other /usr/local/lib/azarch tools); it operates on the invoking user's
+system helper (like the other /usr/local/lib/azzio tools); it operates on the invoking user's
 own $HOME, so it needs no privilege.
 
 ORDERING (matches home_directory.sidebar_entries + the static seed):
@@ -62,9 +62,9 @@ from . import home_directory
 # uses the runtime "$HOME", so it is correct for any user that inherited the config via skel.
 HOME = "/home/main"
 
-# The sync helper -- a root-owned system script next to the other /usr/local/lib/azarch tools.
+# The sync helper -- a root-owned system script next to the other /usr/local/lib/azzio tools.
 # It acts on the INVOKING user's $HOME (no privilege needed).
-SYNC_SCRIPT_DEST = "/usr/local/lib/azarch/azarch-sidebar-sync"
+SYNC_SCRIPT_DEST = "/usr/local/lib/azzio/azzio-sidebar-sync"
 
 # The bookmarks file it regenerates (the same path the static seed writes).
 GTK_BOOKMARKS_PATH = f"{HOME}/.config/gtk-3.0/bookmarks"
@@ -85,7 +85,7 @@ WATCH_INTERVAL_SECS = 2
 
 
 def sync_script() -> str:
-    """Return the azarch-sidebar-sync POSIX-sh helper. Regenerates the GTK bookmarks from the
+    """Return the azzio-sidebar-sync POSIX-sh helper. Regenerates the GTK bookmarks from the
     live top-level home contents in the required order (dirs -> files -> symlinks -> Trash last),
     symlinks resolved. `--watch` polls a cheap signature of the home listing and regenerates on
     change (an add/remove/retarget, caught even within the same clock second).
@@ -103,7 +103,7 @@ def sync_script() -> str:
     interval = WATCH_INTERVAL_SECS
     return f"""\
 #!/bin/sh
-# azarch-sidebar-sync -- regenerate ~/.config/gtk-3.0/bookmarks from the CURRENT top-level home
+# azzio-sidebar-sync -- regenerate ~/.config/gtk-3.0/bookmarks from the CURRENT top-level home
 # contents so anything the user adds to $HOME shows up in Thunar's sidebar (PROMPT). Generated
 # by packages/thunar/live_sidebar (edit the Python, not this file). Order: real dirs ->
 # files -> symlinks -> "Trash" last; symlink bookmarks point at their resolved target. Runs as
@@ -117,7 +117,7 @@ BM="$HOME/.config/gtk-3.0/bookmarks"
 # "<URI-up-to-first-space> <label>", so a path containing a SPACE must be percent-encoded in
 # the URI (a literal space would truncate the URI token and mangle the line). We encode the
 # characters that would break the URI/format: '%' FIRST (so we never double-encode an escape we
-# just wrote), then space, '#', '?'. The curated Az'arch names have none of these, so for them
+# just wrote), then space, '#', '?'. The curated Azzio names have none of these, so for them
 # this is a no-op; it only matters for a user-added folder like "My Documents"
 # (-> file:///home/main/My%20Documents). Label stays the raw name (labels MAY contain spaces).
 uri() {{
@@ -163,7 +163,7 @@ regen() {{
     # last (NO "Home Directory" -- the user deleted it from the sidebar). `sort` on empty input
     # is a no-op. Assemble into a TEMP file first (so a `sort` hiccup never leaves a half-built
     # bookmarks file), then install it -- see the in-place write below.
-    tmp="$BM.azarch.$$"
+    tmp="$BM.azzio.$$"
     mkdir -p "$(dirname "$BM")"
     if {{
         [ -n "$dirs" ]  && printf '%s' "$dirs"  | sort -k2

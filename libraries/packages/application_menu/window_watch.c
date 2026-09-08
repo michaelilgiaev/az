@@ -1,4 +1,4 @@
-/* Az'arch application menu (C port) -- system-wide "app opened" detection.
+/* Azzio application menu (C port) -- system-wide "app opened" detection.
  * One-to-one port of winwatch.py. See window_watch.h. */
 #include "window_watch.h"
 #include "window_resolve.h"     /* the shared window-identity -> .desktop id resolver */

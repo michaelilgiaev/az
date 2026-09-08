@@ -1,4 +1,4 @@
-"""Build Az'arch's OWN packages (calamares, librewolf) with makepkg and drop the
+"""Build Azzio's OWN packages (calamares, librewolf) with makepkg and drop the
 resulting *.pkg.tar.zst into the offline repo the rest of the build already uses.
 
 Everything not in the official Arch repos is built from recipes WE author in
@@ -6,7 +6,7 @@ pkgbuild -- never the AUR, never an AUR helper. This module is the
 runner: it emits those recipes into a scratch dir, ensures the host has the
 makedepends, runs `makepkg` as an UNPRIVILEGED user (makepkg refuses root), and
 copies the built packages into cache/pkgs/repo/ so the normal index-reconcile
-step (packages._reconcile_index) folds them into pacstrap-azarch-repo.db next to
+step (packages._reconcile_index) folds them into pacstrap-azzio-repo.db next to
 the Arch packages. `calamares`/`librewolf` in packages.x86_64 then resolve from
 the local repo like anything else.
 
@@ -50,7 +50,7 @@ ProgressCb = Callable[[int], None]
 # Unprivileged user makepkg runs as (makepkg aborts as root). Created on demand
 # on a native/root build; on a rootless build we already are unprivileged and
 # just use the current user.
-BUILDER_USER = "azarchbuilder"
+BUILDER_USER = "azziobuilder"
 
 # Package NAMES built by this stage. BOTH are built in EVERY tier because neither
 # is in an official Arch repo: librewolf never was; calamares USED to live in
@@ -62,7 +62,7 @@ BUILDER_USER = "azarchbuilder"
 # and (b) know which built packages to re-add/refresh in the offline repo + cache.
 #
 # `thunar` is DIFFERENT from calamares/librewolf: it IS a real Arch package (in extra/ and in
-# the manifest packages.x86_64), which Az'arch REBUILDS from source with a symlink-resolve patch
+# the manifest packages.x86_64), which Azzio REBUILDS from source with a symlink-resolve patch
 # (pkgbuild.pkgbuild_thunar, pkgrel 2 so ours outranks extra/'s -1). Listing it here
 # excludes it from the Arch `pacman -Sw` download -- so ONLY our patched thunar lands in the
 # offline repo (no redundant fetch of extra/'s, and no ambiguity about which is installed). The
@@ -92,7 +92,7 @@ class MakepkgError(RuntimeError):
 # system falls back to its own nproc default.
 #
 # build_jobs() decides ONE job count for the whole stage; _makepkg_one exports it
-# as MAKEFLAGS/NPROC/AZARCH_JOBS so every build system obeys the same ceiling.
+# as MAKEFLAGS/NPROC/AZZIO_JOBS so every build system obeys the same ceiling.
 #
 # The reserve SCALES with machine size instead of a flat count, because a flat
 # reserve is wrong at both ends: "cores - 4" starves a 4-core laptop (1 job) yet
@@ -123,7 +123,7 @@ def _cpu_count() -> int:
 def build_jobs(cores: int | None = None) -> int:
     """Number of parallel compile jobs to allow, scaled to the machine size (see
     the block comment above). This is the ONE place the cap is decided; _makepkg_one
-    exports it as MAKEFLAGS/NPROC/AZARCH_JOBS so every build system (make,
+    exports it as MAKEFLAGS/NPROC/AZZIO_JOBS so every build system (make,
     cmake --build, Firefox's bsys6 make) obeys the same ceiling instead of grabbing
     all cores. `cores` is injectable for testing; it defaults to the live count.
 
@@ -355,7 +355,7 @@ def _repo_is_current(pkg_repo: Path, full_compile: bool,
     recipe all make it False, so the caller goes online and rebuilds. fp_dir defaults
     to the real fingerprint dir; it is injectable so tests can point it at a tmp dir.
 
-    A package cached by an OLDER build of Az'arch (before fingerprints existed) has
+    A package cached by an OLDER build of Azzio (before fingerprints existed) has
     no sidecar -> None != current -> False -> rebuilt once, after which the sidecar
     is present and offline reruns are fast again."""
     if fp_dir is None:
@@ -483,7 +483,7 @@ def build_own_packages(offline: bool, full_compile: bool, progress: ProgressCb,
     # librewolf is produced (from-source vs repackage the verified upstream tarball).
     tier = ("full-compile (calamares + librewolf from source)" if full_compile
             else "default (calamares from source, librewolf repackaged)")
-    print(f"[*] Building Az'arch's own packages -- tier: {tier}")
+    print(f"[*] Building Azzio's own packages -- tier: {tier}")
     phase(f"own packages: {tier}")
     progress(20)
 
@@ -515,7 +515,7 @@ def build_own_packages(offline: bool, full_compile: bool, progress: ProgressCb,
         # from the sources the prior ONLINE run fetched into the makepkg scratch --
         # entirely offline. Do NOT skip, do NOT wipe the scratch (the fetched Firefox
         # tree lives there), do NOT re-fetch (the recipe's `make fetch` is gated off
-        # by AZARCH_OFFLINE and makepkg is told --noextract so it reuses the tree).
+        # by AZZIO_OFFLINE and makepkg is told --noextract so it reuses the tree).
         scratch = paths.CACHEDIR / "makepkg"
         if not _scratch_has_sources(scratch, full_compile=True):
             raise MakepkgError(
@@ -560,7 +560,7 @@ def build_own_packages(offline: bool, full_compile: bool, progress: ProgressCb,
                        offline=False, full_compile=full_compile)
 
     progress(1000)
-    print("[✓] Az'arch's own packages built and staged into the offline repo.")
+    print("[✓] Azzio's own packages built and staged into the offline repo.")
 
 
 def _build_recipe_dirs(builder: str, dirs: list[Path], pkg_repo: Path,
@@ -569,7 +569,7 @@ def _build_recipe_dirs(builder: str, dirs: list[Path], pkg_repo: Path,
     """Build each recipe dir with makepkg, copy the resulting *.pkg.tar.zst into
     the offline repo, and hand the repo back to the invoking user. Shared by the
     online build tail and the offline --full-compile recompile; only the makepkg
-    invocation differs (offline adds --noextract/--nocheck + AZARCH_OFFLINE so it
+    invocation differs (offline adds --noextract/--nocheck + AZZIO_OFFLINE so it
     reuses the already-fetched scratch tree and never touches the network).
 
     `full_compile` names the tier so the recipe fingerprints stamped below reflect
@@ -645,7 +645,7 @@ def _offline_full_recompile(scratch: Path, pkg_repo: Path, progress: ProgressCb,
     _build_recipe_dirs(builder, dirs, pkg_repo, progress, phase,
                        offline=True, full_compile=True)
     progress(1000)
-    print("[✓] Az'arch's own packages recompiled offline and staged into the repo.")
+    print("[✓] Azzio's own packages recompiled offline and staged into the repo.")
 
 
 def _makepkg_one(builder: str, recipe_dir: Path, offline: bool = False) -> None:
@@ -661,8 +661,8 @@ def _makepkg_one(builder: str, recipe_dir: Path, offline: bool = False) -> None:
     run) and just re-run build()+package(). Without --noextract, `makepkg -f`
     would re-extract the source=() array -- re-checking-out librewolf-bsys6 and
     DESTROYING that fetched Firefox tree -- and then build() (whose `make fetch`
-    is gated off by AZARCH_OFFLINE) would have no source. --nocheck skips the
-    (absent) check() phase. AZARCH_OFFLINE=1 is read by the recipe's build() to
+    is gated off by AZZIO_OFFLINE) would have no source. --nocheck skips the
+    (absent) check() phase. AZZIO_OFFLINE=1 is read by the recipe's build() to
     skip `make fetch`. On the default/online path (offline=False) none of this
     applies and the invocation is byte-identical to before."""
     # --holdver: don't let makepkg bump pkgver from VCS. --noconfirm: unattended.
@@ -684,14 +684,14 @@ def _makepkg_one(builder: str, recipe_dir: Path, offline: bool = False) -> None:
     if hardened_conf is not None:
         cmd += ["--config", str(hardened_conf)]
     if offline:
-        env["AZARCH_OFFLINE"] = "1"  # recipe build() skips `make fetch` when set
+        env["AZZIO_OFFLINE"] = "1"  # recipe build() skips `make fetch` when set
     # Cap compile parallelism so a build does not pin every core (see build_jobs).
     # Three env vars because the compilers pick up the limit three different ways:
     #   MAKEFLAGS  -> GNU make (and cmake's Makefiles generator / Firefox's mach,
     #                 which both forward it) sees `-j N`;
     #   NPROC      -> makepkg's own core-count knob, used by some check()/build()
     #                 helpers and honoured by makepkg when computing defaults;
-    #   AZARCH_JOBS-> the explicit `-j"${AZARCH_JOBS:-1}"` our recipes append to
+    #   AZZIO_JOBS-> the explicit `-j"${AZZIO_JOBS:-1}"` our recipes append to
     #                 `cmake --build` / `make build`, which is the belt-and-braces
     #                 guarantee for build systems (Ninja, cargo) that ignore
     #                 MAKEFLAGS. Default of 1 in the recipe keeps them safe even if
@@ -699,7 +699,7 @@ def _makepkg_one(builder: str, recipe_dir: Path, offline: bool = False) -> None:
     jobs = build_jobs()
     env["MAKEFLAGS"] = f"-j{jobs}"
     env["NPROC"] = str(jobs)
-    env["AZARCH_JOBS"] = str(jobs)
+    env["AZZIO_JOBS"] = str(jobs)
     # Keep makepkg's build/cache under the scratch dir, not the builder's $HOME,
     # so a root build doesn't scatter files and offline reruns are clean.
     env["PKGDEST"] = str(recipe_dir)
@@ -719,16 +719,16 @@ def _makepkg_one(builder: str, recipe_dir: Path, offline: bool = False) -> None:
         # built package there) to the builder before handing off.
         _run(["chown", "-R", f"{builder}:{builder}",
               str(recipe_dir), str(src_dir), str(build_dir)], check=True)
-        # Re-exec as the builder, preserving the makepkg env vars. AZARCH_OFFLINE is
+        # Re-exec as the builder, preserving the makepkg env vars. AZZIO_OFFLINE is
         # only present in env on the offline path, so the online envargs list is
         # unchanged (the key is simply absent).
-        # MAKEFLAGS/NPROC/AZARCH_JOBS carry the parallelism cap (build_jobs); they
+        # MAKEFLAGS/NPROC/AZZIO_JOBS carry the parallelism cap (build_jobs); they
         # MUST be forwarded across the sudo -u builder re-exec or the root/container
         # build -- the very path that saturates all cores -- would drop the cap and
         # each compiler would fall back to its all-cores default again.
-        keys = ("PKGDEST", "SRCDEST", "BUILDDIR", "MAKEFLAGS", "NPROC", "AZARCH_JOBS")
+        keys = ("PKGDEST", "SRCDEST", "BUILDDIR", "MAKEFLAGS", "NPROC", "AZZIO_JOBS")
         if offline:
-            keys += ("AZARCH_OFFLINE",)
+            keys += ("AZZIO_OFFLINE",)
         envargs = [f"{k}={env[k]}" for k in keys]
         full = ["sudo", "-u", builder, "env", *envargs, *cmd]
         # run_teed pumps the compile's stdout/stderr through the _Tee so the

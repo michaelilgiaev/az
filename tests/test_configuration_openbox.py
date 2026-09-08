@@ -15,12 +15,12 @@ pre-painted; rc.xml binds the Super key to the menu; autostart arms xcape + the
 keyboard + the menu daemon + the installer), and the privileged wrapper's
 `unset XDG_RUNTIME_DIR` before `exec sudo`.
 
-KDE Plasma was REMOVED from Az'arch and replaced by a panel-less OpenBox desktop;
+KDE Plasma was REMOVED from Azzio and replaced by a panel-less OpenBox desktop;
 every Plasma-specific builder/constant (panel/appletsrc, kdeglobals, kwinrc,
 powerdevil, kscreenlocker, kickoff, ...) is gone, so the tests that pinned them are
-gone too. The Az'arch application menu (opened by the Super key) is the only shell
+gone too. The Azzio application menu (opened by the Super key) is the only shell
 surface now; the OpenBox desktop right-click root menu was removed at the user's
-request, and the titlebar uses the Az'arch theme (Clearlooks with a doubled bar).
+request, and the titlebar uses the Azzio theme (Clearlooks with a doubled bar).
 """
 
 from __future__ import annotations
@@ -32,11 +32,11 @@ import pytest
 from packages import openbox as desktop
 
 
-def _load_azarch_command_line_interface():
-    """Load the `azarch` guest command line interface as a single module namespace.
+def _load_azzio_command_line_interface():
+    """Load the `azzio` guest command line interface as a single module namespace.
 
-    The command line interface is now a PACKAGE (libraries/packages/azarch/) that is BUNDLED into one
-    self-contained script for shipping (packages.azarch.bundle.bundle_source). We exec that
+    The command line interface is now a PACKAGE (libraries/packages/azzio/) that is BUNDLED into one
+    self-contained script for shipping (packages.azzio.bundle.bundle_source). We exec that
     bundle text in a fresh namespace -- exactly the artifact the compiler ships, before the
     country-table re-injection -- so tests exercise the real functions (main/
     resolve_via_server/apply_*/cmd_theme/...) and data (COUNTRY_TABLE/RESOLVER_SERVERS) in
@@ -45,10 +45,10 @@ def _load_azarch_command_line_interface():
     Returned as a types.ModuleType so monkeypatch.setattr / attribute access work like a
     normal module."""
     import types
-    from packages.azarch.bundle import bundle_source
+    from packages.azzio.bundle import bundle_source
 
-    mod = types.ModuleType("azarch_guest_command_line_interface")
-    exec(compile(bundle_source(), "azarch_guest_command_line_interface", "exec"), mod.__dict__)
+    mod = types.ModuleType("azzio_guest_command_line_interface")
+    exec(compile(bundle_source(), "azzio_guest_command_line_interface", "exec"), mod.__dict__)
     return mod
 
 
@@ -59,27 +59,27 @@ def test_plan_has_exactly_nineteen_entries():
     # panel-less OpenBox session ships exactly nineteen files via PLAN:
     #   1. ~/.xinitrc                               (startx -> openbox-session)
     #   2. ~/.config/openbox/rc.xml                 (keybinds, theme, titlebar-button binds)
-    #   3. ~/.themes/Azarch-Dark/openbox-3/themerc  (DARK Az'arch theme -- the default)
-    #   4. ~/.themes/Azarch/openbox-3/themerc       (LIGHT Az'arch theme -- for `theme --white`)
+    #   3. ~/.themes/Azzio-Dark/openbox-3/themerc  (DARK Azzio theme -- the default)
+    #   4. ~/.themes/Azzio/openbox-3/themerc       (LIGHT Azzio theme -- for `theme --white`)
     #   5. ~/.config/gtk-3.0/settings.ini           (GTK3 dark theme default)
     #   6. ~/.config/gtk-4.0/settings.ini           (GTK4 dark theme default)
     #   7. ~/.gtkrc-2.0                              (GTK2 dark theme default)
-    #   8. /etc/dconf/db/local.d/00-azarch-theme     (dconf color-scheme=prefer-dark default)
+    #   8. /etc/dconf/db/local.d/00-azzio-theme     (dconf color-scheme=prefer-dark default)
     #   9. /etc/dconf/profile/user                   (dconf profile so the system db backs user)
-    #  10. /etc/xdg/azarch-picom.conf                (OUR picom config: fading OFF, opaque frames)
+    #  10. /etc/xdg/azzio-picom.conf                (OUR picom config: fading OFF, opaque frames)
     #  11. ~/.Xresources                             (GLOBAL SCALE backbone: Xft.dpi + Xcursor.size)
     #  12. ~/.config/openbox/autostart              (feh, setxkbmap, xcape, menu daemon, installer)
     #  13. ~/.config/openbox/environment            (XDG_CURRENT_DESKTOP + scale env)
-    #  14. /usr/local/share/azarch/openbox-autostart-installed (staged "installed" autostart)
+    #  14. /usr/local/share/azzio/openbox-autostart-installed (staged "installed" autostart)
     #  15. ~/.local/share menu usage seed            (default menu ordering)
-    #  16. /usr/share/applications/azarch-install.desktop (menu re-open entry, system)
-    #  17. ~/Desktop/azarch-install.desktop          (double-clickable installer launcher)
-    #  18. /usr/local/bin/azarch-install             (privileged Calamares wrapper)
-    #  19. /usr/local/bin/azarch                      (guest-side command line interface)
-    # (entries 3-9 are the system theme: dark is the default; `azarch theme` toggles it; entry
+    #  16. /usr/share/applications/azzio-install.desktop (menu re-open entry, system)
+    #  17. ~/Desktop/azzio-install.desktop          (double-clickable installer launcher)
+    #  18. /usr/local/bin/azzio-install             (privileged Calamares wrapper)
+    #  19. /usr/local/bin/azzio                      (guest-side command line interface)
+    # (entries 3-9 are the system theme: dark is the default; `azzio theme` toggles it; entry
     # 10 is the compositor config that kills the picom fade + transparent-titlebar defaults;
     # entry 11 is the GLOBAL SCALE, PROMPT Display/scale task.)
-    # NOTE: the media OSD (/usr/local/lib/azarch/azarch-osd) is NO LONGER a PLAN entry -- it is a
+    # NOTE: the media OSD (/usr/local/lib/azzio/azzio-osd) is NO LONGER a PLAN entry -- it is a
     # COMPILED C binary now (on_screen_display.c), built + installed by terminal_user_interface_build.build_osd()
     # like the terminal UI binary, so it is not emitted as a text file here.
     # The .bash_profile snippet is appended by emit_plan(), NOT part of PLAN.
@@ -138,20 +138,20 @@ def test_install_wrapper_entry_is_root_owned_exec():
 
 
 def test_install_wrapper_has_gui_cli_auto_and_help():
-    # azarch-install is a dispatcher over three explicit modes -- GUI (Calamares), the
+    # azzio-install is a dispatcher over three explicit modes -- GUI (Calamares), the
     # scripted CLI installer, and the fully-unattended --auto -- plus a --help. There is NO
     # default action: a bare invocation shows help (see below). Assert all surfaces exist.
     w = desktop.install_wrapper_sh()
-    assert "--help" in w and "Usage: azarch-install" in w
+    assert "--help" in w and "Usage: azzio-install" in w
     assert "--gui" in w and "--cli" in w and "--auto" in w
     # GUI path still launches Calamares the same way.
     assert "calamares" in w
-    # CLI path runs the scripted installer baked under /root/azarch.
+    # CLI path runs the scripted installer baked under /root/azzio.
     assert desktop.INSTALL_CLI_SCRIPT_PATH in w
 
 
 def test_install_wrapper_has_no_default_action_and_shows_help_on_no_args():
-    # PROMPT.md: `azarch-install` (no option) and `--help`/`-h` must ECHO the help text,
+    # PROMPT.md: `azzio-install` (no option) and `--help`/`-h` must ECHO the help text,
     # NOT start an install. The wrapper therefore has NO display-detection default anymore;
     # a mode must be named explicitly (-g/-c/-a). Assert the dispatch defaults to `usage`
     # (the `*)` arm) and that the old auto-detect branch is gone.
@@ -187,13 +187,13 @@ def test_install_wrapper_disk_preseeds_the_installer():
 def test_install_wrapper_auto_is_fully_unattended_with_fixed_defaults():
     # PROMPT.md: `--auto` applies the FIXED defaults with no prompts. run_auto must export
     # every one of them, then delegate to the same scripted-installer path (run_cli). Assert
-    # each fixed default is set: largest disk, hostname azarch, user main, empty full name,
+    # each fixed default is set: largest disk, hostname azzio, user main, empty full name,
     # Asia/Jerusalem, btrfs, and the '*'-password (Ubuntu/casper) knob. DHCP is the installed
     # default (NetworkManager, no static profile), so there is nothing to assert for network.
     w = desktop.install_wrapper_sh()
     assert "run_auto()" in w
     assert "export AZ_INSTALL_CHOICE=1" in w              # largest fixed disk (skips USB)
-    assert "export AZ_INSTALL_HOSTNAME=azarch" in w
+    assert "export AZ_INSTALL_HOSTNAME=azzio" in w
     assert "export AZ_INSTALL_USERNAME=main" in w
     assert "export AZ_INSTALL_FULLNAME=" in w             # empty -> skipped
     assert "export AZ_INSTALL_TIMEZONE=Asia/Jerusalem" in w
@@ -250,7 +250,7 @@ def test_openbox_rc_xml_entry_is_home_owned_conf():
 
 
 def test_root_owned_dests_are_wrapper_cli_menu_entry_installed_autostart_dconf_and_picom():
-    # Exactly seven PLAN entries are root-owned: the azarch command line interface (/usr/local/bin),
+    # Exactly seven PLAN entries are root-owned: the azzio command line interface (/usr/local/bin),
     # the installer wrapper (/usr/local/bin), the system-wide installer menu .desktop
     # (/usr/share/applications), the STAGED "installed" OpenBox autostart the Calamares install
     # copies onto the target, the TWO dconf system-theme files (the color-scheme=prefer-dark
@@ -262,8 +262,8 @@ def test_root_owned_dests_are_wrapper_cli_menu_entry_installed_autostart_dconf_a
     root_dests = [e["dest"] for e in desktop.PLAN if e["owner"] == "root"]
     assert set(root_dests) == {
         desktop.INSTALL_WRAPPER_PATH,
-        desktop.AZARCH_BIN_PATH,
-        "/usr/share/applications/azarch-install.desktop",
+        desktop.AZZIO_BIN_PATH,
+        "/usr/share/applications/azzio-install.desktop",
         desktop.INSTALLED_AUTOSTART_STAGING_PATH,
         desktop.DCONF_THEME_KEYFILE_PATH,
         desktop.DCONF_PROFILE_USER_PATH,
@@ -272,11 +272,11 @@ def test_root_owned_dests_are_wrapper_cli_menu_entry_installed_autostart_dconf_a
 
 
 def test_desktop_launcher_is_on_the_desktop_executable_and_home_owned():
-    # The live-session "Az'arch Linux Installer" launcher must land in ~/Desktop, be
+    # The live-session "Azzio Linux Installer" launcher must land in ~/Desktop, be
     # executable (0o755, so a file manager trusts it), and be handed to the live user.
     entry = next(
         e for e in desktop.PLAN
-        if e["dest"] == f"{desktop.HOME}/Desktop/azarch-install.desktop"
+        if e["dest"] == f"{desktop.HOME}/Desktop/azzio-install.desktop"
     )
     assert entry["builder"] is desktop.desktop_installer_launcher
     assert entry["mode"] == 0o755
@@ -286,15 +286,15 @@ def test_desktop_launcher_is_on_the_desktop_executable_and_home_owned():
 def test_desktop_launcher_content_names_installer_and_wrapper_and_icon():
     body = desktop.desktop_installer_launcher()
     assert "[Desktop Entry]" in body
-    assert "Name=Az'arch Linux Installer" in body
-    # Exec names `--gui` explicitly (azarch-install has no default action now, so a bare
+    assert "Name=Azzio Linux Installer" in body
+    # Exec names `--gui` explicitly (azzio-install has no default action now, so a bare
     # invocation would only print help -- the launcher must ask for the GUI installer).
     assert f"Exec={desktop.INSTALL_WRAPPER_PATH} --gui" in body
     assert f"Icon={desktop.INSTALLER_ICON_NAME}" in body
     assert "Type=Application" in body
 
 
-def test_installer_launchers_all_use_the_azarch_icon():
+def test_installer_launchers_all_use_the_azzio_icon():
     # Both installer launchers (the Desktop one and the application-menu one) must
     # reference the "Az'" installer icon (not the old generic system-software-install).
     for body in (
@@ -303,11 +303,11 @@ def test_installer_launchers_all_use_the_azarch_icon():
     ):
         assert f"Icon={desktop.INSTALLER_ICON_NAME}" in body
         assert "system-software-install" not in body
-        assert "Name=Az'arch Linux Installer" in body
+        assert "Name=Azzio Linux Installer" in body
 
 
 def test_installer_launchers_all_invoke_gui_mode():
-    # Neither .desktop launcher may rely on a default action -- azarch-install has none now.
+    # Neither .desktop launcher may rely on a default action -- azzio-install has none now.
     # Both the Desktop launcher and the application-menu entry must Exec `--gui` so a
     # double-click / menu-open starts the Calamares GUI (not the help text).
     for body in (
@@ -321,15 +321,15 @@ def test_installer_icon_paths_are_standard_system_locations():
     # The icon is installed to /usr/share/pixmaps and hicolor 256x256 apps (rasterized
     # PNGs) plus the hicolor SCALABLE apps dir (the SVG master) so the basename Icon=
     # resolves at any size; all must be absolute system paths.
-    assert desktop.INSTALLER_ICON_PIXMAP == "/usr/share/pixmaps/azarch-installer.png"
+    assert desktop.INSTALLER_ICON_PIXMAP == "/usr/share/pixmaps/azzio-installer.png"
     assert desktop.INSTALLER_ICON_HICOLOR == (
-        "/usr/share/icons/hicolor/256x256/apps/azarch-installer.png"
+        "/usr/share/icons/hicolor/256x256/apps/azzio-installer.png"
     )
     assert desktop.INSTALLER_ICON_SCALABLE == (
-        "/usr/share/icons/hicolor/scalable/apps/azarch-installer.svg"
+        "/usr/share/icons/hicolor/scalable/apps/azzio-installer.svg"
     )
-    # The icon is standardized as a scalable vector master (azarch.svg), like kitty.svg.
-    assert desktop.INSTALLER_ICON_ASSET == "icons/azarch.svg"
+    # The icon is standardized as a scalable vector master (azzio.svg), like kitty.svg.
+    assert desktop.INSTALLER_ICON_ASSET == "icons/azzio.svg"
     assert desktop.INSTALLER_ICON_PNG_SIZE == 256
 
 
@@ -351,7 +351,7 @@ def test_home_owner_gid_is_autologin_group():
 
 def test_emit_plan_length_is_nineteen_plus_bash_profile():
     # 19 PLAN entries + the appended .bash_profile snippet = 20. emit_plan() is the
-    # single sequence compiler.py iterates. (19 = 18 + the new /etc/xdg/azarch-picom.conf
+    # single sequence compiler.py iterates. (19 = 18 + the new /etc/xdg/azzio-picom.conf
     # compositor config that disables the picom fade + transparent-titlebar defaults.)
     assert len(desktop.emit_plan()) == 20
 
@@ -413,10 +413,10 @@ def test_xinitrc_prepaints_wallpaper_before_exec():
     # exec that starts OpenBox, so the first visible frame is the wallpaper and the
     # autostart's own feh repaint is invisible (identical pixels). feh needs the
     # actual image FILE (it cannot take a directory). The image is chosen by the
-    # per-user `azarch wallpaper` pointer, defaulting to the shipped "years" image.
+    # per-user `azzio wallpaper` pointer, defaulting to the shipped "years" image.
     out = desktop.xinitrc()
     # Reads the pointer and falls back to the WALLPAPER_IMAGE_FILE default, then paints it.
-    assert 'cat "$HOME/.config/azarch/wallpaper"' in out
+    assert 'cat "$HOME/.config/azzio/wallpaper"' in out
     assert "|| _azwp='" + desktop.WALLPAPER_IMAGE_FILE + "'" in out
     assert 'feh --no-fehbg --bg-fill "$_azwp"' in out
     feh_idx = out.index("feh --no-fehbg --bg-fill")
@@ -468,7 +468,7 @@ def test_autostart_runs_picom_with_our_config():
 def test_picom_config_is_root_owned_conf_under_xdg():
     # The compositor config is a system file both sessions read (the autostart is shared), so
     # it is root-owned and a plain 0o644 config under /etc/xdg (picom's system config dir).
-    assert desktop.PICOM_CONFIG_PATH == "/etc/xdg/azarch-picom.conf"
+    assert desktop.PICOM_CONFIG_PATH == "/etc/xdg/azzio-picom.conf"
     entry = next(e for e in desktop.PLAN if e["dest"] == desktop.PICOM_CONFIG_PATH)
     assert entry["owner"] == "root"
     assert entry["mode"] == desktop._CONF
@@ -563,7 +563,7 @@ def test_spice_vdagent_in_manifest():
 # --- OpenBox rc.xml: Super -> menu, no root menu, borderless menu window -----
 
 def test_rc_xml_binds_super_and_menu_to_the_launcher():
-    # The Super key opens the Az'arch menu. OpenBox cannot bind a lone modifier, so
+    # The Super key opens the Azzio menu. OpenBox cannot bind a lone modifier, so
     # xcape turns a solo Super_L tap into Super_L+Menu; rc.xml binds THAT chord
     # (W-Menu) and the bare Menu/Apps key to the menu launcher so either opens it.
     out = desktop.openbox_rc_xml()
@@ -572,18 +572,18 @@ def test_rc_xml_binds_super_and_menu_to_the_launcher():
     assert '<keybind key="Menu">' in out
     # Both keybinds run the single application-menu launcher.
     assert desktop.MENU_LAUNCHER == desktop._app_menu.MENU_LAUNCHER_SYSTEM_PATH
-    assert desktop.MENU_LAUNCHER == "/usr/local/bin/azarch-application-menu"
+    assert desktop.MENU_LAUNCHER == "/usr/local/bin/azzio-application-menu"
     assert f"<command>{desktop.MENU_LAUNCHER}</command>" in out
 
 
 def test_rc_xml_binds_alt_tab_to_switcher_not_nextwindow():
-    # Alt+Tab / Alt+Shift+Tab run the Az'arch window switcher (a horizontal, Windows-like
+    # Alt+Tab / Alt+Shift+Tab run the Azzio window switcher (a horizontal, Windows-like
     # LIVE-thumbnail overlay), NOT OpenBox's built-in vertical NextWindow list. The
     # launcher takes a direction (--next forward, --prev backward).
     out = desktop.openbox_rc_xml()
     assert '<keybind key="A-Tab">' in out
     assert '<keybind key="A-S-Tab">' in out
-    assert desktop.SWITCHER_LAUNCHER == "/usr/local/bin/azarch-window-switcher"
+    assert desktop.SWITCHER_LAUNCHER == "/usr/local/bin/azzio-window-switcher"
     assert f"<command>{desktop.SWITCHER_LAUNCHER} --next</command>" in out
     assert f"<command>{desktop.SWITCHER_LAUNCHER} --prev</command>" in out
     # The old built-in switcher actions are gone.
@@ -628,11 +628,11 @@ def test_rc_xml_root_menu_is_disabled():
 
 
 def test_rc_xml_menu_window_is_undecorated():
-    # The Az'arch application menu is a borderless override-redirect Tk window; rc.xml
-    # must match it (`*azarch*menu*`) and give it NO OpenBox decorations, so no
+    # The Azzio application menu is a borderless override-redirect Tk window; rc.xml
+    # must match it (`*azzio*menu*`) and give it NO OpenBox decorations, so no
     # titlebar/border wraps the launcher.
     out = desktop.openbox_rc_xml()
-    assert '<application name="*azarch*menu*">' in out
+    assert '<application name="*azzio*menu*">' in out
     assert "<decor>no</decor>" in out
 
 
@@ -824,15 +824,15 @@ def test_rc_xml_keeps_alt_right_drag_resize_on_frame():
     assert '<mousebind button="A-Right" action="Drag"><action name="Resize"/></mousebind>' in frame_block
 
 
-# --- Titlebar doubled: Az'arch theme + larger title font ---------------------
+# --- Titlebar doubled: Azzio theme + larger title font ---------------------
 
-def test_rc_xml_uses_the_azarch_dark_theme_by_default():
-    # rc.xml must name the Az'arch DARK theme by default (dark is the Az'arch default), not
-    # stock Clearlooks. `azarch theme --white` rewrites this <name> to the light "Azarch".
+def test_rc_xml_uses_the_azzio_dark_theme_by_default():
+    # rc.xml must name the Azzio DARK theme by default (dark is the Azzio default), not
+    # stock Clearlooks. `azzio theme --white` rewrites this <name> to the light "Azzio".
     out = desktop.openbox_rc_xml()
-    assert desktop.OPENBOX_THEME_NAME == "Azarch"
-    assert desktop.OPENBOX_THEME_NAME_DARK == "Azarch-Dark"
-    assert desktop.OPENBOX_THEME_DEFAULT == "Azarch-Dark"
+    assert desktop.OPENBOX_THEME_NAME == "Azzio"
+    assert desktop.OPENBOX_THEME_NAME_DARK == "Azzio-Dark"
+    assert desktop.OPENBOX_THEME_DEFAULT == "Azzio-Dark"
     assert f"<name>{desktop.OPENBOX_THEME_DEFAULT}</name>" in out
     assert "<name>Clearlooks</name>" not in out
 
@@ -850,7 +850,7 @@ def test_rc_xml_sets_a_larger_title_font():
 
 
 def test_theme_rc_grows_the_titlebar_padding_to_one_and_a_half():
-    # The Az'arch themerc grows the titlebar-height fields vs stock Clearlooks to land the
+    # The Azzio themerc grows the titlebar-height fields vs stock Clearlooks to land the
     # bar at ~1.5x stock (padding.height 2 -> 7, padding.width 3 -> 6). These are the
     # size-driving lines; a drift shrinks or regrows the bar. (An earlier round used 12/8,
     # which doubled the bar and overshot.)
@@ -902,14 +902,14 @@ def test_theme_rc_active_separator_blends_into_the_titlebar():
 
 
 def test_light_theme_keeps_the_clearlooks_cyan_titlebar_colour():
-    # The LIGHT ("Azarch") theme keeps its familiar "cyan'ish" Clearlooks look: it must
+    # The LIGHT ("Azzio") theme keeps its familiar "cyan'ish" Clearlooks look: it must
     # carry the Clearlooks title gradient base colour (#8CB0DC). The DARK theme (default)
     # replaces it with the dark grey/blue palette -- so the cyan must NOT be in the dark one.
     light = desktop.openbox_theme_rc(dark=False)
     dark = desktop.openbox_theme_rc(dark=True)
     assert "*.title.bg.color: #8CB0DC" in light
     assert "#8CB0DC" not in dark
-    # The dark theme uses the Az'arch dark surface palette (matching the application menu).
+    # The dark theme uses the Azzio dark surface palette (matching the application menu).
     assert "#2a2e32" in dark
     # Both keep the shared geometry (grown padding + no bottom handle).
     for out in (light, dark):
@@ -920,13 +920,13 @@ def test_light_theme_keeps_the_clearlooks_cyan_titlebar_colour():
 def test_theme_rc_dests_are_user_theme_search_paths():
     # Both themes ship to ~/.themes/<name>/openbox-3/themerc -- a user theme search path
     # OpenBox scans alongside /usr/share/themes -- so naming one in rc.xml resolves it.
-    assert desktop.OPENBOX_THEME_DIR == f"{desktop.HOME}/.themes/Azarch/openbox-3"
+    assert desktop.OPENBOX_THEME_DIR == f"{desktop.HOME}/.themes/Azzio/openbox-3"
     assert desktop.OPENBOX_THEME_THEMERC == (
-        f"{desktop.HOME}/.themes/Azarch/openbox-3/themerc"
+        f"{desktop.HOME}/.themes/Azzio/openbox-3/themerc"
     )
-    assert desktop.OPENBOX_THEME_DIR_DARK == f"{desktop.HOME}/.themes/Azarch-Dark/openbox-3"
+    assert desktop.OPENBOX_THEME_DIR_DARK == f"{desktop.HOME}/.themes/Azzio-Dark/openbox-3"
     assert desktop.OPENBOX_THEME_THEMERC_DARK == (
-        f"{desktop.HOME}/.themes/Azarch-Dark/openbox-3/themerc"
+        f"{desktop.HOME}/.themes/Azzio-Dark/openbox-3/themerc"
     )
 
 
@@ -949,10 +949,10 @@ def test_theme_rc_entries_are_home_owned_conf():
 def test_autostart_repaints_wallpaper_with_feh():
     # The autostart repaints the SAME image ~/.xinitrc pre-painted (no flash; also
     # covers a re-login where the root pixmap was reset). feh owns the root pixmap.
-    # The image follows the per-user `azarch wallpaper` pointer (default "years"), and
+    # The image follows the per-user `azzio wallpaper` pointer (default "years"), and
     # feh is backgrounded (&) so the autostart continues.
     out = desktop.openbox_autostart()
-    assert 'cat "$HOME/.config/azarch/wallpaper"' in out
+    assert 'cat "$HOME/.config/azzio/wallpaper"' in out
     assert "|| _azwp='" + desktop.WALLPAPER_IMAGE_FILE + "'" in out
     assert 'feh --no-fehbg --bg-fill "$_azwp" &' in out
 
@@ -991,26 +991,26 @@ def test_autostart_starts_the_application_menu_daemon():
 def test_autostart_launches_the_installer_once():
     # The Calamares installer auto-opens ONCE, a couple seconds in (Manjaro-style first-run),
     # via the privileged wrapper -- the same wrapper the menu/Desktop launchers use. It must
-    # name `--gui` explicitly now: azarch-install has NO default action (a bare invocation
+    # name `--gui` explicitly now: azzio-install has NO default action (a bare invocation
     # only prints help), so the first-run autostart must ask for GUI mode by name.
     out = desktop.openbox_autostart()
     assert f"( sleep 2; '{desktop.INSTALL_WRAPPER_PATH}' --gui )" in out
 
 
 def test_live_autostart_shows_the_security_notice():
-    # The base desktop's LIVE session runs `azarch security-notice` once (it self-gates on
+    # The base desktop's LIVE session runs `azzio security-notice` once (it self-gates on
     # the ssh variant / a real password and self-silences after the first show). It is a
     # LIVE-only line -- the installed autostart must NOT carry it (the installed system has
     # a real user password, so the "password not configured" warning does not apply).
     live = desktop.openbox_autostart()
-    assert "azarch security-notice" in live
+    assert "azzio security-notice" in live
 
 
 def test_installed_autostart_has_no_security_notice_or_installer():
     # The installed autostart drops BOTH live-only lines: the first-run installer AND the
     # security notice. (It is the shared common block only.)
     installed = desktop.openbox_autostart_installed()
-    assert "azarch security-notice" not in installed
+    assert "azzio security-notice" not in installed
     assert desktop.INSTALL_WRAPPER_PATH not in installed
 
 
@@ -1032,7 +1032,7 @@ def test_environment_bridges_qt_apps_onto_the_gtk_system_theme():
     # QT_QPA_PLATFORMTHEME=gtk3 is the system-theme bridge for Qt/KF6 apps (Dolphin,
     # Calamares, any downloaded Qt app): without a KDE/portal stack they render LIGHT
     # regardless of the freedesktop color-scheme, so the Qt gtk3 platform theme makes them
-    # follow the GTK theme (Adwaita-dark/Adwaita) `azarch theme` sets -- i.e. Qt apps obey
+    # follow the GTK theme (Adwaita-dark/Adwaita) `azzio theme` sets -- i.e. Qt apps obey
     # the system dark/white toggle too. Regression guard: dropping this un-themes Dolphin.
     assert "export QT_QPA_PLATFORMTHEME=gtk3" in desktop.openbox_environment()
 
@@ -1094,7 +1094,7 @@ def test_install_menu_desktop_is_system_owned_conf():
     # /usr/share/applications (one file for all users), root-owned, plain data (0o644).
     entry = next(
         e for e in desktop.PLAN
-        if e["dest"] == "/usr/share/applications/azarch-install.desktop"
+        if e["dest"] == "/usr/share/applications/azzio-install.desktop"
     )
     assert entry["builder"] is desktop.install_menu_desktop
     assert entry["mode"] == 0o644
@@ -1156,23 +1156,23 @@ def test_install_wrapper_is_sh_script():
     assert desktop.install_wrapper_sh().startswith("#!/bin/sh\n")
 
 
-# --- azarch --sshd-hypervisor guest command line interface (now pure Python) -------------------
-# The `azarch` guest command line interface is a single Python module (libraries/packages/azarch);
-# desktop.azarch_command_line_interface() ships it to /usr/local/bin/azarch with the country table
+# --- azzio --sshd-hypervisor guest command line interface (now pure Python) -------------------
+# The `azzio` guest command line interface is a single Python module (libraries/packages/azzio);
+# desktop.azzio_command_line_interface() ships it to /usr/local/bin/azzio with the country table
 # re-injected from packages/calamares/locale. These tests assert on that emitted Python.
 
-def test_azarch_cli_is_a_python_program():
+def test_azzio_cli_is_a_python_program():
     # It is Python now (no shell), so it must carry the python shebang and NOT be a
     # /bin/sh script. This is the whole point of the de-shelling.
-    out = desktop.azarch_command_line_interface()
+    out = desktop.azzio_command_line_interface()
     assert out.startswith("#!/usr/bin/env python3")
     assert "#!/bin/sh" not in out
 
 
-def test_azarch_subcommand_is_sshd_hypervisor():
-    # The guest command line interface subcommand is --sshd-hypervisor (the binary stays `azarch`).
+def test_azzio_subcommand_is_sshd_hypervisor():
+    # The guest command line interface subcommand is --sshd-hypervisor (the binary stays `azzio`).
     # Assert the branch + usage line exist and no bare `--sshd` token survives.
-    out = desktop.azarch_command_line_interface()
+    out = desktop.azzio_command_line_interface()
     assert 'cmd == "--sshd-hypervisor"' in out
     assert "--sshd-hypervisor    Install host pubkey" in out
     import re
@@ -1180,20 +1180,20 @@ def test_azarch_subcommand_is_sshd_hypervisor():
     assert not re.search(r"--sshd(?!-hypervisor)", out)
 
 
-def test_azarch_sshd_installs_pubkey_and_starts_sshd():
+def test_azzio_sshd_installs_pubkey_and_starts_sshd():
     # The --sshd-hypervisor path must stage the host pubkey into the target user's
     # ~/.ssh/authorized_keys, (re)generate host keys, and enable+start sshd.
-    out = desktop.azarch_command_line_interface()
+    out = desktop.azzio_command_line_interface()
     assert '"authorized_keys"' in out                  # installed into ssh_dir
     assert '"ssh-keygen", "-A"' in out
     assert '"systemctl", "enable", "--now", "sshd"' in out
 
 
-def test_azarch_sshd_targets_sudo_invoking_user_not_root_home():
-    # The documented invocation is `sudo azarch --sshd-hypervisor`, under which $HOME=/root
+def test_azzio_sshd_targets_sudo_invoking_user_not_root_home():
+    # The documented invocation is `sudo azzio --sshd-hypervisor`, under which $HOME=/root
     # and $USER=root. The command line interface must resolve the REAL user via SUDO_USER (fallback to the
     # current user) and look the home up in the passwd db, never off $HOME/os.environ.
-    out = desktop.azarch_command_line_interface()
+    out = desktop.azzio_command_line_interface()
     assert 'os.environ.get("SUDO_USER")' in out
     assert "pwd.getpwnam(target_user).pw_dir" in out
     # It must NOT read HOME from the environment to place the login key.
@@ -1201,41 +1201,41 @@ def test_azarch_sshd_targets_sudo_invoking_user_not_root_home():
     assert 'environ["HOME"]' not in out
 
 
-def test_azarch_sshd_chowns_key_to_target_user():
+def test_azzio_sshd_chowns_key_to_target_user():
     # Under sudo the ~/.ssh tree is created as root; a root-owned authorized_keys
     # trips sshd StrictModes and is ignored. The install must hand ownership to the
     # target user (install -o/-g target_user for BOTH the dir and the key file).
-    out = desktop.azarch_command_line_interface()
+    out = desktop.azzio_command_line_interface()
     assert '"install", "-d", "-m", "700", "-o", target_user, "-g", target_user' in out
     assert '"install", "-m", "600", "-o", target_user, "-g", target_user' in out
 
 
-def test_azarch_sshd_refuses_bare_root_target():
+def test_azzio_sshd_refuses_bare_root_target():
     # If the resolved target is root (no SUDO_USER, invoked as root), there is no home
     # pubkey login for root here, so the command line interface must bail rather than stage a useless key.
-    out = desktop.azarch_command_line_interface()
+    out = desktop.azzio_command_line_interface()
     assert 'if target_user == "root":' in out
 
 
-def test_azarch_sshd_opens_firewall_before_starting_sshd():
+def test_azzio_sshd_opens_firewall_before_starting_sshd():
     # setup-pkgs.sh sets 'ufw default deny incoming', so without an explicit allow
     # the forwarded host->guest :22 is dropped even though sshd listens. The allow must
     # come BEFORE sshd starts so the port is reachable the instant it listens. The rule is
     # 22/tcp explicitly (the user's "port 22 configured to allow tcp").
-    out = desktop.azarch_command_line_interface()
+    out = desktop.azzio_command_line_interface()
     allow_idx = out.index('"ufw", "allow", "22/tcp"')
     start_idx = out.index('"systemctl", "enable", "--now", "sshd"')
     assert allow_idx < start_idx
 
 
-def test_azarch_sshd_enables_sshd_even_without_the_9p_share(monkeypatch):
+def test_azzio_sshd_enables_sshd_even_without_the_9p_share(monkeypatch):
     # The INSTALLED ssh desktop is bare metal: there is NO 9p `shared` folder. The bring-up
     # must SKIP the host-pubkey install (best effort, hypervisor-only) and STILL enable+
     # start sshd (password login via the --ssh password baked into /etc/shadow). A
     # regression that made pubkey install fatal would leave the installed ssh desktop with
     # sshd OFF -- exactly what the user does not want.
     import types
-    azcli = _load_azarch_command_line_interface()
+    azcli = _load_azzio_command_line_interface()
     calls: list[tuple] = []
     monkeypatch.setattr(azcli, "_sudo", lambda *a, **k: calls.append(a) or 0)
     # No share: the mount attempt fails, so the pubkey step bows out gracefully.
@@ -1253,7 +1253,7 @@ def test_azarch_sshd_enables_sshd_even_without_the_9p_share(monkeypatch):
     assert not any(a[:1] == ("install",) for a in calls), calls
 
 
-def test_azarch_sshd_is_fail_fast_no_false_success(monkeypatch):
+def test_azzio_sshd_is_fail_fast_no_false_success(monkeypatch):
     # Behavioral regression guard (the old shell ran `set -e`): if a privileged step
     # FAILS, the command line interface must bail with that step's exit code and NEVER print the
     # "sshd enabled and started" success line. A `check=False` port that always
@@ -1261,7 +1261,7 @@ def test_azarch_sshd_is_fail_fast_no_false_success(monkeypatch):
     # pins. Drive the real sshd_hypervisor() with systemctl stubbed to fail (rc 5).
     import types
 
-    azcli = _load_azarch_command_line_interface()
+    azcli = _load_azzio_command_line_interface()
     printed: list[str] = []
     monkeypatch.setattr(azcli, "print",
                         lambda *a, **k: printed.append(" ".join(map(str, a)))
@@ -1284,11 +1284,11 @@ def test_azarch_sshd_is_fail_fast_no_false_success(monkeypatch):
     assert not any("sshd enabled and started" in p for p in printed), printed
 
 
-# --- azarch --resolve-* guest command line interface (IP geolocation, user-chosen server) ------
+# --- azzio --resolve-* guest command line interface (IP geolocation, user-chosen server) ------
 
-def test_azarch_resolve_subcommands_present_in_case_and_usage():
-    # The resolvers are now POSITIONAL subcommands (azarch timedate/language --resolve).
-    out = desktop.azarch_command_line_interface()
+def test_azzio_resolve_subcommands_present_in_case_and_usage():
+    # The resolvers are now POSITIONAL subcommands (azzio timedate/language --resolve).
+    out = desktop.azzio_command_line_interface()
     for sub in ("timedate", "language", "gpu"):
         assert f'cmd == "{sub}"' in out              # dispatch branch
         assert (sub + " ") in out                    # usage mentions it
@@ -1297,13 +1297,13 @@ def test_azarch_resolve_subcommands_present_in_case_and_usage():
         assert old not in out
 
 
-def test_azarch_resolve_offers_five_shuffled_servers():
+def test_azzio_resolve_offers_five_shuffled_servers():
     # The user must be presented FIVE servers, shuffled, including the two called out
     # in issue #46 (ipapi.co, ipquery.io). The prompt says 1-5. Assert against the
     # actual RESOLVER_SERVERS list the emitted command line interface defines.
-    azcli = _load_azarch_command_line_interface()
+    azcli = _load_azzio_command_line_interface()
 
-    out = desktop.azarch_command_line_interface()
+    out = desktop.azzio_command_line_interface()
     labels = [s[0] for s in azcli.RESOLVER_SERVERS]
     assert "ipapi.co" in labels
     assert "ipquery.io" in labels
@@ -1312,46 +1312,46 @@ def test_azarch_resolve_offers_five_shuffled_servers():
     assert "(1-5)" in out
 
 
-def test_azarch_resolve_uses_stdlib_not_curl_or_jq():
+def test_azzio_resolve_uses_stdlib_not_curl_or_jq():
     # The Python command line interface parses JSON with the standard library (urllib + json), so it does
     # NOT shell out to curl or jq (the old shell command line interface's dependencies). This is a
     # regression guard that the de-shelling did not smuggle those back in.
-    out = desktop.azarch_command_line_interface()
+    out = desktop.azzio_command_line_interface()
     assert "urllib.request" in out
     assert "json.loads" in out
     assert "command -v curl" not in out
     assert "command -v jq" not in out
 
 
-def test_azarch_resolve_language_english_first_with_alt_shift():
+def test_azzio_resolve_language_english_first_with_alt_shift():
     # The applied keyboard must put English ("us") FIRST/active and the region layout
     # SECOND, switched with Alt+Shift -- never the region layout alone.
-    out = desktop.azarch_command_line_interface()
+    out = desktop.azzio_command_line_interface()
     assert 'xkb_layout = f"us,{layout}"' in out
     assert "grp:alt_shift_toggle" in out
     # English-speaking regions get a lone "us" layout (English only).
     assert 'xkb_layout = "us"' in out
 
 
-def test_azarch_resolve_language_keeps_lang_english():
+def test_azzio_resolve_language_keeps_lang_english():
     # Matching the installer: the display language stays English (LANG=en_US) and only
     # the region FORMAT locale (LC_*) follows the country. The LC_* keys are written in
     # a loop over the format categories.
-    out = desktop.azarch_command_line_interface()
+    out = desktop.azzio_command_line_interface()
     assert "LANG=en_US.UTF-8" in out
     assert '"LC_NUMERIC", "LC_TIME", "LC_MONETARY", "LC_PAPER", "LC_MEASUREMENT"' in out
 
 
 def test_resolve_region_flag_removed():
     # --resolve-region (do timezone AND language in one query) was intentionally dropped when
-    # the resolvers became positional (azarch timedate/language --resolve). A user runs both
+    # the resolvers became positional (azzio timedate/language --resolve). A user runs both
     # commands, picking a server each time. Pin that the flag is gone.
-    azcli = _load_azarch_command_line_interface()
+    azcli = _load_azzio_command_line_interface()
     assert azcli.main(["--resolve-region"]) == 2
 
 
-def test_azarch_timedate_resolve_sets_timezone_only():
-    azcli = _load_azarch_command_line_interface()
+def test_azzio_timedate_resolve_sets_timezone_only():
+    azcli = _load_azzio_command_line_interface()
     calls = []
     orig_resolve = azcli.resolve_via_server
     orig_tz = azcli.apply_timezone
@@ -1377,7 +1377,7 @@ def test_ipwho_is_timezone_path_digs_the_id_field():
     # not a bare string like the other four servers. The dotted path MUST be
     # "timezone.id" so _dig extracts the IANA zone; a bare "timezone" path yields the
     # whole dict and apply_timezone then fails with "unknown timezone {...}".
-    azcli = _load_azarch_command_line_interface()
+    azcli = _load_azzio_command_line_interface()
     by_label = {s[0]: s for s in azcli.RESOLVER_SERVERS}
     assert by_label["ipwho.is"][3] == "timezone.id", by_label["ipwho.is"]
     # The other servers return a flat timezone string, so their path stays bare.
@@ -1389,7 +1389,7 @@ def test_resolve_via_server_flattens_ipwho_is_dict_timezone(monkeypatch):
     # End-to-end guard on the real resolve_via_server: given ipwho.is's dict-timezone
     # payload, it must return the FLAT string "Asia/Jerusalem", never the dict. Pin the
     # server (choice=5 -> ipwho.is in the fixed order) and stub the HTTP fetch.
-    azcli = _load_azarch_command_line_interface()
+    azcli = _load_azzio_command_line_interface()
     payload = {
         "country_code": "IL",
         "timezone": {"id": "Asia/Jerusalem", "abbr": "IDT", "is_dst": True,
@@ -1416,7 +1416,7 @@ def test_resolve_via_server_choice_arg_skips_the_stdin_prompt(monkeypatch):
     # resolve_via_server(choice="N") must select the Nth server WITHOUT reading stdin
     # and WITHOUT shuffling (fixed order == RESOLVER_SERVERS), so the TUI can pass the
     # number the user typed into the in-UI prompt.
-    azcli = _load_azarch_command_line_interface()
+    azcli = _load_azzio_command_line_interface()
 
     def _boom():
         raise AssertionError("resolve_via_server must not read stdin when choice is given")
@@ -1445,7 +1445,7 @@ def test_resolve_via_server_choice_arg_skips_the_stdin_prompt(monkeypatch):
 
 
 def test_resolve_via_server_rejects_out_of_range_choice(monkeypatch):
-    azcli = _load_azarch_command_line_interface()
+    azcli = _load_azzio_command_line_interface()
     monkeypatch.setattr("builtins.input",
                         lambda *a: (_ for _ in ()).throw(AssertionError("no stdin")))
     assert azcli.resolve_via_server(choice="9") is None
@@ -1454,9 +1454,9 @@ def test_resolve_via_server_rejects_out_of_range_choice(monkeypatch):
 
 
 def test_timedate_resolve_passes_server_flag_through(monkeypatch):
-    # `azarch timedate --resolve --server 3` must forward "3" to resolve_via_server as the
+    # `azzio timedate --resolve --server 3` must forward "3" to resolve_via_server as the
     # non-interactive choice (this is exactly what the TUI row runs).
-    azcli = _load_azarch_command_line_interface()
+    azcli = _load_azzio_command_line_interface()
     seen = {}
     monkeypatch.setattr(azcli, "resolve_via_server",
                         lambda choice=None: seen.__setitem__("choice", choice)
@@ -1468,7 +1468,7 @@ def test_timedate_resolve_passes_server_flag_through(monkeypatch):
 
 
 def test_language_resolve_passes_server_flag_through(monkeypatch):
-    azcli = _load_azarch_command_line_interface()
+    azcli = _load_azzio_command_line_interface()
     seen = {}
     monkeypatch.setattr(azcli, "resolve_via_server",
                         lambda choice=None: seen.__setitem__("choice", choice)
@@ -1479,12 +1479,12 @@ def test_language_resolve_passes_server_flag_through(monkeypatch):
     assert seen["choice"] == "2"
 
 
-def test_azarch_resolve_embeds_country_table_from_locale():
+def test_azzio_resolve_embeds_country_table_from_locale():
     # The country->layout table is the single source of truth in packages/calamares/locale;
     # the emitted command line interface's COUNTRY_TABLE must equal exactly that data. Build the emitted
     # module and compare its table to locale.RESOLVER_COUNTRY_TABLE.
     from packages.calamares import locale
-    azcli = _load_azarch_command_line_interface()
+    azcli = _load_azzio_command_line_interface()
 
     expected = {cc: (loc, lay, km, 1 if en else 0)
                 for cc, (loc, lay, km, en) in locale.RESOLVER_COUNTRY_TABLE.items()}
@@ -1492,26 +1492,26 @@ def test_azarch_resolve_embeds_country_table_from_locale():
     # asserting the imported module's table matches locale is the strongest check.
     assert azcli.COUNTRY_TABLE == expected
     # And the emitted text really contains the regenerated literal (not a stale copy).
-    out = desktop.azarch_command_line_interface()
+    out = desktop.azzio_command_line_interface()
     assert "'IL': ('he_IL.UTF-8', 'il', 'il', 0)" in out
     assert "'SV': ('es_SV.UTF-8', 'latam', 'la-latin1', 0)" in out
     assert "'US': ('en_US.UTF-8', 'us', 'us', 1)" in out       # English-speaking flag
     assert "'SA': ('ar_SA.UTF-8', 'ara', 'us', 0)" in out
 
 
-def test_azarch_cli_is_valid_python_and_in_sync():
+def test_azzio_cli_is_valid_python_and_in_sync():
     # The whole emitted command line interface (source file with the re-injected table) must be valid
     # Python, and importing/executing it must reproduce the in-sync COUNTRY_TABLE.
     import ast
 
     from packages.calamares import locale
 
-    out = desktop.azarch_command_line_interface()
+    out = desktop.azzio_command_line_interface()
     # No f-string/template artefacts leaked from the injection.
-    assert "AZARCH_CC_TABLE_START" in out and "AZARCH_CC_TABLE_END" in out
+    assert "AZZIO_CC_TABLE_START" in out and "AZZIO_CC_TABLE_END" in out
     ast.parse(out)
     ns: dict = {}
-    exec(compile(out, "azarch_command_line_interface", "exec"), ns)
+    exec(compile(out, "azzio_command_line_interface", "exec"), ns)
     expected = {cc: (loc, lay, km, 1 if en else 0)
                 for cc, (loc, lay, km, en) in locale.RESOLVER_COUNTRY_TABLE.items()}
     assert ns["COUNTRY_TABLE"] == expected
@@ -1548,7 +1548,7 @@ def test_bash_profile_sources_bashrc():
 # --- Branding / wrapper / wallpaper constants -------------------------------
 
 def test_install_wrapper_path_value():
-    assert desktop.INSTALL_WRAPPER_PATH == "/usr/local/bin/azarch-install"
+    assert desktop.INSTALL_WRAPPER_PATH == "/usr/local/bin/azzio-install"
 
 
 def test_wallpaper_image_file_is_the_inner_years_png():

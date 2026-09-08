@@ -1,10 +1,10 @@
-"""application_menu - the Az'arch application menu package (OUR menu, the whole shell).
+"""application_menu - the Azzio application menu package (OUR menu, the whole shell).
 
 The desktop is OpenBox with no panel, so this centered, Breeze-styled launcher (search,
 launch-frequency ordering, power actions), opened by the Super key, is the only launcher
 surface. It is a C / GTK3 program: the sources live directly in this directory (menu.c +
 siblings, a Makefile), and application_menu.py is the build wiring that COMPILES them into
-the resident daemon binary (azarch-application-menu-daemon), ships the pure-Python launcher
+the resident daemon binary (azzio-application-menu-daemon), ships the pure-Python launcher
 (launcher.py, the bin entry point), and generates the .desktop entry.
 
 Modules:

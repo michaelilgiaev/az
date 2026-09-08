@@ -1,4 +1,4 @@
-/* Az'arch window switcher -- enumerate managed windows + resolve identity. See windows.h.
+/* Azzio window switcher -- enumerate managed windows + resolve identity. See windows.h.
  *
  * The xprop helpers (run_xprop, client_list, the WM_CLASS/PID/type parser) mirror
  * application_menu/window_watch.c so both agree on what "a window" is; here we also read

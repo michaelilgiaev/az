@@ -1,4 +1,4 @@
-"""LIVE-NETWORK contract test for the five IP-geolocation servers azarch offers.
+"""LIVE-NETWORK contract test for the five IP-geolocation servers azzio offers.
 
 Unlike the rest of the suite (pure, offline -- see tests.sh), this file actually
 PINGS each server in RESOLVER_SERVERS and proves that the (url, country_path,
@@ -36,13 +36,13 @@ _TIMEOUT = 15
 
 
 def _load_cli() -> types.ModuleType:
-    """Exec the shipped, bundled azarch guest CLI so we test the REAL RESOLVER_SERVERS
-    list + _dig the guest runs -- identical to _load_azarch_command_line_interface in
+    """Exec the shipped, bundled azzio guest CLI so we test the REAL RESOLVER_SERVERS
+    list + _dig the guest runs -- identical to _load_azzio_command_line_interface in
     test_configuration_openbox.py, duplicated here to keep this network tier standalone."""
-    from packages.azarch.bundle import bundle_source
+    from packages.azzio.bundle import bundle_source
 
-    mod = types.ModuleType("azarch_guest_command_line_interface_live")
-    exec(compile(bundle_source(), "azarch_guest_command_line_interface_live", "exec"),
+    mod = types.ModuleType("azzio_guest_command_line_interface_live")
+    exec(compile(bundle_source(), "azzio_guest_command_line_interface_live", "exec"),
          mod.__dict__)
     return mod
 
@@ -66,7 +66,7 @@ def _fetch(url: str):
     """GET + parse JSON, or None if the host is unreachable/slow/non-JSON (skip-worthy,
     not a code failure). A real request so we validate the LIVE response shape."""
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "azarch-test/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "azzio-test/1.0"})
         with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
             return json.loads(resp.read().decode("utf-8", "replace"))
     except Exception:
@@ -111,7 +111,7 @@ def test_live_resolve_via_server_returns_flat_tuple_for_each_server(monkeypatch)
     """End-to-end: drive the REAL resolve_via_server(choice=N) against each live server
     (non-interactive pick) and assert it returns (COUNTRY, TIMEZONE) as two flat strings.
     Exercises the whole path -- fetch, _dig both fields, uppercase, flatten -- the way a
-    user's `azarch timedate --resolve` does, for every server, over the real network."""
+    user's `azzio timedate --resolve` does, for every server, over the real network."""
     if not _online():
         pytest.skip("offline: live resolver-server contract test needs network")
 

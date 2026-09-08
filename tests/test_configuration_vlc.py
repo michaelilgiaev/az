@@ -56,7 +56,7 @@ def test_vlcrc_is_nonempty_and_ini_shaped():
 
 
 def test_vlcrc_follows_system_theme_dark_by_default():
-    # VLC follows the system theme via qt-palette-mode (2 = dark, 1 = light). Az'arch
+    # VLC follows the system theme via qt-palette-mode (2 = dark, 1 = light). Azzio
     # defaults dark; the light build flips it to 1. The line lives under [qt] (before [core]).
     dark = vlc.vlcrc()
     light = vlc.vlcrc(dark=False)

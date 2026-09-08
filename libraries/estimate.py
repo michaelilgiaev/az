@@ -236,7 +236,7 @@ def measure_mbps() -> float | None:
         try:
             req = urllib.request.Request(
                 url, headers={"Range": f"bytes=0-{PROBE_BYTES - 1}",
-                              "User-Agent": "azarch-estimate/1"})
+                              "User-Agent": "azzio-estimate/1"})
             t0 = time.monotonic()
             got = 0
             with urllib.request.urlopen(req, timeout=PROBE_TIMEOUT) as r:

@@ -1,7 +1,7 @@
 /*
- * Az'arch gedit "notepad mode" plugin.
+ * Azzio gedit "notepad mode" plugin.
  *
- * gedit 50 is the gedit-technology fork (GTK3, libgedit-amtk/tepl). Az'arch wants gedit
+ * gedit 50 is the gedit-technology fork (GTK3, libgedit-amtk/tepl). Azzio wants gedit
  * to feel like classic Windows Notepad: NO multi-tab feature, a headerbar stripped down
  * to only the hamburger menu + the window controls, and Ctrl+W that straight-EXITS the
  * app. NONE of that is reachable through config files, GSettings, GTK CSS or an accels
@@ -88,16 +88,16 @@ enum
  * linked Open box (button + open-recent dropdown); win.save the Save button; win.new-tab
  * the "+" button. The hamburger (win.hamburger-menu) and window-control titlebuttons are
  * deliberately NOT listed, so they stay. */
-static const char *AZARCH_HIDDEN_BUTTON_ACTIONS[] = {
+static const char *AZZIO_HIDDEN_BUTTON_ACTIONS[] = {
 	"win.open",
 	"win.save",
 	"win.new-tab",
 	NULL
 };
 
-/* Does `name` match any action in AZARCH_HIDDEN_BUTTON_ACTIONS? */
+/* Does `name` match any action in AZZIO_HIDDEN_BUTTON_ACTIONS? */
 static gboolean
-azarch_action_is_hidden (const char *name)
+azzio_action_is_hidden (const char *name)
 {
 	int i;
 
@@ -105,9 +105,9 @@ azarch_action_is_hidden (const char *name)
 	{
 		return FALSE;
 	}
-	for (i = 0; AZARCH_HIDDEN_BUTTON_ACTIONS[i] != NULL; i++)
+	for (i = 0; AZZIO_HIDDEN_BUTTON_ACTIONS[i] != NULL; i++)
 	{
-		if (g_strcmp0 (name, AZARCH_HIDDEN_BUTTON_ACTIONS[i]) == 0)
+		if (g_strcmp0 (name, AZZIO_HIDDEN_BUTTON_ACTIONS[i]) == 0)
 		{
 			return TRUE;
 		}
@@ -124,13 +124,13 @@ azarch_action_is_hidden (const char *name)
  * never match, so this leaves them untouched.
  */
 static void
-azarch_strip_headerbar_widget (GtkWidget *widget)
+azzio_strip_headerbar_widget (GtkWidget *widget)
 {
 	if (GTK_IS_ACTIONABLE (widget))
 	{
 		const char *action = gtk_actionable_get_action_name (GTK_ACTIONABLE (widget));
 
-		if (azarch_action_is_hidden (action))
+		if (azzio_action_is_hidden (action))
 		{
 			/* If this button sits in a linked box (Open + dropdown), hide the box so the
 			 * dropdown arrow goes too; else hide the button itself. */
@@ -162,7 +162,7 @@ azarch_strip_headerbar_widget (GtkWidget *widget)
 
 		for (l = children; l != NULL; l = l->next)
 		{
-			azarch_strip_headerbar_widget (GTK_WIDGET (l->data));
+			azzio_strip_headerbar_widget (GTK_WIDGET (l->data));
 		}
 		g_list_free (children);
 	}
@@ -174,7 +174,7 @@ azarch_strip_headerbar_widget (GtkWidget *widget)
  * default GApplication (the window's application may not be set yet at activate() time).
  */
 static void
-azarch_kill_new_tab_action (GtkApplicationWindow *win)
+azzio_kill_new_tab_action (GtkApplicationWindow *win)
 {
 	GAction *action = g_action_map_lookup_action (G_ACTION_MAP (win), "new-tab");
 	GApplication *app;
@@ -200,7 +200,7 @@ azarch_kill_new_tab_action (GtkApplicationWindow *win)
  * process) this is a straight EXIT: close = close.
  */
 static void
-azarch_close_activate (GSimpleAction *action,
+azzio_close_activate (GSimpleAction *action,
                        GVariant      *parameter,
                        gpointer       user_data)
 {
@@ -218,7 +218,7 @@ azarch_close_activate (GSimpleAction *action,
  * Make Ctrl+W exit the application (close = close, no leftover empty window). Two belts:
  *
  *   1. REPLACE the win.close action on the window with our own that DESTROYS the window
- *      (see azarch_close_activate). This is window-scoped and immune to app-accel timing:
+ *      (see azzio_close_activate). This is window-scoped and immune to app-accel timing:
  *      whatever accel maps to win.close (Ctrl+W) now quits. gedit's win.close is a stateful
  *      action added at window construction; we remove it and add ours in its place.
  *   2. Also move the app-level accels so app.quit answers <Primary>W too (belt-and-braces
@@ -226,7 +226,7 @@ azarch_close_activate (GSimpleAction *action,
  *      the window's application may not be set yet at activate() time.
  */
 static void
-azarch_rebind_close_to_quit (GtkApplicationWindow *win)
+azzio_rebind_close_to_quit (GtkApplicationWindow *win)
 {
 	GApplication *app;
 
@@ -235,7 +235,7 @@ azarch_rebind_close_to_quit (GtkApplicationWindow *win)
 	{
 		GSimpleAction *close_action = g_simple_action_new ("close", NULL);
 		g_signal_connect (close_action, "activate",
-		                  G_CALLBACK (azarch_close_activate), win);
+		                  G_CALLBACK (azzio_close_activate), win);
 		g_action_map_add_action (G_ACTION_MAP (win), G_ACTION (close_action));
 		g_object_unref (close_action);
 	}
@@ -264,17 +264,17 @@ gedit_modifications_plugin_activate (GeditWindowActivatable *activatable)
 	g_return_if_fail (plugin->window != NULL);
 
 	/* 1. Kill the New Tab feature. */
-	azarch_kill_new_tab_action (GTK_APPLICATION_WINDOW (plugin->window));
+	azzio_kill_new_tab_action (GTK_APPLICATION_WINDOW (plugin->window));
 
 	/* 2. Strip the headerbar down to hamburger + window controls. */
 	titlebar = gtk_window_get_titlebar (GTK_WINDOW (plugin->window));
 	if (titlebar != NULL)
 	{
-		azarch_strip_headerbar_widget (titlebar);
+		azzio_strip_headerbar_widget (titlebar);
 	}
 
 	/* 3. Ctrl+W exits the app (close = close, no leftover empty window). */
-	azarch_rebind_close_to_quit (GTK_APPLICATION_WINDOW (plugin->window));
+	azzio_rebind_close_to_quit (GTK_APPLICATION_WINDOW (plugin->window));
 }
 
 static void

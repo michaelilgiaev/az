@@ -18,7 +18,7 @@ single horizontal rule that degrades to ASCII if the terminal cannot encode it.
 import sys
 
 # The horizontal rule under a header. A light box-drawing dash if the stream can encode
-# it (looks tidy in the Az'arch kitty terminal), else a plain ASCII dash -- decided once
+# it (looks tidy in the Azzio kitty terminal), else a plain ASCII dash -- decided once
 # per stream so a redirected/ASCII-only console never raises on a print.
 _RULE_CHAR = "─"   # BOX DRAWINGS LIGHT HORIZONTAL
 _RULE_WIDTH = 48

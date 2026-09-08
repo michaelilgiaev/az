@@ -58,7 +58,7 @@ def _agent_line(conf: str, proto: str) -> str:
 def test_produced_names_default_tier_builds_calamares_and_librewolf():
     # Arch dropped calamares from extra/, so the default tier must build it too
     # (it can no longer be pacman-downloaded). thunar is ALSO built here: it is a real Arch
-    # package that Az'arch rebuilds from source with the symlink-resolve patch, so it must be
+    # package that Azzio rebuilds from source with the symlink-resolve patch, so it must be
     # excluded from the Arch download and produced by makepkg. Both own packages + thunar build.
     assert makepkg.produced_names(full_compile=False) == ("calamares", "librewolf", "thunar")
 
@@ -214,7 +214,7 @@ def test_repo_is_current_false_when_package_missing(tmp_path):
 
 
 def test_repo_is_current_false_when_fingerprint_absent(tmp_path):
-    # Package present but no sidecar (a cache from an older Az'arch, or the networkq
+    # Package present but no sidecar (a cache from an older Azzio, or the networkq
     # regression) -> not current -> rebuild.
     for name in makepkg.produced_names(full_compile=False):
         (tmp_path / f"{name}-1-1-x86_64.pkg.tar.zst").write_text("")

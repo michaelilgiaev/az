@@ -40,8 +40,8 @@ import paths
 from ownership import Ownership
 from progress import ProgressBar
 from packages.application_menu import application_menu
-from packages.azarch import terminal_user_interface_build
-from packages.azarch import default_applications
+from packages.azzio import terminal_user_interface_build
+from packages.azzio import default_applications
 # timedate (the Flask home page) was folded into the librewolf package (LibreWolf lands on it),
 # so its build wiring is imported from there now.
 from packages.librewolf import timedate
@@ -75,15 +75,15 @@ from packages.thunar import home_directory
 # "Create Document" set from its templates submodule, so there is no standalone templates package.)
 # The packages the
 # compiler already drives explicitly (the desktop pair openbox/librewolf, plus application_menu,
-# passwords, calamares, and the azarch guest command line interface) are excluded from that
+# passwords, calamares, and the azzio guest command line interface) are excluded from that
 # discovery so they are not emitted twice. See _EXPLICIT_PACKAGES below.
 _DESKTOP_MODIFICATIONS = ("openbox", "librewolf")
 # Every package the compiler emits BY NAME (so package_discovery.with_emit_plan() must skip them
 # in the auto-discovered app loop). The desktop pair is emitted in _emit_desktop; application_menu
-# and passwords have their own emit_plan() driven directly; calamares and azarch are not app-loop
+# and passwords have their own emit_plan() driven directly; calamares and azzio are not app-loop
 # packages at all. Keeping this list here means a newly-dropped packages/<app>/ is auto-emitted
 # unless it is added here on purpose.
-_EXPLICIT_PACKAGES = ("openbox", "librewolf", "application_menu", "window_switcher", "passwords", "backup", "hypervisor", "calamares", "azarch")
+_EXPLICIT_PACKAGES = ("openbox", "librewolf", "application_menu", "window_switcher", "passwords", "backup", "hypervisor", "calamares", "azzio")
 import installer
 import pacman
 import profile
@@ -104,8 +104,8 @@ STEP_WEIGHTS = [0] + [8] * 12 + [250, 120, 270, 270]
 # The ISO variants a build CAN produce -- the canonical MAX set that sizes STEP_WEIGHTS's
 # two mkarchiso weights. Every step up to mkarchiso is variant-independent (same packages,
 # same airootfs). WHICH ONE actually builds is decided at runtime by _variants_for(), and
-# it is always exactly one: the base `azarch-headed` medium WITHOUT --ssh, or the
-# `azarch-headed-ssh` medium (INDIVIDUALLY, not alongside base) WHEN --ssh="<PASSWORD>"
+# it is always exactly one: the base `azzio-headed` medium WITHOUT --ssh, or the
+# `azzio-headed-ssh` medium (INDIVIDUALLY, not alongside base) WHEN --ssh="<PASSWORD>"
 # opts in (no default password is ever shipped). The variant KEYS stay base/sshd;
 # profile.ISO_NAMES maps them to the product-line artifact names.
 VARIANTS = ("base", "sshd")
@@ -210,8 +210,8 @@ def _variants_for(ssh_hash: str | None) -> tuple[str, ...]:
     """The ISO variants a build ACTUALLY produces this run -- exactly ONE.
 
     --ssh outputs the SSH-type medium INDIVIDUALLY: when an --ssh password (already
-    hashed) is supplied, ONLY the `azarch-headed-ssh` ISO is built -- NOT the base ISO
-    alongside it. Without --ssh, ONLY the base `azarch-headed` ISO is built. So a plain
+    hashed) is supplied, ONLY the `azzio-headed-ssh` ISO is built -- NOT the base ISO
+    alongside it. Without --ssh, ONLY the base `azzio-headed` ISO is built. So a plain
     run and an --ssh run each produce a single, distinct medium; the base ISO is simply
     what you get when you do not opt into ssh.
 
@@ -242,16 +242,16 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
         full_compile: bool = False, ssh_password_hash: str | None = None) -> list[Path]:
     """Execute all steps; return the paths of the built ISOs. Raises on failure.
 
-    full_compile: when True, Az'arch's own packages (librewolf) are compiled from
+    full_compile: when True, Azzio's own packages (librewolf) are compiled from
     source instead of repackaged from the verified upstream tarball. Passed to the
     makepkg stage below.
 
     ssh_password_hash: the operator's --ssh password ALREADY HASHED (sha-512 crypt),
     or None. It selects WHICH single ISO is built (DECISION 2: no default password is
     ever shipped -- the sshd variant's credential comes from the operator at build time).
-    None -> ONLY the base/headed ISO. A hash -> ONLY the `azarch-headed-ssh` medium
+    None -> ONLY the base/headed ISO. A hash -> ONLY the `azzio-headed-ssh` medium
     (built INDIVIDUALLY, NOT alongside the base ISO), whose /etc/shadow carries that hash
-    for `main` and which auto-runs `azarch --sshd-hypervisor` at boot.
+    for `main` and which auto-runs `azzio --sshd-hypervisor` at boot.
 
     Every step up to mkarchiso is variant-independent -- same packages, same shared
     airootfs -- so the shared, heavy work (package cache, own-package build) happens
@@ -261,7 +261,7 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     """
     W = paths.WORKDIR
     airootfs = W / "airootfs"
-    ea = airootfs / "root/azarch"  # the azarch payload dir baked into the ISO
+    ea = airootfs / "root/azzio"  # the azzio payload dir baked into the ISO
     sudo = _sudo()
 
     # 1 -- Reset build workspace
@@ -321,7 +321,7 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     emit.write_exec(ea / "setup-locale.sh", locale.setup_locale_sh())
     emit.write_text(airootfs / "etc/systemd/system/locale-setup.service", system.LOCALE_SETUP_SERVICE)
 
-    # the azarch fastfetch logo/config for the live (and installed) user.
+    # the azzio fastfetch logo/config for the live (and installed) user.
     _emit_fastfetch(ea, home)
 
     # os-release rebrand:
@@ -333,18 +333,18 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # with "filesystem: usr/lib/os-release exists in filesystem". Instead we plant it
     # AFTER pacstrap via customize_airootfs.sh -- the same after-pacstrap ordering the
     # on-disk installer already uses (libraries/installer.py copies it into /mnt post-
-    # pacstrap). The branded file is staged read-only under root/azarch/os-release and
+    # pacstrap). The branded file is staged read-only under root/azzio/os-release and
     # the hook copies it into place inside the pacstrapped rootfs.
     emit.write_text(ea / "os-release", system.OS_RELEASE)
     # The per-app system files kitty/gedit override (kitty icon SVG, the two stale
     # cat PNGs, the gedit .desktop) are owned by their own packages, so they hit the
     # SAME conflict wall -- planting them in the overlay aborts pacstrap. They get the
     # identical after-pacstrap cure: NoExtract'd (libraries/pacman.py) and copied in by the
-    # customize hook. The replacement bodies are staged under root/azarch/apps/ in
+    # customize hook. The replacement bodies are staged under root/azzio/apps/ in
     # _emit_apps (step 8); here we append their plant/remove lines to the hook.
     emit.write_exec(airootfs / "root/customize_airootfs.sh",
                     system.CUSTOMIZE_AIROOTFS + pacman.app_override_cp_sh())
-    # Overlay the releng `archiso` hostname with `azarch` (prompt + fastfetch title).
+    # Overlay the releng `archiso` hostname with `azzio` (prompt + fastfetch title).
     emit.write_text(airootfs / "etc/hostname", system.HOSTNAME)
 
     # 8 -- Overlay the OpenBox live desktop + Calamares installer configuration.
@@ -381,7 +381,7 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # 9 -- Enable systemd units and sudoers policy.
     # Activation/policy at profile finalization: the always-on *.target.wants symlinks
     # that enable the daemons, plus the sudoers.d drop-ins. The sshd-hypervisor
-    # auto-setup service (emitted + enabled ONLY for the azarch-sshd ISO) is handled
+    # auto-setup service (emitted + enabled ONLY for the azzio-sshd ISO) is handled
     # per-variant in the finalize loop below, not here -- this step is variant-shared.
     bar.step("Enable systemd units and sudoers policy")
     _link_services(airootfs)
@@ -408,17 +408,17 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # PROFILE ROOT) is NOT emitted here: its iso_name is the one thing that differs
     # per variant, so it is written per-variant in the finalize loop below. Calamares
     # (auto-launched from the OpenBox session, step 8) is the GUI installer. The scripted
-    # terminal installer is ALSO emitted (as azarch-install-cli.sh under /root/azarch) so
-    # `azarch-install --cli` can install over SSH with no X -- same partition/pacstrap/
+    # terminal installer is ALSO emitted (as azzio-install-cli.sh under /root/azzio) so
+    # `azzio-install --cli` can install over SSH with no X -- same partition/pacstrap/
     # chroot-setup pipeline as the first-boot installer, just driven from a terminal.
     bar.step("Emit installer payload")
     emit.write_exec(ea / "first-boot-setup.sh", installer.first_boot_sh())
     emit.write_text(ea / "first-boot-setup.service", installer.first_boot_service())
     emit.write_text(ea / "first-boot-setup.conf", installer.first_boot_conf())
-    # The scripted (terminal/SSH) installer -- the CLI half of azarch-install. Baked under
-    # /root/azarch alongside the payload it reads (packages.x86_64, chroot-setup.sh, the
-    # offline repo). openbox.INSTALL_CLI_SCRIPT_PATH points azarch-install --cli at it.
-    emit.write_exec(ea / "azarch-install-cli.sh", installer.installer_sh())
+    # The scripted (terminal/SSH) installer -- the CLI half of azzio-install. Baked under
+    # /root/azzio alongside the payload it reads (packages.x86_64, chroot-setup.sh, the
+    # offline repo). openbox.INSTALL_CLI_SCRIPT_PATH points azzio-install --cli at it.
+    emit.write_exec(ea / "azzio-install-cli.sh", installer.installer_sh())
 
     # 11 -- Resolve build pacman.conf and mirrors.
     # Writes the pacstrap/mkarchiso build pacman.conf, injects the persistent CacheDir,
@@ -437,10 +437,10 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     # stage the installer-side payload the on-disk installer needs
     emit.copy_data("packages.x86_64", ea / "packages.x86_64")
     emit.write_text(ea / "pacman-base-conf/pacman.conf", pacman.installer_base_conf())
-    emit.write_text(ea / "pacstrap-azarch-conf/pacman.conf", pacman.installer_pacstrap_conf())
+    emit.write_text(ea / "pacstrap-azzio-conf/pacman.conf", pacman.installer_pacstrap_conf())
     emit.write_exec(ea / "chroot-setup.sh", installer.chroot_setup_sh())
 
-    # 13 -- Build Az'arch's OWN packages and fold them into the offline repo
+    # 13 -- Build Azzio's OWN packages and fold them into the offline repo
     # (GIANT-ish, weight 120; MUCH heavier under --full-compile). BOTH calamares
     # and librewolf are built here in EVERY tier -- neither is in an Arch repo
     # (librewolf never was; calamares was dropped from extra/, now AUR-only, so
@@ -488,10 +488,10 @@ def _provision_sshd_hardening(airootfs: Path) -> None:
     drop-in HERE (in the airootfs, not just the runtime `--sshd-hypervisor` bring-up) means
     it ships on the live ISO AND is copied to every installed target by the offline
     unpackfs -- closing the gap on a Calamares install, which never runs the bring-up. The
-    `00-` prefix sorts FIRST (before 10-azarch-hardening, the systemd 20-*, and Arch's stock
+    `00-` prefix sorts FIRST (before 10-azzio-hardening, the systemd 20-*, and Arch's stock
     99-archlinux.conf) and sshd is FIRST-match-wins per keyword, so this directive is
-    AUTHORITATIVE and no later drop-in can override it. The azarch TUI/CLI toggle rewrites
-    this file. New file (openssh does not own `00-azarch-root-login.conf`), so no pacstrap
+    AUTHORITATIVE and no later drop-in can override it. The azzio TUI/CLI toggle rewrites
+    this file. New file (openssh does not own `00-azzio-root-login.conf`), so no pacstrap
     file conflict -- it can live in the overlay directly."""
     emit.write_text(airootfs / system.SSHD_ROOT_LOGIN_DROPIN_PATH,
                     system.SSHD_ROOT_LOGIN_OFF)
@@ -502,11 +502,11 @@ def _apply_variant(W: Path, airootfs: Path, variant: str,
     """Overlay the per-variant differences onto the shared profile tree just before
     its mkarchiso pass. Three things differ between the base and sshd ISOs:
 
-      1. profiledef iso_name -- drives the artifact filename (azarch-headed-<ver>.iso vs
-         azarch-headed-ssh-<ver>.iso). Rewritten at the profile root every pass.
+      1. profiledef iso_name -- drives the artifact filename (azzio-headed-<ver>.iso vs
+         azzio-headed-ssh-<ver>.iso). Rewritten at the profile root every pass.
       2. the sshd-hypervisor auto-setup service -- emitted AND enabled (a
          multi-user.target.wants symlink) ONLY for the sshd variant, so that ISO
-         auto-runs `azarch --sshd-hypervisor` at boot. The base ISO must have
+         auto-runs `azzio --sshd-hypervisor` at boot. The base ISO must have
          NEITHER, so we affirmatively remove both when building it -- otherwise a
          leftover from the preceding sshd... (order is base-first today, but this
          stays correct if the order ever flips) would bleed into the base ISO.
@@ -568,10 +568,10 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
             rel = dest_abs[len(openbox.HOME) + 1:]   # path under the home dir
             emit.write_text(skel / rel, content, mode=mode)
     # Installer launcher icon ("Az'" app tile), standardized as the scalable vector
-    # assets/icons/azarch.svg. Ship the SVG to the hicolor SCALABLE apps dir (the vector
+    # assets/icons/azzio.svg. Ship the SVG to the hicolor SCALABLE apps dir (the vector
     # master, like kitty.svg) AND rasterize it to PNGs at /usr/share/pixmaps and the
     # hicolor 256x256 apps dir, so the Desktop/menu/autostart .desktop files
-    # (Icon=azarch-installer) resolve it regardless of which path/size the icon loader
+    # (Icon=azzio-installer) resolve it regardless of which path/size the icon loader
     # consults, with no theme-cache rebuild needed. Root-owned system paths.
     emit.copy_asset(openbox.INSTALLER_ICON_ASSET,
                     airootfs / openbox.INSTALLER_ICON_SCALABLE.lstrip("/"), mode=0o644)
@@ -579,7 +579,7 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
         emit.render_svg_png(openbox.INSTALLER_ICON_ASSET,
                             airootfs / icon_dest.lstrip("/"),
                             openbox.INSTALLER_ICON_PNG_SIZE, mode=0o644)
-    # The two Az'arch wallpaper images ("years", "decades") under /usr/share/wallpapers.
+    # The two Azzio wallpaper images ("years", "decades") under /usr/share/wallpapers.
     # Each ships as contents/images/<res>.png (+ a screenshot.png thumbnail and an inert
     # metadata.json kept for self-description). feh paints the "years" image as the X
     # root pixmap from the OpenBox autostart / ~/.xinitrc (KDE Plasma and its wallpaper
@@ -592,7 +592,7 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
         emit.copy_asset(pkg["asset"], img, mode=0o644)
         # screenshot.png = a thumbnail (reuse the full image).
         emit.copy_asset(pkg["asset"], pkg_root / "contents" / "screenshot.png", mode=0o644)
-    # Az'arch application menu (OUR menu -- the whole shell now that Plasma is gone: a
+    # Azzio application menu (OUR menu -- the whole shell now that Plasma is gone: a
     # centered GTK3 launcher opened by the Super key). The menu is a COMPILED C program:
     # build_daemon() runs `make` against a private copy of the C sources and installs the
     # resulting binary; emit_plan() then drops the two generated TEXT artifacts (the
@@ -610,7 +610,7 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
             entry["builder"](),
             mode=entry["mode"],
         )
-    # The Az'arch window switcher (alt-tab): a SECOND compiled C/GTK3 daemon, OUR
+    # The Azzio window switcher (alt-tab): a SECOND compiled C/GTK3 daemon, OUR
     # replacement for OpenBox's built-in NextWindow list (a horizontal, Windows-like
     # overlay of LIVE window thumbnails). build_daemon() stages this package AND
     # application_menu (four reused translation units) into a scratch tree and installs the
@@ -627,11 +627,11 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
             entry["builder"](),
             mode=entry["mode"],
         )
-    # The bare-`azarch` TERMINAL UI (OUR C settings UI: Theme / Wallpaper / Network, opened
-    # by running `azarch` with no arguments). It is part of the `azarch` package now (one
+    # The bare-`azzio` TERMINAL UI (OUR C settings UI: Theme / Wallpaper / Network, opened
+    # by running `azzio` with no arguments). It is part of the `azzio` package now (one
     # program, C for speed); like the menu it is a COMPILED C program: build_terminal_user_interface() runs
     # `make` against a private copy of the package's C sources and installs the resulting
-    # binary under /usr/local/lib/azarch. The `azarch` command line interface (installed by openbox.PLAN
+    # binary under /usr/local/lib/azzio. The `azzio` command line interface (installed by openbox.PLAN
     # below) execs this binary for the no-argument case. Then install_previews() ships the
     # theme-preview screenshots (verbatim) into the sibling previews dir the UI reads at
     # runtime with kitty. Root-owned; the OFFLINE Calamares install rsyncs both onto the
@@ -643,18 +643,18 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
         airootfs / terminal_user_interface_build.TERMINAL_USER_INTERFACE_PREVIEW_SYSTEM_DIR.lstrip("/")
     )
     # The media OSD indicator (bottom-middle cyan volume/brightness bar). Like the terminal UI it
-    # is a COMPILED C program (on_screen_display.c -> azarch-osd), built from the SAME Makefile and installed
-    # next to the UI binary. `azarch volume/brightness` launches it; it draws a single, no-flicker
+    # is a COMPILED C program (on_screen_display.c -> azzio-osd), built from the SAME Makefile and installed
+    # next to the UI binary. `azzio volume/brightness` launches it; it draws a single, no-flicker
     # Xlib window (so it links X11/Xrandr/Xft, on the build host per the UI build deps). Root-
     # owned; the OFFLINE Calamares install rsyncs it onto the installed system with no extra step.
     terminal_user_interface_build.build_osd(
         airootfs / terminal_user_interface_build.OSD_BIN_SYSTEM_PATH.lstrip("/")
     )
-    # Az'arch timedate (OUR Flask Time + Calendar home page -- the site LibreWolf lands
+    # Azzio timedate (OUR Flask Time + Calendar home page -- the site LibreWolf lands
     # on at localhost:49154). A pure-Python app: emit_plan() copies the app sources
-    # (applications.py/page.py), the launcher, and the azarch-timedate.service unit to their fixed
+    # (applications.py/page.py), the launcher, and the azzio-timedate.service unit to their fixed
     # root-owned system paths. The service ENABLE-symlink is added in _link_services (like
-    # the other azarch units); the OFFLINE Calamares install rsyncs all of it onto the
+    # the other azzio units); the OFFLINE Calamares install rsyncs all of it onto the
     # installed system so the home page also runs at boot there. Its runtime dep
     # (python-flask) is in the manifest. See packages/librewolf/timedate.py.
     for entry in timedate.emit_plan():
@@ -663,7 +663,7 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
             entry["builder"](),
             mode=entry["mode"],
         )
-    # Az'arch passwords (OUR encrypted GPG/AES256 terminal password manager -- the
+    # Azzio passwords (OUR encrypted GPG/AES256 terminal password manager -- the
     # `passwords` command). A pure-Python app like timedate, and now ONE FLAT directory (no
     # pwlib/ sub-library): emit_plan() writes the entry script, the optional plaintext
     # importer, every working module, and the /usr/local/bin/passwords launcher to their
@@ -679,7 +679,7 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
             entry["builder"](),
             mode=entry["mode"],
         )
-    # Az'arch backup (OUR home-directory backup -- the `backup` command). A pure-Python
+    # Azzio backup (OUR home-directory backup -- the `backup` command). A pure-Python
     # app like passwords and a single flat directory: emit_plan() writes the entry
     # script (and any future module) plus the /usr/local/bin/backup launcher to their
     # fixed root-owned system paths -- one single-file entry each, so the whole flat app
@@ -694,7 +694,7 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
             entry["builder"](),
             mode=entry["mode"],
         )
-    # Az'arch hypervisor (OUR per-directory QEMU/KVM VM runner -- the `hypervisor`
+    # Azzio hypervisor (OUR per-directory QEMU/KVM VM runner -- the `hypervisor`
     # command). A pure-Python app like backup and a single flat directory: emit_plan()
     # writes the entry script (command_line_interface.py) and every working module plus the
     # /usr/local/bin/hypervisor launcher to their fixed root-owned system paths -- one
@@ -748,7 +748,7 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
     # pacstrap's file-conflict check would abort (see libraries/pacman.py). They are
     # NoExtract'd and planted post-pacstrap instead. Map override target -> staged basename
     # (None == suppress-only, no body to stage). A replacement entry writes its body under
-    # root/azarch/apps/<basename> (the hook installs it); a suppress-only entry is dropped
+    # root/azzio/apps/<basename> (the hook installs it); a suppress-only entry is dropped
     # here entirely (NoExtract keeps the package file out -- no overlay action needed).
     _override_basename = {target: basename
                           for basename, target, _remove in pacman.ISO_APP_OVERRIDES}
@@ -765,7 +765,7 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
     # + icon + the ~/Templates "Create Document" set | xviewer icon | ... plus any newly-added
     # packages/<app>/__init__.py) contributes its entries here, EXCEPT the ones the compiler
     # drives by name (_EXPLICIT_PACKAGES: the desktop pair openbox/librewolf, application_menu,
-    # passwords, calamares, azarch). default_applications (a packages.azarch module, the XDG
+    # passwords, calamares, azzio). default_applications (a packages.azzio module, the XDG
     # mimeapps + preferred terminal) is appended explicitly since it is not an app-loop package.
     # Each entry is handled the same declarative way below regardless of which package produced
     # it, so the set can grow/shrink freely.
@@ -893,7 +893,7 @@ def _emit_calamares(airootfs: Path) -> None:
     for rel, content in calamares.emit_map().items():
         emit.write_text(base / rel, content)
     # The Calamares WINDOW ICON: rasterize the standardized "Az'" vector app tile to a REAL
-    # PNG inside the branding component dir (branding/azarch/productIcon.png). branding.desc
+    # PNG inside the branding component dir (branding/azzio/productIcon.png). branding.desc
     # names it by that branding-relative filename in `productIcon`, so Calamares resolves it
     # to an absolute path and QIcon() loads it as the window icon -- which OpenBox draws on
     # the titlebar (rc.xml titleLayout's `N`). Calamares wants a real raster FILE here (a
@@ -915,12 +915,12 @@ def _emit_power(airootfs: Path) -> None:
     Calamares install (unpackfs rsyncs the live rootfs) carries them onto the
     installed system unchanged -- and they also govern the live ISO:
 
-      1. STATIC logind drop-in (10-azarch-power.conf): lid does nothing, power
+      1. STATIC logind drop-in (10-azzio-power.conf): lid does nothing, power
          button powers off. A plain /etc file, effective immediately at boot.
-      2. The azarch-sleep-policy script (/usr/local/bin, 0755): decides PC vs laptop
+      2. The azzio-sleep-policy script (/usr/local/bin, 0755): decides PC vs laptop
          (battery present?) and AC state at RUNTIME and writes the idle-sleep
-         drop-in (20-azarch-sleep.conf), then reloads logind.
-      3. Its systemd service (azarch-sleep-policy.service): runs the script at boot;
+         drop-in (20-azzio-sleep.conf), then reloads logind.
+      3. Its systemd service (azzio-sleep-policy.service): runs the script at boot;
          the enable-symlink is added in _link_services.
       4. Its udev rule: re-runs the service on AC-adapter plug/unplug so the
          15-minute idle timer arms/disarms live.
@@ -929,18 +929,18 @@ def _emit_power(airootfs: Path) -> None:
     running system (its value depends on live hardware state, so baking a fixed one
     would be wrong)."""
     emit.write_text(
-        airootfs / "etc/systemd/logind.conf.d/10-azarch-power.conf",
+        airootfs / "etc/systemd/logind.conf.d/10-azzio-power.conf",
         system.LOGIND_POWER_DROPIN,
     )
     emit.write_exec(
-        airootfs / "usr/local/bin/azarch-sleep-policy", system.SLEEP_POLICY_SCRIPT
+        airootfs / "usr/local/bin/azzio-sleep-policy", system.SLEEP_POLICY_SCRIPT
     )
     emit.write_text(
-        airootfs / "etc/systemd/system/azarch-sleep-policy.service",
+        airootfs / "etc/systemd/system/azzio-sleep-policy.service",
         system.SLEEP_POLICY_SERVICE,
     )
     emit.write_text(
-        airootfs / "etc/udev/rules.d/99-azarch-sleep-policy.rules",
+        airootfs / "etc/udev/rules.d/99-azzio-sleep-policy.rules",
         system.SLEEP_POLICY_UDEV_RULE,
     )
 
@@ -981,7 +981,7 @@ def _refresh_own_in_pacstrap_cache(full_compile: bool = False) -> None:
     Two failure modes this closes, both caused by makepkg NOT being reproducible
     bit-for-bit (a rebuild of calamares/librewolf yields a byte-different
     *.pkg.tar.zst under the SAME versioned filename, so its checksum in
-    pacstrap-azarch-repo.db changes each build):
+    pacstrap-azzio-repo.db changes each build):
 
       1. Stale-checksum abort. pacstrap consults its CacheDir BEFORE the file://
          repo. A same-named file left by a PRIOR build fails pacstrap's checksum
@@ -1065,7 +1065,7 @@ def _refresh_own_in_pacstrap_cache(full_compile: bool = False) -> None:
 
 def _refold_own_packages_into_repo(W: Path, full_compile: bool = False) -> None:
     """After makepkg drops our built package(s) into cache/pkgs/repo/, re-reconcile
-    the local repo index so those packages are in pacstrap-azarch-repo.db, then
+    the local repo index so those packages are in pacstrap-azzio-repo.db, then
     RE-stage the repo + db into the airootfs payload dir. build_cache already
     staged the Arch packages there; this overlays our built package(s) on top so
     mkarchiso's pacstrap and the on-disk installer resolve them from the same
@@ -1093,9 +1093,9 @@ def _refold_own_packages_into_repo(W: Path, full_compile: bool = False) -> None:
     # refetch would trigger on the 138 MB librewolf package.
     _refresh_own_in_pacstrap_cache(full_compile)
     # Re-stage into the airootfs payload the on-disk installer copies from.
-    ea = W / "airootfs" / "root/azarch"
-    final_db = ea / "pacstrap-azarch-db"
-    final_cache = ea / "pacstrap-azarch-repo"
+    ea = W / "airootfs" / "root/azzio"
+    final_db = ea / "pacstrap-azzio-db"
+    final_cache = ea / "pacstrap-azzio-repo"
     final_db.mkdir(parents=True, exist_ok=True)
     final_cache.mkdir(parents=True, exist_ok=True)
     subprocess.run(["cp", "-r", f"{pkg_db}/.", f"{final_db}/"], check=False)
@@ -1124,7 +1124,7 @@ def _check_host_deps(sudo, offline: bool) -> None:
     # + the gedit notepad-mode plugin build deps (the `gedit` pkg-config module -> the
     # gedit/GTK3/libpeas dev headers): _emit_apps COMPILES that libpeas plugin later in
     # this run, so the dev stack must be present here or `make` dies on a missing header.
-    # + the bare-`azarch` C terminal UI build dep (just gcc): _emit_desktop COMPILES that
+    # + the bare-`azzio` C terminal UI build dep (just gcc): _emit_desktop COMPILES that
     # UI (terminal_user_interface_build.build_terminal_user_interface) later in this run. It is pure libc (no ncurses/GTK), so gcc
     # -- already pulled in by base-devel / the menu deps -- is all it needs; listed for
     # completeness so the dependency intent is explicit.
@@ -1152,21 +1152,21 @@ def _check_host_deps(sudo, offline: bool) -> None:
         raise subprocess.CalledProcessError(rc, cmd)
 
 
-# Releng-inherited multi-user.target.wants enable-links Az'arch must NOT ship enabled.
+# Releng-inherited multi-user.target.wants enable-links Azzio must NOT ship enabled.
 # The stock archiso `releng` profile enables sshd on the official Arch ISO by shipping
 # airootfs/etc/systemd/system/multi-user.target.wants/sshd.service. _copy_releng copies
-# releng verbatim (symlinks preserved), so that link survives onto BOTH Az'arch variants
+# releng verbatim (symlinks preserved), so that link survives onto BOTH Azzio variants
 # unless stripped -- which is exactly why the DEFAULT headed ISO was booting with sshd active
 # on :22 (`systemctl status sshd` -> enabled; running). ssh must be OFF on the base ISO and
 # ON only on the ssh variant, where it is enabled at boot by sshd-hypervisor-setup.service
-# (see _apply_variant / packages/azarch/sshd.py), NOT by this inherited stock want. So we
+# (see _apply_variant / packages/azzio/sshd.py), NOT by this inherited stock want. So we
 # delete the releng sshd want here, before any overlay; the ssh variant re-enables sshd
 # through its own mechanism, leaving the stock want permanently stripped.
 _RELENG_WANTS_TO_STRIP = ("sshd.service",)
 
 
 def _strip_releng_wants(W: Path) -> None:
-    """Remove releng-inherited multi-user.target.wants links Az'arch must not ship enabled
+    """Remove releng-inherited multi-user.target.wants links Azzio must not ship enabled
     (currently the stock sshd.service want -- ssh is opt-in per variant, never a releng
     default). Best-effort per name so a future releng that drops one is a no-op, not a break."""
     wants = W / "airootfs/etc/systemd/system/multi-user.target.wants"
@@ -1184,17 +1184,17 @@ def _copy_releng(W: Path) -> None:
     _strip_releng_wants(W)
 
 
-# The archiso stock network stack Az'arch must NOT run: the releng profile enables
+# The archiso stock network stack Azzio must NOT run: the releng profile enables
 # systemd-networkd + systemd-resolved (its airootfs ships them enabled and drops
 # /etc/systemd/network/20-{ethernet,wlan,wwan}.network DHCP match files, plus
-# /etc/resolv.conf -> the resolved stub). Az'arch networks via NetworkManager
+# /etc/resolv.conf -> the resolved stub). Azzio networks via NetworkManager
 # (enabled in _link_services), so shipping BOTH stacks makes them RACE for every
 # interface: networkd matches the device first, DHCPs it, and NetworkManager then
 # sees the link as `managed-type: 'external'` and never applies its own profiles.
 #
 # THE BUG this fixes (found by installing then booting the target): a MANUAL/static
 # IPv4 chosen on the Calamares Network page IS written to the target as
-# /etc/NetworkManager/system-connections/azarch-static.nmconnection (the networkcfg
+# /etc/NetworkManager/system-connections/azzio-static.nmconnection (the networkcfg
 # patch works), but the installed system still comes up on a networkd DHCP lease --
 # "ip, subnet mask, nothing was modified" -- because networkd won the race and NM's
 # static profile stayed inactive. (It also affected the live session, benignly:
@@ -1277,7 +1277,7 @@ def _neutralize_archiso_network_stack(airootfs: Path) -> None:
 # clobber a symlink it does not own, so a leftover dangling stub symlink would leave the
 # installed system with no working DNS.
 RESOLV_CONF_PLACEHOLDER = (
-    "# Managed by NetworkManager (Az'arch networks via NetworkManager, not\n"
+    "# Managed by NetworkManager (Azzio networks via NetworkManager, not\n"
     "# systemd-resolved). This file is rewritten at runtime with the active\n"
     "# connection's DNS servers. See compiler._neutralize_archiso_network_stack.\n"
 )
@@ -1285,7 +1285,7 @@ RESOLV_CONF_PLACEHOLDER = (
 
 def _brand_boot_menus(W: Path) -> None:
     """Rebrand the copied releng boot menus (systemd-boot UEFI + syslinux BIOS) and
-    SKIP the first-boot menu -- boot straight into the default Az'arch entry.
+    SKIP the first-boot menu -- boot straight into the default Azzio entry.
 
     Runs right after _copy_releng, over the releng files it laid down. The releng
     profile is systemd-boot-only for UEFI (profiledef bootmodes list no `*.grub.*`),
@@ -1299,7 +1299,7 @@ def _brand_boot_menus(W: Path) -> None:
     UEFI entries: overwrite 01/02 IN PLACE (same filenames) rather than adding
     differently-named ones alongside -- otherwise the menu shows BOTH the stock
     "Arch Linux install medium" rows AND ours (duplicated rows all reading "Arch
-    Linux"). Overwriting rebrands them to Az'arch.
+    Linux"). Overwriting rebrands them to Azzio.
 
     The extra UEFI rows beside 01/02 -- gone so a forced-open menu is clean too -- go
     via the loader.conf override + one deletion:
@@ -1327,8 +1327,8 @@ def _brand_boot_menus(W: Path) -> None:
 
 
 def _emit_fastfetch(ea: Path, home: Path) -> None:
-    """Write the azarch fastfetch configuration + Az' logo for the live user, and stage
-    a copy under root/azarch/fastfetch so the on-disk installer can replant it
+    """Write the azzio fastfetch configuration + Az' logo for the live user, and stage
+    a copy under root/azzio/fastfetch so the on-disk installer can replant it
     into the installed user's ~/.config/fastfetch."""
     cfg = home / ".config/fastfetch"
     emit.write_text(cfg / "config.jsonc", fastfetch.config_jsonc())
@@ -1344,7 +1344,7 @@ def _link_services(airootfs: Path) -> None:
     # to `main`) drops into a login shell whose ~/.bash_profile execs startx ->
     # openbox-session -> (autostart) Calamares. So there is deliberately NO
     # display-manager unit and NO graphical.target.wants here; we only enable the
-    # multi-user daemons and the two azarch oneshots. X is started from the shell, not
+    # multi-user daemons and the two azzio oneshots. X is started from the shell, not
     # by systemd.
     #
     # These enable-links are variant-independent (both ISOs get them). The sshd
@@ -1353,7 +1353,7 @@ def _link_services(airootfs: Path) -> None:
     base = airootfs / "etc/systemd/system"
     emit.mkdir(base / "multi-user.target.wants")
     # bluetooth.service is DELIBERATELY NOT enabled here: Bluetooth is OFF by default on
-    # Az'arch. `azarch network bluetooth on` enables + starts it (and rfkill-unblocks the
+    # Azzio. `azzio network bluetooth on` enables + starts it (and rfkill-unblocks the
     # radio) on demand; leaving it out of multi-user.target.wants keeps the radio down at
     # boot. NetworkManager (the network stack) and CUPS (printing) stay auto-enabled.
     # spice-vdagentd is the SPICE guest agent's system daemon: it bridges the
@@ -1391,12 +1391,12 @@ def _link_services(airootfs: Path) -> None:
     emit.link("/etc/systemd/system/locale-setup.service", base / "multi-user.target.wants/locale-setup.service")
     emit.link("/etc/systemd/system/pkgs-setup.service", base / "multi-user.target.wants/pkgs-setup.service")
     # PC-vs-laptop idle-sleep policy oneshot: enabled on BOTH ISOs (and, via unpackfs,
-    # the installed system). Runs azarch-sleep-policy at boot to write the idle
+    # the installed system). Runs azzio-sleep-policy at boot to write the idle
     # drop-in for the detected chassis/AC state; the udev rule re-runs it on plug/
     # unplug. See _emit_power / libraries/system.py.
-    emit.link("/etc/systemd/system/azarch-sleep-policy.service",
-              base / "multi-user.target.wants/azarch-sleep-policy.service")
-    # Az'arch timedate home page service: the Flask Time + Calendar site (localhost:49154)
+    emit.link("/etc/systemd/system/azzio-sleep-policy.service",
+              base / "multi-user.target.wants/azzio-sleep-policy.service")
+    # Azzio timedate home page service: the Flask Time + Calendar site (localhost:49154)
     # LibreWolf lands on. Enabled on BOTH ISOs (and, via unpackfs, the installed system)
     # so the home page is listening at boot. See timedate.service_unit() / _emit_desktop.
     emit.link(timedate.SERVICE_SYSTEM_PATH,
@@ -1419,7 +1419,7 @@ def _switch_offline(W: Path, conf: str, localrepo: Path) -> None:
         part.unlink(missing_ok=True)
     conf = pacman.switch_to_local_repo(conf, str(localrepo))
     emit.write_text(W / "pacman.conf", conf)
-    if "[pacstrap-azarch-repo]" not in conf:
+    if "[pacstrap-azzio-repo]" not in conf:
         sys.stderr.write(
             "    [!] Offline conf rewrite did not inject the local repo -- check libraries/pacman.py.\n"
         )
@@ -1491,7 +1491,7 @@ def _probe_and_maybe_switch(W: Path, conf: str, localrepo: Path, bar: ProgressBa
     subprocess.run(["rm", "-rf", str(probe)], check=False)
 
 
-def _run_mkarchiso(sudo, W: Path, bar: ProgressBar, reclaim_after, iso_name: str = "azarch-headed") -> Path:
+def _run_mkarchiso(sudo, W: Path, bar: ProgressBar, reclaim_after, iso_name: str = "azzio-headed") -> Path:
     # temp dir cleanup (matches the old "Cleaning up temp directory" step)
     subprocess.run(["rm", "-rf", str(W / ".temp")], check=False)
     # Reset the mkarchiso work tree BEFORE every pass. This is load-bearing for the
@@ -1499,7 +1499,7 @@ def _run_mkarchiso(sudo, W: Path, bar: ProgressBar, reclaim_after, iso_name: str
     # file (work/base.<fn>, work/iso.<fn>) and REFUSES to remove a pre-existing work
     # dir. If the sshd pass reused the base pass's work/, every step -- airootfs build,
     # squashfs, and the final ISO write -- would be skipped as "already done", and
-    # azarch-sshd-*.iso would never be written (mkarchiso even reuses the base ISO's
+    # azzio-sshd-*.iso would never be written (mkarchiso even reuses the base ISO's
     # name slot). Wiping work/ first makes each variant a genuine fresh mkarchiso pass.
     # Unmount any proc/sys/dev/run mkarchiso bind-mounted under the old airootfs before
     # rm, or rm -rf would recurse into live mounts. The base pass's rm is a near-no-op
@@ -1537,11 +1537,11 @@ def _run_mkarchiso(sudo, W: Path, bar: ProgressBar, reclaim_after, iso_name: str
     if rc != 0:
         raise SystemExit(f"[x] mkarchiso failed (exit {rc})")
     # Select the ISO THIS build produced. output/ may hold BOTH variants
-    # (azarch-headed-*.iso AND azarch-headed-ssh-*.iso) when both have been built, so we
+    # (azzio-headed-*.iso AND azzio-headed-ssh-*.iso) when both have been built, so we
     # must not just take the first *.iso. mkarchiso names artifacts <iso_name>-<version>-<arch>
     # where <version> is YYYY.MM.DD (always starts with a DIGIT). Anchoring the glob
-    # with a digit right after "{iso_name}-" makes the BASE selection exact: "azarch-headed-"
-    # followed by a digit matches azarch-headed-2026...iso but NOT azarch-headed-ssh-...iso
+    # with a digit right after "{iso_name}-" makes the BASE selection exact: "azzio-headed-"
+    # followed by a digit matches azzio-headed-2026...iso but NOT azzio-headed-ssh-...iso
     # ("s" is not a digit) -- so the base pass can never accidentally pick up the sshd ISO,
     # regardless of build order or mtimes.
     isos = sorted(paths.BUILDDIR.glob(f"{iso_name}-[0-9]*.iso"))
@@ -1812,16 +1812,16 @@ def main() -> int:
     # progress bar -- which paints to the RAW terminal only -- never reaches the log.
     logstream.install()
 
-    # --full-compile: build Az'arch's own packages entirely from source (incl. the
+    # --full-compile: build Azzio's own packages entirely from source (incl. the
     # multi-hour LibreWolf/Firefox compile) rather than repackaging the verified
     # upstream LibreWolf tarball. Default is the fast repackage tier.
     full_compile = "--full-compile" in sys.argv[1:]
     if full_compile:
-        print("[*] --full-compile: Az'arch's own packages will be built ENTIRELY from source.")
+        print("[*] --full-compile: Azzio's own packages will be built ENTIRELY from source.")
         print("    This includes a LibreWolf/Firefox compile that can take 1.5-3+ hours.")
 
     # Each run builds exactly ONE ISO. The base/headed ISO is the default. The
-    # `azarch-headed-ssh` ISO is built INDIVIDUALLY (in place of the base ISO, not on top
+    # `azzio-headed-ssh` ISO is built INDIVIDUALLY (in place of the base ISO, not on top
     # of it) ONLY when `--ssh="<PASSWORD>"` supplies a non-empty string (DECISION 2 -- no
     # default password is ever shipped; the ssh variant's credential comes from the operator
     # at build time). The password is hashed HERE (sha-512 crypt) and threaded into run();
@@ -1829,13 +1829,13 @@ def main() -> int:
     ssh_password = parse_ssh_flag(sys.argv[1:])
     ssh_hash = ssh_password_hash(ssh_password) if ssh_password else None
     if ssh_hash:
-        print("[*] --ssh supplied: building ONLY the opt-in `azarch-headed-ssh` ISO "
+        print("[*] --ssh supplied: building ONLY the opt-in `azzio-headed-ssh` ISO "
               "(the base ISO is NOT built)")
         print("    (the ssh medium sets `main`'s password from --ssh, enables sshd, and "
               "opens port 22 at boot).")
     else:
-        print("[*] Building ONLY the base `azarch-headed` ISO (ssh disabled). Pass "
-              "--ssh=\"<PASSWORD>\" to build the opt-in `azarch-headed-ssh` ISO instead.")
+        print("[*] Building ONLY the base `azzio-headed` ISO (ssh disabled). Pass "
+              "--ssh=\"<PASSWORD>\" to build the opt-in `azzio-headed-ssh` ISO instead.")
 
     offline = cache_is_complete()
     _stale_cache_notice(offline)

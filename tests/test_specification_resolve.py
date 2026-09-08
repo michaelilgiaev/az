@@ -1,8 +1,8 @@
-"""specification_resolve -- the dependency-graph engine behind the Az'arch specification.
+"""specification_resolve -- the dependency-graph engine behind the Azzio specification.
 
 Every number the specification pages report (what a package brings, what is exclusive to
 one manifest entry, how deep a package sits in the dependency stack, which
-packages are stock Arch vs. Az'arch additions) is derived here from the raw
+packages are stock Arch vs. Azzio additions) is derived here from the raw
 `%DEPENDS%`/`%PROVIDES%` data. A silent off-by-one in the closure walk, a seed
 that leaks into (or out of) a transitive count, a cycle that inflates a height,
 or a provider tie-break that flips would corrupt the whole downstream report
@@ -149,7 +149,7 @@ def test_resolve_closure_marks_unresolved_token():
 
 # --- stock_reachable -------------------------------------------------------
 
-def test_stock_reachable_is_intersection_with_azarch_closure():
+def test_stock_reachable_is_intersection_with_azzio_closure():
     pkgs = _chain_packages()
     # Stock manifest ['a'] reaches {a,b,c}; intersect with {'b','z'} -> {'b'}.
     assert stock_reachable(["a"], {"b", "z"}, pkgs, {}, {}) == {"b"}

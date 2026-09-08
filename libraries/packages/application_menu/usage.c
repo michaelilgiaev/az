@@ -1,4 +1,4 @@
-/* Az'arch application menu (C port) -- launch-frequency usage tracking.
+/* Azzio application menu (C port) -- launch-frequency usage tracking.
  * Port of usage.py. Uses GLib's JSON-free approach: the store is a tiny flat
  * {"id":N,...} object; we parse/emit it by hand (no json-glib dependency) in the
  * SAME compact form usage.py writes (json.dump separators=(",",":")) so the two
@@ -18,15 +18,15 @@ struct AzUsage {
 };
 
 static char *store_path(void) {
-    const char *override = g_getenv("AZARCH_USAGE_FILE");
+    const char *override = g_getenv("AZZIO_USAGE_FILE");
     if (override && override[0])
         return g_strdup(override);
     const char *data_home = g_getenv("XDG_DATA_HOME");
     if (data_home && data_home[0])
-        return g_build_filename(data_home, "azarch-application-menu",
+        return g_build_filename(data_home, "azzio-application-menu",
                                 "usage.json", NULL);
     return g_build_filename(g_get_home_dir(), ".local", "share",
-                            "azarch-application-menu", "usage.json", NULL);
+                            "azzio-application-menu", "usage.json", NULL);
 }
 
 /* Minimal, defensive parser for a flat JSON object of string->integer.

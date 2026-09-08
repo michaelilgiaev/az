@@ -1,12 +1,12 @@
-"""The `azarch network ssh` server front-end + the first-run security notice.
+"""The `azzio network ssh` server front-end + the first-run security notice.
 
 Two closely-related surfaces, both pinned against the BUNDLED shipped script
-(packages.azarch.bundle.bundle_source -- the exact /usr/local/bin/azarch artifact):
+(packages.azzio.bundle.bundle_source -- the exact /usr/local/bin/azzio artifact):
 
-  * `azarch network ssh <start|stop|status>` -- start opens :22/tcp and enables sshd
+  * `azzio network ssh <start|stop|status>` -- start opens :22/tcp and enables sshd
     (via the `--sshd-hypervisor` bring-up), stop disables sshd AND closes :22, status
     reports both. This is the CLI behind the TUI's Network > SSH Server screen.
-  * `azarch security-notice` -- the one-time base-desktop warning (password login + ssh
+  * `azzio security-notice` -- the one-time base-desktop warning (password login + ssh
     OFF by default, enabling either exposes the box). It self-gates on the ssh variant /
     a real password and self-silences after the first show.
 
@@ -19,13 +19,13 @@ import types
 
 import pytest
 
-from packages.azarch.bundle import bundle_source
+from packages.azzio.bundle import bundle_source
 from packages import openbox as desktop
 
 
 def _cli():
-    mod = types.ModuleType("azarch_cli_ssh_test")
-    exec(compile(bundle_source(), "azarch_cli", "exec"), mod.__dict__)
+    mod = types.ModuleType("azzio_cli_ssh_test")
+    exec(compile(bundle_source(), "azzio_cli", "exec"), mod.__dict__)
     return mod
 
 
@@ -38,7 +38,7 @@ def _capture_sudo(cli, monkeypatch, rc=0):
 # --- ssh is a network noun --------------------------------------------------
 
 def test_ssh_is_a_network_noun():
-    src = desktop.azarch_command_line_interface()
+    src = desktop.azzio_command_line_interface()
     assert 'noun == "ssh"' in src
     assert "return cmd_ssh(rest)" in src
     # advertised in the network usage (now with the root-login sub-noun)
@@ -99,9 +99,9 @@ def test_ssh_bringup_hardens_permit_empty_passwords_no():
     # DECISION 2 hardening: the ssh bring-up drops a sshd_config.d snippet with
     # `PermitEmptyPasswords no`, so a blank shadow field can never be logged into even if
     # one ever slipped through. Assert the shipped source writes it before enabling sshd.
-    src = desktop.azarch_command_line_interface()
+    src = desktop.azzio_command_line_interface()
     assert "PermitEmptyPasswords no" in src
-    assert "sshd_config.d/10-azarch-hardening.conf" in src
+    assert "sshd_config.d/10-azzio-hardening.conf" in src
 
 
 def test_ssh_bringup_writes_hardening_before_enabling_sshd(monkeypatch):
@@ -128,7 +128,7 @@ def test_ssh_bringup_writes_hardening_before_enabling_sshd(monkeypatch):
 def test_sshd_hypervisor_opens_22_tcp_not_ssh_alias():
     # The bring-up must open 22/tcp explicitly (the user's firewall spec), so the port is
     # unambiguously tcp/22. Assert the shipped source uses `ufw allow 22/tcp`.
-    src = desktop.azarch_command_line_interface()
+    src = desktop.azzio_command_line_interface()
     assert '"ufw", "allow", "22/tcp"' in src
     # And it must NOT still use the old `ufw allow ssh` alias.
     assert '"ufw", "allow", "ssh"' not in src
@@ -137,9 +137,9 @@ def test_sshd_hypervisor_opens_22_tcp_not_ssh_alias():
 # --- root SSH login: denied by default, toggleable from the TUI/CLI ----------
 # data/PROMPT.md: root ssh login must be OFF by default (only the end user's own
 # account -- resolved dynamically via SUDO_USER -- may log in). A later request
-# added an opt-in switch (`azarch network ssh root on`) surfaced in the TUI. The
-# policy lives in its OWN drop-in (00-azarch-root-login.conf) so the toggle never
-# has to rewrite the always-on 10-azarch-hardening.conf. The `00-` prefix sorts
+# added an opt-in switch (`azzio network ssh root on`) surfaced in the TUI. The
+# policy lives in its OWN drop-in (00-azzio-root-login.conf) so the toggle never
+# has to rewrite the always-on 10-azzio-hardening.conf. The `00-` prefix sorts
 # FIRST so, since sshd is first-match-wins, our directive is authoritative and no
 # later drop-in can silently override it (the original bug: a lower/other file
 # permitted root while the status read only our file and reported "denied").
@@ -156,9 +156,9 @@ def test_root_login_drop_in_constants_carry_the_right_directive():
 
 def test_bringup_writes_root_login_off_dropin():
     # The shipped bring-up source must write the root-login OFF drop-in to its own file.
-    src = desktop.azarch_command_line_interface()
+    src = desktop.azzio_command_line_interface()
     assert "PermitRootLogin no" in src
-    assert "sshd_config.d/00-azarch-root-login.conf" in src
+    assert "sshd_config.d/00-azzio-root-login.conf" in src
 
 
 def test_bringup_writes_root_login_off_before_enabling_sshd(monkeypatch):
@@ -177,7 +177,7 @@ def test_bringup_writes_root_login_off_before_enabling_sshd(monkeypatch):
     monkeypatch.setattr(pwd, "getpwnam", lambda u: types.SimpleNamespace(pw_dir=tmp))
     assert cli.sshd_hypervisor() == 0
     root_write_idx = next(i for i, c in enumerate(calls)
-                          if c[0] == "write" and "00-azarch-root-login.conf" in c[1])
+                          if c[0] == "write" and "00-azzio-root-login.conf" in c[1])
     enable_idx = next(i for i, c in enumerate(calls)
                       if c[:1] == ("sudo",) and "enable" in c)
     assert root_write_idx < enable_idx, calls
@@ -186,7 +186,7 @@ def test_bringup_writes_root_login_off_before_enabling_sshd(monkeypatch):
 
 
 def test_ssh_root_is_a_sub_noun_of_ssh():
-    # `azarch network ssh root <on|off|status>` -- advertised in the ssh help.
+    # `azzio network ssh root <on|off|status>` -- advertised in the ssh help.
     cli = _cli()
     assert cli.cmd_ssh(["root", "--help"]) == 0 or True  # help is optional; dispatch below is the contract
     # Unknown root verb is a usage error (rc 2), matching the rest of the CLI.
@@ -204,7 +204,7 @@ def test_ssh_root_on_writes_on_dropin_and_reloads(monkeypatch):
     assert cli.cmd_ssh(["root", "on"]) == 0
     # Wrote the ON drop-in to the root-login file (now the FIRST-sorting 00- file)...
     w = next(c for c in calls if c[0] == "write")
-    assert "00-azarch-root-login.conf" in w[1]
+    assert "00-azzio-root-login.conf" in w[1]
     assert "PermitRootLogin yes" in w[2]
     # ...and reloaded sshd so the change takes effect without dropping live sessions.
     assert any(c[:1] == ("sudo",) and "reload" in c and "sshd" in c for c in calls), calls
@@ -223,16 +223,16 @@ def test_ssh_root_off_writes_off_dropin_and_reloads(monkeypatch):
     monkeypatch.setattr(cli, "sshd_root_login_is_enabled", lambda: False)
     assert cli.cmd_ssh(["root", "off"]) == 0
     w = next(c for c in calls if c[0] == "write")
-    assert "00-azarch-root-login.conf" in w[1]
+    assert "00-azzio-root-login.conf" in w[1]
     assert "PermitRootLogin no" in w[2]
     assert any(c[:1] == ("sudo",) and "reload" in c and "sshd" in c for c in calls), calls
 
 
 def test_ssh_root_toggle_removes_stale_20_dropin(monkeypatch):
     # BACKWARD COMPAT: systems provisioned by an older build carry the deny policy in the
-    # OLD 20-azarch-root-login.conf. The toggle now writes 00-; to avoid two coexisting
+    # OLD 20-azzio-root-login.conf. The toggle now writes 00-; to avoid two coexisting
     # (confusing, and a second directive) files, enable/disable must also REMOVE the stale
-    # 20- file. Assert both on and off issue an `rm -f .../20-azarch-root-login.conf`.
+    # 20- file. Assert both on and off issue an `rm -f .../20-azzio-root-login.conf`.
     cli = _cli()
     monkeypatch.setattr(cli, "sshd_is_active", lambda: False)
     monkeypatch.setattr(cli, "sshd_root_login_is_enabled", lambda: False)
@@ -241,7 +241,7 @@ def test_ssh_root_toggle_removes_stale_20_dropin(monkeypatch):
         monkeypatch.setattr(cli, "_sudo", lambda *a, **k: calls.append(a) or 0)
         monkeypatch.setattr(cli, "_sudo_write", lambda p, c: None)
         assert cli.cmd_ssh(["root", verb]) == 0
-        assert any(a[:1] == ("rm",) and any("20-azarch-root-login.conf" in x for x in a)
+        assert any(a[:1] == ("rm",) and any("20-azzio-root-login.conf" in x for x in a)
                    for a in calls), (verb, calls)
 
 
@@ -292,7 +292,7 @@ def test_ssh_root_toggle_skips_reload_when_sshd_not_running(monkeypatch):
     monkeypatch.setattr(cli, "sshd_is_active", lambda: False)
     assert cli.cmd_ssh(["root", "on"]) == 0
     # The drop-in is still written...
-    assert any(c[0] == "write" and "00-azarch-root-login.conf" in c[1] for c in calls), calls
+    assert any(c[0] == "write" and "00-azzio-root-login.conf" in c[1] for c in calls), calls
     # ...but nothing was reloaded, because there was no live sshd to reload.
     assert not any("reload" in c for c in calls), calls
 
@@ -318,7 +318,7 @@ def test_root_login_is_enabled_falls_back_to_file_when_no_effective(monkeypatch,
     # so status still shows the intended policy without prompting.
     cli = _cli()
     monkeypatch.setattr(cli, "_sshd_effective_permitrootlogin", lambda: None)
-    conf = tmp_path / "00-azarch-root-login.conf"
+    conf = tmp_path / "00-azzio-root-login.conf"
     monkeypatch.setattr(cli, "_root_login_dropin_path", lambda: str(conf))
     conf.write_text("PermitRootLogin yes\n")
     assert cli.sshd_root_login_is_enabled() is True
@@ -347,11 +347,11 @@ def test_ssh_root_status_reports_disabled_when_effective_denies(monkeypatch, cap
 
 def test_tui_ssh_screen_has_root_login_toggle_rows():
     # The TUI SSH Server screen must expose the toggle. Assert the shipped C model_tree.c
-    # ROWS_SSH table carries rows that drive `azarch network ssh root on` / `... off`.
+    # ROWS_SSH table carries rows that drive `azzio network ssh root on` / `... off`.
     import pathlib
-    src = pathlib.Path("libraries/packages/azarch/model_tree.c").read_text()
-    assert "azarch network ssh root on" in src
-    assert "azarch network ssh root off" in src
+    src = pathlib.Path("libraries/packages/azzio/model_tree.c").read_text()
+    assert "azzio network ssh root on" in src
+    assert "azzio network ssh root off" in src
     # And the enable row should warn it is insecure (root login off is the safe default).
     assert "root" in src.lower() and "login" in src.lower()
 
@@ -359,7 +359,7 @@ def test_tui_ssh_screen_has_root_login_toggle_rows():
 # --- security-notice: wording + self-gating ---------------------------------
 
 def test_security_notice_is_a_dispatch_branch():
-    src = desktop.azarch_command_line_interface()
+    src = desktop.azzio_command_line_interface()
     assert 'cmd == "security-notice"' in src
     assert "return cmd_security_notice(argv[1:])" in src
 
@@ -376,7 +376,7 @@ def test_security_notice_text_covers_the_required_points():
     assert "security practices" in low
     assert "stay safe" in low
     # Prose rules: no colons/semicolons/dashes in the notice sentences (paths/URLs exempt,
-    # and there are none here). The apostrophe in "Az'arch" is allowed.
+    # and there are none here). The apostrophe in "Azzio" is allowed.
     assert ":" not in text and ";" not in text
     assert " - " not in text and "--" not in text
 
@@ -439,7 +439,7 @@ def test_security_notice_shows_once_then_silent(monkeypatch, tmp_path, capsys):
 
 def test_sudo_is_noninteractive_under_the_tui(monkeypatch):
     cli = _cli()
-    # The TUI sets AZARCH_SUDO_NONINTERACTIVE so privileged applies fail FAST instead of
+    # The TUI sets AZZIO_SUDO_NONINTERACTIVE so privileged applies fail FAST instead of
     # hanging on a dead /dev/null prompt. With it set (and not root), _sudo must prefix
     # `sudo -n`. Without it, plain `sudo` (interactive) is kept for normal CLI use.
     seen = {}
@@ -447,11 +447,11 @@ def test_sudo_is_noninteractive_under_the_tui(monkeypatch):
                         lambda argv, **k: seen.update(argv=argv) or type("R", (), {"returncode": 0})())
     monkeypatch.setattr(cli.os, "geteuid", lambda: 1000)  # not root
 
-    monkeypatch.setenv("AZARCH_SUDO_NONINTERACTIVE", "1")
+    monkeypatch.setenv("AZZIO_SUDO_NONINTERACTIVE", "1")
     cli._sudo("ufw", "status", check=False)
     assert seen["argv"][:3] == ["sudo", "-n", "ufw"], seen["argv"]
 
-    monkeypatch.delenv("AZARCH_SUDO_NONINTERACTIVE", raising=False)
+    monkeypatch.delenv("AZZIO_SUDO_NONINTERACTIVE", raising=False)
     cli._sudo("ufw", "status", check=False)
     assert seen["argv"][:2] == ["sudo", "ufw"], seen["argv"]  # interactive kept
 
@@ -463,18 +463,18 @@ def test_sudo_is_direct_when_root(monkeypatch):
     monkeypatch.setattr(cli.subprocess, "run",
                         lambda argv, **k: seen.update(argv=argv) or type("R", (), {"returncode": 0})())
     monkeypatch.setattr(cli.os, "geteuid", lambda: 0)
-    monkeypatch.setenv("AZARCH_SUDO_NONINTERACTIVE", "1")
+    monkeypatch.setenv("AZZIO_SUDO_NONINTERACTIVE", "1")
     cli._sudo("ufw", "status", check=False)
     assert seen["argv"][0] == "ufw", seen["argv"]
 
 
 def test_tui_sets_noninteractive_sudo_env():
-    # The C TUI must set AZARCH_SUDO_NONINTERACTIVE at startup so the applies it spawns run
+    # The C TUI must set AZZIO_SUDO_NONINTERACTIVE at startup so the applies it spawns run
     # sudo non-interactively (the fix for the UI wedging when a privileged action needs
     # sudo). Assert the shipped main.c does it.
     import pathlib
-    main_c = pathlib.Path("libraries/packages/azarch/main.c").read_text()
-    assert 'setenv("AZARCH_SUDO_NONINTERACTIVE", "1", 1)' in main_c
+    main_c = pathlib.Path("libraries/packages/azzio/main.c").read_text()
+    assert 'setenv("AZZIO_SUDO_NONINTERACTIVE", "1", 1)' in main_c
 
 
 def test_security_notice_gate_reads_shadow_field(monkeypatch):

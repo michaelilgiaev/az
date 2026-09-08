@@ -1,8 +1,8 @@
-"""The `azarch network` command -- one front-end over nmcli / rfkill / bluetoothctl / ufw.
+"""The `azzio network` command -- one front-end over nmcli / rfkill / bluetoothctl / ufw.
 
-Az'arch wraps the confusing raw networking tools in a plain noun/verb command matching
-`azarch theme` / `azarch wallpaper`. These tests pin, against the BUNDLED shipped script
-(packages.azarch.bundle.bundle_source -- the exact /usr/local/bin/azarch artifact):
+Azzio wraps the confusing raw networking tools in a plain noun/verb command matching
+`azzio theme` / `azzio wallpaper`. These tests pin, against the BUNDLED shipped script
+(packages.azzio.bundle.bundle_source -- the exact /usr/local/bin/azzio artifact):
 
   * that `network` is a real top-level dispatch branch advertised in usage();
   * the noun surface (status/wifi/wired/bluetooth/airplane/firewall/ip) and that each
@@ -23,14 +23,14 @@ import types
 
 import pytest
 
-from packages.azarch.bundle import bundle_source
+from packages.azzio.bundle import bundle_source
 from packages import openbox as desktop
 
 
 def _command_line_interface():
-    """Exec the bundled azarch command line interface in a fresh module namespace (as shipped)."""
-    mod = types.ModuleType("azarch_cli_network_test")
-    exec(compile(bundle_source(), "azarch_command_line_interface", "exec"), mod.__dict__)
+    """Exec the bundled azzio command line interface in a fresh module namespace (as shipped)."""
+    mod = types.ModuleType("azzio_cli_network_test")
+    exec(compile(bundle_source(), "azzio_command_line_interface", "exec"), mod.__dict__)
     return mod
 
 
@@ -50,7 +50,7 @@ def _stub_reads(command_line_interface, monkeypatch, have=True, run=(0, "")):
 # --- dispatch wiring --------------------------------------------------------
 
 def test_network_is_a_dispatch_branch_in_main():
-    src = desktop.azarch_command_line_interface()
+    src = desktop.azzio_command_line_interface()
     assert 'cmd == "network"' in src
     assert "return cmd_network(argv[1:])" in src
     # advertised in the top-level usage()
@@ -62,7 +62,7 @@ def test_network_help_prints_usage_and_exits_zero(capsys):
     rc = command_line_interface.main(["network", "--help"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "Usage: azarch network" in out
+    assert "Usage: azzio network" in out
     for noun in ("wifi", "wired", "bluetooth", "airplane", "firewall", "ip"):
         assert noun in out
     # The firewall line advertises the full port verb set, including delete.
@@ -317,7 +317,7 @@ def test_firewall_port_rejects_bad_token(monkeypatch, capsys):
 # --- firewall port: Title column + delete (the PROMPT.md additions) ---------
 
 def test_firewall_port_49154_has_timedate_title():
-    """The port-title map ships 49154 -> 'timedate' (the Az'arch timedate home page)."""
+    """The port-title map ships 49154 -> 'timedate' (the Azzio timedate home page)."""
     command_line_interface = _command_line_interface()
     assert command_line_interface.PORT_TITLES.get(49154) == "timedate"
     # The title is matched by base port, regardless of protocol suffix.
@@ -470,7 +470,7 @@ def test_prefix_to_netmask_conversion():
 
 
 def test_ip_show_reports_address_mask_gateway_and_dns(monkeypatch, capsys):
-    # Regression: `azarch network ip show` used to print ONLY the address, hiding the subnet
+    # Regression: `azzio network ip show` used to print ONLY the address, hiding the subnet
     # mask, gateway and DNS the user needs to examine. It must now print all four for every
     # CONNECTED device, and derive the dotted subnet mask from the CIDR prefix.
     command_line_interface = _command_line_interface()

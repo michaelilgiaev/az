@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# pull_specifications.sh -- generate the Az'arch DISTRIBUTION specification.
+# pull_specifications.sh -- generate the Azzio DISTRIBUTION specification.
 #
 # This produces four artifacts:
 #   documentations/SPECIFICATIONS_GENERAL.md  the general / developer view:
-#                                     at-a-glance facts, what Az'arch changes on
+#                                     at-a-glance facts, what Azzio changes on
 #                                     top of Arch, and the subsystem breakdown.
 #                                     No dependency-graph tables (those are below).
 #   documentations/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg  a navigable layered

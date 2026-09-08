@@ -1,12 +1,12 @@
 """
-specification_svg -- render the Az'arch dependency graph as a single self-contained SVG.
+specification_svg -- render the Azzio dependency graph as a single self-contained SVG.
 
 The SVG is the navigable, at-a-glance view the Markdown tables cannot be: seven
 horizontal layers stacked from the kernel at the bottom to the leaf applications
 at the top. Each layer is a labelled band; inside it sit the most load-bearing
 packages of that layer as boxes, coloured by their human-language category and
-marked with their edition -- a star marks an Az'arch Component (in the set only
-because Az'arch added it), while Stock Arch packages (already on the stock
+marked with their edition -- a star marks an Azzio Component (in the set only
+because Azzio added it), while Stock Arch packages (already on the stock
 archiso releng medium) are left unmarked.
 
 No external tooling (no Graphviz, no rsvg): we emit plain SVG text, so it renders
@@ -24,7 +24,7 @@ import html
 
 import specification_classify as K
 
-# Az'arch brand gradient (sampled from the fastfetch logo asset): cyan -> blue.
+# Azzio brand gradient (sampled from the fastfetch logo asset): cyan -> blue.
 BRAND_CYAN = "#03a5fc"
 BRAND_BLUE = "#0065f9"
 INK = "#0d1117"
@@ -52,11 +52,11 @@ LAYER_DEFS = [
     ("Leaves (34+)", "top; the deepest chains -- nothing depends on these"),
 ]
 
-# Edition marker glyphs drawn on each box corner. Two editions only: an Az'arch
-# Component (in the set only because Az'arch added it) gets a star; Stock Arch
+# Edition marker glyphs drawn on each box corner. Two editions only: an Azzio
+# Component (in the set only because Azzio added it) gets a star; Stock Arch
 # (already on the stock archiso releng medium) is unmarked.
 EDITION_MARK = {
-    "az'arch": ("★", BRAND_CYAN),   # Az'arch Component
+    "azzio": ("★", BRAND_CYAN),   # Azzio Component
     "stock":   ("",  None),          # Stock Arch (baseline archiso)
 }
 
@@ -198,7 +198,7 @@ def render_svg(packages, resolved, tiers, tags, glance):
 
     # ---- header / at-a-glance ------------------------------------------- #
     a(f'<text x="{margin}" y="52" font-size="34" font-weight="700" '
-      f'fill="url(#brand)">Az&#39;arch</text>')
+      f'fill="url(#brand)">Azzio</text>')
     a(f'<text x="{margin+168}" y="52" font-size="26" font-weight="600" '
       f'fill="{TEXT}">Distribution dependency graph</text>')
     a(f'<text x="{margin}" y="78" font-size="13" fill="{TEXT_DIM}">'
@@ -213,7 +213,7 @@ def render_svg(packages, resolved, tiers, tags, glance):
         ("ISO version scheme", glance["iso_version"]),
         ("Live-session RAM (cow_spacesize)", glance["ram"]),
         ("Packages (full closure)", str(glance["closure"])),
-        ("Az'arch Component / Stock Arch", f'{glance["azarch"]} / {glance["stock"]}'),
+        ("Azzio Component / Stock Arch", f'{glance["azzio"]} / {glance["stock"]}'),
         ("Deepest chain (leaf -> base)", f'{glance["max_height"]} hops'),
         ("Installed size", glance["size"]),
     ]
@@ -316,10 +316,10 @@ def render_svg(packages, resolved, tiers, tags, glance):
     a(f'<text x="{ex}" y="{ey+4}" font-size="14" font-weight="700" '
       f'fill="{TEXT}">Edition</text>')
     items = [
-        (f'{EDITION_MARK["az\'arch"][0]} Az’arch Component',
-         "in the set only because Az’arch added it (a chosen app or its support)", BRAND_CYAN),
+        (f'{EDITION_MARK["azzio"][0]} Azzio Component',
+         "in the set only because Azzio added it (a chosen app or its support)", BRAND_CYAN),
         ("Stock Arch",
-         "already on the stock archiso releng medium; Az’arch inherits it", TEXT_DIM),
+         "already on the stock archiso releng medium; Azzio inherits it", TEXT_DIM),
     ]
     exx = margin + 90
     for label, desc, col in items:

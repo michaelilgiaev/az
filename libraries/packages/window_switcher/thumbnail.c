@@ -1,4 +1,4 @@
-/* Az'arch window switcher -- live thumbnail capture via XComposite. See thumbnail.h.
+/* Azzio window switcher -- live thumbnail capture via XComposite. See thumbnail.h.
  *
  * picom (started from the OpenBox autostart) redirects every window to an off-screen
  * pixmap; here we name that pixmap, wrap it in a cairo Xlib surface, pull it into a

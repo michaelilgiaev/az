@@ -1,4 +1,4 @@
-# Az'arch window switcher (C/GTK3) build. Produces azarch-window-switcher-daemon.
+# Azzio window switcher (C/GTK3) build. Produces azzio-window-switcher-daemon.
 # Reuses four application-menu translation units (the shared window resolver, the app
 # scan, the icon resolver, the theme palette) by compiling them from ../application_menu
 # with -I so we neither fork nor copy them. build_daemon() (window_switcher.py) stages
@@ -13,7 +13,7 @@ LDFLAGS += $(shell pkg-config --libs $(PKGS)) -lm
 
 OBJS = switcher.o windows.o thumbnail.o layout.o ordering.o switch_logic.o \
        window_resolve.o applications.o icons.o theme.o
-BIN  = azarch-window-switcher-daemon
+BIN  = azzio-window-switcher-daemon
 TESTS_DIR = ../../../tests
 
 $(BIN): $(OBJS)

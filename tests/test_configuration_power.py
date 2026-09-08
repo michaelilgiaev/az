@@ -1,13 +1,13 @@
-"""The `azarch power` command -- shutdown / restart / sleep / lock, with timers.
+"""The `azzio power` command -- shutdown / restart / sleep / lock, with timers.
 
-These pin, against the BUNDLED shipped script (packages.azarch.bundle.bundle_source -- the
-exact /usr/local/bin/azarch artifact):
+These pin, against the BUNDLED shipped script (packages.azzio.bundle.bundle_source -- the
+exact /usr/local/bin/azzio artifact):
 
   * that `power` (and the top-level `shutdown`/`restart`/`sleep`/`lock` convenience verbs)
     are real dispatch branches in main();
   * the duration parser (30m/1h/90s/N-minutes) and HH:MM validation;
   * that immediate actions call `systemctl poweroff|reboot|suspend`, scheduling builds a
-    `systemd-run --unit=azarch-<action> --on-active=/--on-calendar=` timer, --status reads
+    `systemd-run --unit=azzio-<action> --on-active=/--on-calendar=` timer, --status reads
     `systemctl list-timers`, and --cancel stops the transient unit -- all WITHOUT touching
     the host (`_sudo` and the reads are stubbed);
   * lock tries `loginctl lock-session` first;
@@ -24,14 +24,14 @@ import types
 
 import pytest
 
-from packages.azarch.bundle import bundle_source
+from packages.azzio.bundle import bundle_source
 from packages import openbox as desktop
 
 
 def _cli():
-    """Exec the bundled azarch CLI in a fresh module namespace (as shipped)."""
-    mod = types.ModuleType("azarch_cli_power_test")
-    exec(compile(bundle_source(), "azarch_cli", "exec"), mod.__dict__)
+    """Exec the bundled azzio CLI in a fresh module namespace (as shipped)."""
+    mod = types.ModuleType("azzio_cli_power_test")
+    exec(compile(bundle_source(), "azzio_cli", "exec"), mod.__dict__)
     return mod
 
 
@@ -50,7 +50,7 @@ def _have(cli, monkeypatch, have=True):
 def test_power_is_a_dispatch_branch_in_main():
     # Assert against the SHIPPED bundle source (as the network test does) -- the exec'd
     # namespace has no source file for inspect.getsource.
-    src = desktop.azarch_command_line_interface()
+    src = desktop.azzio_command_line_interface()
     assert 'cmd == "power"' in src
     assert "return cmd_power(argv[1:])" in src
     # The convenience top-level verbs exist too. restart/reboot share one branch
@@ -158,7 +158,7 @@ def test_power_now_calls_systemctl(verb, systemctl_verb, monkeypatch):
 
 
 def test_reboot_is_an_alias_for_restart(monkeypatch):
-    # `azarch power reboot` and `azarch reboot` must behave exactly like restart:
+    # `azzio power reboot` and `azzio reboot` must behave exactly like restart:
     # immediate `systemctl reboot`, same as the `restart` verb.
     cli = _cli()
     _have(cli, monkeypatch, True)
@@ -170,7 +170,7 @@ def test_reboot_is_an_alias_for_restart(monkeypatch):
 def test_reboot_alias_wired_in_main_and_help():
     # The top-level `reboot` verb is a real dispatch branch (shared with restart), and both
     # help screens mention it.
-    src = desktop.azarch_command_line_interface()
+    src = desktop.azzio_command_line_interface()
     assert '"reboot"' in src and 'cmd in ("restart", "reboot")' in src
     cli = _cli()
     for helped in (cli.cmd_power(["--help"]), cli._power_verb("restart", ["--help"])):
@@ -185,7 +185,7 @@ def test_reboot_alias_wired_in_main_and_help():
 
 
 def test_reboot_alias_schedules_the_restart_unit(monkeypatch):
-    # A timed reboot uses the SAME transient unit as restart (azarch-restart), so --status /
+    # A timed reboot uses the SAME transient unit as restart (azzio-restart), so --status /
     # --cancel of either verb see the same timer.
     cli = _cli()
     _have(cli, monkeypatch, True)
@@ -193,7 +193,7 @@ def test_reboot_alias_schedules_the_restart_unit(monkeypatch):
     calls = _capture_sudo(cli, monkeypatch)
     assert cli.cmd_power(["reboot", "--in", "5m"]) == 0
     run = [c for c in calls if c and c[0] == "systemd-run"]
-    assert run and "--unit=azarch-restart" in run[0], run
+    assert run and "--unit=azzio-restart" in run[0], run
 
 
 # --- scheduling builds a systemd-run timer ----------------------------------
@@ -209,7 +209,7 @@ def test_schedule_in_builds_on_active_timer(monkeypatch):
     run = [c for c in calls if c and c[0] == "systemd-run"]
     assert run, f"expected a systemd-run call, got {calls}"
     argv = run[0]
-    assert "--unit=azarch-shutdown" in argv
+    assert "--unit=azzio-shutdown" in argv
     assert "--on-active=1800s" in argv
     assert argv[-2:] == ("systemctl", "poweroff")
 
@@ -223,7 +223,7 @@ def test_schedule_at_builds_on_calendar_timer(monkeypatch):
     run = [c for c in calls if c and c[0] == "systemd-run"]
     assert run
     argv = run[0]
-    assert "--unit=azarch-restart" in argv
+    assert "--unit=azzio-restart" in argv
     # HH:MM is zero-padded and expanded to a full OnCalendar spec.
     assert any(a == "--on-calendar=*-*-* 03:07:00" for a in argv), argv
     assert argv[-2:] == ("systemctl", "reboot")
@@ -297,7 +297,7 @@ def test_status_reads_list_timers(monkeypatch, capsys):
         class R:  # noqa: N801 -- tiny stand-in for CompletedProcess
             returncode = 0
             stdout = ("Mon 2026-08-27 03:07:00 UTC 1h left n/a n/a "
-                      "azarch-shutdown.timer azarch-shutdown.service\n")
+                      "azzio-shutdown.timer azzio-shutdown.service\n")
         return R()
 
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
@@ -321,12 +321,12 @@ def test_cancel_stops_the_transient_unit(monkeypatch, capsys):
     calls = _capture_sudo(cli, monkeypatch)
     assert cli.cmd_power(["shutdown", "--cancel"]) == 0
     stops = [c for c in calls if c[:2] == ("systemctl", "stop")]
-    assert any("azarch-shutdown.timer" in c for c in stops), calls
+    assert any("azzio-shutdown.timer" in c for c in stops), calls
 
 
 # --- noise suppression: no `Unit ... not loaded` wall when nothing is pending ---
 # The reported bug: every schedule (which first does an idempotent cancel) and every
-# --cancel-with-nothing-pending spewed "Failed to stop azarch-shutdown.timer: Unit not
+# --cancel-with-nothing-pending spewed "Failed to stop azzio-shutdown.timer: Unit not
 # loaded" x4 to the terminal. The fix gates the stop/reset-failed on _power_pending: when
 # no timer exists, we touch NO unit at all, so systemctl never prints the not-loaded lines.
 

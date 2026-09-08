@@ -1,4 +1,4 @@
-/* Az'arch application menu (C port) -- bottom power/session button.
+/* Azzio application menu (C port) -- bottom power/session button.
  * One-to-one port of widgets.py PowerButton, drawn with Cairo/Pango. */
 #include "power.h"
 #include "theme.h"

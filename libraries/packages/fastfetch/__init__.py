@@ -1,11 +1,11 @@
-"""fastfetch configuration + the azarch "Az'" ASCII logo.
+"""fastfetch configuration + the azzio "Az'" ASCII logo.
 
 fastfetch ships in the ISO's package list; this module provides the two files
-that make `fastfetch` render the azarch brand instead of the stock Arch logo:
+that make `fastfetch` render the azzio brand instead of the stock Arch logo:
 
   logo_txt()     the "Az'" ASCII art, read verbatim from the repo asset
-                 assets/ascii/azarch_fastfetch.ansi. That file is ALREADY
-                 colored with the azarch cyan->blue gradient (real ANSI truecolor
+                 assets/ascii/azzio_fastfetch.ansi. That file is ALREADY
+                 colored with the azzio cyan->blue gradient (real ANSI truecolor
                  escapes baked in per row), so the configuration below uses
                  `type: "file-raw"`, which prints the file byte-for-byte with no
                  post-processing. (The older `type: "file"` + $N-placeholder path
@@ -26,14 +26,14 @@ import paths
 # The "Az'" logo lives as a real asset in the repo (git-tracked, survives
 # `git clean -Xdf`): a rounded capital A with a hollow counter and a lowercase z,
 # 40 cols x 18 rows, pre-colored with the cyan->blue gradient sampled from
-# assets/azarch_logo.png. We read it verbatim rather than embedding a copy here so
+# assets/azzio_logo.png. We read it verbatim rather than embedding a copy here so
 # the art has a single source of truth (the .ansi file you can open and eyeball).
-_LOGO_ASSET = paths.ASSETSDIR / "ascii" / "azarch_fastfetch.ansi"
+_LOGO_ASSET = paths.ASSETSDIR / "ascii" / "azzio_fastfetch.ansi"
 
 # The bare filename the art is written to inside ~/.config/fastfetch/. The configuration's
 # `source` is the absolute path to this; compiler.py / the installer write the file
 # there. Kept as a constant so the two stay in lockstep.
-LOGO_FILENAME = "azarch.ansi"
+LOGO_FILENAME = "azzio.ansi"
 LOGO_PATH = f"/home/main/.config/fastfetch/{LOGO_FILENAME}"
 
 

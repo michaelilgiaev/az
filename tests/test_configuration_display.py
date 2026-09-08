@@ -1,4 +1,4 @@
-"""The `azarch display` command surface + the Display TUI screen (PROMPT Display/scale task).
+"""The `azzio display` command surface + the Display TUI screen (PROMPT Display/scale task).
 
 Guards: the CLI is wired into the dispatcher/usage; the GLOBAL SCALE options + DPI math mirror
 the single source (packages/openbox/scale); scale set rewrites ~/.Xresources with the right Xft.dpi;
@@ -11,21 +11,21 @@ import os
 import tempfile
 import types
 
-from packages.azarch.bundle import bundle_source
+from packages.azzio.bundle import bundle_source
 from packages.openbox import scale
 import paths
 
 
 def _bundled():
-    mod = types.ModuleType("azarch_cli_disp")
-    exec(compile(bundle_source(), "azarch_cli_disp", "exec"), mod.__dict__)
+    mod = types.ModuleType("azzio_cli_disp")
+    exec(compile(bundle_source(), "azzio_cli_disp", "exec"), mod.__dict__)
     return mod
 
 
 def _model_c() -> str:
     # The screen TREE (ROWS_* + SCREENS[]) lives in model_tree.c since model.c was split for the
     # size budget; read both so a row/screen check finds it wherever it is.
-    d = paths.LIBDIR / "packages/azarch"
+    d = paths.LIBDIR / "packages/azzio"
     return (d / "model.c").read_text(encoding="utf-8") + "\n" + \
         (d / "model_tree.c").read_text(encoding="utf-8")
 
@@ -105,12 +105,12 @@ def test_model_c_display_screen_present():
 
 def test_model_c_scale_chooser_offers_every_option():
     model = _model_c()
-    # every SCALE_OPTIONS value has an `azarch display scale <factor>` apply row.
+    # every SCALE_OPTIONS value has an `azzio display scale <factor>` apply row.
     for s in scale.SCALE_OPTIONS:
-        assert f"azarch display scale {s:.2f}" in model, s
+        assert f"azzio display scale {s:.2f}" in model, s
 
 
 def test_model_c_display_orientation_rows():
     model = _model_c()
     for rot in ("normal", "left", "right", "inverted"):
-        assert f"azarch display rotate {rot}" in model, rot
+        assert f"azzio display rotate {rot}" in model, rot

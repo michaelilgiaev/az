@@ -55,9 +55,9 @@ def test_rule_uses_box_dash_on_utf8_and_ascii_dash_otherwise():
 def test_header_prints_title_then_a_rule():
     """header() prints the title on its own line followed by a rule of the same glyph."""
     buf = _Stream("utf-8")
-    user_interface.header("Az'arch backup", stream=buf)
+    user_interface.header("Azzio backup", stream=buf)
     lines = buf.getvalue().splitlines()
-    assert lines[0] == "Az'arch backup"
+    assert lines[0] == "Azzio backup"
     assert set(lines[1]) == {"─"} and len(lines[1]) >= 10
 
 

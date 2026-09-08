@@ -1,14 +1,14 @@
 """specification_classify -- the editorial layer that decides, for every package in the
-closure, (a) which edition it belongs to (stock Arch vs an Az'arch Component)
+closure, (a) which edition it belongs to (stock Arch vs an Azzio Component)
 and (b) a single human-language category role.
 
 These are pure functions over plain dicts -- no metadata is fetched, nothing is
 guessed at random -- so they are the cheapest place to lock down behavior that
 otherwise fails silently:
 
-  * The edition literal is the exact string "az'arch" WITH the apostrophe. A
+  * The edition literal is the exact string "azzio" WITH the apostrophe. A
     renderer that groups by edition string will silently split the graph in two
-    if this ever drifts to "azarch".
+    if this ever drifts to "azzio".
   * The 5-stage category cascade (curated -> group -> dev-tool -> name pattern ->
     desc keyword -> shared-lib/System fallback) has a fixed precedence. A curated
     name must beat everything; a group must beat a name prefix; etc. If the order
@@ -40,17 +40,17 @@ from specification_classify import (
     CURATED,
     GROUP_ROLE,
     DEV_TOOL_NAMES,
-    AZARCH_CONFIGURED,
-    AZARCH_REMOVED,
+    AZZIO_CONFIGURED,
+    AZZIO_REMOVED,
 )
 
 
 # --- edition_of -------------------------------------------------------------
 
 def test_edition_literal_apostrophe():
-    # Not in the stock-reachable set -> it is an Az'arch Component. The literal
-    # MUST carry the apostrophe: "az'arch", not "azarch".
-    assert edition_of("x", set()) == "az'arch"
+    # Not in the stock-reachable set -> it is an Azzio Component. The literal
+    # MUST carry the apostrophe: "azzio", not "azzio".
+    assert edition_of("x", set()) == "azzio"
 
 
 def test_edition_stock_when_reachable():
@@ -61,7 +61,7 @@ def test_edition_stock_when_reachable():
 def test_edition_only_two_values():
     # There are exactly two editions, nothing else.
     assert edition_of("a", {"a"}) == "stock"
-    assert edition_of("b", {"a"}) == "az'arch"
+    assert edition_of("b", {"a"}) == "azzio"
 
 
 # --- category cascade precedence -------------------------------------------
@@ -193,30 +193,30 @@ def test_classify_keys_equal_closure():
 
 def test_classify_record_has_four_keys():
     out = classify({"fastfetch": {}}, ["fastfetch"], set())
-    assert set(out["fastfetch"]) == {"edition", "category", "azarch_note", "removed"}
+    assert set(out["fastfetch"]) == {"edition", "category", "azzio_note", "removed"}
 
 
-def test_classify_azarch_note_from_configured():
-    # fastfetch is an AZARCH_CONFIGURED package; its note must be the exact string.
+def test_classify_azzio_note_from_configured():
+    # fastfetch is an AZZIO_CONFIGURED package; its note must be the exact string.
     out = classify({"fastfetch": {}}, ["fastfetch"], set())
-    assert out["fastfetch"]["azarch_note"] == AZARCH_CONFIGURED["fastfetch"]
+    assert out["fastfetch"]["azzio_note"] == AZZIO_CONFIGURED["fastfetch"]
 
 
 def test_classify_note_none_for_unconfigured():
-    # A package with no Az'arch modification has a None note.
+    # A package with no Azzio modification has a None note.
     out = classify({}, ["linux"], {"linux"})
-    assert out["linux"]["azarch_note"] is None
+    assert out["linux"]["azzio_note"] is None
 
 
 def test_classify_edition_split():
-    # closure member in stock_reachable -> stock; the other -> az'arch.
+    # closure member in stock_reachable -> stock; the other -> azzio.
     out = classify({}, ["linux", "fastfetch"], {"linux"})
     assert out["linux"]["edition"] == "stock"
-    assert out["fastfetch"]["edition"] == "az'arch"
+    assert out["fastfetch"]["edition"] == "azzio"
 
 
 def test_classify_removed_flag_is_false_when_removed_set_empty():
-    # AZARCH_REMOVED is empty, so nothing is ever flagged removed.
+    # AZZIO_REMOVED is empty, so nothing is ever flagged removed.
     out = classify({"fastfetch": {}}, ["fastfetch"], set())
     assert out["fastfetch"]["removed"] is False
 
@@ -253,19 +253,19 @@ def test_group_and_devtool_categories_within_order():
     assert all(category_of(name, {}) == "Developer tools" for name in DEV_TOOL_NAMES)
 
 
-# --- AZARCH_CONFIGURED / AZARCH_REMOVED invariants --------------------------
+# --- AZZIO_CONFIGURED / AZZIO_REMOVED invariants --------------------------
 
-def test_azarch_configured_exact_keys():
-    assert set(AZARCH_CONFIGURED) == {
+def test_azzio_configured_exact_keys():
+    assert set(AZZIO_CONFIGURED) == {
         "fastfetch", "pacman", "filesystem", "systemd",
         "grub", "syslinux", "sudo", "ufw",
     }
 
 
-def test_azarch_configured_notes_non_empty_strings():
-    for pkg, note in AZARCH_CONFIGURED.items():
+def test_azzio_configured_notes_non_empty_strings():
+    for pkg, note in AZZIO_CONFIGURED.items():
         assert isinstance(note, str) and note.strip(), pkg
 
 
-def test_azarch_removed_is_empty_set():
-    assert AZARCH_REMOVED == set()
+def test_azzio_removed_is_empty_set():
+    assert AZZIO_REMOVED == set()

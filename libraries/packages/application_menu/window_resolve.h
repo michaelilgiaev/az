@@ -1,4 +1,4 @@
-/* Az'arch -- shared window identity -> .desktop id resolver.
+/* Azzio -- shared window identity -> .desktop id resolver.
  *
  * Lifted out of window_watch.c so BOTH the application-menu window watcher and the
  * window-switcher (packages/window_switcher) resolve a live X window to the .desktop

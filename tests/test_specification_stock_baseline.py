@@ -3,7 +3,7 @@
 This module is the ground truth for the "Stock Arch" edition: every package the
 official install medium already pulls in. The specification tooling treats STOCK_PACKAGES
 as a *set* and subtracts it from the final package list to decide what counts as
-an "Az'arch Component". Three things silently corrupt that subtraction and none
+an "Azzio Component". Three things silently corrupt that subtraction and none
 of them raise at import time:
 
   * a duplicate entry -- harmless to the set math, but a signal the human copied
@@ -11,7 +11,7 @@ of them raise at import time:
     promise in the module docstring a lie;
   * a token carrying whitespace, an inline comment, or a stray `#` -- it would
     never equal a real package name, so it silently never subtracts, and the
-    package it was meant to represent gets mislabelled an Az'arch Component;
+    package it was meant to represent gets mislabelled an Azzio Component;
   * losing the tuple type or the C-locale sort -- the tuple is the "this is fixed
     reference data, not an editable manifest" guarantee, and the sort is what
     makes an archiso bump a readable diff.
@@ -36,7 +36,7 @@ def test_stock_packages_is_a_tuple():
 
 
 def test_stock_packages_is_non_empty():
-    # An empty baseline would make every stock package look like an Az'arch
+    # An empty baseline would make every stock package look like an Azzio
     # Component -- the subtraction it feeds would be a no-op.
     assert len(STOCK_PACKAGES) > 0
 

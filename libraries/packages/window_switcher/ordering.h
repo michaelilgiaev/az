@@ -1,4 +1,4 @@
-/* Az'arch window switcher -- fixed leading order + alphabetical tail.
+/* Azzio window switcher -- fixed leading order + alphabetical tail.
  *
  * The user's spec: alt-tab shows one tile per window, left to right, ordered
  *   1 librewolf, 2 kitty, 3 the hypervisor display, 4 thunar,

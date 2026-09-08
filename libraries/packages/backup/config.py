@@ -3,15 +3,15 @@
 
 By DEFAULT `backup` writes its two encrypted archives into HOME and stops there -- USB
 and Google Drive upload are DISABLED. This module is the small, user-owned config that
-lets the user OPT IN: once ``azarch backup --configure`` (packages/azarch/backup_targets.py)
+lets the user OPT IN: once ``azzio backup --configure`` (packages/azzio/backup_targets.py)
 has registered a USB mount and/or a Google Drive rclone remote, it writes this config,
 and `backup` reads it and ALSO copies the freshly built archives to whatever targets are
 enabled. Targets absent / disabled -> `backup` behaves exactly as before (local only).
 
-WHERE. The app itself installs root-owned under /usr/local/lib/azarch-backup, which a
+WHERE. The app itself installs root-owned under /usr/local/lib/azzio-backup, which a
 normal user cannot write to, so the config lands somewhere the USER owns:
-~/.config/azarch-backup/backup.cfg (XDG-style, 0600). This mirrors
-packages/passwords/config.py's CONFIG_PATH exactly; the ``azarch`` setup command writes
+~/.config/azzio-backup/backup.cfg (XDG-style, 0600). This mirrors
+packages/passwords/config.py's CONFIG_PATH exactly; the ``azzio`` setup command writes
 the SAME path (it lives in a different, root-owned install dir and cannot import this
 module, so it repeats the path/keys -- kept in lock-step by this docstring, the way
 backup.VAULT_REL tracks passwords/config.DEFAULT_ENCRYPTED).
@@ -27,7 +27,7 @@ import os
 # The config file (XDG). Same shape/location convention as passwords/config.CONFIG_PATH.
 CONFIG_PATH = os.path.join(
     os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")),
-    "azarch-backup", "backup.cfg")
+    "azzio-backup", "backup.cfg")
 
 # Defaults: EVERYTHING off. A missing/empty config therefore means "local archives only",
 # which is the required out-of-the-box behaviour. usb_root defaults to the udisks2 mount
@@ -62,7 +62,7 @@ def load():
 
 def save(data):
     """Persist ``data`` (only the known keys) to CONFIG_PATH, 0600, creating the dir.
-    Returns the path written. Used by the `azarch backup --configure` command."""
+    Returns the path written. Used by the `azzio backup --configure` command."""
     os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
     payload = {k: data.get(k, _DEFAULTS[k]) for k in _DEFAULTS}
     with open(CONFIG_PATH, "w") as handle:

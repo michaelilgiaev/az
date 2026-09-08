@@ -1,4 +1,4 @@
-/* Az'arch application menu (C port) -- Kickoff-style scrollbar.
+/* Azzio application menu (C port) -- Kickoff-style scrollbar.
  *
  * A pixel-faithful re-creation of Plasma Kickoff's scrollbar (widgets.py
  * KickoffScrollBar), because both the classic Tk scrollbar AND the default GTK

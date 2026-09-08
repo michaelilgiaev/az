@@ -15,7 +15,7 @@ from packages import xviewer
 def test_desktop_points_icon_at_custom_private_name():
     d = xviewer.xviewer_desktop()
     assert f"Icon={xviewer.XVIEWER_ICON_NAME}\n" in d
-    assert xviewer.XVIEWER_ICON_NAME == "azarch-xviewer"   # private name (upgrade-proof)
+    assert xviewer.XVIEWER_ICON_NAME == "azzio-xviewer"   # private name (upgrade-proof)
     assert "Icon=xviewer\n" not in d                        # not the stock eye icon
 
 

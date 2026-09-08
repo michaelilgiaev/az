@@ -1,7 +1,7 @@
-"""packages.backup + packages.azarch -- the OPTIONAL cloud / USB backup targets (step 4).
+"""packages.backup + packages.azzio -- the OPTIONAL cloud / USB backup targets (step 4).
 
 By default `backup` writes its two local archives and nothing else -- USB and Google Drive
-upload are DISABLED. The OPT-IN is `azarch backup --configure` (short `-c`): it registers a USB
+upload are DISABLED. The OPT-IN is `azzio backup --configure` (short `-c`): it registers a USB
 mount and/or a Google Drive rclone remote into a small user-owned config, and `backup` then ALSO
 copies the freshly built archives to whatever is enabled. These tests pin that contract:
 
@@ -14,7 +14,7 @@ copies the freshly built archives to whatever is enabled. These tests pin that c
   * copy_to_usb rotates the previous generation aside and copies the archives;
   * the rclone flags carry the resumable tuning (--retries 1 + --low-level-retries);
   * `rclone` is in the package manifest;
-  * `azarch backup --configure`/`-c` bundles into the guest CLI and is dispatched + has usage.
+  * `azzio backup --configure`/`-c` bundles into the guest CLI and is dispatched + has usage.
 
 stdlib-only; the transfer itself is mocked so no real rclone/USB is needed.
 """
@@ -32,7 +32,7 @@ from packages.backup import targets as tgt
 # --- config: default disabled, round-trip, gating ---------------------------
 def _isolate_config(tmp_path, monkeypatch):
     """Point config.CONFIG_PATH at a temp file so tests never touch the real ~/.config."""
-    path = str(tmp_path / "azarch-backup" / "backup.cfg")
+    path = str(tmp_path / "azzio-backup" / "backup.cfg")
     monkeypatch.setattr(cfgmod, "CONFIG_PATH", path)
     return path
 
@@ -282,18 +282,18 @@ def test_config_and_targets_modules_ship():
     assert f"{bk.LIB_DIR}/targets.py" in shipped
 
 
-# --- azarch backup --configure bundles + dispatches -------------------------
-def _azarch_bundle():
-    from packages.azarch.bundle import bundle_source
+# --- azzio backup --configure bundles + dispatches -------------------------
+def _azzio_bundle():
+    from packages.azzio.bundle import bundle_source
     return bundle_source()
 
 
-def test_azarch_backup_configure_is_bundled_and_dispatched():
-    """Step five item 5: the opt-in is now `azarch backup --configure` / `-c`. The module
+def test_azzio_backup_configure_is_bundled_and_dispatched():
+    """Step five item 5: the opt-in is now `azzio backup --configure` / `-c`. The module
     bundles into the single guest CLI script, main() dispatches the `backup` subcommand to
     cmd_backup (which routes --configure/-c to cmd_backup_setup), usage advertises it, and the
     OLD `backup-setup` surface is GONE from the bundle + usage. Pin all of that."""
-    src = _azarch_bundle()
+    src = _azzio_bundle()
     ast.parse(src)  # the whole bundle stays valid Python with the new module in it
     assert "bundled from backup_targets.py" in src
     # The opt-in flow function survives (driven behind the new flag) ...
@@ -309,17 +309,17 @@ def test_azarch_backup_configure_is_bundled_and_dispatched():
     assert 'cmd == "backup-setup"' not in src
 
 
-def test_azarch_backup_bare_and_unknown_flag_do_not_run_a_backup():
-    """A bare `azarch backup` must NOT run a backup -- it points the user at the real `backup`
+def test_azzio_backup_bare_and_unknown_flag_do_not_run_a_backup():
+    """A bare `azzio backup` must NOT run a backup -- it points the user at the real `backup`
     command (usage + exit 2). An unknown flag also errors (exit 2). `--configure`/`-c` (and its
     sub-forms) route into cmd_backup_setup. Driven through the exec'd bundle so the real
     dispatch wiring is exercised (no interactive prompts hit -- only --status/--disable/errors)."""
-    src = _azarch_bundle()
-    ns = {"__name__": "azarch_bundle_backup_dispatch"}
-    exec(compile(src, "azarch", "exec"), ns)
+    src = _azzio_bundle()
+    ns = {"__name__": "azzio_bundle_backup_dispatch"}
+    exec(compile(src, "azzio", "exec"), ns)
     main = ns["main"]
 
-    # bare `azarch backup` -> usage + exit 2 (does NOT run a backup).
+    # bare `azzio backup` -> usage + exit 2 (does NOT run a backup).
     assert main(["backup"]) == 2
     # unknown flag -> exit 2.
     assert main(["backup", "--bogus"]) == 2
@@ -330,16 +330,16 @@ def test_azarch_backup_bare_and_unknown_flag_do_not_run_a_backup():
     assert main(["backup", "-c", "--status"]) == 0
 
 
-def test_azarch_backup_enable_usb_validates_and_enables(tmp_path, monkeypatch):
-    """Step six: the TUI drives a NON-interactive `azarch backup --configure --enable-usb <PATH>`.
+def test_azzio_backup_enable_usb_validates_and_enables(tmp_path, monkeypatch):
+    """Step six: the TUI drives a NON-interactive `azzio backup --configure --enable-usb <PATH>`.
     It enables the USB target ONLY when PATH is a present, writable directory RIGHT NOW (the same
     check the interactive picker does), and writes the config backup.config.load() then reads.
     A missing path leaves USB disabled and exits 2 (a dead target can never enable)."""
-    src = _azarch_bundle()
-    ns = {"__name__": "azarch_bundle_enable_usb"}
-    exec(compile(src, "azarch", "exec"), ns)
+    src = _azzio_bundle()
+    ns = {"__name__": "azzio_bundle_enable_usb"}
+    exec(compile(src, "azzio", "exec"), ns)
 
-    path = str(tmp_path / "azarch-backup" / "backup.cfg")
+    path = str(tmp_path / "azzio-backup" / "backup.cfg")
     ns["_BACKUP_CFG_PATH"] = path
     monkeypatch.setattr(cfgmod, "CONFIG_PATH", path)
 
@@ -361,16 +361,16 @@ def test_azarch_backup_enable_usb_validates_and_enables(tmp_path, monkeypatch):
     assert ns["main"](["backup", "--configure", "--enable-usb"]) == 2
 
 
-def test_azarch_backup_enable_gdrive_verifies_remote_before_enabling(tmp_path, monkeypatch):
-    """Step six: `azarch backup --configure --enable-gdrive <REMOTE>` (non-interactive, TUI-
+def test_azzio_backup_enable_gdrive_verifies_remote_before_enabling(tmp_path, monkeypatch):
+    """Step six: `azzio backup --configure --enable-gdrive <REMOTE>` (non-interactive, TUI-
     driven). It enables Google Drive ONLY when rclone exists AND `rclone about <remote>` succeeds
     (the same verify the interactive flow does); a bare name gets a ':' appended; an unreachable
     remote leaves Drive disabled and exits 2. rclone is faked so no real Drive is needed."""
-    src = _azarch_bundle()
-    ns = {"__name__": "azarch_bundle_enable_gdrive"}
-    exec(compile(src, "azarch", "exec"), ns)
+    src = _azzio_bundle()
+    ns = {"__name__": "azzio_bundle_enable_gdrive"}
+    exec(compile(src, "azzio", "exec"), ns)
 
-    path = str(tmp_path / "azarch-backup" / "backup.cfg")
+    path = str(tmp_path / "azzio-backup" / "backup.cfg")
     ns["_BACKUP_CFG_PATH"] = path
     monkeypatch.setattr(cfgmod, "CONFIG_PATH", path)
 
@@ -396,11 +396,11 @@ def test_azarch_backup_enable_gdrive_verifies_remote_before_enabling(tmp_path, m
     assert ns["main"](["backup", "--configure", "--enable-gdrive"]) == 2
 
 
-def test_azarch_backup_enable_surfaces_are_bundled_and_helpered():
+def test_azzio_backup_enable_surfaces_are_bundled_and_helpered():
     """The two non-interactive enable surfaces bundle into the guest CLI (so the TUI can call
     them) and are advertised in the help. Pins the exact flags + helper functions so the C TUI
     rows and this surface cannot drift."""
-    src = _azarch_bundle()
+    src = _azzio_bundle()
     ast.parse(src)
     assert "--enable-usb" in src
     assert "--enable-gdrive" in src
@@ -408,17 +408,17 @@ def test_azarch_backup_enable_surfaces_are_bundled_and_helpered():
     assert "def _enable_gdrive_remote(" in src
 
 
-def test_azarch_backup_configure_writes_the_same_config_backup_reads(tmp_path, monkeypatch):
-    """The `azarch backup --configure` module and packages/backup/config.py MUST agree on the
+def test_azzio_backup_configure_writes_the_same_config_backup_reads(tmp_path, monkeypatch):
+    """The `azzio backup --configure` module and packages/backup/config.py MUST agree on the
     config path + keys (they live in different install dirs and cannot import each other).
     Exec the bundled module in isolation, point it and config.py at the same temp path, run
     `--configure --disable` THROUGH the real dispatch (main -> cmd_backup -> cmd_backup_setup),
     and confirm backup.config.load() reads exactly what it wrote."""
-    src = _azarch_bundle()
-    ns = {"__name__": "azarch_bundle_test"}
-    exec(compile(src, "azarch", "exec"), ns)
+    src = _azzio_bundle()
+    ns = {"__name__": "azzio_bundle_test"}
+    exec(compile(src, "azzio", "exec"), ns)
 
-    path = str(tmp_path / "azarch-backup" / "backup.cfg")
+    path = str(tmp_path / "azzio-backup" / "backup.cfg")
     # Point BOTH sides at the same temp config path.
     ns["_BACKUP_CFG_PATH"] = path
     monkeypatch.setattr(cfgmod, "CONFIG_PATH", path)

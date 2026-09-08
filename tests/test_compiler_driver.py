@@ -56,17 +56,17 @@ def test_run_installs_ckbcomp_into_usr_bin():
 
 
 def test_run_emits_the_cli_installer_script():
-    # The scripted (terminal/SSH) installer -- the CLI half of azarch-install -- must be
-    # baked into the ISO under /root/azarch so `azarch-install --cli` can install over SSH.
-    # Assert run() writes installer.installer_sh() to azarch-install-cli.sh (executable).
+    # The scripted (terminal/SSH) installer -- the CLI half of azzio-install -- must be
+    # baked into the ISO under /root/azzio so `azzio-install --cli` can install over SSH.
+    # Assert run() writes installer.installer_sh() to azzio-install-cli.sh (executable).
     src = inspect.getsource(compiler.run)
     assert 'installer.installer_sh()' in src
-    assert 'azarch-install-cli.sh' in src
+    assert 'azzio-install-cli.sh' in src
 
 
 def test_emit_calamares_ships_the_window_icon_into_branding():
     # The installer's WINDOW ICON (the "Az'" tile OpenBox draws on the titlebar) is the
-    # branding productIcon: a real PNG copied INTO branding/azarch/. Assert _emit_calamares
+    # branding productIcon: a real PNG copied INTO branding/azzio/. Assert _emit_calamares
     # copies the standardized installer icon asset to the branding productIcon file, so the
     # topbar icon exists and matches the launcher icon.
     from packages.calamares import calamares
@@ -80,7 +80,7 @@ def test_emit_calamares_ships_the_window_icon_into_branding():
     assert "PRODUCT_ICON_FILE" in src
     # The branding.desc names that same file in productIcon.
     assert calamares.PRODUCT_ICON_FILE == "productIcon.png"
-    assert openbox.INSTALLER_ICON_ASSET == "icons/azarch.svg"
+    assert openbox.INSTALLER_ICON_ASSET == "icons/azzio.svg"
 
 
 # --- power management emission + enablement (Tasks 1 & 2) -------------------
@@ -100,10 +100,10 @@ def test_emit_power_writes_all_four_artifacts(tmp_path):
     airootfs = tmp_path / "airootfs"
     compiler._emit_power(airootfs)
 
-    dropin = airootfs / "etc/systemd/logind.conf.d/10-azarch-power.conf"
-    script = airootfs / "usr/local/bin/azarch-sleep-policy"
-    service = airootfs / "etc/systemd/system/azarch-sleep-policy.service"
-    udev = airootfs / "etc/udev/rules.d/99-azarch-sleep-policy.rules"
+    dropin = airootfs / "etc/systemd/logind.conf.d/10-azzio-power.conf"
+    script = airootfs / "usr/local/bin/azzio-sleep-policy"
+    service = airootfs / "etc/systemd/system/azzio-sleep-policy.service"
+    udev = airootfs / "etc/udev/rules.d/99-azzio-sleep-policy.rules"
 
     assert dropin.read_text() == system.LOGIND_POWER_DROPIN
     assert script.read_text() == system.SLEEP_POLICY_SCRIPT
@@ -118,16 +118,16 @@ def test_emit_power_writes_all_four_artifacts(tmp_path):
 
 def test_link_services_enables_sleep_policy(tmp_path):
     # BEHAVIORAL: _link_services must create the multi-user.target.wants symlink that
-    # enables azarch-sleep-policy.service on boot (both ISOs + installed system).
+    # enables azzio-sleep-policy.service on boot (both ISOs + installed system).
     airootfs = tmp_path / "airootfs"
     (airootfs / "etc/systemd/system").mkdir(parents=True)
     compiler._link_services(airootfs)
 
     link = (airootfs / "etc/systemd/system/multi-user.target.wants"
-            / "azarch-sleep-policy.service")
+            / "azzio-sleep-policy.service")
     assert link.is_symlink()
     import os
-    assert os.readlink(link) == "/etc/systemd/system/azarch-sleep-policy.service"
+    assert os.readlink(link) == "/etc/systemd/system/azzio-sleep-policy.service"
 
 
 def test_link_services_enables_spice_vdagentd(tmp_path):
@@ -367,7 +367,7 @@ def test_brand_boot_menus_deletes_releng_memtest_entry(tmp_path):
 def test_brand_boot_menus_is_idempotent_without_memtest(tmp_path):
     # The memtest deletion uses missing_ok=True so a future releng that renames/drops
     # the entry (nothing to delete) does not crash the compiler. Running against a tree
-    # with no memtest entry must succeed and still write the two Az'arch entries.
+    # with no memtest entry must succeed and still write the two Azzio entries.
     W = tmp_path
     compiler._brand_boot_menus(W)  # no pre-existing entries dir at all
     assert (W / "efiboot/loader/entries/01-archiso-linux.conf").exists()
@@ -427,7 +427,7 @@ def test_cache_complete_true_when_all_present(monkeypatch, tmp_path):
     sync = tmp_path / "db" / "sync"
     repo.mkdir(parents=True)
     sync.mkdir(parents=True)
-    idx = repo / "pacstrap-azarch-repo.db"
+    idx = repo / "pacstrap-azzio-repo.db"
     idx.write_text("")
     (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
     # OUR OWN built packages must be present too, else the cache is not complete
@@ -466,7 +466,7 @@ def test_cache_complete_false_when_own_recipe_changed(monkeypatch, tmp_path):
     sync = tmp_path / "db" / "sync"
     repo.mkdir(parents=True)
     sync.mkdir(parents=True)
-    idx = repo / "pacstrap-azarch-repo.db"
+    idx = repo / "pacstrap-azzio-repo.db"
     idx.write_text("")
     (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
@@ -488,7 +488,7 @@ def test_cache_complete_false_when_own_recipe_changed(monkeypatch, tmp_path):
 
 
 def test_cache_complete_false_when_own_fingerprint_absent(monkeypatch, tmp_path):
-    # A cache warmed by an OLDER Az'arch (before fingerprints existed): own-package
+    # A cache warmed by an OLDER Azzio (before fingerprints existed): own-package
     # files present but no sidecar at all. "Can't prove it's current" -> incomplete ->
     # rebuild once (after which the sidecar exists and offline reruns are fast again).
     monkeypatch.setenv("FORCE_ONLINE", "0")
@@ -496,7 +496,7 @@ def test_cache_complete_false_when_own_fingerprint_absent(monkeypatch, tmp_path)
     sync = tmp_path / "db" / "sync"
     repo.mkdir(parents=True)
     sync.mkdir(parents=True)
-    idx = repo / "pacstrap-azarch-repo.db"
+    idx = repo / "pacstrap-azzio-repo.db"
     idx.write_text("")
     (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
@@ -528,7 +528,7 @@ def test_cache_complete_false_when_manifest_package_missing(monkeypatch, tmp_pat
     sync = tmp_path / "db" / "sync"
     repo.mkdir(parents=True)
     sync.mkdir(parents=True)
-    idx = repo / "pacstrap-azarch-repo.db"
+    idx = repo / "pacstrap-azzio-repo.db"
     idx.write_text("")
     (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
@@ -562,7 +562,7 @@ def test_cache_complete_ignores_own_packages_absent_from_repo_files(monkeypatch,
     sync = tmp_path / "db" / "sync"
     repo.mkdir(parents=True)
     sync.mkdir(parents=True)
-    idx = repo / "pacstrap-azarch-repo.db"
+    idx = repo / "pacstrap-azzio-repo.db"
     idx.write_text("")
     (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
@@ -594,7 +594,7 @@ def test_cache_complete_false_when_own_packages_absent(monkeypatch, tmp_path):
     sync = tmp_path / "db" / "sync"
     repo.mkdir(parents=True)
     sync.mkdir(parents=True)
-    idx = repo / "pacstrap-azarch-repo.db"
+    idx = repo / "pacstrap-azzio-repo.db"
     idx.write_text("")
     (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
     (sync / "core.db").write_text("")
@@ -614,7 +614,7 @@ def test_cache_complete_false_when_only_one_own_package_present(monkeypatch, tmp
     sync = tmp_path / "db" / "sync"
     repo.mkdir(parents=True)
     sync.mkdir(parents=True)
-    idx = repo / "pacstrap-azarch-repo.db"
+    idx = repo / "pacstrap-azzio-repo.db"
     idx.write_text("")
     (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
@@ -633,7 +633,7 @@ def test_cache_complete_false_when_no_synced_db(monkeypatch, tmp_path):
     sync = tmp_path / "db" / "sync"
     repo.mkdir(parents=True)
     sync.mkdir(parents=True)
-    idx = repo / "pacstrap-azarch-repo.db"
+    idx = repo / "pacstrap-azzio-repo.db"
     idx.write_text("")
     (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
     # sync dir exists but has NO .db file.
@@ -698,7 +698,7 @@ def _build_profile_conf_with_localrepo(monkeypatch, tmp_path, *, reachable: bool
     W.mkdir()
     localrepo = tmp_path / "repo"
     localrepo.mkdir()
-    idx = localrepo / "pacstrap-azarch-repo.db"
+    idx = localrepo / "pacstrap-azzio-repo.db"
     idx.write_text("")
     monkeypatch.setattr(compiler.paths, "LOCALREPO_INDEX", idx)
     _stub_probe(monkeypatch, reachable=reachable)
@@ -711,7 +711,7 @@ def test_probe_builds_offline_from_local_repo_when_cache_present(monkeypatch, tm
     # Mirrors reachable, but the local repo index EXISTS: the written conf must be
     # the offline (file://-only) form -- no ACTIVE network Include forcing a .sig fetch.
     written = _build_profile_conf_with_localrepo(monkeypatch, tmp_path, reachable=True)
-    assert "[pacstrap-azarch-repo]" in written
+    assert "[pacstrap-azzio-repo]" in written
     assert _active(written, "Include = /etc/pacman.d/mirrorlist") == []
     assert _active(written, "[core]") == [] and _active(written, "[extra]") == []
 
@@ -719,7 +719,7 @@ def test_probe_builds_offline_from_local_repo_when_cache_present(monkeypatch, tm
 def test_probe_offline_when_cache_present_even_if_mirrors_unreachable(monkeypatch, tmp_path):
     # Same offline outcome when mirrors are down -- the cache is authoritative.
     written = _build_profile_conf_with_localrepo(monkeypatch, tmp_path, reachable=False)
-    assert "[pacstrap-azarch-repo]" in written
+    assert "[pacstrap-azzio-repo]" in written
     assert _active(written, "Include = /etc/pacman.d/mirrorlist") == []
 
 
@@ -729,7 +729,7 @@ def test_probe_goes_online_only_when_no_local_repo(monkeypatch, tmp_path):
     W = tmp_path / "profile"
     W.mkdir()
     localrepo = tmp_path / "repo"  # deliberately NOT created -> index absent
-    monkeypatch.setattr(compiler.paths, "LOCALREPO_INDEX", localrepo / "pacstrap-azarch-repo.db")
+    monkeypatch.setattr(compiler.paths, "LOCALREPO_INDEX", localrepo / "pacstrap-azzio-repo.db")
     _stub_probe(monkeypatch, reachable=True)
     conf = compiler.pacman.build_profile_conf(cachedir=str(tmp_path / "pacman-pkg") + "/")
     compiler._probe_and_maybe_switch(W, conf, localrepo, bar=None)
@@ -740,4 +740,4 @@ def test_probe_goes_online_only_when_no_local_repo(monkeypatch, tmp_path):
     # build would fail to resolve them without this. Guards against a future edit that
     # drops append_local_repo from the online branch (the one thing the network-repo
     # assertion above would not catch).
-    assert "[pacstrap-azarch-repo]" in written
+    assert "[pacstrap-azzio-repo]" in written

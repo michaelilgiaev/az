@@ -4,14 +4,14 @@
 hypervisor.cfg, and the base values a fresh `hypervisor install` starts from are the
 hardcoded configuration._CFG_DEFAULTS. This module is the small, user-owned config that
 lets those base defaults be overridden ONCE, globally, so every NEW VM inherits them.
-It is the state behind the `hypervisor --configure` subcommand and the bare-`azarch`
+It is the state behind the `hypervisor --configure` subcommand and the bare-`azzio`
 TUI's Hypervisor screen. A directory's own hypervisor.cfg still WINS for that VM --
 configuration.HypervisorCfg.from_dir layers this file UNDER the per-directory cfg (and
 under env), so changing the defaults only affects new installs and keys a VM leaves unset.
 
-WHERE. The app itself installs root-owned under /usr/local/lib/azarch-hypervisor, which a
+WHERE. The app itself installs root-owned under /usr/local/lib/azzio-hypervisor, which a
 normal user cannot write to, so the defaults land somewhere the USER owns:
-~/.config/azarch-hypervisor/defaults.cfg (XDG-style, 0644 -- no secrets). Mirrors
+~/.config/azzio-hypervisor/defaults.cfg (XDG-style, 0644 -- no secrets). Mirrors
 packages/backup/config.py's CONFIG_PATH convention.
 
 FORMAT. The SAME `key = value` text as hypervisor.cfg (parsed by the ONE canonical
@@ -47,7 +47,7 @@ def defaults_path() -> str:
     XDG_CONFIG_HOME -- and the test harness that sets it -- is always respected. Same
     location convention as backup/config.CONFIG_PATH."""
     base = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
-    return os.path.join(base, "azarch-hypervisor", _DEFAULTS_FILE_NAME)
+    return os.path.join(base, "azzio-hypervisor", _DEFAULTS_FILE_NAME)
 
 
 def exists() -> bool:

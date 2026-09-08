@@ -63,17 +63,17 @@ def test_root_login_dropin_denies_root():
 
 def test_root_login_dropin_path_sorts_first():
     # The file is a sshd_config.d drop-in whose numeric prefix (00) sorts FIRST -- before
-    # every other drop-in (10-azarch-hardening, 20-systemd-userdb, 99-archlinux, ...). With
+    # every other drop-in (10-azzio-hardening, 20-systemd-userdb, 99-archlinux, ...). With
     # sshd's first-match-wins-per-keyword that makes our PermitRootLogin AUTHORITATIVE: no
     # later drop-in can override it (the original bug had our file overridden by an
     # earlier/other one while the status read only our file). It is a RELATIVE airootfs path
     # (no leading slash) so the compiler can join it under airootfs/.
     p = system.SSHD_ROOT_LOGIN_DROPIN_PATH
-    assert p == "etc/ssh/sshd_config.d/00-azarch-root-login.conf"
+    assert p == "etc/ssh/sshd_config.d/00-azzio-root-login.conf"
     assert not p.startswith("/"), "airootfs-relative path must not start with /"
     # Sorts before Arch's stock 99- AND the systemd 20- drop-in AND our own 10- hardening.
     name = p.rsplit("/", 1)[1]
-    assert name < "10-azarch-hardening.conf"
+    assert name < "10-azzio-hardening.conf"
     assert name < "99-archlinux.conf"
 
 
@@ -140,7 +140,7 @@ def test_short_files_exact():
     # a stray space in the sudoers rule invalidates the whole file (sudo refuses).
     assert system.SUDOERS_MAIN == "main ALL=(ALL) NOPASSWD: ALL\n"
     assert system.SUDOERS_ROOTPW == "Defaults rootpw\n"
-    assert system.HOSTNAME == "azarch\n"
+    assert system.HOSTNAME == "azzio\n"
 
 
 # --- os-release: the branding that must NOT change ID -----------------------
@@ -156,12 +156,12 @@ def _parse_os_release():
 
 def test_os_release_id_stays_arch():
     # ID=arch is load-bearing: pacman/AUR helpers key on it. Only the human strings
-    # (NAME/PRETTY_NAME) carry the Az'arch brand.
+    # (NAME/PRETTY_NAME) carry the Azzio brand.
     d = _parse_os_release()
     assert d["ID"] == "arch"
     assert d["ID_LIKE"] == "arch"
-    assert d["NAME"] == "Az'arch Linux"
-    assert d["PRETTY_NAME"] == "Az'arch Linux"
+    assert d["NAME"] == "Azzio Linux"
+    assert d["PRETTY_NAME"] == "Azzio Linux"
     assert d["BUILD_ID"] == "rolling"
 
 
@@ -170,18 +170,18 @@ def test_os_release_id_stays_arch():
 def test_customize_airootfs_copies_os_release():
     s = system.CUSTOMIZE_AIROOTFS
     assert s.startswith("#!/usr/bin/env bash")
-    assert "cp /root/azarch/os-release /usr/lib/os-release" in s
+    assert "cp /root/azzio/os-release /usr/lib/os-release" in s
     assert "chmod 0644 /usr/lib/os-release" in s
 
 
 def test_customize_airootfs_brands_os_release():
     # The hook was reduced to ONLY plant the branded os-release: it is a strict
-    # `set -euo pipefail` bash script that copies /root/azarch/os-release over
+    # `set -euo pipefail` bash script that copies /root/azzio/os-release over
     # /usr/lib/os-release (the file /etc/os-release symlinks to) and modes it 0644.
     s = system.CUSTOMIZE_AIROOTFS
     assert s.startswith("#!/usr/bin/env bash")
     assert "set -euo pipefail" in s
-    assert "cp /root/azarch/os-release /usr/lib/os-release" in s
+    assert "cp /root/azzio/os-release /usr/lib/os-release" in s
     assert "chmod 0644 /usr/lib/os-release" in s
 
 
@@ -249,14 +249,14 @@ def test_bios_syslinux_has_two_boot_labels():
 
 def test_syslinux_head_rebranded():
     # The releng head.cfg says `MENU TITLE Arch Linux`; ours overlays the brand.
-    assert "MENU TITLE Az'arch Linux" in system.BOOT_BIOS_SYSLINUX_HEAD
+    assert "MENU TITLE Azzio Linux" in system.BOOT_BIOS_SYSLINUX_HEAD
     assert "MENU TITLE Arch Linux" not in system.BOOT_BIOS_SYSLINUX_HEAD
 
 
 def test_uefi_loader_suppresses_the_extra_efi_menu_rows():
     # The whole point of overriding the releng loader.conf: hide the extra UEFI rows
     # (EFI Shell / Reboot Into Firmware Interface) the first-boot screen shows beside
-    # our two Az'arch entries. Both suppressions must be present and set to `no`.
+    # our two Azzio entries. Both suppressions must be present and set to `no`.
     lines = system.BOOT_UEFI_LOADER.splitlines()
     assert "auto-entries no" in lines  # drops auto EFI Shell + systemd-boot self-entry
     assert "auto-firmware no" in lines  # drops "Reboot Into Firmware Interface"
@@ -324,7 +324,7 @@ def test_locale_service_waits_for_network_online():
     # The live locale oneshot orders AFTER and WANTS network-online.target and
     # stays active (yes) after exit. The setup itself is now STATIC (no IP-geo
     # since auto-resolve was removed), so this ordering is currently harmless
-    # rather than required; it is kept for the deferred `azarch --resolve-*`
+    # rather than required; it is kept for the deferred `azzio --resolve-*`
     # network resolver (issue #46) that reuses this unit's timing.
     s = system.LOCALE_SETUP_SERVICE
     assert "After=network-online.target" in s
@@ -338,7 +338,7 @@ def test_pkgs_service_diverges_from_locale():
     s = system.PKGS_SETUP_SERVICE
     assert "After=network.target" in s
     assert "network-online" not in s
-    assert "ConditionPathExists=/root/azarch/setup-pkgs.sh" in s
+    assert "ConditionPathExists=/root/azzio/setup-pkgs.sh" in s
     assert "RemainAfterExit=true" in s
 
 
@@ -395,7 +395,7 @@ def test_sleep_policy_idle_is_fifteen_minutes():
 def test_sleep_policy_dropin_path_is_separate_from_static():
     # The dynamic idle drop-in must be a DIFFERENT file from the static lid/button
     # one (10-*), so the two never clobber each other; 20-* sorts after 10-*.
-    assert system.SLEEP_POLICY_DROPIN_PATH == "/etc/systemd/logind.conf.d/20-azarch-sleep.conf"
+    assert system.SLEEP_POLICY_DROPIN_PATH == "/etc/systemd/logind.conf.d/20-azzio-sleep.conf"
 
 
 def test_sleep_policy_script_is_bash_with_battery_and_ac_detection():
@@ -432,7 +432,7 @@ def test_sleep_policy_script_uses_the_idle_seconds_constant():
 def test_sleep_policy_service_is_oneshot_after_logind():
     s = system.SLEEP_POLICY_SERVICE
     assert "Type=oneshot" in s
-    assert "ExecStart=/usr/local/bin/azarch-sleep-policy" in s
+    assert "ExecStart=/usr/local/bin/azzio-sleep-policy" in s
     # Ordered after logind so the boot-time reload lands on a running logind.
     assert "After=systemd-logind.service" in s
     assert "WantedBy=multi-user.target" in s
@@ -454,7 +454,7 @@ def test_sleep_policy_udev_rule_uses_restart_not_systemd_wants():
     # plug/unplug. The rule must instead `systemctl restart` the oneshot (runs it
     # unconditionally every time) with --no-block (never stall udev).
     r = system.SLEEP_POLICY_UDEV_RULE
-    assert 'RUN+="/usr/bin/systemctl --no-block restart azarch-sleep-policy.service"' in r
+    assert 'RUN+="/usr/bin/systemctl --no-block restart azzio-sleep-policy.service"' in r
     # The broken mechanism must be gone.
     assert "SYSTEMD_WANTS" not in r
     # `restart` (not `start`) so a oneshot in inactive/dead state is re-run each time.

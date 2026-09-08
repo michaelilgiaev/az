@@ -9,7 +9,7 @@ and the gpg-availability check cannot drift between the two commands.
 
 WHY tar + gpg (no rar). tar stores symlinks AS links by default (never dereferenced),
 which is exactly the "save the symlink and where it points" requirement, and both
-``gpg`` (gnupg) and Python's ``tarfile`` are already present in Az'arch -- no
+``gpg`` (gnupg) and Python's ``tarfile`` are already present in Azzio -- no
 proprietary ``rar`` dependency. The passphrase is the archive's only key; it is never
 written anywhere and never reaches gpg on the command line (where ``ps`` could read
 it) -- it is fed over a private pipe / stdin instead.

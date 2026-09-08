@@ -1,4 +1,4 @@
-/* Az'arch window switcher -- the resident daemon (alt-tab overlay). See the package
+/* Azzio window switcher -- the resident daemon (alt-tab overlay). See the package
  * README/design. Structure ported from application_menu/menu.c: build the overlay once at
  * login, warm it off-screen, and show by MOVING on-screen / hide by moving off (never a
  * re-map) so the first Alt+Tab is instant. Control by signal, state in a pidfile.
@@ -170,7 +170,7 @@ static void center_on_primary(AzSwitcher *s, int *out_x, int *out_y) {
 /* Is a physical Shift key (either side) currently held DOWN? Reads the raw hardware key bitmap via
  * XQueryKeymap, NOT the event's modifier bits.
  *
- * WHY THIS EXISTS -- the "Alt+Shift+Tab goes forward" bug: Az'arch binds Alt+Shift to the
+ * WHY THIS EXISTS -- the "Alt+Shift+Tab goes forward" bug: Azzio binds Alt+Shift to the
  * grp:alt_shift_toggle language switch. With that binding live, the Shift key (while Alt is held)
  * is bound to the XKB group-switch ACTION, so it stops acting as a plain Shift modifier -- the Tab
  * event that follows arrives WITHOUT GDK_SHIFT_MASK (XKB consumed the Shift for the toggle), and
@@ -219,7 +219,7 @@ static void force_us_group(AzSwitcher *s) {
 
 /* On show: remember the group the user was in, then pin the layout to US so that Alt+Shift can no
  * longer flip to Hebrew WHILE the switcher is up. This is the fix for "Alt+Shift+Tab goes forward
- * instead of backward": Az'arch binds Alt+Shift to the grp:alt_shift_toggle language switch, so on
+ * instead of backward": Azzio binds Alt+Shift to the grp:alt_shift_toggle language switch, so on
  * a physical keyboard XKB eats the Shift as the group-toggle chord and OpenBox sees only plain
  * Alt+Tab. Holding the group at US for the lifetime of the overlay stops the toggle, so the daemon
  * (which holds the seat grab) sees a real Shift+Tab -> ISO_Left_Tab -> backward. The user's rule:
@@ -526,7 +526,7 @@ static gboolean on_key_press(GtkWidget *w, GdkEventKey *ev, gpointer user) {
      * arrives as ISO_Left_Tab; that maps to -1 there. az_strip_select flushes the repaint. */
     int dir = az_switch_direction(ev->keyval, ev->state);
 
-    /* Az'arch's Alt+Shift language toggle robs a Tab of its Shift: with grp:alt_shift_toggle bound,
+    /* Azzio's Alt+Shift language toggle robs a Tab of its Shift: with grp:alt_shift_toggle bound,
      * XKB consumes the Shift (for the group switch) so the Tab arrives as a BARE Tab (state has no
      * shift bit) and az_switch_direction would return FORWARD -- the reported "Alt+Shift+Tab goes
      * forward" bug. Recover the intent from the event-driven latch: if this is a Tab-family key and
@@ -629,7 +629,7 @@ static void warmup(AzSwitcher *s) {
 static char *pid_path(void) {
     const char *rt = g_getenv("XDG_RUNTIME_DIR");
     if (!rt || !rt[0]) rt = "/tmp";
-    return g_build_filename(rt, "azarch-window-switcher.pid", NULL);
+    return g_build_filename(rt, "azzio-window-switcher.pid", NULL);
 }
 
 static int sig_pipe[2];
@@ -652,18 +652,18 @@ static gboolean on_sig_pipe(GIOChannel *src, GIOCondition cond, gpointer user) {
         last = buf[i];
     }
     /* Show latency is the whole point of the snappiness work, so it is measurable: when
-     * AZARCH_SWITCHER_TIMING is set we print how long show_switcher took (the signal-to-mapped
+     * AZZIO_SWITCHER_TIMING is set we print how long show_switcher took (the signal-to-mapped
      * cost) to stderr. The live integration test (tests/integration_window_switcher_live.py) reads
      * this and asserts it stays small -- it was ~200ms when show_switcher did the window
      * enumeration + thumbnail capture inline, and is a few ms now that both are off the hot path.
      * Gated by the env var so normal runs emit nothing. */
     static int timing = -1;
-    if (timing < 0) timing = (g_getenv("AZARCH_SWITCHER_TIMING") != NULL) ? 1 : 0;
+    if (timing < 0) timing = (g_getenv("AZZIO_SWITCHER_TIMING") != NULL) ? 1 : 0;
     gint64 t0 = timing ? g_get_monotonic_time() : 0;
     if (last == SIGUSR1) show_switcher(s, +1);
     else if (last == SIGUSR2) show_switcher(s, -1);
     if (timing && (last == SIGUSR1 || last == SIGUSR2)) {
-        fprintf(stderr, "AZARCH_SHOW_MS %.1f\n", (g_get_monotonic_time() - t0) / 1000.0);
+        fprintf(stderr, "AZZIO_SHOW_MS %.1f\n", (g_get_monotonic_time() - t0) / 1000.0);
         fflush(stderr);
     }
     return TRUE;

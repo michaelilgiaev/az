@@ -1,4 +1,4 @@
-/* Az'arch window switcher -- pure selection decisions. See switch_logic.h.
+/* Azzio window switcher -- pure selection decisions. See switch_logic.h.
  *
  * No GTK objects and no X calls live here: only the GDK_KEY_* / GDK_*_MASK constants (which
  * are plain #defines from the GDK headers). That is what lets tests/test_switch_logic.c

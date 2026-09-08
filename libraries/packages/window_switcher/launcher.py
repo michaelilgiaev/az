@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Az'arch window switcher -- alt-tab launcher (INSTANT, via a daemon).
+"""Azzio window switcher -- alt-tab launcher (INSTANT, via a daemon).
 
-Installed to /usr/local/bin/azarch-window-switcher. Bound by OpenBox to A-Tab
+Installed to /usr/local/bin/azzio-window-switcher. Bound by OpenBox to A-Tab
 (--next) and A-S-Tab (--prev); see packages/openbox. The switcher runs as a resident
 C/GTK3 DAEMON that builds its overlay once at login and keeps it hidden off-screen, so
 each Alt+Tab is instant -- this launcher just signals the daemon:
@@ -23,18 +23,18 @@ import subprocess
 import sys
 import time
 
-# Installed daemon binary. Overridable via AZARCH_SWITCHER_DIR / AZARCH_SWITCHER_BIN for
+# Installed daemon binary. Overridable via AZZIO_SWITCHER_DIR / AZZIO_SWITCHER_BIN for
 # local testing (the compiled daemon lives directly under SWITCHER_DIR).
 SWITCHER_DIR = os.environ.get(
-    "AZARCH_SWITCHER_DIR", "/usr/local/lib/azarch-window-switcher"
+    "AZZIO_SWITCHER_DIR", "/usr/local/lib/azzio-window-switcher"
 )
 DAEMON_BIN = os.environ.get(
-    "AZARCH_SWITCHER_BIN",
-    os.path.join(SWITCHER_DIR, "azarch-window-switcher-daemon"),
+    "AZZIO_SWITCHER_BIN",
+    os.path.join(SWITCHER_DIR, "azzio-window-switcher-daemon"),
 )
 
 RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
-PID_FILE = os.path.join(RUNTIME_DIR, "azarch-window-switcher.pid")
+PID_FILE = os.path.join(RUNTIME_DIR, "azzio-window-switcher.pid")
 
 
 def _read_pid() -> "int | None":
@@ -66,7 +66,7 @@ def main() -> int:
     show_sig = signal.SIGUSR1 if direction == "--next" else signal.SIGUSR2
 
     if not os.path.isfile(DAEMON_BIN):
-        print(f"azarch-window-switcher: daemon binary not found at {DAEMON_BIN}",
+        print(f"azzio-window-switcher: daemon binary not found at {DAEMON_BIN}",
               file=sys.stderr)
         return 1
 
@@ -96,7 +96,7 @@ def main() -> int:
             return 0
         time.sleep(0.05)
 
-    print("azarch-window-switcher: daemon did not come up in time", file=sys.stderr)
+    print("azzio-window-switcher: daemon did not come up in time", file=sys.stderr)
     return 1
 
 

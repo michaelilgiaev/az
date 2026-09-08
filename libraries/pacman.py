@@ -8,7 +8,7 @@ The variants:
 
   build_profile_conf()     the archiso profile's pacman.conf that mkarchiso's
                            internal pacstrap uses. Standard Arch base, PLUS:
-                             - NoExtract usr/lib/os-release (Az'arch branding wins)
+                             - NoExtract usr/lib/os-release (Azzio branding wins)
                              - an injected CacheDir (the persistent build cache)
                              - optionally rewritten to a file:// local repo for
                                fully-offline rebuilds.
@@ -17,7 +17,7 @@ The variants:
                            (/etc/pacman.conf): plain Arch defaults, multilib on.
 
   installer_pacstrap_conf()the transient pacman.conf the on-disk installer swaps in
-                           during pacstrap: adds the file:// [pacstrap-azarch-repo]
+                           during pacstrap: adds the file:// [pacstrap-azzio-repo]
                            so installation works fully offline from the ISO's repo.
 """
 
@@ -142,16 +142,16 @@ _CUSTOM_EXAMPLE = """\
 """
 
 
-# Per-application system files Az'arch REPLACES or SUPPRESSES. Each is owned by the
+# Per-application system files Azzio REPLACES or SUPPRESSES. Each is owned by the
 # app's own package (kitty/gedit), so it hits the SAME file-conflict wall as
 # os-release below -- pre-placing our version in the airootfs overlay aborts pacstrap
 # with "exists in filesystem". The identical two-step cure applies: NoExtract the path
 # (so the package never owns/lays it down) and, for the ones we REPLACE, plant our
-# version post-pacstrap (compiler stages the content under /root/azarch/apps/ and the
+# version post-pacstrap (compiler stages the content under /root/azzio/apps/ and the
 # customize hook / installer copy it into place -- see app_override_cp_sh()).
 #
 # Each entry: (staged_basename | None, target_abs, remove).
-#   staged_basename -- file under /root/azarch/apps/ to install at target_abs (our
+#   staged_basename -- file under /root/azzio/apps/ to install at target_abs (our
 #                      replacement). None means we ship no replacement -- the path is
 #                      only SUPPRESSED (the two stale kitty cat PNGs, which must stay
 #                      gone so the scalable "> _" SVG wins; NoExtract alone keeps them
@@ -192,7 +192,7 @@ ISO_APP_OVERRIDES = [
     # en_IL is the DEFAULT installed display locale (calamares seeds Asia/Jerusalem -> LANG=en_IL),
     # so its catalog is the one that makes the relabels apply out of the box; en_US covers a
     # US-region install and en_GB is the LC_TIME date locale. Staged basenames are per-locale
-    # (unique under /root/azarch/apps/) and match the emit_plan dests (locale.LOCALES) below.
+    # (unique under /root/azzio/apps/) and match the emit_plan dests (locale.LOCALES) below.
     ("thunar.en_US.mo", "/usr/share/locale/en_US/LC_MESSAGES/thunar.mo", False),
     ("thunar.en_GB.mo", "/usr/share/locale/en_GB/LC_MESSAGES/thunar.mo", False),
     ("thunar.en_IL.mo", "/usr/share/locale/en_IL/LC_MESSAGES/thunar.mo", False),
@@ -232,7 +232,7 @@ ISO_APP_OVERRIDES = [
 
 # Files the ISO overrides / suppresses. pacstrap must NOT extract the owning
 # package's version:
-#   usr/lib/os-release   owned by `filesystem`; we replace it with the Az'arch-branded
+#   usr/lib/os-release   owned by `filesystem`; we replace it with the Azzio-branded
 #                        file, planted post-pacstrap by customize_airootfs.sh.
 #   the ISO_APP_OVERRIDES paths (kitty icon + gedit .desktop) -- see above.
 # This MUST be NoExtract'd (not just overlaid): pacman's file-conflict check runs
@@ -246,7 +246,7 @@ _ISO_NOEXTRACT = [
 ]
 
 
-def app_override_cp_sh(prefix: str = "", src_dir: str = "/root/azarch/apps") -> str:
+def app_override_cp_sh(prefix: str = "", src_dir: str = "/root/azzio/apps") -> str:
     """Shell snippet that plants the ISO_APP_OVERRIDES into a pacstrapped root.
 
     Runs AFTER pacstrap (the NoExtract'd paths are absent, so there is no conflict):
@@ -269,7 +269,7 @@ def _options_block(cachedir: str | None, noextract: list[str] | None = None) -> 
     # A single NoExtract line takes multiple space-separated paths. We NoExtract the
     # files the ISO overrides with its own airootfs copies so pacstrap's owning
     # package (filesystem) does not lay down a conflicting file:
-    #   usr/lib/os-release -> our Az'arch branding wins
+    #   usr/lib/os-release -> our Azzio branding wins
     noextract_line = (
         f"NoExtract   = {' '.join(noextract)}" if noextract else "#NoExtract   ="
     )
@@ -316,7 +316,7 @@ def download_conf(parallel_downloads: int = 5) -> str:
 # never Includes the host mirrorlist.
 #
 # SigLevel = Never here only affects the *download* step. Final package trust is
-# re-established at pacstrap time against the file:// [pacstrap-azarch-repo].
+# re-established at pacstrap time against the file:// [pacstrap-azzio-repo].
 #
 [options]
 Architecture      = x86_64
@@ -340,7 +340,7 @@ def build_profile_conf(cachedir: str | None = None) -> str:
     """The archiso profile's pacman.conf for mkarchiso's internal pacstrap.
 
     Standard Arch base with two build-specific tweaks folded in:
-      - NoExtract usr/lib/os-release -> our Az'arch branding wins
+      - NoExtract usr/lib/os-release -> our Azzio branding wins
       - an injected CacheDir         -> persistent build cache reuse
 
     Multilib is left OFF here. The offline rewrite to a file:// repo is applied
@@ -354,16 +354,16 @@ def build_profile_conf(cachedir: str | None = None) -> str:
 
 
 def append_local_repo(conf: str, localrepo_path: str) -> str:
-    """Append the local file:// [pacstrap-azarch-repo] to a conf that KEEPS its
+    """Append the local file:// [pacstrap-azzio-repo] to a conf that KEEPS its
     network repos. Used for ONLINE builds so mkarchiso's pacstrap pulls Arch
-    packages from the mirrors AND Az'arch's own packages (calamares, librewolf,
+    packages from the mirrors AND Azzio's own packages (calamares, librewolf,
     which are not on any mirror) from the local repo. Listed LAST so the network
     repos take precedence for any name they both carry (they won't overlap, but
     ordering makes intent explicit)."""
-    if "[pacstrap-azarch-repo]" in conf:
+    if "[pacstrap-azzio-repo]" in conf:
         return conf
     return conf.rstrip("\n") + (
-        "\n\n[pacstrap-azarch-repo]\n"
+        "\n\n[pacstrap-azzio-repo]\n"
         "SigLevel = Never\n"
         f"Server = file://{localrepo_path}\n"
     )
@@ -374,7 +374,7 @@ def switch_to_local_repo(conf: str, localrepo_path: str) -> str:
     repo instead of the network mirrors -- the fully-offline rebuild path.
 
     Drops every network repo section ([core]/[extra]/[multilib], commented or
-    not) and appends a single [pacstrap-azarch-repo] pointing at the local repo.
+    not) and appends a single [pacstrap-azzio-repo] pointing at the local repo.
     SigLevel=Never: the cached packages have no .sig files and pacstrap runs with
     -G (no keyring copied into the target), so there is nothing to verify against.
     """
@@ -393,7 +393,7 @@ def switch_to_local_repo(conf: str, localrepo_path: str) -> str:
         out_lines.append(line)
     out = "\n".join(out_lines).rstrip("\n")
     out += (
-        "\n\n[pacstrap-azarch-repo]\n"
+        "\n\n[pacstrap-azzio-repo]\n"
         "SigLevel = Never\n"
         f"Server = file://{localrepo_path}\n"
     )
@@ -424,8 +424,8 @@ def installer_pacstrap_conf() -> str:
     )
     conf += "\n" + _CUSTOM_EXAMPLE
     conf += (
-        "\n[pacstrap-azarch-repo]\n"
+        "\n[pacstrap-azzio-repo]\n"
         "SigLevel = Never\n"
-        "Server = file:///mnt/pacstrap-azarch-repo/\n"
+        "Server = file:///mnt/pacstrap-azzio-repo/\n"
     )
     return conf

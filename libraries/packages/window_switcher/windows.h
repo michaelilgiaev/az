@@ -1,4 +1,4 @@
-/* Az'arch window switcher -- enumerate managed windows and resolve their identity.
+/* Azzio window switcher -- enumerate managed windows and resolve their identity.
  *
  * Reuses the application-menu machinery: xprop for _NET_CLIENT_LIST + per-window
  * WM_CLASS/PID/type/name, az_scan_applications() for the .desktop set, and the shared

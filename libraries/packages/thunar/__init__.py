@@ -1,6 +1,6 @@
-"""Thunar file-manager configuration (PROMPT task 2/4/7) -- the Az'arch Thunar setup.
+"""Thunar file-manager configuration (PROMPT task 2/4/7) -- the Azzio Thunar setup.
 
-Thunar (Xfce's GTK file manager) replaced Dolphin. This package configures it to Az'arch's
+Thunar (Xfce's GTK file manager) replaced Dolphin. This package configures it to Azzio's
 taste and is consumed by compiler._emit_apps exactly like the other app packages
 (emit_plan() in the builder/dest/mode/owner shape, plus the asset/render extras kitty uses).
 It is a DIRECTORY module (like packages/gedit's source tree) because it is large; the
@@ -18,7 +18,7 @@ the on-disk home layout are built from the same list):
     packages/thunar/home_directory (the SAME set as the on-disk home layout, resolved paths).
   * actions.py  -- ~/.config/Thunar/uca.xml (Edit with gedit on any file, Edit with gimp on
     images, Create Link via zenity, Open Terminal Here via kitty) + the `link` helper script.
-  * launcher.py -- the thunar.desktop override (Name="Thunar", custom Az'arch icon) + the
+  * launcher.py -- the thunar.desktop override (Name="Thunar", custom Azzio icon) + the
     custom icon files.
   * templates.py -- the ~/Templates "Create Document" set (an empty text doc + the LibreOffice
     ODF trio) and ~/.config/user-dirs.dirs pointing XDG_TEMPLATES_DIR at ~/Templates (PROMPT
@@ -30,7 +30,7 @@ WHAT LANDS WHERE:
     ~/.config/Thunar/thunarrc, ~/.config/xfce4/xfconf/xfce-perchannel-xml/thunar.xml,
     ~/.config/gtk-3.0/gtk.css, ~/.config/gtk-3.0/bookmarks, ~/.config/Thunar/uca.xml
   SYSTEM files (owner "root"):
-    the `link` helper (/usr/local/bin/azarch-link, executable), the custom icon (scalable SVG
+    the `link` helper (/usr/local/bin/azzio-link, executable), the custom icon (scalable SVG
     + PNG rasterizations), and the thunar.desktop override (a package-owned path -> staged for
     the post-pacstrap install hook via pacman.ISO_APP_OVERRIDES, not the overlay).
 

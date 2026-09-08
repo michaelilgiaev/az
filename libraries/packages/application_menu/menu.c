@@ -1,4 +1,4 @@
-/* Az'arch application menu (C/GTK3 port) -- window, search, power row, and the
+/* Azzio application menu (C/GTK3 port) -- window, search, power row, and the
  * resident daemon (built once, kept warm, INSTANT open/close).
  *
  * This single binary is BOTH the menu and the daemon: it builds the window once
@@ -593,7 +593,7 @@ static void build_window(AzMenu *m) {
 static char *pid_path(void) {
     const char *rt = g_getenv("XDG_RUNTIME_DIR");
     if (!rt || !rt[0]) rt = "/tmp";
-    return g_build_filename(rt, "azarch-application-menu.pid", NULL);
+    return g_build_filename(rt, "azzio-application-menu.pid", NULL);
 }
 
 /* Self-pipe for async-signal-safe wakeup on the GTK loop. */
@@ -695,7 +695,7 @@ int main(int argc, char **argv) {
     /* Latch the system theme (dark by default) BEFORE anything is styled: install_css()
      * and build_window() below read the AZ_*_COLOR macros, which resolve to the dark or
      * light palette per what az_theme_init() reads from the freedesktop color-scheme. The
-     * daemon is restarted by `azarch theme` when the theme flips, so re-reading here on
+     * daemon is restarted by `azzio theme` when the theme flips, so re-reading here on
      * launch is enough. */
     az_theme_init();
     g_timing = (g_getenv("AZ_TIMING") != NULL);
