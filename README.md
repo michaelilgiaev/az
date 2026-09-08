@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="assets/logos/azzio_title_627×230.png" alt="Azzio">
-</p>
-
 <table width="100%">
 <thead>
 <tr><th align="left">🚧 UNDER CONSTRUCTION</th></tr>
@@ -9,12 +5,37 @@
 <tbody>
 <tr><td>
 
-The project compiles and runs, but it is still early in development, with most of the core features missing and a good chance that bugs are present. I suggest
-  coming back to it later once it reaches release.
+The project compiles and runs, but it is still early in development. Many features are missing, bugs are common, and it is not stable yet. Feel free to explore if you are curious, but if you need something reliable, please check back later once the project has matured into a stable release.
 
 </td></tr>
 </tbody>
 </table>
+
+ <table width="100%">
+ <thead>
+ <tr><th align="left">📢❗🚨 SECURITY CONCERN</th></tr>
+ </thead>
+ <tbody>
+ <tr><td>
+
+Please read this part. Do not skip it.
+
+The security of Azzio has not been thoroughly reviewed yet. There are no *SECURITY.md* or *ISSUES.md* files. There is also no process in place for onboarding developers, tracking issues, accepting pull requests, or reporting vulnerabilities.
+
+The project recently went through a major overhaul and was renamed to Azzio. During that work, coding LLMs were used to write a lot of the code. That generated code has only been skimmed for basic security and style. It has not been carefully reviewed.
+
+So if you plan to use this project in any way, please read the code first. Do not run anything until you have checked it yourself.
+
+ </td></tr>
+ </tbody>
+ </table>
+
+
+<p align="center">
+  <img src="assets/logos/azzio_title_627×230.png" alt="Azzio">
+</p>
+
+
 
 ## Documentation
 
