@@ -149,13 +149,11 @@ LOGO=archlinux-logo
 # `filesystem` from writing its own "Arch Linux" os-release, so usr/lib/os-release is
 # absent until this cp lands ours.
 #
-# Wallpaper: the desktop is OpenBox now (KDE Plasma was removed), and OpenBox paints no
-# wallpaper of its own -- feh sets the X root pixmap from the OpenBox autostart /
-# ~/.xinitrc (see packages/openbox). So there is NO Plasma org.kde.image default
-# to rewrite here anymore, and no bundled Plasma "Next" wallpaper / notifications
-# plasmoid / krunner / kmenuedit to delete (those packages are gone from the manifest).
-# The two azzio wallpaper images ship as plain files under /usr/share/wallpapers via
-# compiler.py; feh reads the "years" image directly.
+# Wallpaper: the desktop is OpenBox, which paints no wallpaper of its own -- feh sets the
+# X root pixmap from the OpenBox autostart / ~/.xinitrc (see packages/openbox). There is
+# no desktop-environment wallpaper-config file to rewrite here, and no bundled default
+# wallpaper package to delete. The two azzio wallpaper images ship as plain files under
+# /usr/share/wallpapers via compiler.py; feh reads the "years" image directly.
 CUSTOMIZE_AIROOTFS = """\
 #!/usr/bin/env bash
 set -euo pipefail
@@ -407,9 +405,9 @@ HandlePowerKey=poweroff
 #
 # WHY logind IdleAction: logind is the single idle manager that works on BOTH the
 # bare-console live ISO and the OpenBox desktop, and it is DE-independent -- exactly
-# the deterministic behaviour the request describes. With KDE's PowerDevil removed,
-# logind is now the ONLY idle-suspend manager on the system. IdleActionSec=900 == 15
-# minutes.
+# the deterministic behaviour the request describes. logind is the ONLY idle-suspend
+# manager on the system (no desktop-environment power daemon runs). IdleActionSec=900 ==
+# 15 minutes.
 #
 # Detection:
 #   * "laptop" == at least one /sys/class/power_supply/* of type "Battery". This is

@@ -1,7 +1,7 @@
 """Thunar file-manager configuration (PROMPT task 2/4/7) -- the Azzio Thunar setup.
 
-Thunar (Xfce's GTK file manager) replaced Dolphin. This package configures it to Azzio's
-taste and is consumed by compiler._emit_apps exactly like the other app packages
+Thunar (Xfce's GTK file manager) is the Azzio file manager. This package configures it to
+Azzio's taste and is consumed by compiler._emit_apps exactly like the other app packages
 (emit_plan() in the builder/dest/mode/owner shape, plus the asset/render extras kitty uses).
 It is a DIRECTORY module (like packages/gedit's source tree) because it is large; the
 pieces are split into focused submodules and re-exported here (INCLUDING home_directory, the

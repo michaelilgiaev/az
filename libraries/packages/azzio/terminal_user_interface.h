@@ -21,7 +21,7 @@
  *
  * PREVIEWS use kitty's `kitten icat --place` graphics: the Wallpaper screen previews the
  * hovered wallpaper image; the Theme screen previews LibreWolf (the timedate home page)
- * and Dolphin rendered light/dark. kitty is deliberately exempt from the system theme,
+ * and the file manager rendered light/dark. kitty is deliberately exempt from the system theme,
  * which the Theme screen discloses.
  */
 #ifndef AZ_TERMINAL_USER_INTERFACE_H
@@ -68,7 +68,7 @@ typedef enum {
 typedef enum {
     AZ_PV_NONE = 0,
     AZ_PV_WALLPAPER,     /* kitty-icat the wallpaper image for row->preview_arg (an id)  */
-    AZ_PV_THEME,         /* kitty-icat the LibreWolf + Dolphin screenshots (dark/white)  */
+    AZ_PV_THEME,         /* kitty-icat the LibreWolf + file-manager shots (dark/white)   */
 } AzPreviewKind;
 
 typedef struct {

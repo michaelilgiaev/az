@@ -882,35 +882,36 @@ def test_theme_rc_removes_the_bottom_handle_bar():
 def test_theme_rc_active_separator_blends_into_the_titlebar():
     # THE regression this fixes: OpenBox draws a FLAT 1px line at the titlebar's BOTTOM edge
     # (between titlebar and client) via window.active.title.separator.color. The dark theme
-    # used #1f6c93, which rendered as a stray bright-CYAN bar under a focused, non-maximized
-    # window (the reported visual bug -- sampled pixel #1e688d).
+    # once used the accent value, which rendered as a stray bright-CYAN bar under a focused,
+    # non-maximized window (the reported visual bug).
     #
     # The titlebar background is a splitvertical GRADIENT, so the separator must match the
     # gradient's BOTTOM-edge value (title_bg_to_split), NOT the top colour -- matching the top
-    # would leave a faint light hairline exactly where the cyan was. Dark bottom = #2a2e32,
+    # would leave a faint hairline exactly where the cyan was. Dark bottom = #0a0f14,
     # light bottom = #7AA1D1, so those are the pinned separator colours (zero contrast, no line).
     dark = desktop.openbox_theme_rc(dark=True)
     light = desktop.openbox_theme_rc(dark=False)
-    assert "window.active.title.separator.color: #2a2e32" in dark
+    assert "window.active.title.separator.color: #0a0f14" in dark
     assert "window.active.title.separator.color: #7AA1D1" in light
     # The separator matches the titlebar gradient's colorTo split (its bottom edge) in each.
-    for rc, bottom in ((dark, "#2a2e32"), (light, "#7AA1D1")):
+    for rc, bottom in ((dark, "#0a0f14"), (light, "#7AA1D1")):
         assert f"*.title.bg.colorTo.splitTo: {bottom}" in rc
-    # The old cyan-ish separator values must NOT come back as the active separator.
-    assert "window.active.title.separator.color: #1f6c93" not in dark
+    # The accent (logo cyan) must NOT come back as the active separator.
+    assert "window.active.title.separator.color: #06b8fd" not in dark
     assert "window.active.title.separator.color: #4e76a8" not in light
 
 
 def test_light_theme_keeps_the_clearlooks_cyan_titlebar_colour():
     # The LIGHT ("Azzio") theme keeps its familiar "cyan'ish" Clearlooks look: it must
     # carry the Clearlooks title gradient base colour (#8CB0DC). The DARK theme (default)
-    # replaces it with the dark grey/blue palette -- so the cyan must NOT be in the dark one.
+    # replaces it with the near-black OSD palette -- so the Clearlooks cyan must NOT be in
+    # the dark one.
     light = desktop.openbox_theme_rc(dark=False)
     dark = desktop.openbox_theme_rc(dark=True)
     assert "*.title.bg.color: #8CB0DC" in light
     assert "#8CB0DC" not in dark
-    # The dark theme uses the Azzio dark surface palette (matching the application menu).
-    assert "#2a2e32" in dark
+    # The dark theme uses the Azzio near-black surface palette (matching the application menu).
+    assert "#0a0f14" in dark
     # Both keep the shared geometry (grown padding + no bottom handle).
     for out in (light, dark):
         assert "padding.height: 7" in out
@@ -958,9 +959,9 @@ def test_autostart_repaints_wallpaper_with_feh():
 
 
 def test_autostart_applies_us_and_hebrew_layouts_with_alt_shift():
-    # setxkbmap sets US English (default) + Hebrew, Alt+Shift to toggle -- the
-    # DE-independent replacement for the old Plasma kxkbrc. Constants are pinned so a
-    # test catches a layout/toggle drift.
+    # setxkbmap sets US English (default) + Hebrew, Alt+Shift to toggle -- a plain,
+    # DE-independent xkb config. Constants are pinned so a test catches a layout/toggle
+    # drift.
     assert desktop.KEYBOARD_LAYOUTS == ["us", "il"]
     assert desktop.KEYBOARD_TOGGLE == "grp:alt_shift_toggle"
     out = desktop.openbox_autostart()
@@ -1029,11 +1030,11 @@ def test_environment_exports_openbox_desktop():
 
 
 def test_environment_bridges_qt_apps_onto_the_gtk_system_theme():
-    # QT_QPA_PLATFORMTHEME=gtk3 is the system-theme bridge for Qt/KF6 apps (Dolphin,
-    # Calamares, any downloaded Qt app): without a KDE/portal stack they render LIGHT
+    # QT_QPA_PLATFORMTHEME=gtk3 is the system-theme bridge for Qt apps (Calamares, any
+    # downloaded Qt app): with no Qt-side theme config or portal they render LIGHT
     # regardless of the freedesktop color-scheme, so the Qt gtk3 platform theme makes them
     # follow the GTK theme (Adwaita-dark/Adwaita) `azzio theme` sets -- i.e. Qt apps obey
-    # the system dark/white toggle too. Regression guard: dropping this un-themes Dolphin.
+    # the system dark/white toggle too. Regression guard: dropping this un-themes Qt apps.
     assert "export QT_QPA_PLATFORMTHEME=gtk3" in desktop.openbox_environment()
 
 

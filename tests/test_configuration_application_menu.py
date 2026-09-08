@@ -1,8 +1,8 @@
 """packages.application_menu -- OUR application menu, baked into the ISO.
 
-KDE Plasma was removed; the desktop is OpenBox with no panel, so this menu is the
-WHOLE shell -- a borderless launcher CENTERED on the screen, opened by the Super key
-(via xcape + the OpenBox rc.xml keybind).
+The desktop is OpenBox with no panel, so this menu is the WHOLE shell -- a borderless
+launcher CENTERED on the screen, opened by the Super key (via xcape + the OpenBox rc.xml
+keybind).
 
 The menu is a COMPILED C / GTK3 program now (the earlier Tkinter/Python port was
 replaced). The C sources live directly in the package dir with a Makefile; the build
@@ -16,9 +16,9 @@ emits the launcher + .desktop to the fixed system paths the launcher/session exp
 BINARY (not a python module), and (d) the C menu keeps its pinned behaviour -- most
 importantly, TAB lands on "Shut Down".
 
-The menu dismisses like Plasma's Kickoff did -- a global pointer/keyboard grab plus an
-outside-click hit-test, with focus-loss and Escape backing it up. There is NO pin and NO
-panel-icon highlight bar anymore (both were removed with the panel).
+The menu dismisses via a global pointer/keyboard grab plus an outside-click hit-test,
+with focus-loss and Escape backing it up. There is NO pin and NO panel-icon highlight bar
+anymore (both were removed with the panel).
 """
 
 from __future__ import annotations
@@ -68,7 +68,7 @@ def test_csrc_dir_is_flattened_up():
     assert (CSRC_DIR / "theme.h").is_file()
     # A representative spread of the sibling translation units is present at top level.
     for name in ("application_list.c", "applications.c", "usage.c", "icons.c", "actions.c",
-                 "window_watch.c", "kickoff_scrollbar.c", "power.c", "theme.c"):
+                 "window_watch.c", "scrollbar.c", "power.c", "theme.c"):
         assert (CSRC_DIR / name).is_file(), name
 
 
@@ -231,9 +231,8 @@ def test_menu_is_borderless_and_centered():
 
 
 def test_menu_closes_on_outside_click_and_escape():
-    # Ported behaviour: the menu dismisses like Plasma's Kickoff when anything outside it
-    # is pressed (a global grab + a hit-test), and Escape / a physical Super press also
-    # close it.
+    # The menu dismisses when anything outside it is pressed (a global grab + a
+    # hit-test), and Escape / a physical Super press also close it.
     src = _menu_c()
     assert "gdk_seat_grab" in src                           # global pointer/keyboard grab
     assert "on_button_press" in src                         # outside-click hit-test handler

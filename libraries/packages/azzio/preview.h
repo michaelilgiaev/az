@@ -7,7 +7,7 @@
  *                named at the top of the screen by the renderer; hovering a choice previews IT.
  *
  *   THEME     -- two shipped SCREENSHOTS side by side: LibreWolf on the timedate home page and
- *                the Dolphin file manager, in the dark or white variant matching the hovered
+ *                the file manager, in the dark or white variant matching the hovered
  *                choice, so the user sees the theme before applying it. The images ship from
  *                assets/previews/ to AZ_PREVIEW_DIR and are used unmodified (kitty scales them
  *                at draw time). No caption text under them. (Kitty itself is exempt from the

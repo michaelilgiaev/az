@@ -3,7 +3,7 @@
  * A centered dark rounded panel holding one tile per window, left to right in the order
  * ordering.c produced. Each tile is a live thumbnail (icon fallback) with the app icon
  * badged in the corner and the window title underneath; the selected tile carries a
- * Breeze-blue highlight border. Owns nothing about X input -- switcher.c drives selection.
+ * cyan highlight border. Owns nothing about X input -- switcher.c drives selection.
  */
 #ifndef AZ_LAYOUT_H
 #define AZ_LAYOUT_H

@@ -18,29 +18,31 @@
 #include <string.h>
 #include <stdlib.h>
 
-/* The DARK palette (the Breeze-ish default) -- index by AzColorRole. */
+/* The DARK palette -- the Azzio identity, derived from the media OSD
+ * (on_screen_display.c): near-black surfaces + the logo cyan #06b8fd accent, replacing
+ * the old grey-blue scheme. Index by AzColorRole. */
 static const char *AZ_PALETTE_DARK[AZ_C_COUNT] = {
-    [AZ_C_BG]                 = "#2a2e32",
-    [AZ_C_SURFACE]            = "#31363b",
-    [AZ_C_HOVER]              = "#3b4045",
-    [AZ_C_DIVIDER]            = "#3a3f44",
-    [AZ_C_TEXT]               = "#eff0f1",
-    [AZ_C_SUBTEXT]            = "#9aa0a6",
-    [AZ_C_PLACEHOLDER]        = "#7f858a",
-    [AZ_C_BORDER]             = "#3daee9",
-    [AZ_C_SELECT_BORDER]      = "#3daee9",
-    [AZ_C_SELECT_FILL]        = "#31383e",
-    [AZ_C_SELECT_TEXT]        = "#ffffff",
-    [AZ_C_SEL_BG]             = "#c3c3c3",
-    [AZ_C_SEL_FG]             = "#000000",
-    [AZ_C_SCROLL_THUMB]       = "#5c6166",
-    [AZ_C_SCROLL_THUMB_HOVER] = "#93989c",
-    [AZ_C_SCROLL_GROOVE]      = "#33383d",
+    [AZ_C_BG]                 = "#0a0f14",   /* OSD chip background (near-black)          */
+    [AZ_C_SURFACE]            = "#121a21",   /* search box / buttons -- one step up       */
+    [AZ_C_HOVER]              = "#1b2730",   /* row hover -- between surface and track     */
+    [AZ_C_DIVIDER]            = "#20303a",   /* separators -- the OSD's dim bar track      */
+    [AZ_C_TEXT]               = "#dee4ea",   /* app names -- the OSD readout text          */
+    [AZ_C_SUBTEXT]            = "#8b98a3",   /* muted type subtitle (cyan-leaning grey)    */
+    [AZ_C_PLACEHOLDER]        = "#78828c",   /* search placeholder -- the OSD muted grey   */
+    [AZ_C_BORDER]             = "#06b8fd",   /* focus border -- the logo cyan (OSD accent) */
+    [AZ_C_SELECT_BORDER]      = "#06b8fd",   /* selected row / focused button -- logo cyan */
+    [AZ_C_SELECT_FILL]        = "#0e2630",   /* subtle dark cyan-tinted fill               */
+    [AZ_C_SELECT_TEXT]        = "#ffffff",   /* text on a selected row                     */
+    [AZ_C_SEL_BG]             = "#06b8fd",   /* search-box selection -- the logo cyan      */
+    [AZ_C_SEL_FG]             = "#04222e",   /* dark text on the cyan selection            */
+    [AZ_C_SCROLL_THUMB]       = "#3a5563",   /* scrollbar thumb -- muted cyan-grey         */
+    [AZ_C_SCROLL_THUMB_HOVER] = "#06b8fd",   /* thumb brightens to the logo cyan on hover  */
+    [AZ_C_SCROLL_GROOVE]      = "#16222b",   /* faint dark groove behind the thumb         */
 };
 
 /* The LIGHT palette -- an Adwaita-light-ish set matching the light OpenBox theme:
- * near-white surfaces, dark text, the same Breeze highlight blue for selection so the two
- * themes feel like one family. */
+ * near-white surfaces, dark text, and the same logo cyan #06b8fd for selection so the two
+ * themes feel like one Azzio family. */
 static const char *AZ_PALETTE_LIGHT[AZ_C_COUNT] = {
     [AZ_C_BG]                 = "#fafafa",
     [AZ_C_SURFACE]            = "#ffffff",
@@ -49,12 +51,12 @@ static const char *AZ_PALETTE_LIGHT[AZ_C_COUNT] = {
     [AZ_C_TEXT]               = "#1b2430",
     [AZ_C_SUBTEXT]            = "#5a6b7b",
     [AZ_C_PLACEHOLDER]        = "#8a9099",
-    [AZ_C_BORDER]             = "#3daee9",
-    [AZ_C_SELECT_BORDER]      = "#3daee9",
-    [AZ_C_SELECT_FILL]        = "#e3f1fb",
+    [AZ_C_BORDER]             = "#06b8fd",
+    [AZ_C_SELECT_BORDER]      = "#06b8fd",
+    [AZ_C_SELECT_FILL]        = "#d6f3ff",
     [AZ_C_SELECT_TEXT]        = "#ffffff",
-    [AZ_C_SEL_BG]             = "#c3c3c3",
-    [AZ_C_SEL_FG]             = "#000000",
+    [AZ_C_SEL_BG]             = "#06b8fd",
+    [AZ_C_SEL_FG]             = "#04222e",
     [AZ_C_SCROLL_THUMB]       = "#b0b3b6",
     [AZ_C_SCROLL_THUMB_HOVER] = "#8a8e92",
     [AZ_C_SCROLL_GROOVE]      = "#e6e6e6",

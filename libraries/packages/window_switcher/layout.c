@@ -1,8 +1,8 @@
 /* Azzio window switcher -- the horizontal tile strip. See layout.h.
  *
- * Look mirrors the application menu's dark Breeze family (theme.c colours): a rounded
+ * Look mirrors the application menu's cyan-on-dark family (theme.c colours): a rounded
  * panel, tiles with a live thumbnail (or the app icon when no pixmap exists yet), the app
- * icon badged bottom-left, the title underneath, and a Breeze-blue border on the selected
+ * icon badged bottom-left, the title underneath, and a cyan border on the selected
  * tile. */
 #include "layout.h"
 #include "ordering.h"

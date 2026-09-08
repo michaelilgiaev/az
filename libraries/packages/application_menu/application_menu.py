@@ -1,10 +1,10 @@
 """The Azzio application menu -- baked into the live/installed system.
 
-This is OUR application menu, and it is the WHOLE shell: KDE Plasma was removed and
-the desktop is OpenBox with no panel, so this menu -- a borderless, Breeze-styled
-launcher CENTERED on the screen (search, launch-frequency ordering, power actions) --
-is the only launcher surface. It is opened by the Super key (via xcape + the OpenBox
-rc.xml keybind); see packages/openbox.
+This is OUR application menu, and it is the WHOLE shell: the desktop is OpenBox with no
+panel, so this menu -- a borderless, cyan-on-dark launcher CENTERED on the screen
+(search, launch-frequency ordering, power actions) -- is the only launcher surface. It
+is opened by the Super key (via xcape + the OpenBox rc.xml keybind); see
+packages/openbox.
 
 The menu is a C / GTK3 program (the earlier Tkinter/Python port was replaced): the
 sources live DIRECTLY in this dir (menu.c + siblings, a Makefile), and the build here
@@ -22,7 +22,7 @@ Layers:
   * SOURCE tree -- libraries/packages/application_menu/ (paths.APPLICATION_MENU_DIR).
     The C sources live DIRECTLY in this dir, next to this build-wiring module:
       menu.c                     the GTK3 menu + resident daemon (main())
-      {application_list,applications,usage,icons,actions,window_watch,kickoff_scrollbar,power}.{c,h}  its modules
+      {application_list,applications,usage,icons,actions,window_watch,scrollbar,power}.{c,h}  its modules
       theme.h                    the shared colours/sizes header
       Makefile                   builds azzio-application-menu-daemon (+ `make test`)
       launcher.py                the launcher (signals the daemon), pure Python
@@ -61,16 +61,14 @@ MENU_DESKTOP_SYSTEM_PATH = (
     "/usr/local/share/applications/azzio-application-menu.desktop"
 )
 
-# --- Super/Meta key -> menu (handled by OpenBox, not KDE) --------------------
-# Pressing the Super key alone OPENS THIS MENU. Under OpenBox that is wired WITHOUT any
-# KDE machinery: xcape turns a lone Super_L tap into the chord Super_L+Menu and the
-# OpenBox rc.xml binds W-Menu to MENU_LAUNCHER_SYSTEM_PATH (see packages/openbox
-# openbox_rc_xml + openbox_autostart). There is therefore NO X-KDE-Shortcuts .desktop
-# and NO kglobalaccel anymore -- the old KDE global-shortcut file was removed.
+# --- Super/Meta key -> menu (handled by OpenBox) -----------------------------
+# Pressing the Super key alone OPENS THIS MENU, wired entirely through OpenBox: xcape
+# turns a lone Super_L tap into the chord Super_L+Menu and the OpenBox rc.xml binds
+# W-Menu to MENU_LAUNCHER_SYSTEM_PATH (see packages/openbox openbox_rc_xml +
+# openbox_autostart). No global-shortcut daemon or extra .desktop is involved.
 #
 # The daemon that keeps the menu resident (instant open) is likewise started from the
-# OpenBox autostart (packages/openbox.openbox_autostart), not from a KDE autostart
-# .desktop.
+# OpenBox autostart (packages/openbox.openbox_autostart).
 
 # Per-user seed for the launch-frequency store (usage.c's usage store file). The menu
 # orders apps most-launched first; on a FRESH profile there is no history, so without
@@ -93,7 +91,7 @@ MENU_USAGE_SEED_SYSTEM_PATH = (
 MENU_USAGE_SEED: dict[str, int] = {
     "librewolf.desktop": 3,          # LibreWolf (browser)
     "kitty.desktop": 2,              # kitty (terminal)
-    "thunar.desktop": 1,             # Thunar (file manager -- replaced Dolphin)
+    "thunar.desktop": 1,             # Thunar (file manager)
 }
 
 # The menu launcher's icon glyph: the standard "application-menu" hamburger, so the
@@ -103,7 +101,7 @@ MENU_ICON_NAME = "application-menu"
 
 # --- Source files (in the repo) ---------------------------------------------
 # The menu is a C / GTK3 program: menu.c holds main() (the resident daemon) and pulls in
-# the sibling translation units (application_list/applications/usage/icons/actions/window_watch/kickoff_scrollbar/power)
+# the sibling translation units (application_list/applications/usage/icons/actions/window_watch/scrollbar/power)
 # via the Makefile, which produces the single binary named below. launcher.py (the bin
 # entry point) is pure Python and rides along. The Makefile is the single source of truth
 # for HOW the binary is linked; this module just drives it and installs the result.

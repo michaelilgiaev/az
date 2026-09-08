@@ -1,11 +1,10 @@
-/* Azzio application menu (C port) -- Kickoff-style scrollbar.
- * One-to-one port of widgets.py KickoffScrollBar, drawn with Cairo. */
-#include "kickoff_scrollbar.h"
+/* Azzio application menu (C port) -- the custom pill scrollbar, drawn with Cairo. */
+#include "scrollbar.h"
 #include "theme.h"
 
 #include <math.h>
 
-struct AzKScroll {
+struct AzScrollbar {
     GtkWidget     *area;      /* GtkDrawingArea (the bar) */
     GtkAdjustment *vadj;      /* the scrolled window's vertical adjustment */
     gboolean       hover;
@@ -14,7 +13,7 @@ struct AzKScroll {
 };
 
 /* ---- view fractions from the adjustment (Tk first/last) ------------------ */
-static void view_fraction(AzKScroll *s, double *first, double *last) {
+static void view_fraction(AzScrollbar *s, double *first, double *last) {
     double lo = gtk_adjustment_get_lower(s->vadj);
     double up = gtk_adjustment_get_upper(s->vadj);
     double val = gtk_adjustment_get_value(s->vadj);
@@ -26,7 +25,7 @@ static void view_fraction(AzKScroll *s, double *first, double *last) {
 }
 
 /* Content fits entirely -> nothing to scroll (Tk: first<=0 && last>=1). */
-static gboolean fits(AzKScroll *s) {
+static gboolean fits(AzScrollbar *s) {
     double f, l;
     view_fraction(s, &f, &l);
     return f <= 0.0 && l >= 1.0;
@@ -38,18 +37,18 @@ static void set_src(cairo_t *cr, const char *hex) {
     cairo_set_source_rgba(cr, c.red, c.green, c.blue, c.alpha);
 }
 
-static int widget_h(AzKScroll *s) {
+static int widget_h(AzScrollbar *s) {
     GtkAllocation a; gtk_widget_get_allocation(s->area, &a);
     return MAX(1, a.height);
 }
-static int widget_w(AzKScroll *s) {
+static int widget_w(AzScrollbar *s) {
     GtkAllocation a; gtk_widget_get_allocation(s->area, &a);
     return MAX(1, a.width);
 }
 
 /* Pixel (top,bottom) of the thumb for the current view, clamped to a minimum
- * grabbable length (widgets.py _thumb_span). */
-static void thumb_span(AzKScroll *s, double *top_out, double *bot_out) {
+ * grabbable length. */
+static void thumb_span(AzScrollbar *s, double *top_out, double *bot_out) {
     int h = widget_h(s);
     double f, l;
     view_fraction(s, &f, &l);
@@ -70,7 +69,7 @@ static void thumb_span(AzKScroll *s, double *top_out, double *bot_out) {
 /* ---- drawing ------------------------------------------------------------- */
 static gboolean on_draw(GtkWidget *w, cairo_t *cr, gpointer data) {
     (void)w;
-    AzKScroll *s = data;
+    AzScrollbar *s = data;
     if (fits(s))
         return FALSE;                 /* content fits -> draw nothing */
 
@@ -84,7 +83,7 @@ static gboolean on_draw(GtkWidget *w, cairo_t *cr, gpointer data) {
     thumb_span(s, &top, &bot);
 
     /* Groove behind the thumb: hover-only, spanning the full track (a pill of its
-     * own), like Kickoff's background fading in on hover. */
+     * own), fading in on hover. */
     if (s->hover) {
         set_src(cr, AZ_SCROLL_GROOVE_COLOR);
         cairo_new_sub_path(cr);
@@ -113,8 +112,8 @@ static gboolean on_draw(GtkWidget *w, cairo_t *cr, gpointer data) {
 }
 
 /* ---- interaction --------------------------------------------------------- */
-static void scroll_to_pixel(AzKScroll *s, double y) {
-    /* Move the view so the thumb top lands at (y - grab offset) (widgets.py). */
+static void scroll_to_pixel(AzScrollbar *s, double y) {
+    /* Move the view so the thumb top lands at (y - grab offset). */
     int h = widget_h(s);
     double f, l;
     view_fraction(s, &f, &l);
@@ -132,7 +131,7 @@ static void scroll_to_pixel(AzKScroll *s, double y) {
  * so whose e->y -- belongs to a sibling widget the pointer drifted onto; e->y_root
  * is screen-absolute and always right, so translate it against the bar window's
  * screen origin instead of trusting e->y. */
-static double bar_local_y(AzKScroll *s, double y_root) {
+static double bar_local_y(AzScrollbar *s, double y_root) {
     GdkWindow *win = gtk_widget_get_window(s->area);
     int ox = 0, oy = 0;
     if (win) gdk_window_get_origin(win, &ox, &oy);
@@ -141,7 +140,7 @@ static double bar_local_y(AzKScroll *s, double y_root) {
 
 static gboolean on_press(GtkWidget *w, GdkEventButton *e, gpointer data) {
     (void)w;
-    AzKScroll *s = data;
+    AzScrollbar *s = data;
     if (e->button != 1 || fits(s))
         return FALSE;
     double top, bot;
@@ -167,7 +166,7 @@ static gboolean on_press(GtkWidget *w, GdkEventButton *e, gpointer data) {
 
 static gboolean on_motion(GtkWidget *w, GdkEventMotion *e, gpointer data) {
     (void)w;
-    AzKScroll *s = data;
+    AzScrollbar *s = data;
     if (s->dragging)
         scroll_to_pixel(s, bar_local_y(s, e->y_root));
     return FALSE;
@@ -175,7 +174,7 @@ static gboolean on_motion(GtkWidget *w, GdkEventMotion *e, gpointer data) {
 
 static gboolean on_release(GtkWidget *w, GdkEventButton *e, gpointer data) {
     (void)w; (void)e;
-    AzKScroll *s = data;
+    AzScrollbar *s = data;
     if (s->dragging) {
         s->dragging = FALSE;
         gtk_grab_remove(s->area);
@@ -186,14 +185,14 @@ static gboolean on_release(GtkWidget *w, GdkEventButton *e, gpointer data) {
 
 static gboolean on_enter(GtkWidget *w, GdkEventCrossing *e, gpointer data) {
     (void)w; (void)e;
-    AzKScroll *s = data;
+    AzScrollbar *s = data;
     s->hover = TRUE;
     gtk_widget_queue_draw(s->area);
     return FALSE;
 }
 static gboolean on_leave(GtkWidget *w, GdkEventCrossing *e, gpointer data) {
     (void)w; (void)e;
-    AzKScroll *s = data;
+    AzScrollbar *s = data;
     s->hover = FALSE;
     gtk_widget_queue_draw(s->area);
     return FALSE;
@@ -203,7 +202,7 @@ static gboolean on_leave(GtkWidget *w, GdkEventCrossing *e, gpointer data) {
  * match "no bar when everything fits". */
 static void on_adj_changed(GtkAdjustment *adj, gpointer data) {
     (void)adj;
-    AzKScroll *s = data;
+    AzScrollbar *s = data;
     /* Reserve the 12px track only when there is something to scroll, giving the
      * column back to the list otherwise -- but do it by COLLAPSING THE WIDTH, never
      * by gtk_widget_set_visible. Mapping/unmapping the bar's GdkWindow on a filter
@@ -221,8 +220,8 @@ static void on_adj_changed(GtkAdjustment *adj, gpointer data) {
 }
 
 /* ---- construction -------------------------------------------------------- */
-AzKScroll *az_kscroll_new(GtkAdjustment *vadj) {
-    AzKScroll *s = g_new0(AzKScroll, 1);
+AzScrollbar *az_scrollbar_new(GtkAdjustment *vadj) {
+    AzScrollbar *s = g_new0(AzScrollbar, 1);
     s->vadj = vadj;
 
     s->area = gtk_drawing_area_new();
@@ -244,9 +243,9 @@ AzKScroll *az_kscroll_new(GtkAdjustment *vadj) {
     return s;
 }
 
-GtkWidget *az_kscroll_widget(AzKScroll *s) { return s->area; }
+GtkWidget *az_scrollbar_widget(AzScrollbar *s) { return s->area; }
 
-void az_kscroll_free(AzKScroll *s) {
+void az_scrollbar_free(AzScrollbar *s) {
     if (!s) return;
     g_free(s);
 }

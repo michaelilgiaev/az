@@ -1,7 +1,6 @@
 """Minimal OpenBox live-session desktop, authored as configuration-as-Python strings.
 
-KDE Plasma was REMOVED from Azzio (it did not fit the distribution); OpenBox is
-the whole desktop now. The ISO boots to a graphical OpenBox (X11) live session
+OpenBox is the whole desktop. The ISO boots to a graphical OpenBox (X11) live session
 WITHOUT a display manager, Manjaro-style:
 
     getty@tty1 autologins `main`  ->  ~/.bash_profile runs `exec startx` on
@@ -15,8 +14,8 @@ There is deliberately NO PANEL (the user's "we're not going to have a bottom pan
 anymore" decision) and NO desktop right-click menu (the OpenBox root menu was removed
 at the user's request; right-clicking the background does nothing). The ONLY shell
 surface is the Azzio application menu -- a borderless C/GTK3 launcher centered on
-the screen, opened by the Super key. Everything the old Plasma panel carried (launcher,
-power actions) lives in that menu.
+the screen, opened by the Super key. The launcher and power actions all live in that
+menu (there is no separate panel).
 
 Everything here is a small builder function returning the CONTENT of one file.
 compiler.py emits each to its airootfs destination via emit.write_text/write_exec and
@@ -51,9 +50,9 @@ from __future__ import annotations
 
 # --- Branding / assets ------------------------------------------------------
 # The two wallpapers shipped on the medium. Each is a plain PNG copied under
-# /usr/share/wallpapers/<id>/contents/images/<W>x<H>.png (the old KPackage layout is
-# kept so the assets and compiler.py emit paths do not have to change; OpenBox/feh only
-# ever reads the inner file). Both source images are 1672x941 (see assets/wallpapers/).
+# /usr/share/wallpapers/<id>/contents/images/<W>x<H>.png (this nested layout is kept so
+# the assets and compiler.py emit paths do not have to change; OpenBox/feh only ever
+# reads the inner file). Both source images are 1672x941 (see assets/wallpapers/).
 WALLPAPERS_SYSTEM_DIR = "/usr/share/wallpapers"
 WALLPAPER_IMAGE_RES = "1672x941"          # WxH of the shipped PNGs
 WALLPAPER_PACKAGES = [
@@ -91,9 +90,9 @@ def _feh_wallpaper_line() -> str:
 def wallpaper_metadata_json(wp_id: str) -> str:
     """Minimal metadata.json shipped alongside each wallpaper image.
 
-    KDE's KPackage engine is gone, so nothing reads this at runtime anymore; it is
-    kept purely so the two wallpaper directories remain self-describing (authorship /
-    license) and so the compiler.py emit layout for wallpapers does not have to change.
+    Nothing reads this at runtime; it is kept purely so the two wallpaper directories
+    remain self-describing (authorship / license) and so the compiler.py emit layout for
+    wallpapers does not have to change.
     Name == Id so any future picker still labels them "years"/"decades"."""
     return (
         "{\n"
@@ -436,9 +435,10 @@ OPENBOX_THEME_PADDING_WIDTH = 6     # stock Clearlooks: 3 (was 8 when doubled)
 OPENBOX_THEME_HANDLE_WIDTH = 0      # stock Clearlooks: 3 -> 0 removes the bottom bar
 
 # The LIGHT palette: the stock Clearlooks colours (unchanged -- this is the classic cyan
-# "white theme" look). The DARK palette: a coherent dark grey/blue set matching the
-# Azzio application menu (bg #2a2e32 / surface #31363b / text #eff0f1) with the same
-# Breeze highlight blue (#3daee9) for the active menu item, so the whole shell reads dark.
+# "white theme" look). The DARK palette: a coherent near-black set matching the
+# Azzio application menu (bg #0a0f14 / surface #121a21 / text #dee4ea) with the logo
+# cyan (#06b8fd) for the active menu item -- the media OSD identity, so the whole shell
+# reads dark and cyan.
 # openbox_theme_rc(dark) picks one; every field below has a light and a dark value.
 _OB_LIGHT = {
     "menu_border": "#aaaaaa",
@@ -484,49 +484,49 @@ _OB_LIGHT = {
     "osd_unhi_bg": "#BABDB6", "osd_unhi_bg_to": "#efefef",
 }
 _OB_DARK = {
-    "menu_border": "#1b1e21",
-    "menu_title_bg": "#31363b", "menu_title_text": "#eff0f1",
-    "menu_items_bg": "#2a2e32", "menu_items_text": "#eff0f1",
-    "menu_items_disabled": "#6a6f75",
-    "menu_active_bg": "#3daee9", "menu_active_bg_split": "#4fb8ec",
-    "menu_active_bg_to": "#2b9fdd", "menu_active_bg_to_split": "#2596d4",
-    "menu_active_border": "#1f6c93", "menu_active_text": "#ffffff",
-    "menu_sep": "#3a3f44",
-    "handle_bg": "#2a2e32", "grip_bg": "#2a2e32",
-    "win_border": "#15181b",
+    "menu_border": "#06090c",
+    "menu_title_bg": "#121a21", "menu_title_text": "#dee4ea",
+    "menu_items_bg": "#0a0f14", "menu_items_text": "#dee4ea",
+    "menu_items_disabled": "#5a6b76",
+    "menu_active_bg": "#06b8fd", "menu_active_bg_split": "#3fc6fd",
+    "menu_active_bg_to": "#04a8e8", "menu_active_bg_to_split": "#0499d6",
+    "menu_active_border": "#046a8f", "menu_active_text": "#ffffff",
+    "menu_sep": "#20303a",
+    "handle_bg": "#0a0f14", "grip_bg": "#0a0f14",
+    "win_border": "#05080a",
     # active_sep is the FLAT 1px line OpenBox draws at the titlebar's BOTTOM edge (between
-    # titlebar and client). It USED to be #1f6c93, a stray bright-cyan bar under a focused,
+    # titlebar and client). It USED to be #046a8f, a stray bright-cyan bar under a focused,
     # non-maximized window (the reported visual bug). The title bg is a splitvertical GRADIENT
-    # whose bottom-edge pixel is the colorTo split (#2a2e32) -- matching the top color (#3b4045)
+    # whose bottom-edge pixel is the colorTo split (#0a0f14) -- matching the top color (#1b2730)
     # would leave a faint LIGHT hairline where the cyan was, so it is pinned to the BOTTOM value
-    # (#2a2e32) instead; the line then draws the same colour as the titlebar pixel above it and
+    # (#0a0f14) instead; the line then draws the same colour as the titlebar pixel above it and
     # is invisible (same "drop the thin bar under the window" intent as window.handle.width 0).
-    "active_sep": "#2a2e32",
-    "title_bg": "#3b4045", "title_bg_split": "#42474c",
-    "title_bg_to": "#31363b", "title_bg_to_split": "#2a2e32",
+    "active_sep": "#0a0f14",
+    "title_bg": "#1b2730", "title_bg_split": "#22303a",
+    "title_bg_to": "#121a21", "title_bg_to_split": "#0a0f14",
     "active_text": "#ffffff",
-    "abtn_bg": "#3b4045", "abtn_bg_split": "#42474c",
-    "abtn_bg_to": "#31363b", "abtn_bg_to_split": "#2a2e32",
-    "abtn_border": "#15181b", "abtn_image": "#eff0f1",
-    "abtn_hover_bg": "#3daee9", "abtn_hover_bg_split": "#4fb8ec",
-    "abtn_hover_bg_to": "#2b9fdd", "abtn_hover_bg_to_split": "#2596d4",
-    "abtn_hover_border": "#1f6c93", "abtn_hover_image": "#ffffff",
-    "abtn_pressed_bg": "#2596d4",
-    "inactive_sep": "#15181b",
-    "ititle_bg": "#2a2e32", "ititle_bg_split": "#31363b",
-    "ititle_bg_to": "#26292d", "ititle_bg_to_split": "#212427",
-    "inactive_text": "#9aa0a6",
-    "ibtn_bg": "#2a2e32", "ibtn_bg_split": "#31363b",
-    "ibtn_bg_to": "#26292d", "ibtn_bg_to_split": "#212427",
-    "ibtn_border": "#15181b", "ibtn_image": "#9aa0a6",
-    "osd_border": "#1b1e21",
-    "osd_bg": "#2a2e32", "osd_bg_split": "#31363b",
-    "osd_bg_to": "#26292d", "osd_bg_to_split": "#212427",
-    "osd_bg_border": "#15181b",
-    "osd_label_bg": "#31363b", "osd_label_border": "#15181b", "osd_label_text": "#eff0f1",
-    "osd_ilabel_text": "#9aa0a6",
-    "osd_hi_bg": "#3daee9", "osd_hi_bg_to": "#2b9fdd",
-    "osd_unhi_bg": "#3a3f44", "osd_unhi_bg_to": "#31363b",
+    "abtn_bg": "#1b2730", "abtn_bg_split": "#22303a",
+    "abtn_bg_to": "#121a21", "abtn_bg_to_split": "#0a0f14",
+    "abtn_border": "#05080a", "abtn_image": "#dee4ea",
+    "abtn_hover_bg": "#06b8fd", "abtn_hover_bg_split": "#3fc6fd",
+    "abtn_hover_bg_to": "#04a8e8", "abtn_hover_bg_to_split": "#0499d6",
+    "abtn_hover_border": "#046a8f", "abtn_hover_image": "#ffffff",
+    "abtn_pressed_bg": "#0499d6",
+    "inactive_sep": "#05080a",
+    "ititle_bg": "#0a0f14", "ititle_bg_split": "#121a21",
+    "ititle_bg_to": "#0d141a", "ititle_bg_to_split": "#0a1015",
+    "inactive_text": "#8b98a3",
+    "ibtn_bg": "#0a0f14", "ibtn_bg_split": "#121a21",
+    "ibtn_bg_to": "#0d141a", "ibtn_bg_to_split": "#0a1015",
+    "ibtn_border": "#05080a", "ibtn_image": "#8b98a3",
+    "osd_border": "#06090c",
+    "osd_bg": "#0a0f14", "osd_bg_split": "#121a21",
+    "osd_bg_to": "#0d141a", "osd_bg_to_split": "#0a1015",
+    "osd_bg_border": "#05080a",
+    "osd_label_bg": "#121a21", "osd_label_border": "#05080a", "osd_label_text": "#dee4ea",
+    "osd_ilabel_text": "#8b98a3",
+    "osd_hi_bg": "#06b8fd", "osd_hi_bg_to": "#04a8e8",
+    "osd_unhi_bg": "#20303a", "osd_unhi_bg_to": "#121a21",
 }
 
 
@@ -1150,8 +1150,8 @@ def openbox_rc_xml() -> str:
 
 # --- 5. ~/.config/openbox/autostart -----------------------------------------
 # Keyboard layouts for the LIVE session: US English (default) + Hebrew, Alt+Shift to
-# toggle. Applied with setxkbmap in the autostart (the DE-independent equivalent of
-# the old Plasma kxkbrc). Kept as constants so a test can pin them.
+# toggle. Applied with setxkbmap in the autostart (a plain, DE-independent xkb config).
+# Kept as constants so a test can pin them.
 KEYBOARD_LAYOUTS = ["us", "il"]           # xkb codes, us first == default
 KEYBOARD_TOGGLE = "grp:alt_shift_toggle"  # Alt+Shift cycles layouts
 
@@ -1278,11 +1278,11 @@ def openbox_autostart() -> str:
     """~/.config/openbox/autostart for the LIVE session -- run by openbox-session once
     the WM is up.
 
-    Does everything the old Plasma session did via autostart/services, but for a
-    panel-less OpenBox desktop: the shared wallpaper/xcape/menu-daemon block PLUS two
-    LIVE-ONLY behaviours that must NOT survive onto an installed system:
+    Brings up the full session via autostart, for a panel-less OpenBox desktop: the
+    shared wallpaper/xcape/menu-daemon block PLUS two LIVE-ONLY behaviours that must NOT
+    survive onto an installed system:
       * setxkbmap us,il grp:alt_shift_toggle: the US + Hebrew layouts (Alt+Shift to
-        switch), the DE-independent replacement for Plasma's kxkbrc. Live-only because
+        switch), a plain DE-independent xkb config. Live-only because
         an install picks a region keyboard (written to /etc/X11/xorg.conf.d) that this
         fixed us,il would otherwise override at every login.
       * launch the Calamares installer ONCE (Manjaro-style first-run). Live-only: an
@@ -1361,24 +1361,24 @@ def openbox_environment() -> str:
     path than our startx, keep the XDG base dirs defined, AND bridge Qt apps onto the
     system theme.
 
-    QT_QPA_PLATFORMTHEME=gtk3 is the SYSTEM-THEME bridge for Qt: without a KDE/Plasma
-    stack (no kdeglobals, no qt6ct, no xdg-desktop-portal on this medium), Qt6/KF6 apps
-    like Dolphin (the file manager) and Calamares would otherwise render with Qt's stock
-    LIGHT Fusion palette regardless of the freedesktop color-scheme. The Qt `gtk3`
-    platform theme plugin (libqgtk3.so, shipped with qt6-base) makes those Qt apps read
-    the GTK theme instead -- so they follow the SAME Adwaita-dark/Adwaita + prefer-dark
-    signal `azzio theme` sets for GTK, and switch dark<->light with the rest of the
-    session. This is what makes Dolphin (and any downloaded Qt app) obey `azzio theme`."""
+    QT_QPA_PLATFORMTHEME=gtk3 is the SYSTEM-THEME bridge for Qt: with no Qt-side theme
+    config and no xdg-desktop-portal on this medium, Qt6 apps like Calamares would
+    otherwise render with Qt's stock LIGHT Fusion palette regardless of the freedesktop
+    color-scheme. The Qt `gtk3` platform theme plugin (libqgtk3.so, shipped with
+    qt6-base) makes those Qt apps read the GTK theme instead -- so they follow the SAME
+    Adwaita-dark/Adwaita + prefer-dark signal `azzio theme` sets for GTK, and switch
+    dark<->light with the rest of the session. This is what makes Calamares (and any
+    downloaded Qt app) obey `azzio theme`."""
     from . import scale
     return f"""\
 # ~/.config/openbox/environment -- sourced by openbox-session before autostart.
 export XDG_CONFIG_HOME="${{XDG_CONFIG_HOME:-$HOME/.config}}"
 export XDG_CACHE_HOME="${{XDG_CACHE_HOME:-$HOME/.cache}}"
 export XDG_CURRENT_DESKTOP=openbox
-# Bridge Qt/KF6 apps (Dolphin, Calamares, any downloaded Qt app) onto the system theme:
-# the Qt gtk3 platform theme makes them follow the GTK theme (Adwaita-dark/Adwaita) that
-# `azzio theme` sets, so they honour dark/white like everything else. Without this Qt
-# apps render light regardless of the freedesktop color-scheme (no KDE/portal stack here).
+# Bridge Qt apps (Calamares, any downloaded Qt app) onto the system theme: the Qt gtk3
+# platform theme makes them follow the GTK theme (Adwaita-dark/Adwaita) that `azzio theme`
+# sets, so they honour dark/white like everything else. Without this Qt apps render light
+# regardless of the freedesktop color-scheme (no Qt-side theme config or portal here).
 export QT_QPA_PLATFORMTHEME=gtk3
 # GLOBAL SCALE session env (the integer + Qt parts; the fractional part rides on Xft.dpi /
 # gtk-xft-dpi -- see packages/openbox/scale). GDK_SCALE stays 1 (integer-only; 1.35 is fractional).
@@ -1869,8 +1869,8 @@ PLAN = [
         "owner": "root",
     },
     {
-        # Seed OUR menu's launch-frequency store so a fresh profile opens with System
-        # Settings, LibreWolf, kitty, Dolphin at the top (it otherwise sorts
+        # Seed OUR menu's launch-frequency store so a fresh profile opens with
+        # LibreWolf, kitty, Thunar at the top (it otherwise sorts
         # alphabetically with no history). Home-owned data file (0o644), mirrored into
         # /etc/skel so a Calamares-installed user inherits the same starting order.
         # Fully dynamic afterwards -- the daemon re-sorts as apps are opened.

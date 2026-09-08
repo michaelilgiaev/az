@@ -270,7 +270,7 @@ static char *resolve_to_png(AzIcons *r, const char *icon) {
 
 static GdkPixbuf *placeholder(int size) {
     GdkPixbuf *p = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, size, size);
-    /* Muted Breeze surface #4d5359, fully opaque. */
+    /* Muted grey placeholder surface #4d5359, fully opaque. */
     gdk_pixbuf_fill(p, 0x4d5359ffu);
     return p;
 }

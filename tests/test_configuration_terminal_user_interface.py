@@ -22,7 +22,7 @@ artifact) AND the C source tree + its build wiring:
     line advertises WASD / HJKL / arrows (packed + uppercased) with q-to-quit / ESC-to-back,
     Network is the FIRST option, the entry title is "Azzio Settings", the Wallpaper screen
     names the wallpaper DIRECTORY and previews the hovered image, and the Theme screen previews
-    real LibreWolf + Dolphin screenshots (shipped, unmodified) and discloses that kitty is
+    real LibreWolf + file-manager screenshots (shipped, unmodified) and discloses that kitty is
     exempt -- with the "Current:" state shown once at the top and no per-row status echo.
 
 The interactive DRAWING itself is exercised by an interactive smoke run (and the C model is
@@ -479,7 +479,7 @@ def test_wallpaper_screen_names_dir_and_previews_the_image():
 
 def test_theme_screen_previews_real_screenshots_and_disclaims_kitty():
     """PROMPT: Theme previews are the REAL shipped screenshots (LibreWolf on the timedate home
-    page + Dolphin), placed with kitty, sized for the terminal and used UNMODIFIED. The screen
+    page + the file manager), placed with kitty, sized for the terminal and used UNMODIFIED. The screen
     discloses kitty is exempt and shows Current at the top; there is NO caption under them."""
     model = _src("model.c")
     preview = _src("preview.c")
@@ -487,7 +487,7 @@ def test_theme_screen_previews_real_screenshots_and_disclaims_kitty():
     # the kitty disclaimer is the Theme screen subtitle
     assert "Kitty does not follow the system theme" in model
     # the previews are the shipped screenshot files (timedate = LibreWolf home page, files =
-    # Dolphin), placed via kitty's icat with a placement -- not ANSI mock-ups.
+    # the file manager), placed via kitty's icat with a placement -- not ANSI mock-ups.
     assert "kitten" in preview and "icat" in preview and "--place" in preview
     assert "timedate_%s.png" in preview and "files_%s.png" in preview
     assert "dark" in preview and "white" in preview        # the two variants
