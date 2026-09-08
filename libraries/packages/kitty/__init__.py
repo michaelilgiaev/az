@@ -1,4 +1,4 @@
-"""Kitty terminal modification -- clean "> _" icon + an 18pt font_size (matching gedit).
+"""Kitty terminal modification -- approved monochrome icon + an 18pt font_size (matching gedit).
 
 THE FONT SIZE. Besides the icon work described below, this patch ships a partial
 ~/.config/kitty/kitty.conf (kitty_conf()) whose only setting is `font_size 18`, kept equal
@@ -8,15 +8,17 @@ way packages/vlc ships a partial vlcrc. It is a HOME file (owner "home"), skel-m
 like the other per-user configs. The rest of this docstring describes the icon swap.
 
 Kitty (the ONE terminal Azzio ships, bound to Super+Return / opened from the
-application menu) draws a cute mascot by default: a terminal window with a cat's
-face and whiskers poking out of it. Azzio wants the cleanest possible monochrome
-mark that reads as a terminal -- literally a chevron and an underscore cursor,
-"> _", black on transparent, no window chrome and no color. Kitty upstream ships NO
-cat-less icon and NO kitty.conf switch to disable the cat (the maintainer considers
-the cat a permanent tribute), so the ONLY supported route is to REPLACE the icon
-files the desktop icon loader reads and, for the in-window titlebar icon, ship
-~/.config/kitty/kitty.app.png (kitty loads it at startup to set the window icon on
-X11/Wayland -- confirmed via the kitty FAQ).
+application menu) draws a cute cat-face mascot by default. Azzio ships the clean
+monochrome mark the kitty developers themselves APPROVE for people who do not like the
+default cat -- a dark rounded-square tile with a white ">" chevron (see the kitty FAQ,
+"I do not like the kitty icon", and the igrmk/whiskers project it points to). Their
+approved links are kept in the asset SVG's comments so the IP is credited:
+    https://sw.kovidgoyal.net/kitty/faq/#i-do-not-like-the-kitty-icon
+    https://github.com/igrmk/whiskers
+Kitty ships NO kitty.conf switch to select this icon, so the ONLY supported route is to
+REPLACE the icon files the desktop icon loader reads and, for the in-window titlebar
+icon, ship ~/.config/kitty/kitty.app.png (kitty loads it at startup to set the window
+icon on X11/Wayland -- confirmed via the kitty FAQ).
 
 SINGLE SOURCE OF TRUTH. The glyph lives as a real repo asset,
 assets/icons/kitty.svg (git-tracked, survives `git clean -Xdf`, openable/eyeballable),
@@ -36,8 +38,8 @@ The kitty package ships three files that back that name:
 
 We OVERWRITE the scalable SVG with our asset and DELETE the two PNGs so nothing stale
 outranks the SVG: with the same-size PNG gone, the scalable SVG is the highest-quality
-source the loader has, so every surface (menu tile, Alt-Tab, window icon) renders our
-"> _". Shipping our own file into the airootfs overlay means a `pacman -Syu` of kitty
+source the loader has, so every surface (menu tile, Alt-Tab, window icon) renders the
+approved mark. Shipping our own file into the airootfs overlay means a `pacman -Syu` of kitty
 that reships its own icons cannot silently revert us on the LIVE medium (the overlay
 wins at build time); on an installed system a kitty upgrade could re-drop its icon,
 which is acceptable -- this is a cosmetic default, and re-running the modification restores it.
@@ -47,7 +49,7 @@ kitty sets on its OWN top-level window at runtime -- that is the cat baked into 
 binary. kitty's documented override is ~/.config/kitty/kitty.app.png: if present, kitty
 loads it at startup and uses it as the window icon (the top-left titlebar/Alt-Tab image
 the WM shows). So we rasterize the SAME asset SVG to a PNG and ship it there (owner
-"home", mirrored into /etc/skel), giving the open kitty window the clean "> _" instead
+"home", mirrored into /etc/skel), giving the open kitty window the approved mark instead
 of the cat. It is rasterized at 128px because X11 caps the OS-window icon at 128x128 --
 kitty refuses a larger PNG and falls back to the WM's broken/default icon (see
 KITTY_APP_ICON_SIZE).
@@ -64,9 +66,10 @@ No package rebuild -- the overlay simply lands on top of the kitty package's fil
 from __future__ import annotations
 
 # --- The single-source-of-truth icon asset ---------------------------------
-# The clean "> _" glyph (black on transparent, no chrome, no color). Referenced by
-# path the same way packages/fastfetch references paths.ASSETSDIR assets; the SVG is
-# NOT inlined here so the art has ONE definition (the file you can open and eyeball).
+# The kitty-developer-approved monochrome mark (dark rounded tile + white ">" chevron;
+# source links credited in the SVG's comments). Referenced by path the same way
+# packages/fastfetch references paths.ASSETSDIR assets; the SVG is NOT inlined here so
+# the art has ONE definition (the file you can open and eyeball).
 ICON_ASSET = "icons/kitty.svg"
 
 # --- Where the desktop icon loader reads `Icon=kitty` from ------------------
@@ -173,10 +176,10 @@ _CONF = 0o644
 
 
 def emit_plan() -> list[dict]:
-    """Return the emit plan for the kitty icon: copy our "> _" SVG asset over the system
-    scalable icon, remove the two stale cat PNGs that would outrank it, and rasterize the
-    same asset to ~/.config/kitty/kitty.app.png so the open kitty WINDOW's titlebar icon
-    is the clean glyph too.
+    """Return the emit plan for the kitty icon: copy our approved-mark SVG asset over the
+    system scalable icon, remove the two stale cat PNGs that would outrank it, and rasterize
+    the same asset to ~/.config/kitty/kitty.app.png so the open kitty WINDOW's titlebar icon
+    is the approved mark too.
 
     Shape matches openbox.emit_plan()/librewolf.emit_plan() (builder/dest/mode/owner),
     with the declarative extras compiler._emit_apps honours: "asset" (copy an asset file),

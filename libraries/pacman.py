@@ -154,8 +154,8 @@ _CUSTOM_EXAMPLE = """\
 #   staged_basename -- file under /root/azzio/apps/ to install at target_abs (our
 #                      replacement). None means we ship no replacement -- the path is
 #                      only SUPPRESSED (the two stale kitty cat PNGs, which must stay
-#                      gone so the scalable "> _" SVG wins; NoExtract alone keeps them
-#                      out, no post-pacstrap step needed).
+#                      gone so the scalable approved-mark SVG wins; NoExtract alone keeps
+#                      them out, no post-pacstrap step needed).
 #   remove          -- True for the suppress-only PNGs (no replacement planted).
 # The kitty scalable SVG + the gedit .desktop are the ones the pacstrap log named
 # as conflicts; the two PNGs are added so the kitty modification's icon-removal intent actually
