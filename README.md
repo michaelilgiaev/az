@@ -61,15 +61,15 @@ Easy-to-use interactive graph of every component (render is hosted by GitHub Pag
      <tbody>
      <tr><td>
 
-     The new ISO links will be made once project reaches release...
+     The project is still in early development, so there are no mirror links for downloading the ISOs yet.
 
      </td></tr>
      </tbody>
      </table>
 
-   ~The ISO is hosted on Google Drive (GitHub does not allow files larger than 2 GB).~
+     ~https://azzio.baselinux.net/download/azzio-headed-2026.09.08-x86_64.iso~
 
-   ~**Link:** [https://drive.google.com/file/d/18nclTLo05_KU7uOfYd_WTnI0LK--mGE6/view?usp=sharing](https://drive.google.com/file/d/18nclTLo05_KU7uOfYd_WTnI0LK--mGE6/view?usp=sharing)~
+     ~https://azzio.baselinux.net/download/azzio-headless-2026.09.08-x86_64.iso~
 
 2. **Create a Bootable USB**  
 
