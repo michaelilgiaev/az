@@ -6,7 +6,7 @@ Every single component of the distribution, fully expanded -- nothing
 collapsed. For each package: what it is (in plain language), which
 layer of the stack it sits in, what it depends on, and what depends on
 it. This is the exhaustive companion to:
-  - SPECIFICATIONS_COMPONENTS_OVERVIEW.svg   (the at-a-glance layered graph)
+  - SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html   (the interactive layered graph)
   - SPECIFICATIONS_GENERAL.md   (prose + subsystem breakdown)
 
 The plain-language 'purpose' of each component is the official Arch

@@ -39,15 +39,12 @@ So if you plan to use this project in any way, please read the code first. Do no
 
 ## Documentation
 
-General specifications of the distribution.
+Technical Specifications.
 - [documentations/SPECIFICATIONS_GENERAL.md](documentations/SPECIFICATIONS_GENERAL.md)
 
-Brief overview of the components (render is hosted by GitHub Pages).
-- [https://michaelilgiaev.github.io/azzio/documentations/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg](https://michaelilgiaev.github.io/azzio/documentations/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg)  
-  (documentations/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg)
+Interactive Graph of Shipped Packages.
+- [https://azzio.baselinux.net/documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html](https://azzio.baselinux.net/documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
 
-Easy-to-use interactive graph of every component (render is hosted by GitHub Pages).
-- [https://michaelilgiaev.github.io/azzio/documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html](https://michaelilgiaev.github.io/azzio/documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)  
   (documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
 
 ## Install
