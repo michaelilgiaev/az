@@ -56,7 +56,7 @@ LIGHT_BLUE='\\033[1;34m'
 RED='\\033[1;31m'
 RESET='\\033[0m'
 
-echo -e "${LIGHT_BLUE}Welcome to azzio Installation${RESET}"
+echo -e "${LIGHT_BLUE}Welcome to Azzio Installation${RESET}"
 echo -e "${RED}WARNING:${RESET} This will erase everything on the targeted disk using wipefs -a, removing all filesystem, RAID, and partition-table signatures${RESET}"
 echo "Select an installation option:"
 echo "1. Automatically detect largest disk (excludes USB drives) and install azzio"

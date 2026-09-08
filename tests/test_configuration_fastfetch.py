@@ -35,7 +35,23 @@ def test_logo_txt_reads_the_repo_asset():
     assert art.strip() != ""
 
 
+def _module_types(data):
+    # Modules are either a bare string ("title") or an object ({"type": "os", ...}).
+    return [m if isinstance(m, str) else m["type"] for m in data["modules"]]
+
+
 def test_config_includes_expected_modules():
     data = json.loads(fastfetch.config_jsonc())
+    types = _module_types(data)
     for mod in ("title", "os", "kernel", "packages"):
-        assert mod in data["modules"]
+        assert mod in types
+
+
+def test_os_module_prints_azzio_without_linux_suffix():
+    # os-release NAME is "Azzio Linux"; the fastfetch os line hard-codes "Azzio"
+    # so the display reads "OS: Azzio x86_64" (not "Azzio Linux x86_64"), while the
+    # {arch} placeholder still reports the real architecture live.
+    data = json.loads(fastfetch.config_jsonc())
+    os_mod = next(m for m in data["modules"] if isinstance(m, dict) and m["type"] == "os")
+    assert os_mod["format"] == "Azzio {arch}"
+    assert "Linux" not in os_mod["format"]
