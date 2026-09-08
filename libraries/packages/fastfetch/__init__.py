@@ -57,6 +57,15 @@ def config_jsonc() -> str:
 
     `type: "file-raw"` prints the file byte-for-byte -- no $N replacement, no
     re-coloring -- because the .ansi art already carries its own truecolor escapes.
+
+    The `os` module is expanded from the bare "os" string into an object with an
+    explicit `format`: "Azzio {arch}". By default fastfetch renders the os line from
+    os-release NAME + architecture, and NAME is "Azzio Linux" (system.py, the real
+    distro identity used by the BIOS menu, specs, etc.), so the default would print
+    "Azzio Linux x86_64" -- redundant with the kernel line below. We hard-code
+    "Azzio" here (the ONLY place the display is trimmed; os-release NAME is left
+    untouched) and keep the live `{arch}` placeholder so it still reports the real
+    architecture. `key: "OS"` pins the label so the row stays "OS: Azzio x86_64".
     """
     return f"""\
 {{
@@ -72,7 +81,11 @@ def config_jsonc() -> str:
     "modules": [
         "title",
         "separator",
-        "os",
+        {{
+            "type": "os",
+            "key": "OS",
+            "format": "Azzio {{arch}}"
+        }},
         "host",
         "kernel",
         "uptime",
