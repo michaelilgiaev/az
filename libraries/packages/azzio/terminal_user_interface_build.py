@@ -4,7 +4,7 @@ Running `azzio` with no arguments opens a full-screen settings UI for the three 
 fresh machine needs tuned -- Theme, Wallpaper, Network. It is C driving the terminal with
 raw ANSI + termios (no ncurses/GTK), so redraws are instant: coloured (the Azzio logo
 cyan), everything centred, WASD/HJKL/arrow navigation, live status, and kitty-graphics
-previews (the hovered wallpaper; the theme rendered as real LibreWolf + Dolphin screenshots).
+previews (the hovered wallpaper; the theme rendered as real LibreWolf + file-manager screenshots).
 
 WHY IT LIVES HERE. It used to be a SEPARATE package (packages/azzio_terminal_user_interface/) with its own
 Python wrapper, but the command line interface it drives is the `azzio` package -- and there is only ONE
@@ -72,7 +72,7 @@ OSD_BIN_NAME = "azzio-osd"
 
 # The theme-preview screenshots shipped verbatim from assets/previews/ to
 # TERMINAL_USER_INTERFACE_PREVIEW_SYSTEM_DIR. The names are the CONTRACT preview.c hard-codes: LibreWolf on the
-# timedate home page + Dolphin, each in a dark and a white variant. They ship UNMODIFIED
+# timedate home page + the file manager, each in a dark and a white variant. They ship UNMODIFIED
 # (kitty scales them into the reserved rectangle at draw time); replacing them with the same
 # filenames needs no code change. Relative to assets/.
 PREVIEW_ASSETS = (

@@ -9,7 +9,7 @@
  * under XDG_RUNTIME_DIR.
  *
  * Ports menu.py (window + AppMenu), daemon.py (signal loop + debounce), the
- * PowerButton/scrollbar look from widgets.py, and standard search editing.
+ * power-button/scrollbar look, and standard search editing.
  */
 #include <gtk/gtk.h>
 #include <gdk/gdkx.h>
@@ -135,7 +135,7 @@ static void install_css(void) {
          * highlightcolor swap): blue while the search entry has the caret, grey once
          * TAB moves focus to the power row. */
         ".az-search-box.focused {"
-        "  border-color: %s;"              /* BORDER_COLOR (Breeze blue) on focus */
+        "  border-color: %s;"              /* BORDER_COLOR (logo cyan) on focus */
         "}"
         /* the entry itself: flat, surface bg, TEXT_COLOR text + caret, ipady=6 */
         ".az-search-entry {"

@@ -27,7 +27,7 @@ technique keyboard.py already uses) and drive ICCCM by hand:
 
 X selections live only in this process / the X server's memory, so nothing here
 persists across an X restart or a reboot -- that requirement is satisfied for
-free (the caveat is a clipboard *manager* like Klipper/GPaste snapshotting the
+free (the caveat is a clipboard *manager* like GPaste snapshotting the
 value; see clipboard.py's module note).
 
 Values are passed in on argv-free stdin as a NUL-separated list so secrets never
@@ -284,7 +284,7 @@ def _write_property(lib, dpy, req, value, atoms):
 
 
 # The desktop's clipboard manager (Cinnamon's csd-clipboard here, likewise
-# Klipper/GPaste) snapshots the new selection the instant we take ownership -- it
+# GPaste and similar) snapshots the new selection the instant we take ownership -- it
 # requests the DATA in ~1-2ms, every time, to cache it. If that grab counted as
 # "the paste", the clipboard would clear before the user ever pressed Ctrl+V.
 #

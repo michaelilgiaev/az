@@ -261,9 +261,8 @@ ttf-dejavu
 ttf-liberation
 noto-fonts
 # --- OpenBox desktop (minimal, no display manager, no panel) --------------
-# KDE Plasma was REMOVED (it did not fit the distro). OpenBox is now the whole
-# desktop: a lightweight X11 window manager the startx session execs directly
-# (exec openbox-session in ~/.xinitrc). There is NO panel -- the Azzio
+# OpenBox is the whole desktop: a lightweight X11 window manager the startx session
+# execs directly (exec openbox-session in ~/.xinitrc). There is NO panel -- the Azzio
 # application menu (Super key / centered popup) is the only shell surface, so no
 # tint2/panel package is shipped. `xcape` turns a lone Super tap into Super+Menu
 # so OpenBox's rc.xml can bind the menu launcher to the bare Super key (OpenBox
@@ -277,12 +276,12 @@ adwaita-icon-theme
 gnome-themes-extra
 xcursor-themes
 # --- Calamares installer dependencies -------------------------------------
-# The graphical installer (built via makepkg, see configuration/pkgbuild.py) is a
-# Qt6/KDE-Frameworks app: `pacman -Si calamares` depends on kcrash kconfig
-# kcoreaddons kiconthemes ki18n kpmcore polkit-qt6 qt6-svg solid yaml-cpp (+ the
-# ckbcomp/hwinfo/squashfs-tools already present). These K* + Qt6 packages therefore
-# STAY even though Plasma is gone -- they are the installer's toolkit, not the
-# desktop shell. qt6-declarative/qt6-5compat back Calamares' QML pages.
+# The graphical installer (built via makepkg, see configuration/pkgbuild.py) is a Qt6
+# app built on the KDE Frameworks libraries: `pacman -Si calamares` depends on kcrash
+# kconfig kcoreaddons kiconthemes ki18n kpmcore polkit-qt6 qt6-svg solid yaml-cpp (+ the
+# ckbcomp/hwinfo/squashfs-tools already present). These library packages STAY because
+# the installer links them -- they are the installer's toolkit, not a desktop shell.
+# qt6-declarative/qt6-5compat back Calamares' QML pages.
 kpmcore
 qt6-base
 qt6-svg
@@ -332,10 +331,11 @@ mailcap
 librewolf
 gedit
 gimp
-# --- Thunar file manager (GTK, replaces Dolphin) --------------------------
-# Dolphin (KDE/KF6) was DROPPED: too many Azzio tweaks required fighting hardcoded
-# C++ strings, QRC templates and KIOSK lockdowns. Thunar (Xfce's GTK file manager) is
-# the better fit -- it matches the rest of the GTK desktop (gedit/gimp/xviewer + the
+# --- Thunar file manager (GTK) --------------------------------------------
+# Thunar (Xfce's GTK file manager) is the chosen file manager: a Qt file manager was
+# tried first but customizing it meant fighting hardcoded C++ strings, QRC templates and
+# lockdowns. Thunar is the better fit -- it matches the rest of the GTK desktop
+# (gedit/gimp/xviewer + the
 # Adwaita theme + the QT_QPA_PLATFORMTHEME=gtk3 bridge), is minimal and stable, and its
 # custom right-click actions (~/.config/Thunar/uca.xml) are a first-class feature that
 # runs any command with mime/pattern conditions -- exactly what the "Create Link" and

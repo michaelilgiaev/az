@@ -163,7 +163,7 @@ update_db: false
 update_system: false
 
 # Operations run against the target after unpackfs. We only remove the INSTALLER
-# itself (calamares has no place on an installed system); the desktop (plasma,
+# itself (calamares has no place on an installed system); the desktop (openbox,
 # xorg, kitty, librewolf, ...) is KEPT so the installed system boots to the same
 # graphical environment as the live medium. Nothing is installed over the network.
 # `try_remove` (not `remove`) so an absent package does not fail the step.
@@ -224,9 +224,9 @@ def keyboard_conf() -> str:
     Arabic; an English-speaking region -> English only.
 
     useLocale1:false keeps the module reading/writing the plain
-    /etc/X11/xorg.conf.d/00-keyboard.conf (Azzio is Plasma/X11); the `configure`
-    block keeps kwin/gnome off (the layout is read from that xkb file directly, so
-    no KWin/GNOME keyboard integration is needed)."""
+    /etc/X11/xorg.conf.d/00-keyboard.conf (Azzio is OpenBox/X11); the `configure`
+    block leaves the per-DE keyboard integrations off (the layout is read from that xkb
+    file directly, so none of them is needed)."""
     return """\
 # Keyboard configuration for the Azzio installer.
 ---
@@ -237,7 +237,7 @@ xOrgConfFileName: "/etc/X11/xorg.conf.d/00-keyboard.conf"
 convertedKeymapPath: "/usr/share/kbd/keymaps/xkb"
 
 # Manage the plain xorg.conf.d file directly instead of going through
-# systemd-localed. Azzio is Plasma/X11 and the layout is read from
+# systemd-localed. Azzio is OpenBox/X11 and the layout is read from
 # /etc/X11/xorg.conf.d/00-keyboard.conf.
 useLocale1: false
 
@@ -256,9 +256,9 @@ guessLayout: true
 # opt-in switch it reads (upstream/other distros default it to false).
 regionSecondLayout: true
 
-# Azzio runs Plasma on X11, but the layout is read from the plain xkb
-# xorg.conf.d file we manage (useLocale1:false) -- so no KWin/GNOME keyboard
-# integration needs configuring here.
+# Azzio runs OpenBox on X11, and the layout is read from the plain xkb
+# xorg.conf.d file we manage (useLocale1:false) -- so none of Calamares' per-DE
+# keyboard integrations need configuring here (both left off below).
 configure:
     kwin: false
     gnome: false

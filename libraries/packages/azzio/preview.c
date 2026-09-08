@@ -5,7 +5,7 @@
  *
  *   WALLPAPER -- the actual wallpaper PNG for the hovered choice.
  *   THEME     -- two shipped SCREENSHOTS side by side: LibreWolf on the timedate home page
- *                and the Dolphin file manager, in the dark or the white variant to match the
+ *                and the file manager, in the dark or the white variant to match the
  *                hovered choice. The images live in AZ_PREVIEW_DIR (installed from
  *                assets/previews/ by terminal_user_interface_build.install_previews) and are used UNMODIFIED --
  *                kitty scales each into the reserved half-rectangle at draw time, so swapping

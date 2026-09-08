@@ -582,8 +582,8 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
     # The two Azzio wallpaper images ("years", "decades") under /usr/share/wallpapers.
     # Each ships as contents/images/<res>.png (+ a screenshot.png thumbnail and an inert
     # metadata.json kept for self-description). feh paints the "years" image as the X
-    # root pixmap from the OpenBox autostart / ~/.xinitrc (KDE Plasma and its wallpaper
-    # grid are gone). Root-owned under /usr/share/wallpapers.
+    # root pixmap from the OpenBox autostart / ~/.xinitrc. Root-owned under
+    # /usr/share/wallpapers.
     for pkg in openbox.WALLPAPER_PACKAGES:
         pkg_root = airootfs / openbox.WALLPAPERS_SYSTEM_DIR.lstrip("/") / pkg["id"]
         emit.write_text(pkg_root / "metadata.json",
@@ -592,8 +592,8 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
         emit.copy_asset(pkg["asset"], img, mode=0o644)
         # screenshot.png = a thumbnail (reuse the full image).
         emit.copy_asset(pkg["asset"], pkg_root / "contents" / "screenshot.png", mode=0o644)
-    # Azzio application menu (OUR menu -- the whole shell now that Plasma is gone: a
-    # centered GTK3 launcher opened by the Super key). The menu is a COMPILED C program:
+    # Azzio application menu (OUR menu -- the whole shell: a centered GTK3 launcher
+    # opened by the Super key). The menu is a COMPILED C program:
     # build_daemon() runs `make` against a private copy of the C sources and installs the
     # resulting binary; emit_plan() then drops the two generated TEXT artifacts (the
     # pure-Python launcher installed as the bin entry point, and the .desktop). The

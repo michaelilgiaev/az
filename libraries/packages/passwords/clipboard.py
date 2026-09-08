@@ -21,7 +21,7 @@ Taking ownership of the CLIPBOARD selection automatically sends the previous
 owner a SelectionClear, so starting a new clip supersedes any still-pending one
 without us tracking PIDs. X selections are in-memory only, so the "no reboot
 persistence" requirement holds for free -- the one caveat is a desktop clipboard
-*manager* (Cinnamon's csd-clipboard, KDE Klipper, GPaste) that may snapshot the
+*manager* (Cinnamon's csd-clipboard, GPaste, or similar) that may snapshot the
 value; clipboard_owner.py absorbs the manager's initial grab, but a manager's
 own on-disk history (if enabled) is outside our control and worth the user
 knowing about.

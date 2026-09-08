@@ -26,7 +26,7 @@ static PowerBtn *btn_of(GtkWidget *w) {
 }
 
 /* Horizontal OPAQUE bounds of a pixbuf: first (*x0) and last (*x1) column that
- * contains any pixel with alpha above a small threshold. Breeze icons carry
+ * contains any pixel with alpha above a small threshold. The session icons carry
  * transparent padding that is NOT symmetric, so the icon's visible ink sits off-
  * centre inside its pixbuf box; geometrically centring the box therefore pushes the
  * ink a few px left of true centre (the "3-7px left-heavier" the user measured).
@@ -124,7 +124,7 @@ static gboolean power_draw(GtkWidget *w, cairo_t *cr, gpointer data) {
     int tw, th;
     pango_layout_get_pixel_size(lay, &tw, &th);
 
-    /* Centre on the icon's OPTICAL INK, not its pixbuf box. The Breeze pixbuf has
+    /* Centre on the icon's OPTICAL INK, not its pixbuf box. The icon pixbuf has
      * asymmetric transparent padding, so ink_x0 (first opaque column) and ink_x1 (last)
      * bound the actually-visible glyph; ink_x0>0 means dead space on the left. We lay the
      * block out on those bounds so the icon's left ink edge and the label's right edge sit

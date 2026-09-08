@@ -225,8 +225,7 @@ DEFAULT_KEYMAP = "us"
 # day/month/year (e.g. 03/08/2026). Setting LC_TIME to en_GB.UTF-8 flips the whole
 # system's date order to d/m/y (the user's "modify timedate from m/d/y to d/m/y"
 # request) without changing the language of anything else. This LC_TIME governs the
-# whole system; the OpenBox desktop has no separate clock config to align (KDE Plasma
-# and its plasma-localerc are gone).
+# whole system; the OpenBox desktop has no separate clock config to align.
 DEFAULT_TIME_LOCALE = "en_GB.UTF-8"
 
 # Azzio default (and, since auto-resolve was removed, ONLY) timezone. Dynamic

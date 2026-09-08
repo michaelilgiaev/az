@@ -46,7 +46,7 @@ typedef enum {
     AZ_C_TEXT,          /* big app names */
     AZ_C_SUBTEXT,       /* muted -- the type subtitle */
     AZ_C_PLACEHOLDER,   /* search placeholder text */
-    AZ_C_BORDER,        /* Breeze highlight blue (focus border) */
+    AZ_C_BORDER,        /* the logo cyan (focus border) */
     AZ_C_SELECT_BORDER, /* outline of selected row / focused button */
     AZ_C_SELECT_FILL,   /* subtle fill inside selected/hovered control */
     AZ_C_SELECT_TEXT,   /* text on a selected row */
@@ -86,7 +86,7 @@ const char *az_color(AzColorRole role);
 #define AZ_SCROLL_THUMB_HOVER  az_color(AZ_C_SCROLL_THUMB_HOVER)
 #define AZ_SCROLL_GROOVE_COLOR az_color(AZ_C_SCROLL_GROOVE)
 
-/* --- Scrollbar geometry (arrow-less rounded pill, Kickoff style) -- STOCK, AZ_SCALED --- */
+/* --- Scrollbar geometry (arrow-less rounded pill) -- STOCK, AZ_SCALED --- */
 #define AZ_SCROLL_THUMB_WIDTH  AZ_SCALED(4)    /* was 6  @1.35 */
 #define AZ_SCROLL_TRACK_WIDTH  AZ_SCALED(9)    /* was 12 @1.35 */
 #define AZ_SCROLL_THUMB_MIN    AZ_SCALED(24)   /* was 32 @1.35 */
