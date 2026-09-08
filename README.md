@@ -35,17 +35,16 @@ So if you plan to use this project in any way, please read the code first. Do no
   <img src="assets/logos/azzio_title_627×230.png" alt="Azzio">
 </p>
 
-
-
 ## Documentation
 
-Technical Specifications.
+**Technical Specifications**
+
 - [documentations/SPECIFICATIONS_GENERAL.md](documentations/SPECIFICATIONS_GENERAL.md)
 
-Interactive Graph of Shipped Packages.
-- [https://azzio.baselinux.net/documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html](https://azzio.baselinux.net/documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
+**Interactive Packages Graph**
 
-  (documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
+- [https://azzio.baselinux.net/documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html](https://azzio.baselinux.net/documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
+- [documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html](documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
 
 ## Install
 
