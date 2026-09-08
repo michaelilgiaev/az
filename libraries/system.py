@@ -49,18 +49,18 @@ main:{LOCKED_PASSWORD}:14871::::::
 # into the airootfs as a sshd_config.d drop-in: it ships on the live ISO AND is copied to
 # every installed target by the offline unpackfs, closing the gap independent of the
 # runtime `--sshd-hypervisor` bring-up. The `00-` prefix sorts FIRST -- before Arch's stock
-# `99-archlinux.conf`, the systemd `20-*` drop-in, and our own `10-azarch-hardening.conf` --
+# `99-archlinux.conf`, the systemd `20-*` drop-in, and our own `10-azzio-hardening.conf` --
 # and sshd is FIRST-match-wins per keyword (man sshd_config: "the first obtained value will
 # be used"), so this directive is AUTHORITATIVE and no later drop-in can override it. (The
 # earlier `20-` name was not: any lower/other file setting `PermitRootLogin yes` won
-# first-match while the status read only our file and wrongly reported denied.) The azarch
+# first-match while the status read only our file and wrongly reported denied.) The azzio
 # TUI/CLI toggle rewrites this same file.
-SSHD_ROOT_LOGIN_DROPIN_PATH = "etc/ssh/sshd_config.d/00-azarch-root-login.conf"
+SSHD_ROOT_LOGIN_DROPIN_PATH = "etc/ssh/sshd_config.d/00-azzio-root-login.conf"
 
 SSHD_ROOT_LOGIN_OFF = (
-    "# Az'arch root-login policy -- default DENY (`azarch network ssh root off`).\n"
+    "# Azzio root-login policy -- default DENY (`azzio network ssh root off`).\n"
     "# Only the end user's own account may log in over ssh; root is refused for all\n"
-    "# auth methods (key and password). Flip with `azarch network ssh root on`.\n"
+    "# auth methods (key and password). Flip with `azzio network ssh root on`.\n"
     "PermitRootLogin no\n"
 )
 
@@ -125,17 +125,17 @@ SUDOERS_SECURE_PATH = "Defaults secure_path=\"/usr/local/sbin:/usr/local/bin:/us
 #
 # ID stays `arch` on purpose: pacman, AUR helpers, and countless scripts key on
 # ID=arch to treat the system as Arch. Only NAME/PRETTY_NAME (the human strings
-# fastfetch prints) change to the azarch brand. ID_LIKE reinforces the lineage.
+# fastfetch prints) change to the azzio brand. ID_LIKE reinforces the lineage.
 OS_RELEASE = """\
-NAME="Az'arch Linux"
-PRETTY_NAME="Az'arch Linux"
+NAME="Azzio Linux"
+PRETTY_NAME="Azzio Linux"
 ID=arch
 ID_LIKE=arch
 BUILD_ID=rolling
 ANSI_COLOR="38;2;6;184;253"
-HOME_URL="https://github.com/michaelilgiaev/azarch"
-SUPPORT_URL="https://github.com/michaelilgiaev/azarch"
-BUG_REPORT_URL="https://github.com/michaelilgiaev/azarch/issues"
+HOME_URL="https://github.com/michaelilgiaev/azzio"
+SUPPORT_URL="https://github.com/michaelilgiaev/azzio"
+BUG_REPORT_URL="https://github.com/michaelilgiaev/azzio/issues"
 LOGO=archlinux-logo
 """
 
@@ -145,7 +145,7 @@ LOGO=archlinux-logo
 # os-release. Doing it here (post-pacstrap) avoids the file-conflict that pre-placing
 # /usr/lib/os-release in the airootfs overlay would trigger against the owning
 # `filesystem` package; see compiler.py step 7. The staged sources live under
-# /root/azarch/ in the chroot. NoExtract (libraries/pacman.py) already kept
+# /root/azzio/ in the chroot. NoExtract (libraries/pacman.py) already kept
 # `filesystem` from writing its own "Arch Linux" os-release, so usr/lib/os-release is
 # absent until this cp lands ours.
 #
@@ -154,21 +154,21 @@ LOGO=archlinux-logo
 # ~/.xinitrc (see packages/openbox). So there is NO Plasma org.kde.image default
 # to rewrite here anymore, and no bundled Plasma "Next" wallpaper / notifications
 # plasmoid / krunner / kmenuedit to delete (those packages are gone from the manifest).
-# The two azarch wallpaper images ship as plain files under /usr/share/wallpapers via
+# The two azzio wallpaper images ship as plain files under /usr/share/wallpapers via
 # compiler.py; feh reads the "years" image directly.
 CUSTOMIZE_AIROOTFS = """\
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Brand the live system as Az'arch Linux. /etc/os-release symlinks to this path.
-cp /root/azarch/os-release /usr/lib/os-release
+# Brand the live system as Azzio Linux. /etc/os-release symlinks to this path.
+cp /root/azzio/os-release /usr/lib/os-release
 chmod 0644 /usr/lib/os-release
 
 # System theme DEFAULT (dark): compile the dconf keyfile (color-scheme='prefer-dark',
 # from packages/openbox) into the binary /etc/dconf/db/local so the freedesktop appearance
 # default is dark for every user out of the box. Runs here (post-pacstrap) because dconf is
 # only installed inside the pacstrapped rootfs, not the airootfs overlay. A per-user
-# `gsettings set` from `azarch theme` overrides this system default and persists.
+# `gsettings set` from `azzio theme` overrides this system default and persists.
 if command -v dconf >/dev/null 2>&1; then
     dconf update || true
 fi
@@ -186,20 +186,20 @@ ExecStart=
 ExecStart=-/usr/bin/agetty --noreset --noclear --autologin main - $TERM
 """
 
-# System hostname. The archiso releng base ships `archiso`; we overlay `azarch`
-# so the shell prompt and fastfetch title read main@azarch instead of main@archiso.
+# System hostname. The archiso releng base ships `archiso`; we overlay `azzio`
+# so the shell prompt and fastfetch title read main@azzio instead of main@archiso.
 # (We deliberately do NOT rename the `archiso` build TOOLING or the ISO's internal
 # install_dir -- those are functional identifiers from the archiso project, not
-# branding.) The plain `azarch` here is the live-ISO hostname; the on-disk
+# branding.) The plain `azzio` here is the live-ISO hostname; the on-disk
 # installer sets the installed system's hostname separately.
-HOSTNAME = "azarch\n"
+HOSTNAME = "azzio\n"
 
 # --- Boot menu entries ------------------------------------------------------
 # systemd-boot (UEFI) entries + syslinux (BIOS) configuration. %INSTALL_DIR% and
 # %ARCHISO_UUID% are archiso placeholders substituted by mkarchiso.
 
 BOOT_UEFI_LINUX = """\
-title    Az'arch Linux install medium (x86_64, UEFI)
+title    Azzio Linux install medium (x86_64, UEFI)
 sort-key 01
 linux    /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux
 initrd   /%INSTALL_DIR%/boot/x86_64/initramfs-linux.img
@@ -207,7 +207,7 @@ options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% cow_space
 """
 
 BOOT_UEFI_SPEECH = """\
-title    Az'arch Linux install medium (x86_64, UEFI) with speech
+title    Azzio Linux install medium (x86_64, UEFI) with speech
 sort-key 02
 linux    /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux
 initrd   /%INSTALL_DIR%/boot/x86_64/initramfs-linux.img
@@ -216,14 +216,14 @@ options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% accessibi
 
 # systemd-boot loader.conf. Overrides the releng default (timeout/default/beep only)
 # so the first-boot UEFI menu is SKIPPED entirely -- it boots straight into the
-# default Az'arch entry with no menu shown, which is what the user asked for.
+# default Azzio entry with no menu shown, which is what the user asked for.
 #
 # `timeout 0` (menu-force disabled): systemd-boot does NOT render the menu and boots
 # `default` immediately. The menu is still reachable by holding a key (Space) during
 # firmware->loader handoff, so this is a skip, not a permanent removal.
 #
 # The auto-entry suppressions stay so that IF the user does force the menu open, it
-# shows ONLY our two Az'arch entries -- none of the extra rows the earlier screenshot
+# shows ONLY our two Azzio entries -- none of the extra rows the earlier screenshot
 # had:
 #   * "EFI Shell"                     -- systemd-boot AUTO-discovers shell*.efi on the
 #                                        ESP (mkarchiso plants shellx64.efi at /); this
@@ -247,10 +247,10 @@ auto-firmware no
 BOOT_BIOS_SYSLINUX = """\
 LABEL arch64
 TEXT HELP
-Boot the Az'arch Linux install medium on BIOS.
-It allows you to install Az'arch Linux or perform system maintenance.
+Boot the Azzio Linux install medium on BIOS.
+It allows you to install Azzio Linux or perform system maintenance.
 ENDTEXT
-MENU LABEL Az'arch Linux install medium (x86_64, BIOS)
+MENU LABEL Azzio Linux install medium (x86_64, BIOS)
 LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux
 INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux.img
 APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% cow_spacesize=4G
@@ -258,10 +258,10 @@ APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% cow_spacesi
 # Accessibility boot option
 LABEL arch64speech
 TEXT HELP
-Boot the Az'arch Linux install medium on BIOS with speakup screen reader.
-It allows you to install Az'arch Linux or perform system maintenance with speech feedback.
+Boot the Azzio Linux install medium on BIOS with speakup screen reader.
+It allows you to install Azzio Linux or perform system maintenance with speech feedback.
 ENDTEXT
-MENU LABEL Az'arch Linux install medium (x86_64, BIOS) with ^speech
+MENU LABEL Azzio Linux install medium (x86_64, BIOS) with ^speech
 LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux
 INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux.img
 APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% accessibility=on cow_spacesize=4G
@@ -269,11 +269,11 @@ APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% accessibili
 
 # syslinux (BIOS) menu chrome. The releng archiso_head.cfg sets `MENU TITLE Arch
 # Linux`; the build overlays this rebranded head so the BIOS boot screen title
-# reads Az'arch. Kept byte-faithful to releng's head.cfg except the MENU TITLE.
+# reads Azzio. Kept byte-faithful to releng's head.cfg except the MENU TITLE.
 BOOT_BIOS_SYSLINUX_HEAD = """\
 SERIAL 0 115200
 UI vesamenu.c32
-MENU TITLE Az'arch Linux
+MENU TITLE Azzio Linux
 MENU BACKGROUND splash.png
 
 MENU WIDTH 78
@@ -337,7 +337,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/root/azarch/setup-locale.sh
+ExecStart=/root/azzio/setup-locale.sh
 StandardOutput=journal
 RemainAfterExit=yes
 
@@ -349,11 +349,11 @@ PKGS_SETUP_SERVICE = """\
 [Unit]
 Description=Configure Packages
 After=network.target
-ConditionPathExists=/root/azarch/setup-pkgs.sh
+ConditionPathExists=/root/azzio/setup-pkgs.sh
 
 [Service]
 Type=oneshot
-ExecStart=/root/azarch/setup-pkgs.sh
+ExecStart=/root/azzio/setup-pkgs.sh
 RemainAfterExit=true
 
 [Install]
@@ -376,11 +376,11 @@ WantedBy=multi-user.target
 #
 # The idle-suspend policy (PC vs laptop, AC-aware) is NOT here: it depends on
 # runtime chassis/AC state, so it is written dynamically by SLEEP_POLICY_SCRIPT
-# into a SEPARATE drop-in (20-azarch-sleep.conf) and does not collide with this
+# into a SEPARATE drop-in (20-azzio-sleep.conf) and does not collide with this
 # static file (10-*, lower number, both are merged by logind).
 LOGIND_POWER_DROPIN = """\
-# Az'arch power/lid/button policy (static half). Idle-suspend (PC vs laptop) is
-# written separately by azarch-sleep-policy at 20-azarch-sleep.conf.
+# Azzio power/lid/button policy (static half). Idle-suspend (PC vs laptop) is
+# written separately by azzio-sleep-policy at 20-azzio-sleep.conf.
 [Login]
 # Closing the lid does nothing, on battery OR AC OR docked (default would suspend).
 HandleLidSwitch=ignore
@@ -419,12 +419,12 @@ HandlePowerKey=poweroff
 #   * "on AC" == at least one supply of type "Mains" with online == 1.
 # The two enumerations are plain shell globs over sysfs -- no `$(...)` gymnastics --
 # and the script is defensive (missing files, no supplies at all -> treated as PC).
-SLEEP_POLICY_DROPIN_PATH = "/etc/systemd/logind.conf.d/20-azarch-sleep.conf"
+SLEEP_POLICY_DROPIN_PATH = "/etc/systemd/logind.conf.d/20-azzio-sleep.conf"
 SLEEP_POLICY_IDLE_SECONDS = 900  # 15 minutes
 
 SLEEP_POLICY_SCRIPT = f"""\
 #!/bin/bash
-# azarch-sleep-policy -- auto-detect PC vs laptop and set the idle-sleep policy.
+# azzio-sleep-policy -- auto-detect PC vs laptop and set the idle-sleep policy.
 #
 #   PC (no battery)                -> never sleep   (IdleAction=ignore)
 #   laptop on battery (unplugged)  -> sleep in 15m  (IdleAction=suspend, {SLEEP_POLICY_IDLE_SECONDS}s)
@@ -473,7 +473,7 @@ fi
 
 mkdir -p "$(dirname "$DROPIN")"
 cat > "$DROPIN" <<EOF
-# Generated by azarch-sleep-policy (do not edit; regenerated at boot and on
+# Generated by azzio-sleep-policy (do not edit; regenerated at boot and on
 # AC-adapter change). PC/laptop-on-AC -> ignore; laptop-on-battery -> suspend 15m.
 [Login]
 IdleAction=$action
@@ -491,13 +491,13 @@ systemctl reload systemd-logind 2>/dev/null || true
 # udev-triggered invocations happen well after boot, when logind is already up.
 SLEEP_POLICY_SERVICE = """\
 [Unit]
-Description=Az'arch PC/laptop idle-sleep policy (auto-detect battery + AC)
+Description=Azzio PC/laptop idle-sleep policy (auto-detect battery + AC)
 After=systemd-logind.service
 Wants=systemd-logind.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/azarch-sleep-policy
+ExecStart=/usr/local/bin/azzio-sleep-policy
 RemainAfterExit=no
 
 [Install]
@@ -523,21 +523,21 @@ WantedBy=multi-user.target
 # constraint does not apply because we only kick a unit asynchronously, we do not run
 # the work inline. Absolute systemctl path (udev RUN has a minimal PATH).
 SLEEP_POLICY_UDEV_RULE = """\
-# Re-evaluate the Az'arch idle-sleep policy when the AC adapter is plugged/unplugged.
-SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_TYPE}=="Mains", ACTION=="change", RUN+="/usr/bin/systemctl --no-block restart azarch-sleep-policy.service"
+# Re-evaluate the Azzio idle-sleep policy when the AC adapter is plugged/unplugged.
+SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_TYPE}=="Mains", ACTION=="change", RUN+="/usr/bin/systemctl --no-block restart azzio-sleep-policy.service"
 """
 
 
 # --- sshd-hypervisor variant only -------------------------------------------
-# Baked into the `azarch-sshd` ISO ONLY (compiler.py emits + enables it only when
-# variant == "sshd"). It runs `azarch --sshd-hypervisor` automatically at boot --
-# the whole point of that variant ("sudo azarch --sshd-hypervisor on by default").
+# Baked into the `azzio-sshd` ISO ONLY (compiler.py emits + enables it only when
+# variant == "sshd"). It runs `azzio --sshd-hypervisor` automatically at boot --
+# the whole point of that variant ("sudo azzio --sshd-hypervisor on by default").
 #
 # It runs as ROOT with Environment=SUDO_USER=main (rather than User=main) on
-# purpose. The azarch command line interface resolves its target user from ${SUDO_USER:-$(id -un)} and
+# purpose. The azzio command line interface resolves its target user from ${SUDO_USER:-$(id -un)} and
 # REFUSES a bare-root target, so SUDO_USER=main makes it stage the pubkey into
 # /home/main/.ssh (the account sshd accepts) exactly as an interactive
-# `sudo azarch --sshd-hypervisor` would. Running the UNIT as root avoids the PAM
+# `sudo azzio --sshd-hypervisor` would. Running the UNIT as root avoids the PAM
 # session a `User=main` unit would need for the command line interface's internal `sudo` calls (mount
 # the virtiofs share, ssh-keygen -A, ufw, systemctl enable --now sshd): as root those
 # `sudo` invocations are trivial no-op elevations and the `install -o main` calls
@@ -553,19 +553,19 @@ SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_TYPE}=="Mains", ACTION=="change", RU
 #
 # Failure is non-fatal to boot: the guest still boots to the desktop if the shared
 # folder / host pubkey is absent (e.g. booted without the hypervisor's shared dir).
-# The azarch command line interface exits non-zero in that case, but Type=oneshot + no other unit
+# The azzio command line interface exits non-zero in that case, but Type=oneshot + no other unit
 # depending on it means the system carries on; the user can re-run it by hand.
 SSHD_HYPERVISOR_SETUP_SERVICE = """\
 [Unit]
-Description=Az'arch sshd-hypervisor auto-setup (install host pubkey + start sshd)
+Description=Azzio sshd-hypervisor auto-setup (install host pubkey + start sshd)
 After=pkgs-setup.service
 Wants=pkgs-setup.service
-ConditionPathExists=/usr/local/bin/azarch
+ConditionPathExists=/usr/local/bin/azzio
 
 [Service]
 Type=oneshot
 Environment=SUDO_USER=main
-ExecStart=/usr/local/bin/azarch --sshd-hypervisor
+ExecStart=/usr/local/bin/azzio --sshd-hypervisor
 RemainAfterExit=true
 StandardOutput=journal
 StandardError=journal
@@ -593,7 +593,7 @@ WantedBy=multi-user.target
 # mount is simpler and the share is present from boot when it is present at all).
 HOME_MAIN_SHARED_MOUNT = """\
 [Unit]
-Description=Az'arch host<->guest shared folder (virtiofs)
+Description=Azzio host<->guest shared folder (virtiofs)
 DefaultDependencies=no
 After=local-fs-pre.target
 Before=local-fs.target

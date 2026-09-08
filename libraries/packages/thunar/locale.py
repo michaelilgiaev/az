@@ -24,7 +24,7 @@ the original):
 WHICH LOCALE ACTUALLY APPLIES. gettext only consults the catalog in the LC_MESSAGES dir of the
 locale that is IN EFFECT (a common myth is that English msgids ignore catalogs; that is TRUE
 ONLY for the C/POSIX locale -- for a REAL generated locale glibc's gettext DOES consult it).
-The catch: the DEFAULT installed Az'arch system does NOT run en_US. calamares seeds the region
+The catch: the DEFAULT installed Azzio system does NOT run en_US. calamares seeds the region
 as Asia/Jerusalem (packages/calamares/calamares.locale_conf), so out of the box the target's
 /etc/locale.conf is LANG=en_IL (English/Israel) -- VERIFIED on the live hypervisor: openbox's
 environ has LANG=en_IL and `LANG=en_IL gettext -d thunar "Places"` returned the STOCK "Places"
@@ -56,7 +56,7 @@ from __future__ import annotations
 
 import struct
 
-# The locales the Az'arch ISO generates (packages/calamares/locale): en_US.UTF-8 is the
+# The locales the Azzio ISO generates (packages/calamares/locale): en_US.UTF-8 is the
 # display language, en_GB.UTF-8 the LC_TIME date locale. Ship the override catalog under BOTH
 # so whichever LC_MESSAGES is in effect finds it. The catalog dir is the standard system path
 # Thunar's bindtextdomain uses.

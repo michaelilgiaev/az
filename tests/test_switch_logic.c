@@ -1,4 +1,4 @@
-/* Az'arch window switcher -- selection-logic unit tests. Compiled against the SHIPPING
+/* Azzio window switcher -- selection-logic unit tests. Compiled against the SHIPPING
  * switch_logic.c (via tests/Makefile). Pure asserts, no framework; non-zero exit on failure.
  *
  * These are BEHAVIORAL tests for the two decisions the alt-tab overlay makes -- the exact

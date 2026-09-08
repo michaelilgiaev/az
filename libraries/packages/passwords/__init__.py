@@ -1,4 +1,4 @@
-"""passwords - Az'arch's encrypted (GPG AES256) terminal password manager.
+"""passwords - Azzio's encrypted (GPG AES256) terminal password manager.
 
 This package holds the whole application in one flat directory (there is no
 `pwlib/` sub-library anymore): the entry script plus every module it calls.

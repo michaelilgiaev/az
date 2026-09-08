@@ -1,7 +1,7 @@
 """_auto_install_iso -- the empty-disk installer-ISO auto-attach decision.
 
 REGRESSION GUARD. The old code auto-attached the single installer ISO when the
-system disk was still EMPTY (never installed), so `hypervisor run azarch.qcow2`
+system disk was still EMPTY (never installed), so `hypervisor run azzio.qcow2`
 on a fresh disk booted the installer instead of hanging at the UEFI shell. A
 refactor that made `run` demand an explicit .qcow2 dropped that logic; this pins
 it back.
@@ -47,7 +47,7 @@ def _full_disk(tmp_path) -> str:
 def test_empty_disk_one_iso_auto_attaches(tmp_path):
     cfg = _cfg(tmp_path)
     disk = _empty_disk(tmp_path)
-    iso = tmp_path / "azarch.iso"
+    iso = tmp_path / "azzio.iso"
     iso.write_text("x")
     assert vm._auto_install_iso(cfg, "", disk) == str(iso)
 
@@ -70,7 +70,7 @@ def test_empty_disk_many_isos_attaches_nothing(tmp_path):
 def test_full_disk_never_auto_attaches(tmp_path):
     cfg = _cfg(tmp_path)
     disk = _full_disk(tmp_path)
-    (tmp_path / "azarch.iso").write_text("x")  # present, but disk is installed
+    (tmp_path / "azzio.iso").write_text("x")  # present, but disk is installed
     assert vm._auto_install_iso(cfg, "", disk) == ""
 
 

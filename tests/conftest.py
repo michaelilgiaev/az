@@ -1,4 +1,4 @@
-"""Shared pytest fixtures + import-path setup for the azarch test suite.
+"""Shared pytest fixtures + import-path setup for the azzio test suite.
 
 `bash tests.sh` already puts libraries/ and scripts/libraries/ on PYTHONPATH, and
 pyproject.toml's [tool.pytest.ini_options] pythonpath does the same for a bare

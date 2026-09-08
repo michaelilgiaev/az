@@ -256,7 +256,7 @@ def _pin_trees(monkeypatch, tmp_path, *, docker: bool):
     logs.mkdir()
 
     if docker:
-        workdir = tmp_path / "container" / "azarch-build"
+        workdir = tmp_path / "container" / "azzio-build"
         workdir.mkdir(parents=True)
     else:
         workdir = cache / "build"

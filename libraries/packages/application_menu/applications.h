@@ -1,4 +1,4 @@
-/* Az'arch application menu (C port) -- application discovery + category typing.
+/* Azzio application menu (C port) -- application discovery + category typing.
  *
  * Port of the original applications.py. Scans freedesktop .desktop files and turns each visible one
  * into an AzAppEntry the menu renders: display Name, Exec argv (field codes
@@ -37,7 +37,7 @@ GPtrArray *az_scan_applications(void);
 gboolean az_is_hidden_desktop_id(const char *desktop_id);
 
 /* TRUE when running from the archiso live medium (distro not yet installed).
- * Detected via /run/archiso; AZARCH_FORCE_LIVE=1/0 overrides for testing. */
+ * Detected via /run/archiso; AZZIO_FORCE_LIVE=1/0 overrides for testing. */
 gboolean az_is_live_session(void);
 
 /* Move the entry with this .desktop id to index 0 (order of the rest preserved).

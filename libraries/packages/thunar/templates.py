@@ -9,7 +9,7 @@ which creates the ~/Templates DIRECTORY this module then fills -- for the same r
 Thunar populates its "Create New Document..." submenu from the XDG templates dir: every FILE
 in ~/Templates (the dir named by XDG_TEMPLATES_DIR in ~/.config/user-dirs.dirs) becomes a
 "Create Document -> <that file's name>" entry that COPIES the template into the current folder.
-Out of the box Az'arch shipped no templates AND user-dirs.dirs pointed XDG_TEMPLATES_DIR at the
+Out of the box Azzio shipped no templates AND user-dirs.dirs pointed XDG_TEMPLATES_DIR at the
 whole home dir ("$HOME/"), so the submenu was effectively empty (just the "About Templates"
 placeholder, now also disabled in packages/thunar/settings). This module fixes both:
 
@@ -22,7 +22,7 @@ placeholder, now also disabled in packages/thunar/settings). This module fixes b
      UNCOMPRESSED per the ODF spec, plus the minimal manifest + content/styles/meta parts) so
      LibreOffice opens the copy cleanly rather than complaining about a 0-byte file.
   2. Ships ~/.config/user-dirs.dirs with XDG_TEMPLATES_DIR="$HOME/Templates" (and the other
-     XDG dirs matching the Az'arch home layout) so Thunar (via g_get_user_special_dir) finds
+     XDG dirs matching the Azzio home layout) so Thunar (via g_get_user_special_dir) finds
      the templates dir. Without this, xdg-user-dirs-update would regenerate the stock file with
      XDG_TEMPLATES_DIR="$HOME/" and Thunar would scan all of $HOME.
 
@@ -54,19 +54,19 @@ TEMPLATES_DIR = f"{HOME}/{TEMPLATES_DIRNAME}"
 
 # ~/.config/user-dirs.dirs -- XDG user dirs. The load-bearing line is
 # XDG_TEMPLATES_DIR="$HOME/Templates" (so Thunar finds the templates); the rest mirror the
-# Az'arch home layout (home_directory.DIRECTORIES) so xdg-aware apps land in the right folders.
+# Azzio home layout (home_directory.DIRECTORIES) so xdg-aware apps land in the right folders.
 USER_DIRS_PATH = f"{HOME}/.config/user-dirs.dirs"
 
 
 def user_dirs_dirs() -> str:
     """Return ~/.config/user-dirs.dirs. Points XDG_TEMPLATES_DIR at ~/Templates (PROMPT batch
     item 8) so Thunar's Create Document submenu reads our template set, and maps the other XDG
-    dirs to the Az'arch home layout. The `# written by xdg-user-dirs-update` banner is kept so
+    dirs to the Azzio home layout. The `# written by xdg-user-dirs-update` banner is kept so
     xdg-user-dirs-update treats it as its own file and preserves these values (it only rewrites
     missing lines)."""
     return (
         "# This file is written by xdg-user-dirs-update\n"
-        "# Az'arch ships it (packages/thunar/templates) so XDG_TEMPLATES_DIR points at ~/Templates\n"
+        "# Azzio ships it (packages/thunar/templates) so XDG_TEMPLATES_DIR points at ~/Templates\n"
         "# (Thunar's Create Document submenu reads that dir). Format is XDG_xxx_DIR=\"$HOME/yyy\".\n"
         'XDG_DESKTOP_DIR="$HOME/Desktop"\n'
         'XDG_DOWNLOAD_DIR="$HOME/Downloads"\n'
@@ -148,7 +148,7 @@ _META_XML = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <office:document-meta xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" \
 xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" office:version="1.3">
- <office:meta><meta:generator>Az'arch templates</meta:generator></office:meta>
+ <office:meta><meta:generator>Azzio templates</meta:generator></office:meta>
 </office:document-meta>
 """
 

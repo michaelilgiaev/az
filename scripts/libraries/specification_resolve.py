@@ -1,6 +1,6 @@
 """
 specification_resolve -- turn the package manifest + the Arch DB universe into the real
-dependency graph of the Az'arch distribution.
+dependency graph of the Azzio distribution.
 
 Steps:
   1. Load the explicit manifest (libraries/packages/packages.x86_64).
@@ -102,22 +102,22 @@ def resolve_closure(manifest_tokens, packages, provides, groups):
     }
 
 
-def stock_reachable(stock_tokens, azarch_closure, packages, provides, groups):
-    """Return the set of packages in the Az'arch closure that the STOCK archiso
+def stock_reachable(stock_tokens, azzio_closure, packages, provides, groups):
+    """Return the set of packages in the Azzio closure that the STOCK archiso
     `releng` medium already pulls in.
 
     We resolve the stock releng manifest through the exact same machinery as the
-    Az'arch manifest (groups expanded, `provides` followed) and walk its full
-    transitive closure, then intersect with the Az'arch closure. A package is
+    Azzio manifest (groups expanded, `provides` followed) and walk its full
+    transitive closure, then intersect with the Azzio closure. A package is
     "Stock Arch" iff it lands in that intersection; everything else in the
-    Az'arch closure is there only because of an Az'arch addition.
+    Azzio closure is there only because of an Azzio addition.
 
-    Resolving the stock list on its own graph (rather than reusing the Az'arch
+    Resolving the stock list on its own graph (rather than reusing the Azzio
     edges) is deliberate: it answers "what would plain archiso install?" honestly,
-    independent of what Az'arch happens to also request.
+    independent of what Azzio happens to also request.
     """
     stock = resolve_closure(stock_tokens, packages, provides, groups)
-    return stock["closure"] & azarch_closure
+    return stock["closure"] & azzio_closure
 
 
 def _reach_from(seeds, edges, closure):

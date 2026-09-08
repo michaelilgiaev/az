@@ -1,4 +1,4 @@
-/* Az'arch -- unit tests for the shared window->desktop resolver (window_resolve.c),
+/* Azzio -- unit tests for the shared window->desktop resolver (window_resolve.c),
  * compiled against the SHIPPING applications.c + window_resolve.c. Pure asserts;
  * non-zero exit on any failure. Built + run by tests/Makefile (delegated to by
  * the top-level `make test` and the package Makefiles' `test` target). */

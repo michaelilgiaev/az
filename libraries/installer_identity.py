@@ -2,7 +2,7 @@
 
 The Calamares GUI collects, on its Location / Keyboard / Users pages, the things that make
 an installed system PERSONAL and SECURE: a hostname, a real user account with a chosen
-password, a root password, and a timezone. The old `azarch-install --cli` skipped all of
+password, a root password, and a timezone. The old `azzio-install --cli` skipped all of
 that -- it copied the LIVE `main` account and the LIVE (passwordless) root verbatim and
 hard-set Asia/Jerusalem, so a headless SSH install produced a box with NO root password and
 a fixed timezone: NOT "the same result" Calamares gives.
@@ -27,20 +27,20 @@ Language and console keyboard stay ENGLISH-ONLY ("us") on purpose: that is the d
 deliberate locale policy (see packages/calamares/locale.py), the same policy the GUI enforces
 outside its optional second-layout nicety. LUKS/swap stay off (the partition editor is the
 one Calamares page not reimplemented in a TTY); the root filesystem is ext4 by default, or
-btrfs when AZ_INSTALL_FILESYSTEM=btrfs (which `azarch-install --auto` sets, matching the GUI).
+btrfs when AZ_INSTALL_FILESYSTEM=btrfs (which `azzio-install --auto` sets, matching the GUI).
 
 Everything here is a pure string producer -- no network, no subprocess, no filesystem writes
 -- so it is unit-testable exactly like installer.py. The env pre-seed names are the
 AZ_INSTALL_* family, extending the AZ_INSTALL_CHOICE / AZ_INSTALL_DISK pair the disk step
-already honours, so a fully unattended `azarch-install --cli` stays scriptable.
+already honours, so a fully unattended `azzio-install --cli` stays scriptable.
 """
 
 from __future__ import annotations
 
 # Defaults mirror the live session identity + the distribution's fixed timezone, so a user
-# who just presses Enter through every prompt lands on the familiar azarch/main/Asia-Jerusalem
+# who just presses Enter through every prompt lands on the familiar azzio/main/Asia-Jerusalem
 # system (only now with real, chosen passwords instead of the live passwordless root).
-DEFAULT_HOSTNAME = "azarch"
+DEFAULT_HOSTNAME = "azzio"
 DEFAULT_USERNAME = "main"
 DEFAULT_TIMEZONE = "Asia/Jerusalem"
 
@@ -67,12 +67,12 @@ if [ -n "$AZ_INSTALL_HOSTNAME" ]; then
     az_hostname="$AZ_INSTALL_HOSTNAME"
     echo "Hostname: $az_hostname (pre-seeded)"
 else
-    read -rp "Hostname [azarch]: " az_hostname
-    az_hostname="${az_hostname:-azarch}"
+    read -rp "Hostname [azzio]: " az_hostname
+    az_hostname="${az_hostname:-azzio}"
 fi
 
 # Full name (optional, cosmetic GECOS field). Skipped entirely under the unattended/auto
-# marker (AZ_INSTALL_STAR_PASSWORD, which `azarch-install --auto` sets): the full name is
+# marker (AZ_INSTALL_STAR_PASSWORD, which `azzio-install --auto` sets): the full name is
 # intentionally blank there (spec: full_name=NULL, skip), and an empty AZ_INSTALL_FULLNAME
 # cannot survive run_cli()'s `${VAR:+...}` sudo forwarding, so it would arrive UNSET and
 # fall through to this interactive prompt -- blocking the "no questions asked" auto run.
@@ -122,7 +122,7 @@ while :; do
     break
 done
 
-# STAR-PASSWORD convention (`azarch-install --auto` sets AZ_INSTALL_STAR_PASSWORD=1): both the
+# STAR-PASSWORD convention (`azzio-install --auto` sets AZ_INSTALL_STAR_PASSWORD=1): both the
 # user and root get a literal '*' in the shadow field -- the Ubuntu/casper standard. '*' is an
 # INVALID hash, so no password authenticates, but the account is NOT locked (unlike '!'); the
 # box stays usable via tty1 autologin + NOPASSWD sudo, exactly like the live medium. When set we

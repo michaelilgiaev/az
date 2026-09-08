@@ -1,4 +1,4 @@
-/* Az'arch window switcher -- fixed leading order + alphabetical tail. See ordering.h.
+/* Azzio window switcher -- fixed leading order + alphabetical tail. See ordering.h.
  * 1 librewolf, 2 kitty, 3 hypervisor (remote-viewer), 4 thunar, 5 rest (alpha).
  * Pure: no GTK/X, so it is unit-tested headless. */
 #include "ordering.h"

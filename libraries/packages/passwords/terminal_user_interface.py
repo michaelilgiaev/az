@@ -11,9 +11,9 @@ Two input states resolve the conflict between "type letters to search" and
                            it. ENTER "continue"s INTO the entry view (columns +
                            copy/clip/edit). "/" drops back to the search box.
 
-NAVIGATION mirrors the Az'arch terminal UI (packages/azarch/render.c): the same
+NAVIGATION mirrors the Azzio terminal UI (packages/azzio/render.c): the same
 WASD / HJKL / arrow movement, "/" for search. The bottom line is a plain,
-left-aligned "KEY label   KEY label" nav bar built the same way azarch draws its
+left-aligned "KEY label   KEY label" nav bar built the same way azzio draws its
 verbs (a keycap, a space, a dim label, a gap) -- NOT centred and NOT coloured,
 just structured the same.
 
@@ -33,8 +33,8 @@ import new_entry
 
 SEARCH, SELECT = 0, 1
 
-# Movement keys, mirroring azarch: WASD + HJKL + arrows all drive the vertical
-# list (there is only a vertical axis here, exactly like azarch's own list, whose
+# Movement keys, mirroring azzio: WASD + HJKL + arrows all drive the vertical
+# list (there is only a vertical axis here, exactly like azzio's own list, whose
 # nav labels every one of these clusters simply "move"). Held as sets of the
 # ordinals so the handlers can test membership cheaply.
 _UP_KEYS = {curses.KEY_UP, ord('w'), ord('W'), ord('k'), ord('K'),

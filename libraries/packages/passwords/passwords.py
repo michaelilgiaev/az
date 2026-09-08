@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The `passwords` command -- Az'arch's encrypted password manager.
+"""The `passwords` command -- Azzio's encrypted password manager.
 
 Streamlined: there is no separate setup step and nothing to source. Running
 `passwords`:

@@ -1,4 +1,4 @@
-/* Az'arch application-menu UI scale -- the scale-1.0 DEFAULT (stock). This checked-in copy lets
+/* Azzio application-menu UI scale -- the scale-1.0 DEFAULT (stock). This checked-in copy lets
  * the C tests compile at stock size; the ISO build (application_menu.build_daemon) OVERWRITES it
  * in its private build copy with the real GLOBAL_SCALE ratio generated from modifications/scale,
  * so the shipped menu's fixed-PIXEL geometry (theme.h) derives from the single scale source. The

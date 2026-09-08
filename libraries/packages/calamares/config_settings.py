@@ -21,7 +21,7 @@ def settings_conf() -> str:
     configure, including keyboard, are listed in emit_map()).
     """
     return """\
-# Calamares master configuration for Az'arch Linux.
+# Calamares master configuration for Azzio Linux.
 ---
 # Directories scanned for module descriptors. Absolute paths are the system
 # install locations from the `calamares` package; "modules" is relative to this
@@ -56,8 +56,8 @@ sequence:
   - locale
   - keyboard
   - partition
-  # Az'arch "Network" page (networkq QML view module, added by the
-  # azarch-calamares-networkq source patch): Automatic (DHCP, the default) vs a
+  # Azzio "Network" page (networkq QML view module, added by the
+  # azzio-calamares-networkq source patch): Automatic (DHCP, the default) vs a
   # Manual static IPv4 (address / subnet mask / gateway / DNS 1 / DNS 2). It writes
   # its choice to GlobalStorage; the patched `networkcfg` exec job (below) turns a
   # manual choice into a 0600 static NetworkManager profile on the target. Placed
@@ -130,8 +130,8 @@ sequence:
 - show:
   - finished
 
-# Branding component (branding/azarch/branding.desc).
-branding: azarch
+# Branding component (branding/azzio/branding.desc).
+branding: azzio
 
 # Require the "Yes, I understand the installer will DESTROY data" checkbox before
 # the destructive exec phase can run.

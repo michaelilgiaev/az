@@ -1,4 +1,4 @@
-# azarch - ISO build environment
+# azzio - ISO build environment
 #
 # This image gives compile.sh a clean, genuine Arch Linux userland with the
 # real Arch core/extra/multilib repositories. That is the whole point: the ISO
@@ -7,12 +7,12 @@
 # those repos are wrong or absent, so the build must happen inside Arch. This
 # container provides that regardless of the machine you run it on.
 #
-# Build:  docker build -t azarch .
+# Build:  docker build -t azzio .
 # Run:    docker run --rm -it --privileged \
 #           -v "$PWD/cache:/build/cache" \
 #           -v "$PWD/output:/build/output" \
 #           -v "$PWD/logs:/build/logs" \
-#           azarch
+#           azzio
 #         These three mounts mirror compile.sh's own directory scheme so the
 #         host keeps the persistent download cache (cache/, which also holds the
 #         disposable profile+scratch tree in cache/build/), the build output
@@ -31,7 +31,7 @@ FROM archlinux:latest
 #   python        -> the build itself: compile.sh is a thin PTY/sudo shim that
 #                    hands off to `python3 -m compiler` (see libraries/)
 # --noconfirm keeps the build non-interactive.
-# Extra tools beyond the original set, for the makepkg stage that builds Az'arch's
+# Extra tools beyond the original set, for the makepkg stage that builds Azzio's
 # OWN packages (calamares, librewolf) from our recipes in packages/pkgbuild:
 #   fakeroot   -> makepkg's fakeroot packaging (part of base-devel, listed for clarity)
 #   gnupg      -> import + verify LibreWolf's release signing key for the .sig check
@@ -39,7 +39,7 @@ FROM archlinux:latest
 # build time by makepkg._install_host_build_deps, not baked in here, so the
 # image stays small and the dep set tracks the recipes.
 #
-# The Az'arch application menu is a COMPILED C / GTK3 program: the build COMPILES it on
+# The Azzio application menu is a COMPILED C / GTK3 program: the build COMPILES it on
 # the host (compiler.build_daemon -> `make`) during _emit_desktop, so the GTK3 dev stack
 # must be present in THIS image or that compile fails with "gtk/gtk.h: No such file or
 # directory" and aborts the build. This is unlike the makepkg makedepends: those are
@@ -58,7 +58,7 @@ FROM archlinux:latest
 #   gcc        -> the compiler both Makefiles invoke (provided by base-devel; listed in
 #                 the code's dep sets, present here via base-devel).
 #   libx11 / libxrandr / libxft -> the X client dev headers/libs the media OSD (osd.c ->
-#                 azarch-osd) links: Xlib, RandR (primary-monitor geometry), Xft (anti-aliased
+#                 azzio-osd) links: Xlib, RandR (primary-monitor geometry), Xft (anti-aliased
 #                 percent text). The OSD is compiled during the desktop emit (build_osd), BEFORE
 #                 makepkg, so these must be baked in here. Keep in sync with
 #                 terminal_user_interface_build.TERMINAL_USER_INTERFACE_BUILD_DEPS.
@@ -150,11 +150,11 @@ COPY . /build
 # build driver's SIGINT/SIGTERM handler additionally kills the whole process group
 # so pacman/mkarchiso die immediately. tini is TTY-transparent, so PTY logging works.
 #
-# ENTRYPOINT, not CMD: trailing `docker run azarch <args>` (e.g. --estimate,
+# ENTRYPOINT, not CMD: trailing `docker run azzio <args>` (e.g. --estimate,
 # --full-compile) must be APPENDED to compile.sh, not REPLACE it. With a bare CMD
 # and no ENTRYPOINT, Docker discards the CMD and tries to exec the flag itself, so
-# `docker run azarch --estimate` fails with `exec: "--estimate": ... not found`.
+# `docker run azzio --estimate` fails with `exec: "--estimate": ... not found`.
 # ENTRYPOINT passes the flags straight through to compile.sh's `"$@"`. The no-arg
-# `docker run azarch` still runs a default full build (compile.sh treats no args as
-# the default tier). To get a debug shell now use `docker run --entrypoint bash azarch`.
+# `docker run azzio` still runs a default full build (compile.sh treats no args as
+# the default tier). To get a debug shell now use `docker run --entrypoint bash azzio`.
 ENTRYPOINT ["./compile.sh"]

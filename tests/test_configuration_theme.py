@@ -1,18 +1,18 @@
-"""The `azarch theme` system-wide dark/white toggle + the shipped dark defaults.
+"""The `azzio theme` system-wide dark/white toggle + the shipped dark defaults.
 
-Az'arch has a system theme (dark by default) built on the EXISTING freedesktop / GTK
+Azzio has a system theme (dark by default) built on the EXISTING freedesktop / GTK
 standard so downloaded apps that honour it are configured for free. These tests pin:
 
-  * the `azarch theme` subcommand surface (--dark/-d, --white/-w, --help, bare status) as it
-    is BUNDLED into the shipped /usr/local/bin/azarch script;
+  * the `azzio theme` subcommand surface (--dark/-d, --white/-w, --help, bare status) as it
+    is BUNDLED into the shipped /usr/local/bin/azzio script;
   * that the theme uses the standard signals (org.gnome.desktop.interface color-scheme +
     the GTK theme files with Adwaita-dark / Adwaita);
   * that the ISO's shipped DEFAULT files (packages.openbox GTK settings.ini + dconf keyfile)
     are DARK and stay byte-for-byte in lock-step with the command line interface's theme.py dark output, so the
-    shipped default and a later `azarch theme --dark` produce identical files;
+    shipped default and a later `azzio theme --dark` produce identical files;
   * that the kitty terminal is DELIBERATELY exempt (the theme never touches kitty).
 
-The command line interface is exercised via its bundle (packages.azarch.bundle.bundle_source) executed in one
+The command line interface is exercised via its bundle (packages.azzio.bundle.bundle_source) executed in one
 namespace -- exactly the artifact the compiler ships -- so tests drive the real functions.
 """
 
@@ -22,23 +22,23 @@ import types
 
 import pytest
 
-from packages.azarch.bundle import bundle_source
+from packages.azzio.bundle import bundle_source
 from packages import openbox as desktop
 
 
 def _command_line_interface():
-    """Exec the bundled azarch command line interface in a fresh module namespace (as shipped)."""
-    mod = types.ModuleType("azarch_cli_theme_test")
-    exec(compile(bundle_source(), "azarch_command_line_interface", "exec"), mod.__dict__)
+    """Exec the bundled azzio command line interface in a fresh module namespace (as shipped)."""
+    mod = types.ModuleType("azzio_cli_theme_test")
+    exec(compile(bundle_source(), "azzio_command_line_interface", "exec"), mod.__dict__)
     return mod
 
 
-# --- the `azarch theme` subcommand surface ----------------------------------
+# --- the `azzio theme` subcommand surface ----------------------------------
 
 def test_theme_is_a_dispatch_branch_in_main():
-    # `azarch theme ...` must be a real top-level dispatch branch, and the top-level usage
+    # `azzio theme ...` must be a real top-level dispatch branch, and the top-level usage
     # must advertise it.
-    src = desktop.azarch_command_line_interface()
+    src = desktop.azzio_command_line_interface()
     assert 'cmd == "theme"' in src
     assert "return cmd_theme(argv[1:])" in src
     assert "theme [--dark|--white]" in src   # advertised in usage()
@@ -49,7 +49,7 @@ def test_theme_help_prints_usage_and_exits_zero(capsys):
     rc = command_line_interface.main(["theme", "--help"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "Usage: azarch theme" in out
+    assert "Usage: azzio theme" in out
     assert "--dark" in out and "--white" in out
     # both the long help header AND the standard mention are present
     assert "freedesktop color-scheme" in out
@@ -58,7 +58,7 @@ def test_theme_help_prints_usage_and_exits_zero(capsys):
 def test_theme_accepts_all_four_flag_spellings():
     # --dark/-d and --white/-w must both map to apply_theme(dark=True/False); assert the
     # dispatch in cmd_theme handles all four spellings.
-    src = desktop.azarch_command_line_interface()
+    src = desktop.azzio_command_line_interface()
     assert '("--dark", "-d")' in src
     assert '("--white", "-w")' in src
     assert "apply_theme(dark=True)" in src
@@ -66,7 +66,7 @@ def test_theme_accepts_all_four_flag_spellings():
 
 
 def test_theme_dark_and_white_dispatch_without_touching_the_real_system(monkeypatch):
-    # Drive `azarch theme --dark` / `--white` with apply_theme stubbed, so we prove the
+    # Drive `azzio theme --dark` / `--white` with apply_theme stubbed, so we prove the
     # dispatch wiring without mutating the host. bare `theme` -> status.
     command_line_interface = _command_line_interface()
     calls = []
@@ -89,7 +89,7 @@ def test_theme_unknown_option_is_rc_two(capsys):
 
 
 def test_bare_theme_prints_current_status(monkeypatch, capsys):
-    # `azarch theme` with no args prints the current theme. Stub current_theme so the test
+    # `azzio theme` with no args prints the current theme. Stub current_theme so the test
     # does not depend on the host's dconf state.
     command_line_interface = _command_line_interface()
     monkeypatch.setattr(command_line_interface, "current_theme", lambda: "dark")
@@ -107,7 +107,7 @@ def test_theme_uses_freedesktop_color_scheme_standard():
     assert command_line_interface.COLOR_SCHEME_DARK == "prefer-dark"
     assert command_line_interface.COLOR_SCHEME_LIGHT == "prefer-light"
     # apply_theme writes the color-scheme gsetting (the freedesktop appearance signal).
-    src = desktop.azarch_command_line_interface()
+    src = desktop.azzio_command_line_interface()
     assert '"org.gnome.desktop.interface", "color-scheme"' in src
 
 
@@ -134,7 +134,7 @@ def test_theme_never_touches_kitty():
     # kitty -- no write to a kitty config path and no signal to a running kitty. (A comment
     # DOCUMENTING the exemption is fine and expected; what must be absent is any kitty action.)
     command_line_interface = _command_line_interface()
-    src = desktop.azarch_command_line_interface()
+    src = desktop.azzio_command_line_interface()
     # No kitty config path is ever written and no kitty process is signalled.
     assert ".config/kitty" not in src
     assert "pkill" not in src or "kitty" not in src.split("pkill", 1)[1][:40]
@@ -163,7 +163,7 @@ def test_shipped_dconf_default_is_prefer_dark():
 
 
 def test_shipped_defaults_match_cli_dark_output_no_drift():
-    # The ISO's shipped default files and a later `azarch theme --dark` MUST produce
+    # The ISO's shipped default files and a later `azzio theme --dark` MUST produce
     # identical files. Assert the openbox default builders equal the command line interface theme.py dark output.
     command_line_interface = _command_line_interface()
     assert command_line_interface.gtk3_settings_ini(True) == desktop.gtk3_settings_ini_default()
@@ -175,25 +175,25 @@ def test_shipped_defaults_match_cli_dark_output_no_drift():
 
 def test_retheme_openbox_swaps_the_theme_name(tmp_path, monkeypatch):
     # _retheme_openbox rewrites the <theme><name> in the user's rc.xml between the dark and
-    # light Az'arch theme names. Point the command line interface's home at a temp dir with a seed rc.xml.
+    # light Azzio theme names. Point the command line interface's home at a temp dir with a seed rc.xml.
     command_line_interface = _command_line_interface()
     rc_dir = tmp_path / ".config" / "openbox"
     rc_dir.mkdir(parents=True)
     (rc_dir / "rc.xml").write_text(
-        "<openbox_config><theme><name>Azarch-Dark</name></theme>"
+        "<openbox_config><theme><name>Azzio-Dark</name></theme>"
         "<desktops><names><name>one</name></names></desktops></openbox_config>"
     )
     monkeypatch.setattr(command_line_interface, "_THEME_HOME", str(tmp_path))
     monkeypatch.setattr(command_line_interface.os.environ, "get", lambda *a, **k: None)  # no DISPLAY -> no reconfigure
     command_line_interface._retheme_openbox(dark=False)
     out = (rc_dir / "rc.xml").read_text()
-    assert "<name>Azarch</name>" in out
-    assert "<name>Azarch-Dark</name>" not in out
+    assert "<name>Azzio</name>" in out
+    assert "<name>Azzio-Dark</name>" not in out
     # the desktop <name>one</name> must be UNTOUCHED (only the theme name is swapped)
     assert "<name>one</name>" in out
     # and back to dark
     command_line_interface._retheme_openbox(dark=True)
-    assert "<name>Azarch-Dark</name>" in (rc_dir / "rc.xml").read_text()
+    assert "<name>Azzio-Dark</name>" in (rc_dir / "rc.xml").read_text()
 
 
 def test_retheme_vlc_flips_only_the_palette_line(tmp_path, monkeypatch):
@@ -228,7 +228,7 @@ def test_retheme_librewolf_flips_theme_prefs(tmp_path, monkeypatch):
 
 
 def test_current_theme_defaults_dark_when_no_signal(tmp_path, monkeypatch):
-    # With no gsettings value and no settings.ini, current_theme() falls back to the Az'arch
+    # With no gsettings value and no settings.ini, current_theme() falls back to the Azzio
     # default: dark.
     command_line_interface = _command_line_interface()
     monkeypatch.setattr(command_line_interface, "_THEME_HOME", str(tmp_path))

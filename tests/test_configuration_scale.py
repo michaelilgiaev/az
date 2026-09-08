@@ -118,7 +118,7 @@ def test_only_one_scale_no_second_hardcoded_dpi():
     # scale module + the files it legitimately generates. Scan the modules that were reconciled.
     import paths
     # theme.py (CLI) must NOT hardcode gtk-xft-dpi (the scale rides Xft.dpi, not settings.ini).
-    theme_py = (paths.LIBDIR / "packages/azarch/theme.py").read_text()
+    theme_py = (paths.LIBDIR / "packages/azzio/theme.py").read_text()
     assert "gtk-xft-dpi" not in theme_py
     # openbox default settings.ini must NOT carry gtk-xft-dpi either (same reason).
     from packages import openbox as ob

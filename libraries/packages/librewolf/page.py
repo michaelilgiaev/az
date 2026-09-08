@@ -115,7 +115,7 @@ def render(*, zone_name: str, now: datetime.datetime) -> str:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{hh}:{mm} {ampm} · Az'arch</title>
+<title>{hh}:{mm} {ampm} · Azzio</title>
 <style>
 {css_block}
 </style>

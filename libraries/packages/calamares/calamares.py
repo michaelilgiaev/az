@@ -1,16 +1,16 @@
 """Calamares installer configuration, authored as configuration-as-Python strings.
 
-Az'arch boots to a minimal OpenBox live session and auto-launches Calamares
-(Manjaro-style) to install Az'arch Linux to disk. Calamares 3.4.2 reads:
+Azzio boots to a minimal OpenBox live session and auto-launches Calamares
+(Manjaro-style) to install Azzio Linux to disk. Calamares 3.4.2 reads:
 
   /etc/calamares/settings.conf          -- module search paths + the sequence
   /etc/calamares/modules/<name>.conf    -- one configuration per module in the sequence
-  /etc/calamares/branding/azarch/*      -- product branding + slideshow
+  /etc/calamares/branding/azzio/*      -- product branding + slideshow
 
 Every builder below returns the exact text of one of those files. The install is
 OFFLINE by design: the target root is unpacked from the live SquashFS by the
 `unpackfs` module (NOT pacstrapped over the network), matching how the rest of
-Az'arch installs. Btrfs is the DEFAULT filesystem and full-disk LUKS encryption
+Azzio installs. Btrfs is the DEFAULT filesystem and full-disk LUKS encryption
 is offered as a toggle in the partition page.
 
 Style note: Calamares configuration files are YAML (settings.conf, branding.desc, and
@@ -31,7 +31,7 @@ exactly as before, and never need to know which submodule a builder lives in:
   config_branding    branding.desc + show.qml
   calamares_shellprocess  the post-unpackfs target fixups (own file; see below)
 
-This mirrors how the rest of the codebase is organized (packages/azarch/ is one
+This mirrors how the rest of the codebase is organized (packages/azzio/ is one
 package split into many small modules re-exported from its __init__), and keeps every
 file well under the project's per-file line ceiling and single-purpose.
 

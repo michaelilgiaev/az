@@ -44,9 +44,9 @@ from packages.backup import archive as arch
 
 # --- emit_plan() contract ---------------------------------------------------
 EXPECTED_KEY_PLAN = {
-    "/usr/local/lib/azarch-backup/backup.py": 0o644,
-    "/usr/local/lib/azarch-backup/unpack.py": 0o644,
-    "/usr/local/lib/azarch-backup/archive.py": 0o644,
+    "/usr/local/lib/azzio-backup/backup.py": 0o644,
+    "/usr/local/lib/azzio-backup/unpack.py": 0o644,
+    "/usr/local/lib/azzio-backup/archive.py": 0o644,
     "/usr/local/bin/backup": 0o755,
     "/usr/local/bin/unpack": 0o755,
 }
@@ -556,7 +556,7 @@ def test_backup_still_makes_passwords_archive_when_home_has_no_backable_dirs(tmp
 
 
 def test_backup_output_is_stripped_no_header_no_plan_no_vault_skip(tmp_path, capsys):
-    """Step five item 3: the `backup` output is STRIPPED DOWN. There is NO "Az'arch backup"
+    """Step five item 3: the `backup` output is STRIPPED DOWN. There is NO "Azzio backup"
     banner, NO rule, and NO Home/Items/Store/Skip plan block -- and crucially NO "skipping ...
     Vault" claim anywhere (the store IS backed up, so the old Skip line was factually wrong).
     The compact per-archive result lines + the final summary remain, and there are NO empty
@@ -570,7 +570,7 @@ def test_backup_output_is_stripped_no_header_no_plan_no_vault_skip(tmp_path, cap
     assert rc == 0
     out = capsys.readouterr().out
     # The whole header/plan block is gone.
-    assert "Az'arch backup" not in out
+    assert "Azzio backup" not in out
     assert "Home:" not in out and "Items:" not in out and "Store:" not in out
     assert "Skip:" not in out
     # The FALSE "Vault is skipped" claim is gone (both the plan wording and any reprint).

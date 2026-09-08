@@ -1,4 +1,4 @@
-/* Az'arch window switcher -- live thumbnail capture via XComposite.
+/* Azzio window switcher -- live thumbnail capture via XComposite.
  *
  * With a compositor (picom) redirecting every window to an off-screen pixmap, this reads
  * the window's CURRENT contents -- even when covered or minimized -- so the switcher tile

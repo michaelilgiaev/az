@@ -44,11 +44,11 @@ from packages.passwords import config as pwconfig
 # is discovered from the source dir, so it is pinned structurally (below) rather than as a
 # frozen list.
 EXPECTED_KEY_PLAN = {
-    "/usr/local/lib/azarch-passwords/passwords.py": 0o644,
-    "/usr/local/lib/azarch-passwords/encrypt_passwords_text_tile.py": 0o644,
-    "/usr/local/lib/azarch-passwords/cryptography.py": 0o644,
-    "/usr/local/lib/azarch-passwords/terminal_user_interface.py": 0o644,
-    "/usr/local/lib/azarch-passwords/new_entry.py": 0o644,
+    "/usr/local/lib/azzio-passwords/passwords.py": 0o644,
+    "/usr/local/lib/azzio-passwords/encrypt_passwords_text_tile.py": 0o644,
+    "/usr/local/lib/azzio-passwords/cryptography.py": 0o644,
+    "/usr/local/lib/azzio-passwords/terminal_user_interface.py": 0o644,
+    "/usr/local/lib/azzio-passwords/new_entry.py": 0o644,
     "/usr/local/bin/passwords": 0o755,
 }
 
@@ -182,7 +182,7 @@ def test_config_lives_in_user_home_not_beside_root_owned_code():
     assert cfg.startswith(os.path.expanduser("~/.config")) or "XDG_CONFIG_HOME" in cfg \
         or "/.config/" in cfg
     assert not cfg.startswith("/usr/local/")
-    assert cfg.endswith("azarch-passwords/passwords.cfg")
+    assert cfg.endswith("azzio-passwords/passwords.cfg")
 
 
 # --- the compiler actually WIRES the package in (seam coverage) -------------
@@ -263,9 +263,9 @@ def test_launcher_is_a_binary_on_path_not_a_bashrc_command():
     assert 'exec python -u passwords.py "$@"' in sh
 
 
-# --- the reworked TUI navigation (azarch-style) -----------------------------
-def test_terminal_user_interface_nav_mirrors_azarch_and_drops_open_and_help():
-    """The PROMPT reworks the TUI: azarch-style nav (WASD/HJKL/arrows movement, '/' search,
+# --- the reworked TUI navigation (azzio-style) -----------------------------
+def test_terminal_user_interface_nav_mirrors_azzio_and_drops_open_and_help():
+    """The PROMPT reworks the TUI: azzio-style nav (WASD/HJKL/arrows movement, '/' search,
     ESC back, Q quit) and the 'o open' + 'h help' verbs deleted. These are behavioural, but
     pin the shipped terminal_user_interface.py source so the keymap cannot silently regress on
     the ISO."""

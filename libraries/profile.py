@@ -14,18 +14,18 @@ from __future__ import annotations
 
 # ISO base names per build variant. mkarchiso names the artifact
 # <iso_name>-<version>-<arch>.iso, so these drive the two output filenames:
-#   base -> azarch-headed-<ver>-x86_64.iso      (the normal live/install medium)
-#   sshd -> azarch-headed-ssh-<ver>-x86_64.iso  (same, but ssh is ENABLED and `main`
+#   base -> azzio-headed-<ver>-x86_64.iso      (the normal live/install medium)
+#   sshd -> azzio-headed-ssh-<ver>-x86_64.iso  (same, but ssh is ENABLED and `main`
 #                                                has the operator's --ssh password)
 #
 # "headed" is the product LINE and "-ssh" its sub-flavour. This leaves room for a future
-# "headless" line (azarch-headless) without disturbing the base/sshd variant KEYS the build
+# "headless" line (azzio-headless) without disturbing the base/sshd variant KEYS the build
 # branches on -- those stay `base`/`sshd`; only the artifact NAME carries the product line.
 # The two ISOs are separated in output/ by the digit-anchored glob "{iso_name}-[0-9]*.iso":
-# "azarch-headed-2026..." matches base, "azarch-headed-ssh-..." does not (the char after
-# "azarch-headed-" is 's', not a digit), exactly as before the rename.
-ISO_NAME = "azarch-headed"
-ISO_NAME_SSHD = "azarch-headed-ssh"
+# "azzio-headed-2026..." matches base, "azzio-headed-ssh-..." does not (the char after
+# "azzio-headed-" is 's', not a digit), exactly as before the rename.
+ISO_NAME = "azzio-headed"
+ISO_NAME_SSHD = "azzio-headed-ssh"
 
 # The set of recognized build variants -> iso_name. compiler.run loops over the
 # runtime-selected variant (compiler._variants_for), calling iso_name_for to name the ISO.
@@ -36,13 +36,13 @@ ISO_NAMES = {
     "sshd": ISO_NAME_SSHD,
 }
 
-ISO_PUBLISHER = "michaelilgiaev <https://github.com/michaelilgiaev/azarch>"
-ISO_APPLICATION = "Az'arch Installer/Az'arch Linux Live/Rescue DVD"
+ISO_PUBLISHER = "michaelilgiaev <https://github.com/michaelilgiaev/azzio>"
+ISO_APPLICATION = "Azzio Installer/Azzio Linux Live/Rescue DVD"
 INSTALL_DIR = "arch"
 
 
 def iso_name_for(variant: str = "base") -> str:
-    """The mkarchiso iso_name for a build variant (unknown -> base 'azarch-headed')."""
+    """The mkarchiso iso_name for a build variant (unknown -> base 'azzio-headed')."""
     return ISO_NAMES.get(variant, ISO_NAME)
 
 BOOTMODES = (
@@ -64,7 +64,7 @@ FILE_PERMISSIONS = {
     "/etc/sudoers.d/00-main": "0:0:440",
     "/etc/sudoers.d/00-rootpw": "0:0:440",
     "/root": "0:0:750",
-    "/root/azarch": "0:0:750",
+    "/root/azzio": "0:0:750",
     "/root/.automated_script.sh": "0:0:755",
     "/root/.gnupg": "0:0:700",
     "/usr/local/bin/choose-mirror": "0:0:755",
@@ -75,45 +75,45 @@ FILE_PERMISSIONS = {
     # here keep an explicit mode. Without this entry the wrapper ships 0644
     # (non-executable), so the autostart's `[ -x ... ]` guard skips it and Calamares
     # never auto-launches. THIS is what breaks the live installer.
-    "/usr/local/bin/azarch-install": "0:0:755",
-    "/usr/local/bin/azarch": "0:0:755",
-    # The Az'arch application-menu launcher (run by the Super key via OpenBox's rc.xml
+    "/usr/local/bin/azzio-install": "0:0:755",
+    "/usr/local/bin/azzio": "0:0:755",
+    # The Azzio application-menu launcher (run by the Super key via OpenBox's rc.xml
     # keybind). SAME archiso mode-normalization as
-    # azarch-install above: application_menu.PLAN emits it 0755, but the squashfs ships
+    # azzio-install above: application_menu.PLAN emits it 0755, but the squashfs ships
     # it 0644 (non-executable) unless pinned here -- and then the Super key runs a
     # non-executable file and the menu never opens.
-    "/usr/local/bin/azarch-application-menu": "0:0:755",
-    # The Az'arch window-switcher launcher (run by OpenBox's A-Tab/A-S-Tab
+    "/usr/local/bin/azzio-application-menu": "0:0:755",
+    # The Azzio window-switcher launcher (run by OpenBox's A-Tab/A-S-Tab
     # <action name="Execute"> -- OUR replacement for the built-in NextWindow list). SAME
-    # archiso mode-normalization as azarch-application-menu above: window_switcher.PLAN emits
+    # archiso mode-normalization as azzio-application-menu above: window_switcher.PLAN emits
     # it 0755, but the squashfs ships it 0644 (non-executable) unless pinned here -- and then
     # OpenBox's /bin/sh -c on the launcher fails with "Permission denied", which OpenBox
     # surfaces as an error popup INSTEAD of the alt-tab overlay (the reported bug). Verified
     # 0644 on the built ISO.
-    "/usr/local/bin/azarch-window-switcher": "0:0:755",
-    # The Az'arch timedate launcher (run by azarch-timedate.service, which ExecStart's it
+    "/usr/local/bin/azzio-window-switcher": "0:0:755",
+    # The Azzio timedate launcher (run by azzio-timedate.service, which ExecStart's it
     # to serve the Flask Time + Calendar home page at localhost:49154). SAME archiso mode-
-    # normalization as azarch-install above: timedate.PLAN emits it 0755, but the squashfs
+    # normalization as azzio-install above: timedate.PLAN emits it 0755, but the squashfs
     # ships it 0644 (non-executable) unless pinned here -- and then systemd fails the unit
     # with status=203/EXEC (Permission denied) and the home page never listens, so a new
     # tab / the browser home page lands on a dead port. Verified on the built ISO.
-    "/usr/local/bin/azarch-timedate": "0:0:755",
-    # The Az'arch `passwords` launcher (the encrypted terminal password manager the user
-    # runs by typing `passwords`). SAME archiso mode-normalization as azarch-install above:
+    "/usr/local/bin/azzio-timedate": "0:0:755",
+    # The Azzio `passwords` launcher (the encrypted terminal password manager the user
+    # runs by typing `passwords`). SAME archiso mode-normalization as azzio-install above:
     # packages/passwords/packaging.PLAN emits it 0755, but the squashfs ships it 0644
     # (non-executable) unless pinned here -- and then typing `passwords` fails with
     # "Permission denied" (the shell needs the exec bit to run it) on BOTH the live ISO and
     # the installed system. Root-owned on PATH, so every user gets the command.
     "/usr/local/bin/passwords": "0:0:755",
-    # The Az'arch `backup`/`unpack` launchers (the home-directory backup the user runs by
+    # The Azzio `backup`/`unpack` launchers (the home-directory backup the user runs by
     # typing `backup`, and the restore command `unpack`). SAME archiso mode-normalization as
-    # azarch-install/passwords above: packages/backup/packaging.emit_plan() emits both 0755,
+    # azzio-install/passwords above: packages/backup/packaging.emit_plan() emits both 0755,
     # but the squashfs ships them 0644 (non-executable) unless pinned here -- and then typing
     # `backup` (or `unpack`) fails with "command not found"/"Permission denied" even by full
     # path (this was the last build's bug #1). Root-owned on PATH, so every user gets them.
     "/usr/local/bin/backup": "0:0:755",
     "/usr/local/bin/unpack": "0:0:755",
-    # The Az'arch `hypervisor` launcher (the per-directory QEMU/KVM VM runner the user runs
+    # The Azzio `hypervisor` launcher (the per-directory QEMU/KVM VM runner the user runs
     # by typing `hypervisor`). SAME archiso mode-normalization as passwords/backup above:
     # packages/hypervisor/packaging.emit_plan() emits it 0755, but the squashfs ships it 0644
     # (non-executable) unless pinned here -- and then typing `hypervisor` fails with
@@ -124,62 +124,62 @@ FILE_PERMISSIONS = {
     # installed 0755, but the squashfs would ship it 0644 unless pinned -- and the
     # autostart's `[ -x ... ]` guard would then skip it, so the menu is never pre-built
     # and the first Super press does nothing / starts nothing.
-    "/usr/local/lib/azarch-application-menu/azarch-application-menu-daemon": "0:0:755",
+    "/usr/local/lib/azzio-application-menu/azzio-application-menu-daemon": "0:0:755",
     # The COMPILED window-switcher daemon binary (built by window_switcher.build_daemon and
     # started from the OpenBox autostart, which keeps the alt-tab overlay hidden so the first
     # Alt+Tab is instant). Same archiso mode-normalization as the menu daemon above: it is
     # installed 0755, but the squashfs would ship it 0644 unless pinned -- and then the
     # autostart's `[ -x ... ]` guard skips it, so the daemon is never pre-built and Alt+Tab
     # starts nothing.
-    "/usr/local/lib/azarch-window-switcher/azarch-window-switcher-daemon": "0:0:755",
-    # The COMPILED bare-`azarch` TERMINAL UI binary (built by terminal_user_interface_build.build_terminal_user_interface from the
-    # azarch package's C sources and EXEC'd by the `azarch` command line interface for the no-argument case).
+    "/usr/local/lib/azzio-window-switcher/azzio-window-switcher-daemon": "0:0:755",
+    # The COMPILED bare-`azzio` TERMINAL UI binary (built by terminal_user_interface_build.build_terminal_user_interface from the
+    # azzio package's C sources and EXEC'd by the `azzio` command line interface for the no-argument case).
     # Same archiso mode-normalization
     # as the menu daemon above: it is installed 0755, but the squashfs would ship it 0644
-    # unless pinned -- and then the `azarch` launcher's os.access(..., X_OK) guard fails and
-    # bare `azarch` silently falls back to the pointer message instead of opening the UI.
-    "/usr/local/lib/azarch/azarch": "0:0:755",
-    # The media OSD indicator (/usr/local/lib/azarch/azarch-osd), the bottom-middle cyan
-    # volume/brightness bar `azarch volume/brightness` launches. A COMPILED C binary now (on_screen_display.c),
+    # unless pinned -- and then the `azzio` launcher's os.access(..., X_OK) guard fails and
+    # bare `azzio` silently falls back to the pointer message instead of opening the UI.
+    "/usr/local/lib/azzio/azzio": "0:0:755",
+    # The media OSD indicator (/usr/local/lib/azzio/azzio-osd), the bottom-middle cyan
+    # volume/brightness bar `azzio volume/brightness` launches. A COMPILED C binary now (on_screen_display.c),
     # built + installed by terminal_user_interface_build.build_osd() like the terminal UI binary.
     # Same archiso mode-normalization as that binary: the build installs it 0755, but the squashfs
     # would ship it 0644 unless pinned -- and then media.py's os.access(..., X_OK) guard fails and
     # the FN keys change the volume/brightness with NO on-screen bar.
-    "/usr/local/lib/azarch/azarch-osd": "0:0:755",
-    # The live Thunar-sidebar sync helper (/usr/local/lib/azarch/azarch-sidebar-sync), which
+    "/usr/local/lib/azzio/azzio-osd": "0:0:755",
+    # The live Thunar-sidebar sync helper (/usr/local/lib/azzio/azzio-sidebar-sync), which
     # regenerates ~/.config/gtk-3.0/bookmarks from the live home contents and (with --watch)
     # keeps Thunar's Places pane in sync. SAME archiso mode-normalization as the binaries above:
     # live_sidebar.emit_plan() emits it 0755, but the squashfs ships it 0644 unless pinned here --
-    # and then the OpenBox autostart's `[ -x '/usr/local/lib/azarch/azarch-sidebar-sync' ]` guard
+    # and then the OpenBox autostart's `[ -x '/usr/local/lib/azzio/azzio-sidebar-sync' ]` guard
     # FAILS, so the --watch daemon never launches and Places never updates when a folder is added
     # or removed (the reported "Places does not update" bug: the file-monitor theory was sound,
     # but the watcher that rewrites the file was never even running because it shipped non-exec).
-    "/usr/local/lib/azarch/azarch-sidebar-sync": "0:0:755",
+    "/usr/local/lib/azzio/azzio-sidebar-sync": "0:0:755",
     # The OpenBox session autostart (~/.config/openbox/autostart). openbox-session runs
     # it via /bin/sh, but it carries a shebang and openbox.PLAN emits it 0755, so pin it
     # executable here too (archiso would otherwise normalize it to 0644). Pin both the
     # live-user copy (1000:998) and the /etc/skel copy (root-owned).
     "/home/main/.config/openbox/autostart": "1000:998:755",
     "/etc/skel/.config/openbox/autostart": "0:0:755",
-    # The live-session Desktop "Az'arch Linux Installer" launcher. Same archiso mode-
-    # normalization as azarch-install above: compiler.py emits it 0755, but the squashfs
+    # The live-session Desktop "Azzio Linux Installer" launcher. Same archiso mode-
+    # normalization as azzio-install above: compiler.py emits it 0755, but the squashfs
     # ships it 0644 unless pinned here. Shipping it EXECUTABLE means a file manager that
     # honours the exec bit launches it on double-click without a "not trusted" prompt.
     # Both the live-user copy (uid 1000:998) and the /etc/skel copy (root-owned) are
     # pinned.
-    "/home/main/Desktop/azarch-install.desktop": "1000:998:755",
-    "/etc/skel/Desktop/azarch-install.desktop": "0:0:755",
+    "/home/main/Desktop/azzio-install.desktop": "1000:998:755",
+    "/etc/skel/Desktop/azzio-install.desktop": "0:0:755",
     # Vendored ckbcomp (libraries/packages/calamares/ckbcomp.py), a Python 3 port of the
-    # upstream Perl ckbcomp. Same archiso mode-normalization as azarch-install above: without
+    # upstream Perl ckbcomp. Same archiso mode-normalization as azzio-install above: without
     # an explicit 0755 here it ships 0644, Calamares' `QProcess::start("ckbcomp")`
     # cannot execute it, and the keyboard-page preview stays BLANK ("ckbcomp not
     # found, keyboard preview disabled"). This entry keeps the exec bit so the preview
     # renders key legends.
     "/usr/bin/ckbcomp": "0:0:755",
     "/etc/sudoers.d/00-secure-path": "0:0:440",
-    "/root/azarch/setup-locale.sh": "0:0:755",
+    "/root/azzio/setup-locale.sh": "0:0:755",
     "/etc/systemd/system/locale-setup.service": "0:0:644",
-    "/root/azarch/setup-pkgs.sh": "0:0:755",
+    "/root/azzio/setup-pkgs.sh": "0:0:755",
     "/etc/systemd/system/pkgs-setup.service": "0:0:644",
 }
 
@@ -195,7 +195,7 @@ def profiledef_sh(variant: str = "base") -> str:
 # Generated by profile.py -- edit the Python, not this file.
 
 iso_name="{iso_name}"
-iso_label="AZARCH_$(date --date="@${{SOURCE_DATE_EPOCH:-$(date +%s)}}" +%Y%m)"
+iso_label="AZZIO_$(date --date="@${{SOURCE_DATE_EPOCH:-$(date +%s)}}" +%Y%m)"
 iso_publisher="{ISO_PUBLISHER}"
 iso_application="{ISO_APPLICATION}"
 iso_version="$(date --date="@${{SOURCE_DATE_EPOCH:-$(date +%s)}}" +%Y.%m.%d)"

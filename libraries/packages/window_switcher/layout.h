@@ -1,4 +1,4 @@
-/* Az'arch window switcher -- the horizontal tile strip (Windows-like overlay body).
+/* Azzio window switcher -- the horizontal tile strip (Windows-like overlay body).
  *
  * A centered dark rounded panel holding one tile per window, left to right in the order
  * ordering.c produced. Each tile is a live thumbnail (icon fallback) with the app icon

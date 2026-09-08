@@ -220,7 +220,7 @@ def test_is_within_blocks_paths_that_escape_the_destination(tmp_path):
 # --- step five item 4: the unpack output is MINIMAL -------------------------
 @requires_gpg
 def test_unpack_output_is_minimal_no_header_no_rows(tmp_path, capsys):
-    """Step five item 4: `unpack` output is MINIMAL. There is NO "Az'arch unpack" header,
+    """Step five item 4: `unpack` output is MINIMAL. There is NO "Azzio unpack" header,
     NO rule, and NO Archive:/Restore: rows -- the prompt is just the (live) keyboard line +
     "Passphrase:" (printed inside prompt_passphrase, covered by the live-keyboard tests). Only
     the compact "Restoring ..." progress + the final "Restored into ..." line remain, with no
@@ -231,7 +231,7 @@ def test_unpack_output_is_minimal_no_header_no_rows(tmp_path, capsys):
     assert _run_unpack([home_arc], dst, _PASS) == 0
     out = capsys.readouterr().out
     # The header/rows are gone.
-    assert "Az'arch unpack" not in out
+    assert "Azzio unpack" not in out
     assert "Archive:" not in out and "Restore:" not in out
     # No horizontal RULE line (a whole line that is a run of the rule glyph or ASCII dashes).
     # We check for a rule LINE, not a bare '-', so a hyphen inside a path (e.g. the pytest

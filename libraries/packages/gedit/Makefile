@@ -1,4 +1,4 @@
-# Az'arch gedit notepad-mode plugin -- build the libpeas C plugin .so.
+# Azzio gedit notepad-mode plugin -- build the libpeas C plugin .so.
 #
 # A libpeas/gedit plugin is a shared object loaded by gedit at runtime; it is built
 # against the gedit + GTK3 + libpeas dev stack via pkg-config (the same style as the

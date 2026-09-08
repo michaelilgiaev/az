@@ -1,6 +1,6 @@
 """Minimal OpenBox live-session desktop, authored as configuration-as-Python strings.
 
-KDE Plasma was REMOVED from Az'arch (it did not fit the distribution); OpenBox is
+KDE Plasma was REMOVED from Azzio (it did not fit the distribution); OpenBox is
 the whole desktop now. The ISO boots to a graphical OpenBox (X11) live session
 WITHOUT a display manager, Manjaro-style:
 
@@ -8,13 +8,13 @@ WITHOUT a display manager, Manjaro-style:
     tty1 only  ->  ~/.xinitrc paints the wallpaper (no flash) and execs
     `openbox-session`  ->  OpenBox reads rc.xml (keybinds, no decorations fuss)
     and runs ~/.config/openbox/autostart, which sets the wallpaper, starts the
-    Az'arch application-menu daemon, arms the Super key (via xcape), applies the
+    Azzio application-menu daemon, arms the Super key (via xcape), applies the
     keyboard layouts, and opens the Calamares installer once.
 
 There is deliberately NO PANEL (the user's "we're not going to have a bottom panel
 anymore" decision) and NO desktop right-click menu (the OpenBox root menu was removed
 at the user's request; right-clicking the background does nothing). The ONLY shell
-surface is the Az'arch application menu -- a borderless C/GTK3 launcher centered on
+surface is the Azzio application menu -- a borderless C/GTK3 launcher centered on
 the screen, opened by the Super key. Everything the old Plasma panel carried (launcher,
 power actions) lives in that menu.
 
@@ -32,7 +32,7 @@ Design constraints (match archiso/OpenBox/Calamares reality):
     (the root menu is removed). See libraries/packages/packages.x86_64.
   * Calamares MUST run privileged. The live medium has passwordless-sudo `main`
     and passwordless root, so the launch stays `sudo -E calamares` via the tiny
-    /usr/local/bin/azarch-install wrapper the autostart runs.
+    /usr/local/bin/azzio-install wrapper the autostart runs.
   * NO cyan/black flash: ~/.xinitrc sets the X root to the SAME wallpaper image the
     session will show (feh --bg-fill) BEFORE OpenBox starts, and the autostart's own
     `feh --bg-fill` repaints the identical pixels -- so the first and only paint is
@@ -40,7 +40,7 @@ Design constraints (match archiso/OpenBox/Calamares reality):
   * The Super key opens the menu. OpenBox cannot bind a LONE modifier, so `xcape`
     turns a solo Super_L tap into the chord Super_L+Menu, which rc.xml binds to the
     menu launcher (Super still works as a normal modifier for every other bind).
-  * The two azarch wallpapers ("years"/"decades") are shipped under
+  * The two azzio wallpapers ("years"/"decades") are shipped under
     /usr/share/wallpapers as plain images; "years" is the default feh paints. Baked
     into /etc/skel too so a Calamares-created user inherits the same session.
   * startx-from-tty replaces graphical.target: _link_services needs no
@@ -74,15 +74,15 @@ WALLPAPER_ASSET = "wallpapers/years.png"
 
 def _feh_wallpaper_line() -> str:
     """A POSIX-sh snippet that paints the wallpaper with feh, honouring the per-user pointer
-    `azarch wallpaper` writes: read the pointer file; if it names an existing file use it,
+    `azzio wallpaper` writes: read the pointer file; if it names an existing file use it,
     otherwise fall back to the shipped "years" default. Shared by ~/.xinitrc and the OpenBox
     autostart so the pre-paint (no-flash) and the session repaint choose the SAME image, and
-    both follow an `azarch wallpaper` choice. `$HOME` (the SHELL variable) is used so the
+    both follow an `azzio wallpaper` choice. `$HOME` (the SHELL variable) is used so the
     same line works for any user that inherited the config via /etc/skel."""
     # NB: the pointer path is expressed with $HOME so it resolves per-user; the default is
     # the fixed shipped path. Guard on feh existing so a missing tool never breaks startup.
     return (
-        f'_azwp="$(cat "$HOME/.config/azarch/wallpaper" 2>/dev/null)"\n'
+        f'_azwp="$(cat "$HOME/.config/azzio/wallpaper" 2>/dev/null)"\n'
         f'[ -n "$_azwp" ] && [ -f "$_azwp" ] || _azwp=\'{WALLPAPER_IMAGE_FILE}\'\n'
         f'[ -x /usr/bin/feh ] && feh --no-fehbg --bg-fill "$_azwp"'
     )
@@ -102,7 +102,7 @@ def wallpaper_metadata_json(wp_id: str) -> str:
         f'        "Name": "{wp_id}",\n'
         '        "License": "CC-BY-SA-4.0",\n'
         '        "Authors": [\n'
-        '            { "Name": "Az\'arch", "Email": "" }\n'
+        '            { "Name": "Azzio", "Email": "" }\n'
         "        ]\n"
         "    }\n"
         "}\n"
@@ -111,15 +111,15 @@ def wallpaper_metadata_json(wp_id: str) -> str:
 
 # The one privileged launch path shared by the autostart + the OpenBox root menu +
 # a menu launcher.
-INSTALL_WRAPPER_PATH = "/usr/local/bin/azarch-install"
+INSTALL_WRAPPER_PATH = "/usr/local/bin/azzio-install"
 
 # The scripted (terminal) installer the CLI/SSH path runs, baked into the live ISO under
-# the azarch payload dir (/root/azarch) alongside chroot-setup.sh + packages.x86_64 + the
-# offline repo it pacstraps from. `azarch-install --cli` execs it via sudo. It is the SAME
+# the azzio payload dir (/root/azzio) alongside chroot-setup.sh + packages.x86_64 + the
+# offline repo it pacstraps from. `azzio-install --cli` execs it via sudo. It is the SAME
 # partition/pacstrap/chroot-setup pipeline as the first-boot installer, authored in
 # libraries/installer.installer_sh, so a headless SSH install produces the same system a
 # GUI Calamares install would.
-INSTALL_CLI_SCRIPT_PATH = "/root/azarch/azarch-install-cli.sh"
+INSTALL_CLI_SCRIPT_PATH = "/root/azzio/azzio-install-cli.sh"
 
 # The Calamares installer window's WM_CLASS. VERIFIED with `xprop WM_CLASS` on the running
 # installer in the live VM: BOTH fields are the lowercase "calamares" --
@@ -167,24 +167,24 @@ RESTORED_WINDOW_HEIGHT = 750       # 1200x750 == 16:10, unmistakably wider than 
 DEFAULT_RESOLUTION = "1920x1080"
 
 # The system-wide application-menu launcher for the installer. Present on the LIVE medium
-# so the installer can be reopened from the Az'arch menu; REMOVED from the installed system
+# so the installer can be reopened from the Azzio menu; REMOVED from the installed system
 # by the Calamares cleanup step (calamares_shellprocess) so the installer does not appear in
 # the menu post-installation (calamares itself is also try_removed). Named here so the PLAN
 # entry that ships it and the shellprocess step that deletes it cannot drift.
-INSTALL_MENU_DESKTOP_PATH = "/usr/share/applications/azarch-install.desktop"
+INSTALL_MENU_DESKTOP_PATH = "/usr/share/applications/azzio-install.desktop"
 
-# Installer launcher icon. The Az'arch icon is standardized as a SCALABLE VECTOR,
-# assets/icons/azarch.svg (the "Az'" wordmark on the dark app tile), living under
+# Installer launcher icon. The Azzio icon is standardized as a SCALABLE VECTOR,
+# assets/icons/azzio.svg (the "Az'" wordmark on the dark app tile), living under
 # assets/icons/ alongside kitty.svg -- the single place icons live, and the same
 # vector-master convention kitty follows. compiler.py copies that SVG to the hicolor
 # SCALABLE apps dir (the master the icon loader rasterizes) AND rasterizes it to PNGs at
 # /usr/share/pixmaps and the hicolor 256x256 apps dir, so the Desktop launcher and the
-# application-menu entry (Icon=azarch-installer) resolve it regardless of which path/size
+# application-menu entry (Icon=azzio-installer) resolve it regardless of which path/size
 # the icon loader consults. It is ALSO the Calamares window icon (branding.desc
 # productIcon, a rasterized PNG QIcon can load), so the OpenBox titlebar shows it -- see
 # packages/calamares/calamares.py.
-INSTALLER_ICON_ASSET = "icons/azarch.svg"
-INSTALLER_ICON_NAME = "azarch-installer"
+INSTALLER_ICON_ASSET = "icons/azzio.svg"
+INSTALLER_ICON_NAME = "azzio-installer"
 INSTALLER_ICON_PIXMAP = f"/usr/share/pixmaps/{INSTALLER_ICON_NAME}.png"
 INSTALLER_ICON_HICOLOR = (
     f"/usr/share/icons/hicolor/256x256/apps/{INSTALLER_ICON_NAME}.png"
@@ -203,37 +203,37 @@ HOME = "/home/main"
 # uid:gid for the live user tree (autologin group gid 998).
 HOME_OWNER = (1000, 998)
 
-# The per-user wallpaper POINTER file `azarch wallpaper` writes (packages/azarch/wallpaper.py):
+# The per-user wallpaper POINTER file `azzio wallpaper` writes (packages/azzio/wallpaper.py):
 # a one-line file holding the chosen image's absolute path. The session's wallpaper step
 # (_feh_wallpaper_line, used by ~/.xinitrc + the OpenBox autostart) reads it and paints that
 # image if it exists, else falls back to the "years" default -- so a fresh user gets "years"
-# while `azarch wallpaper --decades.png` sticks across a re-login. Under ~/.config
+# while `azzio wallpaper --decades.png` sticks across a re-login. Under ~/.config
 # (XDG_CONFIG_HOME the session exports). Kept in lock-step with the command line interface's _state_file() (a
 # test pins the two). The session reads it via the $HOME shell variable (per-user via skel).
-WALLPAPER_POINTER_FILE = f"{HOME}/.config/azarch/wallpaper"
+WALLPAPER_POINTER_FILE = f"{HOME}/.config/azzio/wallpaper"
 
 
 # The live Thunar sidebar sync helper, launched (with --watch) from the OpenBox autostart so
 # additions to the home directory show up in Thunar's shortcuts pane at runtime (PROMPT). Kept
 # in lock-step with packages/thunar/live_sidebar.SYNC_SCRIPT_DEST (a test pins them equal);
 # this constant is the single name the autostart refers to it by, held here to avoid importing
-# the thunar package into openbox (mirrors how AZARCH_OSD_SYSTEM_PATH is handled).
-THUNAR_SIDEBAR_SYNC = "/usr/local/lib/azarch/azarch-sidebar-sync"
+# the thunar package into openbox (mirrors how AZZIO_OSD_SYSTEM_PATH is handled).
+THUNAR_SIDEBAR_SYNC = "/usr/local/lib/azzio/azzio-sidebar-sync"
 
 
 # --- Application menu wiring (single source of truth in application_menu.py) --
 # OUR menu is the whole shell now. It ships as a resident daemon (built once, kept
 # hidden) so opening it is instant; the Super key and the OpenBox root menu both run
-# the launcher (/usr/local/bin/azarch-application-menu) which signals that daemon.
+# the launcher (/usr/local/bin/azzio-application-menu) which signals that daemon.
 from packages.application_menu import application_menu as _app_menu  # noqa: E402  (the menu is OUR package)
 
 MENU_LAUNCHER = _app_menu.MENU_LAUNCHER_SYSTEM_PATH
 MENU_DAEMON_BIN = _app_menu.MENU_DAEMON_BIN_SYSTEM_PATH
 
-# The Az'arch window switcher (alt-tab): OUR replacement for OpenBox's built-in
+# The Azzio window switcher (alt-tab): OUR replacement for OpenBox's built-in
 # NextWindow list -- a horizontal, Windows-like overlay of LIVE window thumbnails. Also a
 # resident C/GTK3 daemon (built once, kept hidden); rc.xml binds A-Tab/A-S-Tab to the
-# launcher (/usr/local/bin/azarch-window-switcher --next/--prev) which signals it.
+# launcher (/usr/local/bin/azzio-window-switcher --next/--prev) which signals it.
 from packages.window_switcher import window_switcher as _switcher  # noqa: E402  (the switcher is OUR package)
 
 SWITCHER_LAUNCHER = _switcher.SWITCHER_LAUNCHER_SYSTEM_PATH
@@ -258,7 +258,7 @@ SWITCHER_DAEMON_BIN = _switcher.SWITCHER_DAEMON_BIN_SYSTEM_PATH
 # Everything else is picom's plain default (a bare vsync'd compositor -- exactly what the
 # switcher's XComposite capture needs, no eye-candy). Root-owned system path so both the live
 # and installed sessions read the same file (the autostart is shared).
-PICOM_CONFIG_PATH = "/etc/xdg/azarch-picom.conf"
+PICOM_CONFIG_PATH = "/etc/xdg/azzio-picom.conf"
 
 
 def picom_conf() -> str:
@@ -273,8 +273,8 @@ def picom_conf() -> str:
     the packaged /etc/xdg/picom.conf (whose `fading = true` / `frame-opacity = 0.9` are the two
     reported bugs). Root-owned; shared by the live and installed autostart."""
     return (
-        "# Az'arch picom (compositor) config. Generated by packages/openbox (edit the\n"
-        "# Python, not this file). picom is REQUIRED by the Az'arch window switcher so its\n"
+        "# Azzio picom (compositor) config. Generated by packages/openbox (edit the\n"
+        "# Python, not this file). picom is REQUIRED by the Azzio window switcher so its\n"
         "# XComposite capture can read LIVE pixels of every window; this config keeps picom a\n"
         "# BARE compositor with NO eye-candy. The packaged /etc/xdg/picom.conf default turns on\n"
         "# window fading and a 0.9 frame opacity (a see-through titlebar) -- BOTH are disabled\n"
@@ -339,14 +339,14 @@ export DESKTOP_SESSION=openbox
 # Load the X resource DB (the GLOBAL SCALE backbone: Xft.dpi + Xcursor.size, derived from the
 # single scale in packages/openbox/scale). Every X client reads Xft.dpi as the screen DPI, so this
 # is what makes fractional scaling (e.g. 1.35) actually take effect on X11 (GDK_SCALE is
-# integer-only). `azarch display scale` rewrites ~/.Xresources and re-runs `xrdb -merge`.
+# integer-only). `azzio display scale` rewrites ~/.Xresources and re-runs `xrdb -merge`.
 [ -x /usr/bin/xrdb ] && [ -f "$HOME/.Xresources" ] && xrdb -merge "$HOME/.Xresources"
 
 # Paint the wallpaper onto the X root FIRST so the first visible frame is the
 # wallpaper, not a solid color. The OpenBox autostart repaints the same image moments
 # later (identical pixels -> no visible transition, no flash). feh is shipped in the
 # manifest; it owns the root pixmap under OpenBox (OpenBox draws no wallpaper itself).
-# The image honours the per-user `azarch wallpaper` pointer, falling back to "years".
+# The image honours the per-user `azzio wallpaper` pointer, falling back to "years".
 """ + _feh_wallpaper_line() + """
 
 # Replace this shell with the OpenBox X11 session; when OpenBox exits, X exits and
@@ -363,7 +363,7 @@ def bash_profile_startx() -> str:
     login $DISPLAY is set or $(tty) != /dev/tty1, so the guard is false and you get a
     normal shell -- important for rescue/maintenance use of the ISO."""
     return """\
-# ~/.bash_profile -- Az'arch live session bootstrap.
+# ~/.bash_profile -- Azzio live session bootstrap.
 # Source .bashrc for interactive niceties if present.
 [[ -f ~/.bashrc ]] && . ~/.bashrc
 
@@ -379,14 +379,14 @@ fi
 """
 
 
-# --- 2b. ~/.themes/Azarch/openbox-3/themerc (custom OpenBox theme) ----------
+# --- 2b. ~/.themes/Azzio/openbox-3/themerc (custom OpenBox theme) ----------
 # The window titlebar ("that cyan'ish colored bar") is drawn by the OpenBox THEME, not
 # rc.xml. Stock Clearlooks makes a THIN bar: its title height is font(8pt) + a tiny
 # padding.height(2) top and bottom, and OpenBox sizes the min/max/close BUTTONS to that
 # same label height -- so the whole bar (and its buttons) come out small.
 #
 # We want the bar 1.5x the stock height (an earlier round DOUBLED it, which overshot).
-# We ship our own theme, "Azarch": a byte-for-byte copy of the stock Clearlooks
+# We ship our own theme, "Azzio": a byte-for-byte copy of the stock Clearlooks
 # openbox-3 themerc with only the size-driving fields grown, landing halfway between
 # stock and the (too-tall) doubled values. It is a fresh theme dir (not an edit of the
 # packaged Clearlooks) so the airootfs overlay owns it and a package update to openbox
@@ -398,7 +398,7 @@ fi
 # THE BOTTOM "THIN WHITE BAR": OpenBox draws a HANDLE -- a full-width strip along the
 # BOTTOM edge of every decorated window -- whose height is window.handle.width and whose
 # fill is window.*.handle.bg.color (#eaebec, a near-white). Stock Clearlooks makes it a
-# few px tall; on Az'arch it read as an "unnecessary thin white bar under a window". The
+# few px tall; on Azzio it read as an "unnecessary thin white bar under a window". The
 # user asked for it gone, so window.handle.width is set to 0: a zero-height handle draws
 # NOTHING (the near-white strip disappears). Resizing is UNAFFECTED -- the rc.xml Bottom /
 # Left / Right / corner mouse contexts resize on the window's invisible border edges
@@ -409,19 +409,19 @@ fi
 # OpenBox draws bigger buttons, so the min/max/close targets grow with the bar.
 # Everything else (the #8CB0DC cyan gradient, the button gradients/hover/pressed states,
 # the menu/osd styling) is copied verbatim so the look is identical, only 1.5x larger.
-# Az'arch ships TWO OpenBox titlebar themes -- a LIGHT one ("Azarch", the classic
-# Clearlooks-cyan look) and a DARK one ("Azarch-Dark", the default). Both are generated
+# Azzio ships TWO OpenBox titlebar themes -- a LIGHT one ("Azzio", the classic
+# Clearlooks-cyan look) and a DARK one ("Azzio-Dark", the default). Both are generated
 # from openbox_theme_rc(dark) below: identical GEOMETRY (the ~1.5x titlebar + no bottom
 # handle), only the colour palette differs. rc.xml's <theme><name> selects one, and
-# `azarch theme --dark|--white` rewrites that name + `openbox --reconfigure`s. Dark is the
-# out-of-the-box default (rc.xml ships <name>Azarch-Dark</name>).
-OPENBOX_THEME_NAME = "Azarch"            # the LIGHT theme name (classic Clearlooks-cyan)
-OPENBOX_THEME_NAME_DARK = "Azarch-Dark"  # the DARK theme name (the default)
+# `azzio theme --dark|--white` rewrites that name + `openbox --reconfigure`s. Dark is the
+# out-of-the-box default (rc.xml ships <name>Azzio-Dark</name>).
+OPENBOX_THEME_NAME = "Azzio"            # the LIGHT theme name (classic Clearlooks-cyan)
+OPENBOX_THEME_NAME_DARK = "Azzio-Dark"  # the DARK theme name (the default)
 OPENBOX_THEME_DIR = f"{HOME}/.themes/{OPENBOX_THEME_NAME}/openbox-3"
 OPENBOX_THEME_THEMERC = f"{OPENBOX_THEME_DIR}/themerc"
 OPENBOX_THEME_DIR_DARK = f"{HOME}/.themes/{OPENBOX_THEME_NAME_DARK}/openbox-3"
 OPENBOX_THEME_THEMERC_DARK = f"{OPENBOX_THEME_DIR_DARK}/themerc"
-# The theme OpenBox uses out of the box (dark is the Az'arch default). rc.xml names it.
+# The theme OpenBox uses out of the box (dark is the Azzio default). rc.xml names it.
 OPENBOX_THEME_DEFAULT = OPENBOX_THEME_NAME_DARK
 
 # The two padding fields (in px) that set the titlebar height, and the resize-handle
@@ -437,7 +437,7 @@ OPENBOX_THEME_HANDLE_WIDTH = 0      # stock Clearlooks: 3 -> 0 removes the botto
 
 # The LIGHT palette: the stock Clearlooks colours (unchanged -- this is the classic cyan
 # "white theme" look). The DARK palette: a coherent dark grey/blue set matching the
-# Az'arch application menu (bg #2a2e32 / surface #31363b / text #eff0f1) with the same
+# Azzio application menu (bg #2a2e32 / surface #31363b / text #eff0f1) with the same
 # Breeze highlight blue (#3daee9) for the active menu item, so the whole shell reads dark.
 # openbox_theme_rc(dark) picks one; every field below has a light and a dark value.
 _OB_LIGHT = {
@@ -531,7 +531,7 @@ _OB_DARK = {
 
 
 def openbox_theme_rc(dark: bool = True) -> str:
-    """One Az'arch OpenBox themerc -- the DARK palette (default) when dark=True, else the
+    """One Azzio OpenBox themerc -- the DARK palette (default) when dark=True, else the
     LIGHT (classic Clearlooks-cyan) palette.
 
     Both share the stock Clearlooks GEOMETRY with the titlebar-height fields grown
@@ -543,14 +543,14 @@ def openbox_theme_rc(dark: bool = True) -> str:
 
     Shipped to ~/.themes/<name>/openbox-3/themerc (a user theme search path OpenBox scans
     alongside /usr/share/themes) and mirrored into /etc/skel so the installed user inherits
-    both themes. rc.xml names the dark one by default; `azarch theme` swaps between them."""
+    both themes. rc.xml names the dark one by default; `azzio theme` swaps between them."""
     c = _OB_DARK if dark else _OB_LIGHT
     variant = "DARK (the default)" if dark else "LIGHT (classic Clearlooks-cyan)"
     return f"""\
-# Az'arch OpenBox theme -- {variant}. ~1.5x titlebar, NO bottom handle.
+# Azzio OpenBox theme -- {variant}. ~1.5x titlebar, NO bottom handle.
 # Generated by packages.openbox (edit the Python, not this file). Geometry matches stock
 # Clearlooks (padding.height/width grown; window.handle.width 0 removes the bottom bar);
-# only the colour palette differs between the dark and light Az'arch themes. The larger
+# only the colour palette differs between the dark and light Azzio themes. The larger
 # title FONT is set in rc.xml's <theme>.
 
 # Fonts (halos)
@@ -704,41 +704,41 @@ osd.unhilight.bg.colorTo: {c["osd_unhi_bg_to"]}
 
 
 def openbox_theme_rc_dark() -> str:
-    """PLAN builder for the DARK Az'arch OpenBox theme (the default)."""
+    """PLAN builder for the DARK Azzio OpenBox theme (the default)."""
     return openbox_theme_rc(dark=True)
 
 
 def openbox_theme_rc_light() -> str:
-    """PLAN builder for the LIGHT Az'arch OpenBox theme (classic Clearlooks-cyan)."""
+    """PLAN builder for the LIGHT Azzio OpenBox theme (classic Clearlooks-cyan)."""
     return openbox_theme_rc(dark=False)
 
 
 # --- 2c. System theme DEFAULT: the freedesktop / GTK dark standard ----------
-# Az'arch ships DARK as the default, using the EXISTING freedesktop / GTK standard so any
+# Azzio ships DARK as the default, using the EXISTING freedesktop / GTK standard so any
 # downloaded app that honours it is configured for free. Three layers, all defaulting dark:
 #   * The GTK theme files (gtk-3.0/gtk-4.0 settings.ini + ~/.gtkrc-2.0): Adwaita-dark +
 #     gtk-application-prefer-dark-theme=1. GTK2/3/4 apps read these at startup. HOME files
-#     (skel-mirrored). These are the DEFAULT; `azarch theme --white` rewrites them to light.
+#     (skel-mirrored). These are the DEFAULT; `azzio theme --white` rewrites them to light.
 #   * The dconf SYSTEM default for org.gnome.desktop.interface color-scheme='prefer-dark'
 #     (the freedesktop "appearance" signal GTK4/libadwaita/portal apps read). Shipped as a
 #     /etc/dconf keyfile + profile and compiled by `dconf update` in the customize hook
-#     (post-pacstrap, where dconf exists). A per-user `gsettings set` from `azarch theme`
+#     (post-pacstrap, where dconf exists). A per-user `gsettings set` from `azzio theme`
 #     OVERRIDES this system default and persists, so a user who picks white keeps white.
-# These builders MUST stay byte-for-byte in lock-step with the azarch command line interface's theme.py dark
+# These builders MUST stay byte-for-byte in lock-step with the azzio command line interface's theme.py dark
 # output (a test bundles the command line interface and asserts equality) so the shipped default and a later
-# `azarch theme --dark` produce identical files.
+# `azzio theme --dark` produce identical files.
 GTK3_SETTINGS_PATH = f"{HOME}/.config/gtk-3.0/settings.ini"
 GTK4_SETTINGS_PATH = f"{HOME}/.config/gtk-4.0/settings.ini"
 GTKRC2_PATH = f"{HOME}/.gtkrc-2.0"
 # The dconf system-default keyfile + profile + the marker the customize hook greps for.
-DCONF_THEME_KEYFILE_PATH = "/etc/dconf/db/local.d/00-azarch-theme"
+DCONF_THEME_KEYFILE_PATH = "/etc/dconf/db/local.d/00-azzio-theme"
 DCONF_PROFILE_USER_PATH = "/etc/dconf/profile/user"
 
 
 def gtk3_settings_ini_default() -> str:
     """~/.config/gtk-3.0/settings.ini shipped default (DARK). Matches theme.gtk3_settings_ini(True)."""
     return (
-        "# Az'arch GTK3 theme. Generated by `azarch theme` (edit via the command, not\n"
+        "# Azzio GTK3 theme. Generated by `azzio theme` (edit via the command, not\n"
         "# this file). gtk-application-prefer-dark-theme is the GTK3 dark switch.\n"
         "[Settings]\n"
         "gtk-theme-name=Adwaita-dark\n"
@@ -755,7 +755,7 @@ def gtk3_settings_ini_default() -> str:
 def gtk4_settings_ini_default() -> str:
     """~/.config/gtk-4.0/settings.ini shipped default (DARK). Matches theme.gtk4_settings_ini(True)."""
     return (
-        "# Az'arch GTK4 theme. Generated by `azarch theme`.\n"
+        "# Azzio GTK4 theme. Generated by `azzio theme`.\n"
         "[Settings]\n"
         "gtk-theme-name=Adwaita-dark\n"
         "gtk-application-prefer-dark-theme=1\n"
@@ -766,20 +766,20 @@ def gtk4_settings_ini_default() -> str:
 def gtkrc2_default() -> str:
     """~/.gtkrc-2.0 shipped default (DARK). Matches theme.gtkrc2(True)."""
     return (
-        "# Az'arch GTK2 theme. Generated by `azarch theme`.\n"
+        "# Azzio GTK2 theme. Generated by `azzio theme`.\n"
         'gtk-theme-name="Adwaita-dark"\n'
         'gtk-icon-theme-name="Adwaita"\n'
     )
 
 
 def dconf_theme_keyfile() -> str:
-    """/etc/dconf/db/local.d/00-azarch-theme -- the dconf SYSTEM default that makes the
+    """/etc/dconf/db/local.d/00-azzio-theme -- the dconf SYSTEM default that makes the
     freedesktop color-scheme 'prefer-dark' for every user out of the box. A per-user
-    `gsettings set` (what `azarch theme` runs) overrides it and persists. Compiled into the
+    `gsettings set` (what `azzio theme` runs) overrides it and persists. Compiled into the
     binary db by `dconf update` in the customize hook (post-pacstrap, dconf present)."""
     return (
-        "# Az'arch dark theme -- freedesktop color-scheme system default. Compiled by\n"
-        "# `dconf update`. A per-user `gsettings set` (azarch theme) overrides this.\n"
+        "# Azzio dark theme -- freedesktop color-scheme system default. Compiled by\n"
+        "# `dconf update`. A per-user `gsettings set` (azzio theme) overrides this.\n"
         "[org/gnome/desktop/interface]\n"
         "color-scheme='prefer-dark'\n"
         "gtk-theme='Adwaita-dark'\n"
@@ -790,7 +790,7 @@ def dconf_profile_user() -> str:
     """/etc/dconf/profile/user -- the dconf profile so the `local` system db (above) backs
     the user db. Without this profile, the system default keyfile is never consulted."""
     return (
-        "# Az'arch dconf profile: user db on top, the system `local` db (color-scheme\n"
+        "# Azzio dconf profile: user db on top, the system `local` db (color-scheme\n"
         "# default) beneath it. Generated by packages.openbox.\n"
         "user-db:user\n"
         "system-db:local\n"
@@ -801,7 +801,7 @@ def dconf_profile_user() -> str:
 # The single scale source is packages/openbox/scale; here it lands in the standard app-agnostic
 # channels so every conformant app obeys it: ~/.Xresources (Xft.dpi + Xcursor.size, loaded by
 # `xrdb` in ~/.xinitrc), gtk-xft-dpi in the GTK settings.ini (with the theme, above), and the
-# session env (GDK_SCALE + QT_* in the openbox environment). `azarch display scale` rewrites
+# session env (GDK_SCALE + QT_* in the openbox environment). `azzio display scale` rewrites
 # these from a chosen factor and re-applies live.
 XRESOURCES_PATH = f"{HOME}/.Xresources"
 
@@ -810,12 +810,12 @@ def xresources() -> str:
     """~/.Xresources -- the X resource DB `xrdb` loads at session start. Carries Xft.dpi (the
     screen DPI every X client reads) and Xcursor.size, both DERIVED from the single scale
     (packages/openbox/scale). This is the fractional-scale backbone on X11 (GDK_SCALE is
-    integer-only). `azarch display scale` rewrites the two values and re-runs `xrdb -merge`."""
+    integer-only). `azzio display scale` rewrites the two values and re-runs `xrdb -merge`."""
     from . import scale
     return (
-        "! Az'arch X resources. Generated by packages/openbox (edit the Python, not this\n"
+        "! Azzio X resources. Generated by packages/openbox (edit the Python, not this\n"
         "! file). Xft.dpi is the GLOBAL SCALE backbone (round(96*scale)) every X client reads;\n"
-        "! Xcursor.size scales the cursor with it. `azarch display scale` rewrites these.\n"
+        "! Xcursor.size scales the cursor with it. `azzio display scale` rewrites these.\n"
         f"Xft.dpi: {scale.xft_dpi()}\n"
         f"Xcursor.size: {scale.xcursor_size()}\n"
     )
@@ -844,8 +844,8 @@ TITLE_FONT_SIZE = _scale.pt(_scale.OPENBOX_TITLE_FONT_STOCK)
 def openbox_rc_xml() -> str:
     """OpenBox rc.xml: window-manager behaviour + keybinds for a panel-less session.
 
-    Uses the Az'arch theme (Clearlooks with a ~1.5x titlebar, see openbox_theme_rc)
-    plus a larger title font, and wires the Az'arch bits:
+    Uses the Azzio theme (Clearlooks with a ~1.5x titlebar, see openbox_theme_rc)
+    plus a larger title font, and wires the Azzio bits:
       * W-Menu / Menu -> run the application-menu launcher (the Super key, via xcape).
       * A small, sensible keybind set (close window, alt-tab, workspace switch, a
         terminal on W-Return) so the session is usable without a panel.
@@ -861,13 +861,13 @@ def openbox_rc_xml() -> str:
       * NO desktop right/middle-click menu: the "Root" mouse context is intentionally
         EMPTY so right-clicking the background does nothing (the OpenBox root menu was
         removed per the user's request; the Super key remains the only way to the menu).
-    There is NO dock/panel configuration -- the Az'arch menu is the only shell.
+    There is NO dock/panel configuration -- the Azzio menu is the only shell.
 
     Placed at ~/.config/openbox/rc.xml (and /etc/skel) so the live and installed users
     share it. OpenBox re-reads it on `openbox --reconfigure`."""
     return f"""\
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Az'arch OpenBox configuration. Panel-less: the Az'arch application menu (Super key)
+<!-- Azzio OpenBox configuration. Panel-less: the Azzio application menu (Super key)
      is the only shell surface, and the desktop right-click menu is disabled. Generated
      by packages.openbox (edit the Python, not this file). -->
 <openbox_config xmlns="http://openbox.org/3.4/rc">
@@ -890,9 +890,9 @@ def openbox_rc_xml() -> str:
     <primaryMonitor>1</primaryMonitor>
   </placement>
   <theme>
-    <!-- The Az'arch theme with a ~1.5x-height titlebar (openbox_theme_rc, shipped to
+    <!-- The Azzio theme with a ~1.5x-height titlebar (openbox_theme_rc, shipped to
          ~/.themes/{OPENBOX_THEME_NAME} and ~/.themes/{OPENBOX_THEME_NAME_DARK}). DARK is
-         the default; `azarch theme` (white / dark) rewrites this name element to
+         the default; `azzio theme` (white / dark) rewrites this name element to
          "{OPENBOX_THEME_NAME}" or "{OPENBOX_THEME_NAME_DARK}". titleLayout NLIMC = icon,
          label, iconify, maximize, close. The leading `N` (icon) is kept ONLY to show the
          window's branding icon (e.g. the Calamares "Az'" tile, productIcon) on the left of
@@ -919,7 +919,7 @@ def openbox_rc_xml() -> str:
       <slant>normal</slant>
     </font>
   </theme>
-  <!-- EXACTLY ONE desktop. Az'arch has a single desktop and no workspace switching: the
+  <!-- EXACTLY ONE desktop. Azzio has a single desktop and no workspace switching: the
        user asked that there not be multiple desktops "to begin with" (they had noticed the
        client-menu's "Send to desktop" listing two live desktops). <number>1</number> means
        OpenBox exposes a single workspace, so the client-menu shows no "Send to desktop"
@@ -939,7 +939,7 @@ def openbox_rc_xml() -> str:
   </resize>
   <keyboard>
     <!-- The Super key: xcape emits Super_L+Menu on a lone Super tap; bind that chord
-         (and the bare Menu/Apps key) to the Az'arch application-menu launcher. -->
+         (and the bare Menu/Apps key) to the Azzio application-menu launcher. -->
     <keybind key="W-{SUPER_MENU_KEYSYM}">
       <action name="Execute">
         <command>{MENU_LAUNCHER}</command>
@@ -960,7 +960,7 @@ def openbox_rc_xml() -> str:
     <keybind key="A-F4">
       <action name="Close"/>
     </keybind>
-    <!-- Alt+Tab: the Az'arch window switcher (packages/window_switcher), which REPLACES
+    <!-- Alt+Tab: the Azzio window switcher (packages/window_switcher), which REPLACES
          OpenBox's built-in vertical icon list. A horizontal, Windows-like overlay of LIVE
          window thumbnails, ordered librewolf/kitty/hypervisor/thunar/alphabetical. The
          launcher signals the resident daemon (the next flag advances forward, prev
@@ -979,31 +979,31 @@ def openbox_rc_xml() -> str:
     <keybind key="W-d">
       <action name="ToggleShowDesktop"/>
     </keybind>
-    <!-- No C-A-Left/Right GoToDesktop binds: Az'arch has a SINGLE desktop (see <desktops>
+    <!-- No C-A-Left/Right GoToDesktop binds: Azzio has a SINGLE desktop (see <desktops>
          above), so there is no second workspace to switch to. -->
     <!-- W-d ToggleShowDesktop still minimises/restores everything on the one desktop. -->
-    <!-- FN media keys -> the `azarch` volume/brightness controls (7.5% steps, a centered
+    <!-- FN media keys -> the `azzio` volume/brightness controls (7.5% steps, a centered
          cyan on-screen bar). We bind the X "XF86" media KEYSYMS the keyboard emits, NOT a
          fixed FN+F2/F3, because that physical mapping DIFFERS per machine: on the user's PC
          keyboard FN+F2/F3 emit the AUDIO keysyms (volume), while on their laptop FN+F2/F3 emit
          the BRIGHTNESS keysyms (dim/brighten). Binding the keysyms means each machine's FN keys
          "just work" without us resolving the layout. Brightness is a LAPTOP-ONLY control, so
-         `azarch brightness` self-gates: on a PC (no backlight) these brightness binds harmlessly
+         `azzio brightness` self-gates: on a PC (no backlight) these brightness binds harmlessly
          do nothing, exactly as intended (a desktop has no screen backlight to dim). -->
     <keybind key="XF86AudioRaiseVolume">
-      <action name="Execute"><command>{AZARCH_BIN_PATH} volume up</command></action>
+      <action name="Execute"><command>{AZZIO_BIN_PATH} volume up</command></action>
     </keybind>
     <keybind key="XF86AudioLowerVolume">
-      <action name="Execute"><command>{AZARCH_BIN_PATH} volume down</command></action>
+      <action name="Execute"><command>{AZZIO_BIN_PATH} volume down</command></action>
     </keybind>
     <keybind key="XF86AudioMute">
-      <action name="Execute"><command>{AZARCH_BIN_PATH} volume mute</command></action>
+      <action name="Execute"><command>{AZZIO_BIN_PATH} volume mute</command></action>
     </keybind>
     <keybind key="XF86MonBrightnessUp">
-      <action name="Execute"><command>{AZARCH_BIN_PATH} brightness up</command></action>
+      <action name="Execute"><command>{AZZIO_BIN_PATH} brightness up</command></action>
     </keybind>
     <keybind key="XF86MonBrightnessDown">
-      <action name="Execute"><command>{AZARCH_BIN_PATH} brightness down</command></action>
+      <action name="Execute"><command>{AZZIO_BIN_PATH} brightness down</command></action>
     </keybind>
   </keyboard>
   <mouse>
@@ -1107,9 +1107,9 @@ def openbox_rc_xml() -> str:
         <y>center</y>
       </position>
     </application>
-    <!-- The Az'arch application menu is a borderless override-redirect Tk window; it
+    <!-- The Azzio application menu is a borderless override-redirect Tk window; it
          manages its own placement (centered) and needs no OpenBox decorations. -->
-    <application name="*azarch*menu*">
+    <application name="*azzio*menu*">
       <decor>no</decor>
     </application>
     <!-- The Calamares installer: open RESTORED-DOWN (NOT maximized) and CENTERED, so the live
@@ -1145,7 +1145,7 @@ def openbox_rc_xml() -> str:
 # The OpenBox ROOT menu (right/middle click on the desktop) was REMOVED per the user's
 # request ("remove the right click menu ... disable that menu completely"). rc.xml's
 # Root mouse context is now empty (no ShowMenu), so right-clicking the desktop does
-# nothing, and no menu.xml is emitted. The Az'arch application menu (Super key) remains
+# nothing, and no menu.xml is emitted. The Azzio application menu (Super key) remains
 # the only shell surface; its launcher, installer, and power actions live there.
 
 # --- 5. ~/.config/openbox/autostart -----------------------------------------
@@ -1210,8 +1210,8 @@ fi
 
 # 1. Wallpaper: repaint the same image ~/.xinitrc pre-painted (no flash; also covers a
 #    re-login where the X root pixmap was reset). feh owns the root pixmap on OpenBox. The
-#    image honours the per-user `azarch wallpaper` pointer, falling back to the "years"
-#    default -- so an `azarch wallpaper --decades.png` choice survives a re-login.
+#    image honours the per-user `azzio wallpaper` pointer, falling back to the "years"
+#    default -- so an `azzio wallpaper --decades.png` choice survives a re-login.
 {_feh_wallpaper_line()} &
 
 # 2. Super key -> application menu. OpenBox cannot bind a lone modifier, so xcape turns
@@ -1224,7 +1224,7 @@ fi
 command -v xcape >/dev/null 2>&1 && \\
     xcape -t 500 -e 'Super_L=Super_L|Menu' &
 
-# 3. Az'arch application-menu daemon: build the menu once and keep it hidden so the
+# 3. Azzio application-menu daemon: build the menu once and keep it hidden so the
 #    first Super press is instant (the C/GTK3 daemon, see application_menu/menu.c).
 [ -x '{MENU_DAEMON_BIN}' ] && \\
     setsid '{MENU_DAEMON_BIN}' >/dev/null 2>&1 < /dev/null &
@@ -1239,23 +1239,23 @@ command -v xcape >/dev/null 2>&1 && \\
 command -v picom >/dev/null 2>&1 && \\
     setsid picom --config {PICOM_CONFIG_PATH} >/dev/null 2>&1 < /dev/null &
 
-# 3b. Az'arch window-switcher daemon: build the alt-tab overlay once and keep it hidden so
+# 3b. Azzio window-switcher daemon: build the alt-tab overlay once and keep it hidden so
 #     the first Alt+Tab is instant (the C/GTK3 daemon, see packages/window_switcher). Bound
 #     to A-Tab/A-S-Tab in rc.xml via the launcher, which signals this daemon.
 [ -x '{SWITCHER_DAEMON_BIN}' ] && \\
     setsid '{SWITCHER_DAEMON_BIN}' >/dev/null 2>&1 < /dev/null &
 
 # 4. FN media keys, hold-to-drag: X autorepeat governs how fast HOLDING an FN volume/brightness
-#    key repeats (each repeat is one `azarch volume/brightness` step -> the OSD "fast drag").
+#    key repeats (each repeat is one `azzio volume/brightness` step -> the OSD "fast drag").
 #    The default ~660ms delay before repeats start feels sluggish when you just want to hold to
 #    ramp, so shorten the initial DELAY to 300ms and set a brisk RATE of 25/s. `xset r rate
 #    <delay> <rate>`; guarded so a missing xset never breaks the session.
 command -v xset >/dev/null 2>&1 && xset r rate 300 25 &
 
 # 5. Media defaults: seed the STARTING levels (50% volume, 100% brightness on a laptop) ONCE.
-#    `azarch media-init` keys off a per-user marker, so it applies the defaults on a fresh
+#    `azzio media-init` keys off a per-user marker, so it applies the defaults on a fresh
 #    machine but never clobbers a level the user has since chosen. Silent (no OSD), always rc 0.
-[ -x '{AZARCH_BIN_PATH}' ] && '{AZARCH_BIN_PATH}' media-init >/dev/null 2>&1 &
+[ -x '{AZZIO_BIN_PATH}' ] && '{AZZIO_BIN_PATH}' media-init >/dev/null 2>&1 &
 
 # 6. Live Thunar sidebar: keep ~/.config/gtk-3.0/bookmarks in sync with the ACTUAL home
 #    contents so anything the user adds to $HOME shows up in the shortcuts pane (PROMPT). The
@@ -1296,7 +1296,7 @@ def openbox_autostart() -> str:
     layouts = ",".join(KEYBOARD_LAYOUTS)
     return f"""\
 #!/bin/sh
-# ~/.config/openbox/autostart -- Az'arch OpenBox LIVE session startup (panel-less).
+# ~/.config/openbox/autostart -- Azzio OpenBox LIVE session startup (panel-less).
 # Run by openbox-session after the window manager is up. Keep every line guarded so a
 # missing tool never breaks the session. The Calamares install overwrites this with the
 # "installed" variant (no fixed keyboard, no installer) -- see calamares_shellprocess.py.
@@ -1310,7 +1310,7 @@ command -v setxkbmap >/dev/null 2>&1 && \\
     setxkbmap -layout '{layouts}' -option '{KEYBOARD_TOGGLE}' &
 
 # 7. LIVE-ONLY -- Calamares installer, once, a couple seconds in (Manjaro-style
-#    first-run). Launched via `--gui` -- azarch-install has no default action now, so the
+#    first-run). Launched via `--gui` -- azzio-install has no default action now, so the
 #    GUI mode must be named explicitly. The wrapper elevates via passwordless sudo on the
 #    live medium. Stripped from the installed autostart so an installed system never
 #    re-opens the installer.
@@ -1318,13 +1318,13 @@ if [ -x '{INSTALL_WRAPPER_PATH}' ]; then
     ( sleep 2; '{INSTALL_WRAPPER_PATH}' --gui ) &
 fi
 
-# 8. LIVE-ONLY -- first-run SECURITY NOTICE (once). `azarch security-notice` explains that
+# 8. LIVE-ONLY -- first-run SECURITY NOTICE (once). `azzio security-notice` explains that
 #    the base desktop ships with password login + ssh OFF, and that enabling either exposes
 #    the box over the network. It SELF-GATES: it stays quiet on the ssh variant (ssh was
 #    chosen deliberately) and once a real login password is set, and self-silences after the
 #    first show. Stripped from the installed autostart (the installed system has a real
 #    user password, so the warning does not apply there).
-command -v azarch >/dev/null 2>&1 && ( sleep 4; azarch security-notice ) &
+command -v azzio >/dev/null 2>&1 && ( sleep 4; azzio security-notice ) &
 """
 
 
@@ -1339,7 +1339,7 @@ def openbox_autostart_installed() -> str:
     into place inside the target chroot without needing any `$`-expansion."""
     return f"""\
 #!/bin/sh
-# ~/.config/openbox/autostart -- Az'arch OpenBox INSTALLED session startup (panel-less).
+# ~/.config/openbox/autostart -- Azzio OpenBox INSTALLED session startup (panel-less).
 # Written by the Calamares install (calamares_shellprocess.py) over the live autostart:
 # the shared wallpaper/xcape/menu-daemon block only -- NO fixed us,il keyboard (the
 # region keyboard in /etc/X11/xorg.conf.d governs) and NO first-run installer launch.
@@ -1350,7 +1350,7 @@ def openbox_autostart_installed() -> str:
 
 # Where the "installed" autostart is staged on the ISO so the Calamares shellprocess can
 # copy it over the target's inherited live autostart (home + skel) inside the chroot.
-INSTALLED_AUTOSTART_STAGING_PATH = "/usr/local/share/azarch/openbox-autostart-installed"
+INSTALLED_AUTOSTART_STAGING_PATH = "/usr/local/share/azzio/openbox-autostart-installed"
 
 
 def openbox_environment() -> str:
@@ -1367,8 +1367,8 @@ def openbox_environment() -> str:
     LIGHT Fusion palette regardless of the freedesktop color-scheme. The Qt `gtk3`
     platform theme plugin (libqgtk3.so, shipped with qt6-base) makes those Qt apps read
     the GTK theme instead -- so they follow the SAME Adwaita-dark/Adwaita + prefer-dark
-    signal `azarch theme` sets for GTK, and switch dark<->light with the rest of the
-    session. This is what makes Dolphin (and any downloaded Qt app) obey `azarch theme`."""
+    signal `azzio theme` sets for GTK, and switch dark<->light with the rest of the
+    session. This is what makes Dolphin (and any downloaded Qt app) obey `azzio theme`."""
     from . import scale
     return f"""\
 # ~/.config/openbox/environment -- sourced by openbox-session before autostart.
@@ -1377,14 +1377,14 @@ export XDG_CACHE_HOME="${{XDG_CACHE_HOME:-$HOME/.cache}}"
 export XDG_CURRENT_DESKTOP=openbox
 # Bridge Qt/KF6 apps (Dolphin, Calamares, any downloaded Qt app) onto the system theme:
 # the Qt gtk3 platform theme makes them follow the GTK theme (Adwaita-dark/Adwaita) that
-# `azarch theme` sets, so they honour dark/white like everything else. Without this Qt
+# `azzio theme` sets, so they honour dark/white like everything else. Without this Qt
 # apps render light regardless of the freedesktop color-scheme (no KDE/portal stack here).
 export QT_QPA_PLATFORMTHEME=gtk3
 # GLOBAL SCALE session env (the integer + Qt parts; the fractional part rides on Xft.dpi /
 # gtk-xft-dpi -- see packages/openbox/scale). GDK_SCALE stays 1 (integer-only; 1.35 is fractional).
 # GDK_DPI_SCALE is deliberately UNSET (it would be a SECOND font multiplier on top of
 # gtk-xft-dpi and double-scale). Qt-over-gtk3 gets an explicit fractional factor (auto-detect
-# off so it does not fight it). `azarch display scale` rewrites these values.
+# off so it does not fight it). `azzio display scale` rewrites these values.
 export GDK_SCALE={scale.gdk_scale()}
 export QT_AUTO_SCREEN_SCALE_FACTOR=0
 export QT_ENABLE_HIGHDPI_SCALING=1
@@ -1402,21 +1402,21 @@ def az_menu_usage_seed_json() -> str:
     return _app_menu.usage_seed_json()
 
 
-# --- 7. /usr/share/applications/azarch-install.desktop ----------------------
+# --- 7. /usr/share/applications/azzio-install.desktop ----------------------
 def install_menu_desktop() -> str:
     """A launcher in the application menu so the installer can be re-opened after it is
     closed, sharing the same privileged wrapper. Lands in /usr/share/applications
-    (system-wide), so it is not a per-user file and is picked up by the Az'arch menu's
+    (system-wide), so it is not a per-user file and is picked up by the Azzio menu's
     application scan.
 
-    Exec names `--gui` explicitly: azarch-install has no default action, so a bare invocation
+    Exec names `--gui` explicitly: azzio-install has no default action, so a bare invocation
     would only print help. This entry re-opens the Calamares GUI installer."""
     return """\
 [Desktop Entry]
 Type=Application
-Name=Az'arch Linux Installer
+Name=Azzio Linux Installer
 GenericName=System Installer
-Comment=Install Az'arch Linux to disk
+Comment=Install Azzio Linux to disk
 Exec=""" + INSTALL_WRAPPER_PATH + """ --gui
 Icon=""" + INSTALLER_ICON_NAME + """
 Terminal=false
@@ -1425,25 +1425,25 @@ Keywords=install;calamares;setup;
 """
 
 
-# --- 7b. ~/Desktop/azarch-install.desktop (live-session Desktop launcher) ----
+# --- 7b. ~/Desktop/azzio-install.desktop (live-session Desktop launcher) ----
 def desktop_installer_launcher() -> str:
-    """A double-clickable "Az'arch Linux Installer" launcher that sits ON the live
+    """A double-clickable "Azzio Linux Installer" launcher that sits ON the live
     Desktop, so the installer is one obvious icon away even after the autostart window
     is closed. Uses the same privileged wrapper and the "Az'" app icon.
 
     Ships EXECUTABLE (PLAN mode 0o755 + a profile.py FILE_PERMISSIONS pin) so any file
     manager that honours the exec bit runs it without a "not trusted" prompt -- archiso
     normalizes overlay modes to 0644 in the squashfs unless a path is pinned (the same
-    gotcha documented for /usr/local/bin/azarch-install), so the pin is required.
+    gotcha documented for /usr/local/bin/azzio-install), so the pin is required.
 
-    Exec names `--gui` explicitly: azarch-install has no default action, so a bare
+    Exec names `--gui` explicitly: azzio-install has no default action, so a bare
     invocation would only print help. Double-clicking this opens the Calamares GUI."""
     return """\
 [Desktop Entry]
 Type=Application
-Name=Az'arch Linux Installer
+Name=Azzio Linux Installer
 GenericName=System Installer
-Comment=Install Az'arch Linux to disk
+Comment=Install Azzio Linux to disk
 Exec=""" + INSTALL_WRAPPER_PATH + """ --gui
 Icon=""" + INSTALLER_ICON_NAME + """
 Terminal=false
@@ -1452,42 +1452,42 @@ Keywords=install;calamares;setup;
 """
 
 
-# --- 8. /usr/local/bin/azarch (guest-side command line interface) ------------------------------
-# The `azarch` guest command line interface is its OWN Python PACKAGE now, libraries/packages/azarch/ (all
+# --- 8. /usr/local/bin/azzio (guest-side command line interface) ------------------------------
+# The `azzio` guest command line interface is its OWN Python PACKAGE now, libraries/packages/azzio/ (all
 # Python -- no shell). It grew a `theme` subcommand (and more to come), so the single module
 # was split into small modules (common/country_table/resolver/theme/sshd/command_line_interface). This module
 # no longer AUTHORS the command line interface; it (a) asks the package to BUNDLE those modules into one
 # self-contained script (bundle.bundle_source()), then (b) injects the country->locale table
-# from packages/calamares/locale (the single source of truth) between the AZARCH_CC markers,
-# and ships the result to /usr/local/bin/azarch. See paths.AZARCH_COMMAND_LINE_INTERFACE_DIR and packages/azarch/.
-AZARCH_BIN_PATH = "/usr/local/bin/azarch"
+# from packages/calamares/locale (the single source of truth) between the AZZIO_CC markers,
+# and ships the result to /usr/local/bin/azzio. See paths.AZZIO_COMMAND_LINE_INTERFACE_DIR and packages/azzio/.
+AZZIO_BIN_PATH = "/usr/local/bin/azzio"
 
 # The media OSD indicator (the bottom-middle cyan volume/brightness bar) is a COMPILED Xlib
-# program now (on_screen_display.c -> azarch-osd), NOT a tkinter script -- it is a separate GUI process that
-# `azarch volume/brightness` launches and feeds one JSON line. It is a SINGLE resident window: a
+# program now (on_screen_display.c -> azzio-osd), NOT a tkinter script -- it is a separate GUI process that
+# `azzio volume/brightness` launches and feeds one JSON line. It is a SINGLE resident window: a
 # second launch forwards to the one already up (no flicker) instead of spawning another. It ships
-# next to the C terminal user interface binary in the azarch lib dir (built by
+# next to the C terminal user interface binary in the azzio lib dir (built by
 # terminal_user_interface_build.build_osd), so the two travel together. Kept in lock-step with
-# packages/azarch/media.py OSD_INDICATOR_BIN and terminal_user_interface_build.OSD_BIN_SYSTEM_PATH
+# packages/azzio/media.py OSD_INDICATOR_BIN and terminal_user_interface_build.OSD_BIN_SYSTEM_PATH
 # (tests pin them). This constant remains the single name openbox refers to it by.
-AZARCH_OSD_SYSTEM_PATH = "/usr/local/lib/azarch/azarch-osd"
+AZZIO_OSD_SYSTEM_PATH = "/usr/local/lib/azzio/azzio-osd"
 
 # Marker lines (in the bundled source, originally from country_table.py) bracketing the
 # generated COUNTRY_TABLE literal.
-_AZARCH_CC_START = "# AZARCH_CC_TABLE_START"
-_AZARCH_CC_END = "# AZARCH_CC_TABLE_END"
+_AZZIO_CC_START = "# AZZIO_CC_TABLE_START"
+_AZZIO_CC_END = "# AZZIO_CC_TABLE_END"
 
 
-def azarch_command_line_interface() -> str:
-    """The `azarch` guest command line interface (Python), BUNDLED from the libraries/packages/azarch/ package
-    into one self-contained script and shipped to /usr/local/bin/azarch. The COUNTRY_TABLE
-    dict literal between the AZARCH_CC markers is REGENERATED from
+def azzio_command_line_interface() -> str:
+    """The `azzio` guest command line interface (Python), BUNDLED from the libraries/packages/azzio/ package
+    into one self-contained script and shipped to /usr/local/bin/azzio. The COUNTRY_TABLE
+    dict literal between the AZZIO_CC markers is REGENERATED from
     packages/calamares/locale.RESOLVER_COUNTRY_TABLE so the guest resolver's
     country->locale/layout map stays in lock-step with that single source of truth. The
     package already carries a working copy of the table, so it is self-contained/runnable on
     its own; this re-injection just guarantees no drift.
 
-    Subcommands (see packages/azarch/ for the full behavior):
+    Subcommands (see packages/azzio/ for the full behavior):
       theme [--dark|--white]  set the system colour theme (dark default); no arg prints it
       --sshd-hypervisor   install host pubkey from ~/shared/authorized_keys, start sshd
       gpu [--resolve|--list]  detect the GPU and resolve its drivers from the offline repo
@@ -1495,11 +1495,11 @@ def azarch_command_line_interface() -> str:
       language [--resolve]    geolocate by IP and set English + the region language
     """
     from packages.calamares.locale import resolver_country_table_py  # noqa: E402 (locale lives with the calamares package)
-    from packages.azarch.bundle import bundle_source  # noqa: E402 (the command line interface package's bundler)
+    from packages.azzio.bundle import bundle_source  # noqa: E402 (the command line interface package's bundler)
 
     src = bundle_source()
-    start = src.index(_AZARCH_CC_START) + len(_AZARCH_CC_START)
-    end = src.index(_AZARCH_CC_END)
+    start = src.index(_AZZIO_CC_START) + len(_AZZIO_CC_START)
+    end = src.index(_AZZIO_CC_END)
     generated = (
         "\nCOUNTRY_TABLE: dict[str, tuple[str, str, str, int]] = {\n"
         + resolver_country_table_py()
@@ -1508,14 +1508,14 @@ def azarch_command_line_interface() -> str:
     return src[:start] + generated + src[end:]
 
 
-# --- 8b. /usr/local/lib/azarch/azarch-osd (the media OSD indicator) ---------
+# --- 8b. /usr/local/lib/azzio/azzio-osd (the media OSD indicator) ---------
 # The OSD is a COMPILED C program (on_screen_display.c) now, so there is no text builder here anymore: it is
 # built + installed by terminal_user_interface_build.build_osd() (invoked from compiler.py right
 # after the terminal UI binary), and pinned executable in profile.FILE_PERMISSIONS. The old
-# azarch_osd() text emitter (which shipped the tkinter osd_indicator.py verbatim) is gone.
+# azzio_osd() text emitter (which shipped the tkinter osd_indicator.py verbatim) is gone.
 
 
-# --- 9. /usr/local/bin/azarch-install (privileged Calamares launcher) -------
+# --- 9. /usr/local/bin/azzio-install (privileged Calamares launcher) -------
 def install_wrapper_sh() -> str:
     """The single privileged launch path for Calamares, used by both the OpenBox
     autostart and the application-menu / Desktop installer launchers. On the live medium `main` has
@@ -1549,32 +1549,32 @@ def install_wrapper_sh() -> str:
     the session env is unchanged so the rest of the desktop keeps its Qt factor."""
     return f"""\
 #!/bin/sh
-# azarch-install -- the Az'arch installer launcher for the live session.
+# azzio-install -- the Azzio installer launcher for the live session.
 #
 # Front-ends over the SAME install (a mode must be chosen explicitly; no default action):
 #   * GUI (`-g`/`--gui`): the Calamares graphical installer.
 #   * CLI (`-c`/`--cli`): the scripted terminal installer at {INSTALL_CLI_SCRIPT_PATH}.
-#     This is what lets a user install Az'arch entirely over an SSH session, with no X.
+#     This is what lets a user install Azzio entirely over an SSH session, with no X.
 #   * AUTO (`-a`/`--auto`): the CLI installer with every answer pre-seeded to fixed
-#     defaults (btrfs, user main, host azarch, tz Asia/Jerusalem, '*' passwords, DHCP).
-#   Bare `azarch-install` (or -h/--help) prints help and does nothing else.
+#     defaults (btrfs, user main, host azzio, tz Asia/Jerusalem, '*' passwords, DHCP).
+#   Bare `azzio-install` (or -h/--help) prints help and does nothing else.
 #
 # `main` has passwordless sudo on the live medium, so neither path needs a polkit agent.
 #
 # Usage:
-#   azarch-install                 Show this help (no default action).
-#   azarch-install -g|--gui        Force the Calamares graphical installer.
-#   azarch-install -c|--cli        Force the scripted terminal installer (interactive).
-#   azarch-install -a|--auto       Fully-unattended install with fixed defaults (btrfs).
-#   azarch-install --cli --disk sdX CLI install onto /dev/sdX, no disk prompt.
-#   azarch-install -h|--help       Show this help.
+#   azzio-install                 Show this help (no default action).
+#   azzio-install -g|--gui        Force the Calamares graphical installer.
+#   azzio-install -c|--cli        Force the scripted terminal installer (interactive).
+#   azzio-install -a|--auto       Fully-unattended install with fixed defaults (btrfs).
+#   azzio-install --cli --disk sdX CLI install onto /dev/sdX, no disk prompt.
+#   azzio-install -h|--help       Show this help.
 
 usage() {{
     cat <<'EOF'
-Usage: azarch-install [ -g | -c | -a | --cli --disk <dev> ] [ -h ]
+Usage: azzio-install [ -g | -c | -a | --cli --disk <dev> ] [ -h ]
 
   (no option), -h, --help
-                      Show this help. Running azarch-install with no option does NOT
+                      Show this help. Running azzio-install with no option does NOT
                       start an install; pick one of the modes below.
 
   -g, --gui, --graphical-user-interface
@@ -1593,7 +1593,7 @@ Usage: azarch-install [ -g | -c | -a | --cli --disk <dev> ] [ -h ]
                         disk       the largest FIXED disk (skips removable/USB), whole
                                    disk, no swap, btrfs, unencrypted
                         user       main   (full name skipped)
-                        hostname   azarch
+                        hostname   azzio
                         passwords  '*' for user and root (Ubuntu/casper convention: no
                                    password login, account not locked; console autologin
                                    + passwordless sudo still work)
@@ -1611,7 +1611,7 @@ Fully unattended over SSH with your OWN values (instead of --auto's fixed ones):
 any prompt via the environment, e.g.
   AZ_INSTALL_DISK=sda AZ_INSTALL_HOSTNAME=box AZ_INSTALL_USERNAME=me \
   AZ_INSTALL_PASSWORD=... AZ_INSTALL_ROOT_PASSWORD=... AZ_INSTALL_TIMEZONE=Europe/London \
-  azarch-install --cli
+  azzio-install --cli
 Recognised: AZ_INSTALL_DISK, AZ_INSTALL_HOSTNAME, AZ_INSTALL_USERNAME, AZ_INSTALL_FULLNAME,
 AZ_INSTALL_PASSWORD, AZ_INSTALL_ROOT_PASSWORD, AZ_INSTALL_TIMEZONE, AZ_INSTALL_FILESYSTEM
 (ext4 default, or btrfs), and AZ_INSTALL_CHOICE. Any prompt left un-seeded is asked
@@ -1641,7 +1641,7 @@ run_gui() {{
 }}
 
 run_cli() {{
-    # The scripted installer needs root and reads its payload from /root/azarch (mode 0750,
+    # The scripted installer needs root and reads its payload from /root/azzio (mode 0750,
     # readable only by root -- so the existence check goes through sudo, not a bare test as
     # `main`). It honours AZ_INSTALL_CHOICE (1=auto largest disk, 2=manual) and AZ_INSTALL_DISK
     # for the disk step, and the AZ_INSTALL_{{HOSTNAME,USERNAME,FULLNAME,PASSWORD,ROOT_PASSWORD,
@@ -1649,7 +1649,7 @@ run_cli() {{
     # none set it prompts interactively (fine over SSH). Each is forwarded ACROSS the sudo
     # boundary explicitly (only when set) so a restrictive sudoers env_reset cannot drop it.
     if ! sudo test -r '{INSTALL_CLI_SCRIPT_PATH}'; then
-        echo "azarch-install: CLI installer not found at {INSTALL_CLI_SCRIPT_PATH}" >&2
+        echo "azzio-install: CLI installer not found at {INSTALL_CLI_SCRIPT_PATH}" >&2
         exit 1
     fi
     exec sudo -E env \\
@@ -1676,7 +1676,7 @@ run_auto() {{
     #   disk     the largest FIXED disk (AZ_INSTALL_CHOICE=1 skips removable/USB), whole disk,
     #            no swap, btrfs (AZ_INSTALL_FILESYSTEM=btrfs -- parity with the Calamares GUI's
     #            defaultFileSystemType), unencrypted (the CLI path never encrypts)
-    #   user     main   full name skipped (empty)   hostname azarch
+    #   user     main   full name skipped (empty)   hostname azzio
     #   passwords '*' for user AND root -- the Ubuntu/casper convention (AZ_INSTALL_STAR_PASSWORD):
     #            a literal '*' in the shadow field is an INVALID hash, so no password authenticates,
     #            but the account is NOT locked (unlike '!'). The box stays usable exactly like the
@@ -1686,7 +1686,7 @@ run_auto() {{
     #   network  automatic DHCP -- the installed system enables NetworkManager with no static
     #            profile, which IS DHCP, so there is nothing to configure here.
     export AZ_INSTALL_CHOICE=1
-    export AZ_INSTALL_HOSTNAME=azarch
+    export AZ_INSTALL_HOSTNAME=azzio
     export AZ_INSTALL_USERNAME=main
     export AZ_INSTALL_FULLNAME=
     export AZ_INSTALL_TIMEZONE=Asia/Jerusalem
@@ -1708,7 +1708,7 @@ while [ $# -gt 0 ]; do
         --disk=*) AZ_INSTALL_CHOICE=2; AZ_INSTALL_DISK="${{1#--disk=}}"
                 export AZ_INSTALL_CHOICE AZ_INSTALL_DISK ;;
         -h|--help) usage; exit 0 ;;
-        *) echo "azarch-install: unknown option: $1" >&2; usage >&2; exit 2 ;;
+        *) echo "azzio-install: unknown option: $1" >&2; usage >&2; exit 2 ;;
     esac
     shift
 done
@@ -1717,7 +1717,7 @@ case "$mode" in
     gui) run_gui ;;
     cli) run_cli ;;
     auto) run_auto ;;
-    *) usage; exit 0 ;;    # no mode chosen (bare `azarch-install`) -> help, no install.
+    *) usage; exit 0 ;;    # no mode chosen (bare `azzio-install`) -> help, no install.
 esac
 """
 
@@ -1754,7 +1754,7 @@ PLAN = [
         # OpenBox window-manager config: keybinds (Super -> menu via xcape's W-Menu),
         # window management, the doubled-titlebar theme + title font, and the FULL
         # titlebar-button mouse bindings (so min/max/close work). The desktop right-click
-        # menu is disabled (empty Root context). No panel/dock config -- the Az'arch menu
+        # menu is disabled (empty Root context). No panel/dock config -- the Azzio menu
         # is the only shell. Home-owned; mirrored into /etc/skel. rc.xml is a plain
         # config (0644).
         "builder": openbox_rc_xml,
@@ -1763,9 +1763,9 @@ PLAN = [
         "owner": "home",
     },
     {
-        # The DARK Az'arch OpenBox THEME (the default; ~1.5x-height titlebar). Ships to
-        # ~/.themes/Azarch-Dark/openbox-3/themerc (a user theme search path); rc.xml's
-        # <theme> names it "Azarch-Dark" out of the box. Home-owned; mirrored into
+        # The DARK Azzio OpenBox THEME (the default; ~1.5x-height titlebar). Ships to
+        # ~/.themes/Azzio-Dark/openbox-3/themerc (a user theme search path); rc.xml's
+        # <theme> names it "Azzio-Dark" out of the box. Home-owned; mirrored into
         # /etc/skel. Plain data (0o644).
         "builder": openbox_theme_rc_dark,
         "dest": OPENBOX_THEME_THEMERC_DARK,
@@ -1773,9 +1773,9 @@ PLAN = [
         "owner": "home",
     },
     {
-        # The LIGHT Az'arch OpenBox THEME (classic Clearlooks-cyan). Ships to
-        # ~/.themes/Azarch/openbox-3/themerc so `azarch theme --white` can switch rc.xml's
-        # <theme><name> to "Azarch" and have the themerc already present. Home-owned;
+        # The LIGHT Azzio OpenBox THEME (classic Clearlooks-cyan). Ships to
+        # ~/.themes/Azzio/openbox-3/themerc so `azzio theme --white` can switch rc.xml's
+        # <theme><name> to "Azzio" and have the themerc already present. Home-owned;
         # mirrored into /etc/skel. Plain data (0o644).
         "builder": openbox_theme_rc_light,
         "dest": OPENBOX_THEME_THEMERC,
@@ -1784,7 +1784,7 @@ PLAN = [
     },
     {
         # System theme DEFAULT (DARK) -- GTK3 theme file. The freedesktop/GTK standard any
-        # downloaded GTK3 app reads at startup; `azarch theme --white` rewrites it. Home file.
+        # downloaded GTK3 app reads at startup; `azzio theme --white` rewrites it. Home file.
         "builder": gtk3_settings_ini_default,
         "dest": GTK3_SETTINGS_PATH,
         "mode": _CONF,
@@ -1889,7 +1889,7 @@ PLAN = [
         # The Desktop launcher must be EXECUTABLE (0o755) so a file manager launches it
         # on double-click without an untrusted-.desktop prompt.
         "builder": desktop_installer_launcher,
-        "dest": f"{HOME}/Desktop/azarch-install.desktop",
+        "dest": f"{HOME}/Desktop/azzio-install.desktop",
         "mode": _EXEC,
         "owner": "home",
     },
@@ -1900,12 +1900,12 @@ PLAN = [
         "owner": "root",
     },
     {
-        "builder": azarch_command_line_interface,
-        "dest": AZARCH_BIN_PATH,
+        "builder": azzio_command_line_interface,
+        "dest": AZZIO_BIN_PATH,
         "mode": _EXEC,
         "owner": "root",
     },
-    # NOTE: the media OSD indicator (/usr/local/lib/azarch/azarch-osd) is NOT emitted here as a
+    # NOTE: the media OSD indicator (/usr/local/lib/azzio/azzio-osd) is NOT emitted here as a
     # text file anymore -- it is a COMPILED C program (on_screen_display.c). compiler.py builds and installs it
     # via terminal_user_interface_build.build_osd(), exactly like the terminal UI binary. It is
     # still pinned 0755 in FILE_PERMISSIONS so archiso ships it executable.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Az'arch window switcher -- LIVE behavioral integration check (needs a real X display).
+"""Azzio window switcher -- LIVE behavioral integration check (needs a real X display).
 
 This is NOT part of the pure `bash tests.sh` suite (that suite never touches X/GTK). It is a
 manual/CI-on-a-VM harness that proves the two alt-tab bugs stay fixed AT RUNTIME -- the layer
@@ -45,7 +45,7 @@ for _p in (_REPO / "libraries", _REPO / "libraries" / "packages"):
 
 from packages.window_switcher import window_switcher as ws  # noqa: E402
 
-PIDFILE = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "azarch-window-switcher.pid"
+PIDFILE = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "azzio-window-switcher.pid"
 
 # The minimal uinput injector, compiled once. Real hardware key events (not XTEST) so Shift+Tab
 # reaches the daemon as ISO_Left_Tab under the grab instead of the mangled ISO_Next_Group.
@@ -62,7 +62,7 @@ static void syn(void){emit(EV_SYN,SYN_REPORT,0);}
 static int kc(const char*n){if(!strcmp(n,"ALT"))return KEY_LEFTALT;if(!strcmp(n,"SHIFT"))return KEY_LEFTSHIFT;if(!strcmp(n,"TAB"))return KEY_TAB;return -1;}
 int main(int c,char**v){if(c<2)return 2;ufd=open("/dev/uinput",O_WRONLY|O_NONBLOCK);if(ufd<0){perror("uinput");return 1;}
 ioctl(ufd,UI_SET_EVBIT,EV_KEY);ioctl(ufd,UI_SET_KEYBIT,KEY_LEFTALT);ioctl(ufd,UI_SET_KEYBIT,KEY_LEFTSHIFT);ioctl(ufd,UI_SET_KEYBIT,KEY_TAB);
-struct uinput_setup u;memset(&u,0,sizeof(u));u.id.bustype=BUS_USB;u.id.vendor=0x1234;u.id.product=0x5678;strcpy(u.name,"azarch-virtual-kbd");
+struct uinput_setup u;memset(&u,0,sizeof(u));u.id.bustype=BUS_USB;u.id.vendor=0x1234;u.id.product=0x5678;strcpy(u.name,"azzio-virtual-kbd");
 ioctl(ufd,UI_DEV_SETUP,&u);ioctl(ufd,UI_DEV_CREATE);usleep(400000);
 char*s=NULL,*t=strtok_r(v[1],",",&s);while(t){if(!strncmp(t,"sleep:",6))usleep(atoi(t+6)*1000);
 else if(!strncmp(t,"down:",5)){int k=kc(t+5);if(k>=0){emit(EV_KEY,k,1);syn();}}
@@ -139,7 +139,7 @@ class Harness:
         self.uinput = tmp / "uinput_key"
         self.grpstate = tmp / "grpstate"
         self.shot = tmp / "shot.py"
-        self.daemon = tmp / "azarch-window-switcher-daemon"
+        self.daemon = tmp / "azzio-window-switcher-daemon"
         self.stderr_log = tmp / "daemon.stderr"
         self.pid = None
 
@@ -183,12 +183,12 @@ class Harness:
                 os.kill(int(PIDFILE.read_text().strip()), signal.SIGTERM)
             except (OSError, ValueError):
                 pass
-        _sh("pkill -f azarch-window-switcher-daemon")
+        _sh("pkill -f azzio-window-switcher-daemon")
         time.sleep(1)
         PIDFILE.unlink(missing_ok=True)
-        # AZARCH_SWITCHER_TIMING makes the daemon print "AZARCH_SHOW_MS <ms>" per show (see
+        # AZZIO_SWITCHER_TIMING makes the daemon print "AZZIO_SHOW_MS <ms>" per show (see
         # switcher.c on_sig_pipe); we capture stderr so the snappiness check can read it.
-        env = dict(os.environ, AZARCH_SWITCHER_TIMING="1")
+        env = dict(os.environ, AZZIO_SWITCHER_TIMING="1")
         self._stderr_fh = open(self.stderr_log, "w")
         subprocess.Popen(
             ["setsid", str(self.daemon)],
@@ -199,14 +199,14 @@ class Harness:
         self.pid = int(PIDFILE.read_text().strip())
 
     def show_latencies(self):
-        """The AZARCH_SHOW_MS samples (ms, float) the daemon has emitted so far, in order."""
+        """The AZZIO_SHOW_MS samples (ms, float) the daemon has emitted so far, in order."""
         try:
             text = self.stderr_log.read_text()
         except OSError:
             return []
         out = []
         for line in text.splitlines():
-            if line.startswith("AZARCH_SHOW_MS"):
+            if line.startswith("AZZIO_SHOW_MS"):
                 try:
                     out.append(float(line.split()[1]))
                 except (IndexError, ValueError):
@@ -252,7 +252,7 @@ class Harness:
     def open_chord_and_commit(self, backward: bool):
         """Drive a REAL physical Alt+Tab / Alt+Shift+Tab chord (uinput) end to end and return the
         committed WM_CLASS. Unlike open_and_commit (which fakes direction via SIGUSR2), this fires
-        the actual key chord OpenBox+XKB see, so it exercises the true bug: Az'arch binds Alt+Shift
+        the actual key chord OpenBox+XKB see, so it exercises the true bug: Azzio binds Alt+Shift
         to the language toggle, so a physical Alt+Shift+Tab used to open FORWARD (XKB ate the Shift)
         and flip to Hebrew. The daemon's fix (pin US on show + read the physical Shift key) must make
         this chord open BACKWARD with the group staying US. The launcher (SIGUSR1) still opens the
@@ -298,7 +298,7 @@ def main() -> int:
         return 77
 
     failures = []
-    with tempfile.TemporaryDirectory(prefix="azarch-switcher-live-") as td:
+    with tempfile.TemporaryDirectory(prefix="azzio-switcher-live-") as td:
         tmp = Path(td)
         h = Harness(tmp)
         h.build()
@@ -361,7 +361,7 @@ def main() -> int:
                   f"(A-S-Tab steps the other way)")
 
         # --- Bug 1b: a REAL Alt+Shift+Tab chord opens backward AND keeps the layout US. --------
-        # This is the true end-to-end reproduction the SIGUSR2 test above cannot cover. Az'arch
+        # This is the true end-to-end reproduction the SIGUSR2 test above cannot cover. Azzio
         # binds Alt+Shift to grp:alt_shift_toggle, so a physical Alt+Shift+Tab used to (a) flip the
         # layout US->Hebrew and (b) open FORWARD, because XKB consumed the Shift as the group-switch
         # chord and OpenBox saw a bare Alt+Tab. The daemon fix pins the group to US on show and reads
@@ -403,7 +403,7 @@ def main() -> int:
                   f"and the layout stayed US (groups={groups})")
 
         # --- Bug 3: the overlay is SNAPPY -- show latency stays tiny. -----------
-        # The daemon prints "AZARCH_SHOW_MS <ms>" per show (AZARCH_SWITCHER_TIMING, set by the
+        # The daemon prints "AZZIO_SHOW_MS <ms>" per show (AZZIO_SWITCHER_TIMING, set by the
         # harness). This is the signal-to-mapped cost. It was ~150-220ms when show_switcher
         # enumerated windows (forks xprop) and captured every tile's XComposite pixmap INLINE,
         # before moving the overlay on-screen -- the reported "delayed / not snappy", and why a
@@ -419,7 +419,7 @@ def main() -> int:
             h.open_and_dismiss()
         samples = h.show_latencies()[base:]
         if not samples:
-            failures.append("Bug3: no AZARCH_SHOW_MS samples captured (timing hook missing?)")
+            failures.append("Bug3: no AZZIO_SHOW_MS samples captured (timing hook missing?)")
         else:
             samples_sorted = sorted(samples)
             median = samples_sorted[len(samples_sorted) // 2]

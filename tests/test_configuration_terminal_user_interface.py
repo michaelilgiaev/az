@@ -1,26 +1,26 @@
-"""The bare-`azarch` TERMINAL UI -- now a COMPILED C program (Theme / Wallpaper / Network).
+"""The bare-`azzio` TERMINAL UI -- now a COMPILED C program (Theme / Wallpaper / Network).
 
-Running `azarch` with NO arguments opens a full-screen text UI so a developer new to Linux
+Running `azzio` with NO arguments opens a full-screen text UI so a developer new to Linux
 can tune the three things a fresh machine needs -- Theme, Wallpaper, Network -- with arrow
 keys (or WASD / HJKL), a search box at the top and nav hints at the bottom, everything
-centred and coloured in the Az'arch logo cyan. It used to be Python/curses but felt laggy, so
-it was rewritten in C. The C sources now live INSIDE the azarch package
-(libraries/packages/azarch/, built by terminal_user_interface_build.py) -- there is only ONE program, `azarch`,
-and the UI is C for speed; the Python `azarch` command line interface just EXECs that binary for the no-argument
+centred and coloured in the Azzio logo cyan. It used to be Python/curses but felt laggy, so
+it was rewritten in C. The C sources now live INSIDE the azzio package
+(libraries/packages/azzio/, built by terminal_user_interface_build.py) -- there is only ONE program, `azzio`,
+and the UI is C for speed; the Python `azzio` command line interface just EXECs that binary for the no-argument
 case.
 
-These tests pin, against BOTH the bundled Python launcher (the /usr/local/bin/azarch
+These tests pin, against BOTH the bundled Python launcher (the /usr/local/bin/azzio
 artifact) AND the C source tree + its build wiring:
 
-  * bare `azarch` dispatches to run_terminal_user_interface, which EXECs the compiled UI binary (not curses);
+  * bare `azzio` dispatches to run_terminal_user_interface, which EXECs the compiled UI binary (not curses);
   * the launcher's binary path is the SAME one the build installs (no drift);
   * graceful degradation: with no terminal, run_terminal_user_interface prints a pointer and returns 0 instead
-    of exec-ing anything (so `azarch </dev/null` / a pipe never throws);
+    of exec-ing anything (so `azzio </dev/null` / a pipe never throws);
   * the build wiring compiles exactly the C sources into the installed binary, without
     polluting the repo tree, and the binary is pinned executable in the ISO file_permissions;
   * the spec's specifics live in the C source: the accent is the logo cyan #06B8FD, the nav
     line advertises WASD / HJKL / arrows (packed + uppercased) with q-to-quit / ESC-to-back,
-    Network is the FIRST option, the entry title is "Az'arch Settings", the Wallpaper screen
+    Network is the FIRST option, the entry title is "Azzio Settings", the Wallpaper screen
     names the wallpaper DIRECTORY and previews the hovered image, and the Theme screen previews
     real LibreWolf + Dolphin screenshots (shipped, unmodified) and discloses that kitty is
     exempt -- with the "Current:" state shown once at the top and no per-row status echo.
@@ -39,22 +39,22 @@ import types
 
 import pytest
 
-from packages.azarch.bundle import bundle_source, MODULE_ORDER
-from packages.azarch import terminal_user_interface_build
+from packages.azzio.bundle import bundle_source, MODULE_ORDER
+from packages.azzio import terminal_user_interface_build
 from packages import openbox as desktop
 import paths
 import profile as profiledef
 
 
-# The C UI sources now live INSIDE the azarch package (one program, C for speed) -- there is
-# no separate azarch_terminal_user_interface package anymore.
-TERMINAL_USER_INTERFACE_SRC_DIR = paths.AZARCH_COMMAND_LINE_INTERFACE_DIR
+# The C UI sources now live INSIDE the azzio package (one program, C for speed) -- there is
+# no separate azzio_terminal_user_interface package anymore.
+TERMINAL_USER_INTERFACE_SRC_DIR = paths.AZZIO_COMMAND_LINE_INTERFACE_DIR
 
 
 def _command_line_interface():
-    """Exec the bundled azarch command line interface in a fresh module namespace (as shipped)."""
-    mod = types.ModuleType("azarch_cli_terminal_user_interface_test")
-    exec(compile(bundle_source(), "azarch_command_line_interface", "exec"), mod.__dict__)
+    """Exec the bundled azzio command line interface in a fresh module namespace (as shipped)."""
+    mod = types.ModuleType("azzio_cli_terminal_user_interface_test")
+    exec(compile(bundle_source(), "azzio_command_line_interface", "exec"), mod.__dict__)
     return mod
 
 
@@ -72,11 +72,11 @@ def _src(name: str) -> str:
     return text
 
 
-# --- dispatch wiring: bare azarch -> run_terminal_user_interface -> exec the C binary ------------
+# --- dispatch wiring: bare azzio -> run_terminal_user_interface -> exec the C binary ------------
 
-def test_bare_azarch_dispatches_to_the_terminal_user_interface():
-    """No-argument azarch must route to run_terminal_user_interface, and the top-level usage must mention the UI."""
-    src = desktop.azarch_command_line_interface()
+def test_bare_azzio_dispatches_to_the_terminal_user_interface():
+    """No-argument azzio must route to run_terminal_user_interface, and the top-level usage must mention the UI."""
+    src = desktop.azzio_command_line_interface()
     assert 'cmd == ""' in src
     assert "return run_terminal_user_interface(argv)" in src
     assert "full-screen UI" in src  # advertised in usage()
@@ -94,11 +94,11 @@ def test_launcher_binary_path_matches_the_build():
     two can never drift."""
     command_line_interface = _command_line_interface()
     assert command_line_interface.TERMINAL_USER_INTERFACE_BIN == terminal_user_interface_build.TERMINAL_USER_INTERFACE_BIN_SYSTEM_PATH
-    assert command_line_interface.TERMINAL_USER_INTERFACE_BIN == "/usr/local/lib/azarch/azarch"
+    assert command_line_interface.TERMINAL_USER_INTERFACE_BIN == "/usr/local/lib/azzio/azzio"
 
 
 def test_bare_main_uses_run_terminal_user_interface(monkeypatch):
-    """command_line_interface.main([]) must call run_terminal_user_interface (bare azarch == the UI)."""
+    """command_line_interface.main([]) must call run_terminal_user_interface (bare azzio == the UI)."""
     command_line_interface = _command_line_interface()
     called = {}
     monkeypatch.setattr(command_line_interface, "run_terminal_user_interface", lambda argv=None: (called.setdefault("hit", True), 0)[1])
@@ -124,7 +124,7 @@ def test_run_terminal_user_interface_without_tty_prints_pointer(monkeypatch, cap
     assert command_line_interface.run_terminal_user_interface([]) == 0
     out = capsys.readouterr().out
     assert "no interactive terminal" in out
-    for sub in ("azarch theme", "azarch wallpaper", "azarch network"):
+    for sub in ("azzio theme", "azzio wallpaper", "azzio network"):
         assert sub in out
 
 
@@ -214,7 +214,7 @@ def test_build_terminal_user_interface_compiles_and_does_not_pollute_the_repo_tr
 
 def test_terminal_user_interface_binary_is_pinned_executable_in_the_iso():
     """archiso normalizes overlay modes, so the compiled binary must be pinned 0755 in the
-    profile file_permissions or bare `azarch` would find it non-executable and fall back to
+    profile file_permissions or bare `azzio` would find it non-executable and fall back to
     the pointer instead of opening the UI."""
     perms = profiledef.FILE_PERMISSIONS
     assert terminal_user_interface_build.TERMINAL_USER_INTERFACE_BIN_SYSTEM_PATH in perms
@@ -222,7 +222,7 @@ def test_terminal_user_interface_binary_is_pinned_executable_in_the_iso():
 
 
 def test_terminal_user_interface_binary_is_pure_libc_no_ncurses_no_gtk():
-    """The terminal UI BINARY (azarch) is pure libc + raw ANSI (previews shell out to kitty at
+    """The terminal UI BINARY (azzio) is pure libc + raw ANSI (previews shell out to kitty at
     runtime): its link recipe uses no ncurses and no GTK. (The media OSD, a SEPARATE binary, does
     link X -- see the next test -- but the terminal UI itself does not.)"""
     # The $(BIN) link line must carry no library discovery / no ncurses / no gtk linkage.
@@ -236,7 +236,7 @@ def test_terminal_user_interface_binary_is_pure_libc_no_ncurses_no_gtk():
 
 
 def test_osd_build_deps_include_the_x_libraries():
-    """The media OSD (azarch-osd) is an Xlib program, so the build deps grew beyond gcc to add
+    """The media OSD (azzio-osd) is an Xlib program, so the build deps grew beyond gcc to add
     the X client libraries it links (libx11 for Xlib, libxrandr for the primary-monitor
     geometry, libxft for anti-aliased text). gcc stays first."""
     deps = terminal_user_interface_build.TERMINAL_USER_INTERFACE_BUILD_DEPS
@@ -261,7 +261,7 @@ def test_osd_x_build_deps_are_provisioned_on_the_build_host():
     from pathlib import Path
 
     deps = terminal_user_interface_build.TERMINAL_USER_INTERFACE_BUILD_DEPS
-    repo = Path(paths.AZARCH_COMMAND_LINE_INTERFACE_DIR).parents[2]   # .../libraries/packages/azarch -> repo root
+    repo = Path(paths.AZZIO_COMMAND_LINE_INTERFACE_DIR).parents[2]   # .../libraries/packages/azzio -> repo root
     # The Docker build image bakes the X dev libs in (the OSD compile runs before makepkg).
     dockerfile = (repo / "Dockerfile").read_text(encoding="utf-8")
     for dep in ("libx11", "libxrandr", "libxft"):
@@ -276,8 +276,8 @@ def test_osd_x_build_deps_are_provisioned_on_the_build_host():
 
 # --- the spec's specifics, pinned in the C source ---------------------------
 
-def test_accent_is_the_azarch_logo_cyan():
-    """PROMPT: use the Az'arch logo colour (cyan-ish, #06B8FD) to differentiate elements and
+def test_accent_is_the_azzio_logo_cyan():
+    """PROMPT: use the Azzio logo colour (cyan-ish, #06B8FD) to differentiate elements and
     ease navigation. The accent RGB (6,184,253) must be the accent SGR in the palette."""
     header = _src("terminal_user_interface.h")
     assert "#06B8FD" in header
@@ -439,12 +439,12 @@ def test_esc_go_back_is_instant():
 
 
 def test_entry_title_and_first_option():
-    """PROMPT: rename the entry screen to "Az'arch Settings" and make Network the FIRST option.
+    """PROMPT: rename the entry screen to "Azzio Settings" and make Network the FIRST option.
     (The earlier "no branding" rule was about ASCII-art / a logo banner -- a plain window title
     is not that; the spec explicitly asks for this title.)"""
     model = _src("model.c")
-    # the entry screen is titled "Az'arch Settings"
-    assert '"Az\'arch Settings"' in model
+    # the entry screen is titled "Azzio Settings"
+    assert '"Azzio Settings"' in model
     # Network is the first main-menu row (before Theme / Wallpaper)
     net = model.index('.label="Network"')
     theme = model.index('.label="Theme"')
@@ -506,7 +506,7 @@ def test_theme_and_wallpaper_rows_have_no_status_echo():
     screens must instead supply a screen-level .current probe."""
     model = _src("model.c")
     # the Theme/Wallpaper apply rows are defined with a preview but WITHOUT a .status field
-    for row_target in ('.target="azarch theme --dark"', '.target="azarch wallpaper --years.png"'):
+    for row_target in ('.target="azzio theme --dark"', '.target="azzio wallpaper --years.png"'):
         assert row_target in model
     # the screen-level "Current:" probe is wired for both
     assert ".current=az_status_theme" in model
@@ -516,24 +516,24 @@ def test_theme_and_wallpaper_rows_have_no_status_echo():
     assert "scr->current" in render
 
 
-def test_actions_shell_back_to_the_azarch_subcommands():
-    """Every apply row runs the SAME tested `azarch` subcommand (the C UI adds navigation,
+def test_actions_shell_back_to_the_azzio_subcommands():
+    """Every apply row runs the SAME tested `azzio` subcommand (the C UI adds navigation,
     not new system behaviour)."""
     model = _src("model.c")
     for cmd in (
-        "azarch theme --dark",
-        "azarch theme --white",
-        "azarch wallpaper --years.png",
-        "azarch wallpaper --decades.png",
-        "azarch network firewall enable",
-        "azarch network firewall port list",
-        "azarch network wifi on",
+        "azzio theme --dark",
+        "azzio theme --white",
+        "azzio wallpaper --years.png",
+        "azzio wallpaper --decades.png",
+        "azzio network firewall enable",
+        "azzio network firewall port list",
+        "azzio network wifi on",
     ):
         assert cmd in model, f"missing action: {cmd}"
 
 
 def test_backup_entry_in_the_model_and_cli_surface():
-    """Step six: a "Backup" entry in the top menu drives the SAME opt-in `azarch backup
+    """Step six: a "Backup" entry in the top menu drives the SAME opt-in `azzio backup
     --configure` flow, OFF BY DEFAULT, streamlined for a new user. Pin (a) the C model has a
     reachable "backup" screen off ROWS_MAIN with the az_status_backup Current: probe and the two
     non-interactive applies + the two AZ_ACT_PROMPT enable rows, and (b) the bundled CLI carries
@@ -547,12 +547,12 @@ def test_backup_entry_in_the_model_and_cli_surface():
     # the status probe (declared in the header, defined in model.c)
     assert "az_status_backup" in model
     assert "az_status_backup" in _src("terminal_user_interface.h")
-    # the four rows' azarch wrappers (status/disable non-interactive; enable-* prompt-driven)
+    # the four rows' azzio wrappers (status/disable non-interactive; enable-* prompt-driven)
     for cmd in (
-        "azarch backup --configure --status",
-        "azarch backup --configure --disable",
-        "azarch backup --configure --enable-usb",
-        "azarch backup --configure --enable-gdrive",
+        "azzio backup --configure --status",
+        "azzio backup --configure --disable",
+        "azzio backup --configure --enable-usb",
+        "azzio backup --configure --enable-gdrive",
     ):
         assert cmd in model, f"missing backup row target: {cmd}"
     # the enable rows are AZ_ACT_PROMPT (free-text path/remote, not digits) with a prompt label
@@ -566,11 +566,11 @@ def test_backup_entry_in_the_model_and_cli_surface():
 
 def test_backup_status_probe_reads_the_configure_status():
     """az_status_backup summarises the opt-in targets by asking the configurator's own
-    non-interactive `azarch backup --configure --status` (so the TUI's Current: line and the CLI
-    can't disagree), and reports the DEFAULT "off (local only)" when both are off / azarch is
+    non-interactive `azzio backup --configure --status` (so the TUI's Current: line and the CLI
+    can't disagree), and reports the DEFAULT "off (local only)" when both are off / azzio is
     missing -- never a blank cell."""
     model = _src("model.c")
-    assert '"azarch", "backup", "--configure", "--status"' in model
+    assert '"azzio", "backup", "--configure", "--status"' in model
     assert "off (local only)" in model          # the default / fallback line
     assert "USB + Google Drive" in model        # the both-on summary
 
@@ -603,8 +603,8 @@ def test_everything_is_centred():
 
 def test_hovered_row_shows_base_and_wrapper_command_lines():
     """PROMPT: under each setting, show TWO lines -- "Base Command: $ <base>" over
-    "Azarch Wrapper: $ azarch ..." -- with the labels AND the "$" prompt WHITE and the commands
-    CYAN (the user: 'Base Command: $' and 'Azarch Wrapper: $' are to be white). The "$ " now
+    "Azzio Wrapper: $ azzio ..." -- with the labels AND the "$" prompt WHITE and the commands
+    CYAN (the user: 'Base Command: $' and 'Azzio Wrapper: $' are to be white). The "$ " now
     lives in the WHITE label (not the cyan value), so the prompt renders white. The renderer
     draws both via az_row_base / az_row_command; model.c exposes az_row_base."""
     render = _src("render.c")
@@ -612,7 +612,7 @@ def test_hovered_row_shows_base_and_wrapper_command_lines():
     header = _src("terminal_user_interface.h")
     # the two exact labels the spec wants -- now INCLUDING the "$ " prompt, so it is white.
     assert '"Base Command: $ "' in render
-    assert '"Azarch Wrapper: $ "' in render
+    assert '"Azzio Wrapper: $ "' in render
     # both command accessors feed the lines
     assert "az_row_base" in render and "az_row_command" in render
     # the base accessor is a real, exported model function
@@ -624,14 +624,14 @@ def test_hovered_row_shows_base_and_wrapper_command_lines():
     # AZ_SGR_ACCENT (base/cmd passed straight, no "$ %s" prefix): so the "$" prompt is white.
     assert 'put_center_labeled(&b, ui, rows - 4, AZ_SGR_TEXT, "Base Command: $ ",' in render
     assert '                               AZ_SGR_ACCENT, base);' in render
-    assert 'put_center_labeled(&b, ui, rows - 3, AZ_SGR_TEXT, "Azarch Wrapper: $ ",' in render
+    assert 'put_center_labeled(&b, ui, rows - 3, AZ_SGR_TEXT, "Azzio Wrapper: $ ",' in render
     assert '                               AZ_SGR_ACCENT, cmd);' in render
     # every apply/port row carries a .base in the model (the underlying tool command)
     assert ".base=" in model
 
 
 def test_c_and_x_copy_commands_via_xclip():
-    """PROMPT: hovering a setting, `c` copies the azarch wrapper and `x` copies the base command,
+    """PROMPT: hovering a setting, `c` copies the azzio wrapper and `x` copies the base command,
     using xclip (the clipboard tool shipped on this X11 build). The keys are advertised on the
     nav line; main.c binds them; action.c copies through xclip; xclip is in the manifest."""
     render = _src("render.c")

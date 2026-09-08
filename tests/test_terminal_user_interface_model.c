@@ -1,4 +1,4 @@
-/* Az'arch -- headless C unit tests for the bare-`azarch` terminal user interface MODEL.
+/* Azzio -- headless C unit tests for the bare-`azzio` terminal user interface MODEL.
  *
  * The UI's menu tree + the search filter + the wallpaper path are pure data/logic in
  * model.c (no terminal), so we exercise them directly here -- the C counterpart of the old
@@ -46,8 +46,8 @@ static void test_top_level_is_network_theme_wallpaper(void)
     CHECK(strcmp(m->rows[11].label, "Hypervisor") == 0); /* per-directory VM defaults */
     CHECK(strcmp(m->rows[12].label, "Power") == 0);      /* shutdown/restart/sleep/lock + timers */
     CHECK(strcmp(m->rows[13].label, "Backup") == 0);    /* opt-in backup entry, still last */
-    /* the entry title is the (re)named "Az'arch Settings" */
-    CHECK(strcmp(m->title, "Az'arch Settings") == 0);
+    /* the entry title is the (re)named "Azzio Settings" */
+    CHECK(strcmp(m->title, "Azzio Settings") == 0);
 }
 
 /* Exactly the subsystems + the network sub-screens + the volume/brightness + the machine screen
@@ -85,7 +85,7 @@ static void test_screen_set_is_exactly_expected(void)
 
 /* Volume + Brightness screens (the follow-up spec: "I don't see Volume and Brightness settings,
  * that should be there"). Volume shows the live level via a screen-level Current: probe and its
- * rows set a PRECISE level (or step/mute) via `azarch volume ...`. Brightness is the same but
+ * rows set a PRECISE level (or step/mute) via `azzio volume ...`. Brightness is the same but
  * LAPTOP-ONLY (its Current: probe reports PC vs Laptop). Neither needs sudo (the user session
  * owns audio/backlight), and neither echoes a per-row status (Current: shows it once). */
 static void test_volume_and_brightness_screens(void)
@@ -100,9 +100,9 @@ static void test_volume_and_brightness_screens(void)
         CHECK(v->rows[i].kind == AZ_ACT_APPLY);
         CHECK(v->rows[i].needs_root == 0);          /* PipeWire/ALSA run in the user session */
         CHECK(v->rows[i].status == NULL);           /* no per-row echo (Current: shows it) */
-        if (strcmp(v->rows[i].target, "azarch volume mute") == 0) has_mute = 1;
-        if (strcmp(v->rows[i].target, "azarch volume set 50") == 0) has_set50 = 1;
-        if (strcmp(v->rows[i].target, "azarch volume set 100") == 0) has_set100 = 1;
+        if (strcmp(v->rows[i].target, "azzio volume mute") == 0) has_mute = 1;
+        if (strcmp(v->rows[i].target, "azzio volume set 50") == 0) has_set50 = 1;
+        if (strcmp(v->rows[i].target, "azzio volume set 100") == 0) has_set100 = 1;
     }
     CHECK(has_mute == 1);
     CHECK(has_set50 == 1);
@@ -118,7 +118,7 @@ static void test_volume_and_brightness_screens(void)
         CHECK(b->rows[i].kind == AZ_ACT_APPLY);
         CHECK(b->rows[i].needs_root == 0);
         CHECK(b->rows[i].status == NULL);
-        if (strcmp(b->rows[i].target, "azarch brightness set 100") == 0) has_bset100 = 1;
+        if (strcmp(b->rows[i].target, "azzio brightness set 100") == 0) has_bset100 = 1;
     }
     CHECK(has_bset100 == 1);
 
@@ -132,7 +132,7 @@ static void test_volume_and_brightness_screens(void)
 
 /* The Machine Type screen: it shows the recognised type ONCE via a screen-level `.current`
  * probe (PC/Laptop), and its rows HARD-SWITCH the type -- Force PC / Force Laptop / Autodetect
- * -- each an apply that runs `azarch machine ...` (no sudo: it writes the user's own pointer).
+ * -- each an apply that runs `azzio machine ...` (no sudo: it writes the user's own pointer).
  * This backs the spec's "add Machine Type ... display what it recognizes ... allow a hard
  * switch." */
 static void test_machine_type_screen(void)
@@ -144,9 +144,9 @@ static void test_machine_type_screen(void)
     CHECK(m->current == az_status_machine);
     /* three hard-switch rows: force PC, force Laptop, autodetect */
     CHECK(m->nrows == 3);
-    CHECK(strcmp(m->rows[0].target, "azarch machine --pc") == 0);
-    CHECK(strcmp(m->rows[1].target, "azarch machine --laptop") == 0);
-    CHECK(strcmp(m->rows[2].target, "azarch machine --auto") == 0);
+    CHECK(strcmp(m->rows[0].target, "azzio machine --pc") == 0);
+    CHECK(strcmp(m->rows[1].target, "azzio machine --laptop") == 0);
+    CHECK(strcmp(m->rows[2].target, "azzio machine --auto") == 0);
     for (int i = 0; i < m->nrows; i++) {
         CHECK(m->rows[i].kind == AZ_ACT_APPLY);
         CHECK(m->rows[i].needs_root == 0);       /* writes the user's own config, no sudo */
@@ -162,11 +162,11 @@ static void test_machine_type_screen(void)
 }
 
 /* The Backup screen (step six): a "Backup" entry on ROWS_MAIN opens a screen that drives the
- * SAME opt-in flow `azarch backup --configure` exposes, streamlined + OFF BY DEFAULT. Its
+ * SAME opt-in flow `azzio backup --configure` exposes, streamlined + OFF BY DEFAULT. Its
  * "Current:" line is az_status_backup ("off (local only)" by default). The four rows: two
  * non-interactive APPLIES (--status / --disable) and two AZ_ACT_PROMPT enable rows (USB / Google
  * Drive) that prompt for the path/remote and run the non-interactive --enable-* surface. Every
- * row is captured in-UI (show_output) and carries a Base Command + Azarch Wrapper hint; none needs
+ * row is captured in-UI (show_output) and carries a Base Command + Azzio Wrapper hint; none needs
  * sudo (the configurator writes the user's own config). */
 static void test_backup_screen(void)
 {
@@ -195,19 +195,19 @@ static void test_backup_screen(void)
         const AzRow *r = &b->rows[i];
         CHECK(r->needs_root == 0);        /* the configurator writes the user's own config, no sudo */
         CHECK(r->show_output == 1);       /* every row shows its captured result in the overlay */
-        /* every row carries BOTH hint lines: an azarch wrapper AND a base command (no bare row) */
+        /* every row carries BOTH hint lines: an azzio wrapper AND a base command (no bare row) */
         CHECK(az_row_command(r) != NULL);
         CHECK(az_row_base(r) != NULL);
         if (r->kind == AZ_ACT_APPLY &&
-            strcmp(r->target, "azarch backup --configure --status") == 0) {
+            strcmp(r->target, "azzio backup --configure --status") == 0) {
             has_status = 1;
         }
         if (r->kind == AZ_ACT_APPLY &&
-            strcmp(r->target, "azarch backup --configure --disable") == 0) {
+            strcmp(r->target, "azzio backup --configure --disable") == 0) {
             has_disable = 1;
         }
         if (r->kind == AZ_ACT_PROMPT &&
-            strcmp(r->target, "azarch backup --configure --enable-usb") == 0) {
+            strcmp(r->target, "azzio backup --configure --enable-usb") == 0) {
             has_enable_usb = 1;
             CHECK(r->prompt != NULL);                          /* asks for the mount path */
             CHECK(strstr(az_row_command(r), "<value>") != NULL); /* wrapper has the placeholder */
@@ -215,7 +215,7 @@ static void test_backup_screen(void)
             CHECK(strstr(az_row_base(r), "cp ") != NULL);        /* the real copy backup does */
         }
         if (r->kind == AZ_ACT_PROMPT &&
-            strcmp(r->target, "azarch backup --configure --enable-gdrive") == 0) {
+            strcmp(r->target, "azzio backup --configure --enable-gdrive") == 0) {
             has_enable_gdrive = 1;
             CHECK(r->prompt != NULL);                          /* asks for the remote name */
             CHECK(strstr(az_row_command(r), "<value>") != NULL);
@@ -234,7 +234,7 @@ static void test_backup_screen(void)
  * "Current:" line is az_status_hypervisor (a short ram/cpus/disk/net summary). The rows: a --status
  * APPLY, a --reset APPLY, and several AZ_ACT_PROMPT --set rows (ram/cpus/disk_size/network/audio)
  * that prompt for the value and append it. Every row is captured in-UI and carries a Base + Wrapper
- * hint; none needs sudo (the defaults file is the user's own ~/.config/azarch-hypervisor). */
+ * hint; none needs sudo (the defaults file is the user's own ~/.config/azzio-hypervisor). */
 static void test_hypervisor_screen(void)
 {
     /* the ROWS_MAIN entry that opens it -- row 11, just before Backup, with the summary status */
@@ -257,7 +257,7 @@ static void test_hypervisor_screen(void)
     for (int i = 0; i < h->nrows; i++) {
         const AzRow *r = &h->rows[i];
         CHECK(r->needs_root == 0);        /* the user's own config file, no sudo */
-        /* every row carries BOTH hint lines: an azarch wrapper AND a base command (no bare row) */
+        /* every row carries BOTH hint lines: an azzio wrapper AND a base command (no bare row) */
         CHECK(az_row_command(r) != NULL);
         CHECK(az_row_base(r) != NULL);
         if (r->kind == AZ_ACT_APPLY &&
@@ -289,7 +289,7 @@ static void test_hypervisor_screen(void)
 }
 
 /* Default Applications: a category list + one screen per category, each letting the user CHANGE
- * that category's default via an `azarch default-applications set ...` apply. The category set,
+ * that category's default via an `azzio default-applications set ...` apply. The category set,
  * keys and the current-handler probes are the TUI half of the default_applications.py source;
  * a Python test pins the labels/keys against that source so C and Python cannot drift. */
 /* Write a stub .desktop (declaring the given MimeType) into <dir>. Used by the fixture so the
@@ -366,7 +366,7 @@ static void test_default_applications_screens(void)
     CHECK(az_screen_find("defaultapps.mail") == NULL);
 
     /* each category screen shows the current handler up top and CHANGES it via an apply that
-     * runs `azarch default-applications set ...` -- no sudo (writes the user's own config). */
+     * runs `azzio default-applications set ...` -- no sudo (writes the user's own config). */
     const AzScreen *web = az_screen_find("defaultapps.web");
     CHECK(web != NULL);
     /* the per-category screen discloses the .desktop drop-in dir TERSELY (user request): just
@@ -379,8 +379,8 @@ static void test_default_applications_screens(void)
     CHECK(web->nrows >= 1);
     CHECK(web->rows[0].kind == AZ_ACT_APPLY);
     CHECK(web->rows[0].needs_root == 0);
-    CHECK(strncmp(web->rows[0].target, "azarch default-applications set web ",
-                  strlen("azarch default-applications set web ")) == 0);
+    CHECK(strncmp(web->rows[0].target, "azzio default-applications set web ",
+                  strlen("azzio default-applications set web ")) == 0);
     /* SELF-RESOLVING (the load-bearing behaviour): the curated seed (librewolf) comes FIRST, and
      * an app that is NOT curated but declares the category's MIME (firefox: x-scheme-handler/http)
      * SURFACES purely from being installed -- exactly "install Firefox and it appears; remove it
@@ -411,7 +411,7 @@ static void test_default_applications_screens(void)
 }
 
 /* Display: cinnamon-settings-display parity (xrandr) + the GLOBAL SCALE chooser. The scale
- * chooser is the firm requirement; its rows set the ONE scale via `azarch display scale`. */
+ * chooser is the firm requirement; its rows set the ONE scale via `azzio display scale`. */
 static void test_display_screens(void)
 {
     /* the ROWS_MAIN entry */
@@ -454,9 +454,9 @@ static void test_display_screens(void)
     for (int i = 0; i < sc->nrows; i++) {
         CHECK(sc->rows[i].kind == AZ_ACT_APPLY);
         CHECK(sc->rows[i].needs_root == 0);      /* the X resource DB is per-session, no sudo */
-        if (strcmp(sc->rows[i].target, "azarch display scale 1.35") == 0) has_135 = 1;
-        if (strcmp(sc->rows[i].target, "azarch display scale 1.00") == 0) has_100 = 1;
-        if (strcmp(sc->rows[i].target, "azarch display scale 2.00") == 0) has_200 = 1;
+        if (strcmp(sc->rows[i].target, "azzio display scale 1.35") == 0) has_135 = 1;
+        if (strcmp(sc->rows[i].target, "azzio display scale 1.00") == 0) has_100 = 1;
+        if (strcmp(sc->rows[i].target, "azzio display scale 2.00") == 0) has_200 = 1;
     }
     CHECK(has_135 && has_100 && has_200);
 
@@ -486,7 +486,7 @@ static void test_network_rows_descend(void)
 
 /* IP Address screen: the live twin of the Calamares installer "Network" page (static IPv4 vs
  * DHCP). It hangs off the Network parent, shows the active address ONCE via az_status_ip, has a
- * plain "Show" read (no root) and two AZ_ACT_PROMPT setters wrapping `azarch network ip
+ * plain "Show" read (no root) and two AZ_ACT_PROMPT setters wrapping `azzio network ip
  * static|dynamic` (needs_root; they edit the NM connection). The setters teach a "<value>"
  * placeholder in BOTH the wrapper and the base command, like the firewall port / backup enable
  * rows. This backs the user's "the terminal UI must also have these [network] settings". */
@@ -515,13 +515,13 @@ static void test_ip_address_screen(void)
     for (int i = 0; i < ip->nrows; i++) {
         const AzRow *r = &ip->rows[i];
         CHECK(r->status == NULL);                         /* no per-row echo (Current: shows it) */
-        if (strcmp(r->target, "azarch network ip show") == 0) {
+        if (strcmp(r->target, "azzio network ip show") == 0) {
             has_show = 1;
             CHECK(r->kind == AZ_ACT_APPLY);
             CHECK(r->needs_root == 0);                    /* a read: no sudo */
             CHECK(r->show_output == 1);                   /* the table lands in the overlay */
         }
-        if (strcmp(r->target, "azarch network ip static") == 0) {
+        if (strcmp(r->target, "azzio network ip static") == 0) {
             has_static = 1;
             CHECK(r->kind == AZ_ACT_PROMPT);              /* type the iface/addr/gw/dns line */
             CHECK(r->needs_root == 1);                    /* edits the NM connection */
@@ -530,7 +530,7 @@ static void test_ip_address_screen(void)
             CHECK(strstr(az_row_base(r), "<value>") != NULL);     /* base placeholder too */
             CHECK(strstr(az_row_base(r), "nmcli") != NULL);       /* the real tool it wraps */
         }
-        if (strcmp(r->target, "azarch network ip dynamic") == 0) {
+        if (strcmp(r->target, "azzio network ip dynamic") == 0) {
             has_dynamic = 1;
             CHECK(r->kind == AZ_ACT_PROMPT);
             CHECK(r->needs_root == 1);
@@ -544,7 +544,7 @@ static void test_ip_address_screen(void)
     CHECK(has_dynamic == 1);
 }
 
-/* Theme rows are APPLIES that run the tested `azarch theme` subcommand. */
+/* Theme rows are APPLIES that run the tested `azzio theme` subcommand. */
 static void test_theme_rows_are_applies(void)
 {
     const AzScreen *t = az_screen_find("theme");
@@ -553,8 +553,8 @@ static void test_theme_rows_are_applies(void)
     CHECK(strcmp(t->rows[0].label, "Dark") == 0);
     CHECK(strcmp(t->rows[1].label, "White") == 0);
     CHECK(t->rows[0].kind == AZ_ACT_APPLY);
-    CHECK(strcmp(t->rows[0].target, "azarch theme --dark") == 0);
-    CHECK(strcmp(t->rows[1].target, "azarch theme --white") == 0);
+    CHECK(strcmp(t->rows[0].target, "azzio theme --dark") == 0);
+    CHECK(strcmp(t->rows[1].target, "azzio theme --white") == 0);
     /* both request the theme preview */
     CHECK(t->rows[0].preview == AZ_PV_THEME);
     CHECK(t->rows[1].preview == AZ_PV_THEME);
@@ -568,7 +568,7 @@ static void test_theme_rows_are_applies(void)
 static void test_row_command(void)
 {
     const AzScreen *t = az_screen_find("theme");
-    CHECK(strcmp(az_row_command(&t->rows[0]), "azarch theme --dark") == 0);
+    CHECK(strcmp(az_row_command(&t->rows[0]), "azzio theme --dark") == 0);
     /* a SCREEN row (Network parent) has no command to type */
     const AzScreen *m = az_screen_find("main");
     CHECK(az_row_command(&m->rows[0]) == NULL);
@@ -585,22 +585,22 @@ static void test_row_command(void)
 }
 
 /* PROMPT: every apply/port row now teaches its UNDERLYING base command too (az_row_base) --
- * the "Base Command: $ ..." line, which `x` copies -- alongside the azarch wrapper (`c`). A
+ * the "Base Command: $ ..." line, which `x` copies -- alongside the azzio wrapper (`c`). A
  * SCREEN row teaches neither. A PORT row's base carries the same "<port>" placeholder the
  * wrapper does. These are the exact commands wired in the model, verified end-to-end. */
 static void test_row_base_command(void)
 {
-    /* Theme: the base is the gsettings call, the wrapper is the azarch one. */
+    /* Theme: the base is the gsettings call, the wrapper is the azzio one. */
     const AzScreen *t = az_screen_find("theme");
     CHECK(strcmp(az_row_base(&t->rows[0]),
                  "gsettings set org.gnome.desktop.interface color-scheme prefer-dark") == 0);
-    CHECK(strcmp(az_row_command(&t->rows[0]), "azarch theme --dark") == 0);
+    CHECK(strcmp(az_row_command(&t->rows[0]), "azzio theme --dark") == 0);
 
-    /* Airplane on: the PROMPT's worked example -- base nmcli, wrapper azarch. */
+    /* Airplane on: the PROMPT's worked example -- base nmcli, wrapper azzio. */
     const AzScreen *air = az_screen_find("network.airplane");
     CHECK(strcmp(air->rows[0].label, "Turn airplane mode on") == 0);
     CHECK(strcmp(az_row_base(&air->rows[0]), "sudo nmcli networking off") == 0);
-    CHECK(strcmp(az_row_command(&air->rows[0]), "azarch network airplane on") == 0);
+    CHECK(strcmp(az_row_command(&air->rows[0]), "azzio network airplane on") == 0);
 
     /* Wallpaper base is the feh line ending in the real image path. */
     const AzScreen *w = az_screen_find("wallpaper");
@@ -670,7 +670,7 @@ static void test_firewall_lists_and_configures_ports(void)
     for (int i = 0; i < fw->nrows; i++) {
         CHECK(fw->rows[i].needs_root == 1);        /* all firewall applies secure sudo first */
         if (fw->rows[i].kind == AZ_ACT_APPLY &&
-            strcmp(fw->rows[i].target, "azarch network firewall port list") == 0) {
+            strcmp(fw->rows[i].target, "azzio network firewall port list") == 0) {
             has_list = 1;
             CHECK(fw->rows[i].show_output == 1);    /* the listing renders in the overlay */
         }
@@ -726,8 +726,8 @@ static void test_network_subscreens_have_current_and_no_row_spam(void)
 
 /* The SSH Server screen (Network > SSH Server -- the spec's streamlined ssh entry). It must
  * resolve, show sshd state via a screen-level Current: probe, and carry rows to START/STOP the
- * server, run the hypervisor bring-up (`azarch --sshd-hypervisor`), and open/close :22 -- each
- * privileged (needs_root) and teaching a base command + the azarch wrapper. */
+ * server, run the hypervisor bring-up (`azzio --sshd-hypervisor`), and open/close :22 -- each
+ * privileged (needs_root) and teaching a base command + the azzio wrapper. */
 static void test_ssh_server_screen(void)
 {
     const AzScreen *s = az_screen_find("network.ssh");
@@ -742,19 +742,19 @@ static void test_ssh_server_screen(void)
     for (int i = 0; i < s->nrows; i++) {
         CHECK(s->rows[i].kind == AZ_ACT_APPLY);
         CHECK(s->rows[i].needs_root == 1);          /* every ssh action secures sudo first */
-        CHECK(az_row_command(&s->rows[i]) != NULL); /* teaches the azarch wrapper */
+        CHECK(az_row_command(&s->rows[i]) != NULL); /* teaches the azzio wrapper */
         CHECK(az_row_base(&s->rows[i]) != NULL);    /* AND the base command */
-        if (strcmp(s->rows[i].target, "azarch network ssh start") == 0) has_start = 1;
-        if (strcmp(s->rows[i].target, "azarch network ssh stop") == 0) has_stop = 1;
-        if (strcmp(s->rows[i].target, "azarch --sshd-hypervisor") == 0) has_hyper = 1;
-        if (strcmp(s->rows[i].target, "azarch network firewall port open 22/tcp") == 0) has_open = 1;
+        if (strcmp(s->rows[i].target, "azzio network ssh start") == 0) has_start = 1;
+        if (strcmp(s->rows[i].target, "azzio network ssh stop") == 0) has_stop = 1;
+        if (strcmp(s->rows[i].target, "azzio --sshd-hypervisor") == 0) has_hyper = 1;
+        if (strcmp(s->rows[i].target, "azzio network firewall port open 22/tcp") == 0) has_open = 1;
         /* root SSH login toggle (off by default) -- both directions must be present */
-        if (strcmp(s->rows[i].target, "azarch network ssh root on") == 0) has_root_on = 1;
-        if (strcmp(s->rows[i].target, "azarch network ssh root off") == 0) has_root_off = 1;
+        if (strcmp(s->rows[i].target, "azzio network ssh root on") == 0) has_root_on = 1;
+        if (strcmp(s->rows[i].target, "azzio network ssh root off") == 0) has_root_off = 1;
     }
     CHECK(has_start == 1);
     CHECK(has_stop == 1);
-    CHECK(has_hyper == 1);                           /* the "button" for azarch --sshd-hypervisor */
+    CHECK(has_hyper == 1);                           /* the "button" for azzio --sshd-hypervisor */
     CHECK(has_open == 1);
     CHECK(has_root_on == 1);                         /* Enable root SSH login (INSECURE) */
     CHECK(has_root_off == 1);                        /* Disable root SSH login (default) */
@@ -766,7 +766,7 @@ static void test_ssh_server_screen(void)
     char tdir[] = "/tmp/az_root_login_test.XXXXXX";
     CHECK(mkdtemp(tdir) != NULL);
     char tf[300];
-    snprintf(tf, sizeof tf, "%s/00-azarch-root-login.conf", tdir);
+    snprintf(tf, sizeof tf, "%s/00-azzio-root-login.conf", tdir);
     setenv("AZ_ROOT_LOGIN_DROPIN", tf, 1);
     remove(tf);                                        /* absent -> shipped default */
     CHECK(strcmp(az_root_login_state(), "denied") == 0);
@@ -807,21 +807,21 @@ static void test_power_screen(void)
     CHECK(p->current == az_status_power);
     int has_shutdown = 0, has_restart = 0, has_sleep = 0, has_lock = 0, has_prompt = 0, has_cancel = 0;
     for (int i = 0; i < p->nrows; i++) {
-        CHECK(az_row_command(&p->rows[i]) != NULL);   /* teaches the azarch wrapper */
+        CHECK(az_row_command(&p->rows[i]) != NULL);   /* teaches the azzio wrapper */
         CHECK(az_row_base(&p->rows[i]) != NULL);      /* AND the base command */
-        if (strcmp(p->rows[i].target, "azarch power shutdown") == 0) {
+        if (strcmp(p->rows[i].target, "azzio power shutdown") == 0) {
             has_shutdown = 1; CHECK(p->rows[i].needs_root == 1);
         }
-        if (strcmp(p->rows[i].target, "azarch power restart") == 0) has_restart = 1;
-        if (strcmp(p->rows[i].target, "azarch power sleep") == 0) has_sleep = 1;
-        if (strcmp(p->rows[i].target, "azarch power lock") == 0) {
+        if (strcmp(p->rows[i].target, "azzio power restart") == 0) has_restart = 1;
+        if (strcmp(p->rows[i].target, "azzio power sleep") == 0) has_sleep = 1;
+        if (strcmp(p->rows[i].target, "azzio power lock") == 0) {
             has_lock = 1; CHECK(p->rows[i].needs_root == 0);   /* locking needs no root */
         }
         if (p->rows[i].kind == AZ_ACT_PROMPT) {
             has_prompt = 1;
             CHECK(p->rows[i].prompt != NULL);          /* asks for a duration */
         }
-        if (strcmp(p->rows[i].target, "azarch power shutdown --cancel") == 0) has_cancel = 1;
+        if (strcmp(p->rows[i].target, "azzio power shutdown --cancel") == 0) has_cancel = 1;
     }
     CHECK(has_shutdown == 1);
     CHECK(has_restart == 1);
@@ -843,7 +843,7 @@ static void test_power_screen(void)
 
 /* The firewall DEFAULT-policy control (the "general incoming and outgoing rule configuration"
  * the spec asks the UI to display AND control). The screen's Current: probe is the policy
- * summary, and rows wrap `azarch network firewall default <in> <out>`. */
+ * summary, and rows wrap `azzio network firewall default <in> <out>`. */
 static void test_firewall_default_policy_control(void)
 {
     const AzScreen *fw = az_screen_find("network.firewall");
@@ -852,14 +852,14 @@ static void test_firewall_default_policy_control(void)
     CHECK(fw->current == az_status_firewall_policy);
     int has_recommended = 0, has_allow_in = 0;
     for (int i = 0; i < fw->nrows; i++) {
-        if (strcmp(fw->rows[i].target, "azarch network firewall default deny allow") == 0) {
+        if (strcmp(fw->rows[i].target, "azzio network firewall default deny allow") == 0) {
             has_recommended = 1;
             CHECK(fw->rows[i].needs_root == 1);
         }
-        if (strcmp(fw->rows[i].target, "azarch network firewall default allow allow") == 0)
+        if (strcmp(fw->rows[i].target, "azzio network firewall default allow allow") == 0)
             has_allow_in = 1;
     }
-    CHECK(has_recommended == 1);   /* deny incoming + allow outgoing (the Az'arch baseline) */
+    CHECK(has_recommended == 1);   /* deny incoming + allow outgoing (the Azzio baseline) */
     CHECK(has_allow_in == 1);      /* open incoming (advanced) */
 }
 
@@ -876,7 +876,7 @@ static void test_wallpaper_rows_preview(void)
     CHECK(strstr(w->subtitle, "/usr/share/wallpapers") != NULL);
 }
 
-/* GPU / Time & Date / Language: the three new screens resolve, carry the right `azarch`
+/* GPU / Time & Date / Language: the three new screens resolve, carry the right `azzio`
  * subcommand targets, and their main-menu rows descend into them. */
 static void test_resolve_screens(void)
 {
@@ -885,21 +885,21 @@ static void test_resolve_screens(void)
     const AzScreen *l = az_screen_find("language");
     CHECK(g != NULL); CHECK(t != NULL); CHECK(l != NULL);
     CHECK(strcmp(g->title, "GPU") == 0);
-    CHECK(strcmp(g->rows[0].target, "azarch gpu --resolve") == 0);
+    CHECK(strcmp(g->rows[0].target, "azzio gpu --resolve") == 0);
     CHECK(g->rows[0].kind == AZ_ACT_APPLY);         /* GPU resolve is non-interactive (just installs) */
     CHECK(g->rows[0].needs_root == 1);              /* resolve installs packages (pacman) */
     CHECK(g->rows[0].show_output == 1);
     /* Time & Date / Language resolve pick 1 of 5 servers INTERACTIVELY. The capture overlay
      * feeds /dev/null to stdin, so the resolver cannot prompt there -- instead these are
      * AZ_ACT_PROMPT rows: the UI collects the server number in-field and appends it, running
-     * "azarch <sub> --resolve --server <N>" (the non-interactive resolver path). The prompt
+     * "azzio <sub> --resolve --server <N>" (the non-interactive resolver path). The prompt
      * label lists the fixed server order so the typed number is unambiguous. */
     CHECK(t->rows[0].kind == AZ_ACT_PROMPT);
-    CHECK(strcmp(t->rows[0].target, "azarch timedate --resolve --server") == 0);
+    CHECK(strcmp(t->rows[0].target, "azzio timedate --resolve --server") == 0);
     CHECK(t->rows[0].prompt != NULL && strstr(t->rows[0].prompt, "ipapi.co") != NULL);
     CHECK(t->rows[0].show_output == 1);
     CHECK(l->rows[0].kind == AZ_ACT_PROMPT);
-    CHECK(strcmp(l->rows[0].target, "azarch language --resolve --server") == 0);
+    CHECK(strcmp(l->rows[0].target, "azzio language --resolve --server") == 0);
     CHECK(l->rows[0].prompt != NULL && strstr(l->rows[0].prompt, "ipapi.co") != NULL);
     CHECK(l->rows[0].show_output == 1);
     CHECK(g->current == az_status_gpu);

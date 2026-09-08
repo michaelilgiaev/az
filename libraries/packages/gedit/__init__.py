@@ -4,7 +4,7 @@
     -------------------------------------------------------------
     This is inspired by Windows' old-school Notepad. gedit should be a BASIC,
     featureless application: it does not need features -- it is a simple tool that
-    serves a very simple goal. Modern gedit's multi-tab approach does not fit Az'arch,
+    serves a very simple goal. Modern gedit's multi-tab approach does not fit Azzio,
     a distribution that wants to "get out of the way". So: STRAIGHT UP REMOVE the
     multi-tab feature (open something twice -> ANOTHER WINDOW, never a tab), strip the
     headerbar down to ONLY the hamburger menu + the window controls (min/max/close),
@@ -12,7 +12,7 @@
 
     THE FORK, AND WHY CONFIG FILES ALONE ARE NOT ENOUGH
     ---------------------------------------------------
-    Az'arch ships gedit 50 -- the gedit-technology fork (GTK3, libgedit-amtk/tepl), NOT
+    Azzio ships gedit 50 -- the gedit-technology fork (GTK3, libgedit-amtk/tepl), NOT
     GNOME's GTK4 gedit. On this fork:
       * The tab bar is a GeditMultiNotebook; show-tabs-mode='never' hides the STRIP but
         the "New Tab" (win.new-tab) affordance and Ctrl+T still exist.
@@ -29,7 +29,7 @@
         would do this cannot load.
     The ONLY supported hook that can remove the New Tab action, strip the headerbar
     buttons and rebind Ctrl+W is a COMPILED libpeas plugin implementing
-    GeditWindowActivatable, whose activate() fires once per window. Az'arch already
+    GeditWindowActivatable, whose activate() fires once per window. Azzio already
     compiles C for the application menu, so this fits the same pattern.
 
     WHAT WE SHIP (three system files, all root-owned) + one compiled plugin .so
@@ -97,7 +97,7 @@ import paths
 # dir. Both root-owned; the OFFLINE Calamares install rsyncs the live rootfs, so they
 # carry onto the installed system with no separate installer step.
 DESKTOP_ENTRY_PATH = "/usr/share/applications/org.gnome.gedit.desktop"
-GSCHEMA_OVERRIDE_PATH = "/usr/share/glib-2.0/schemas/90_azarch-gedit.gschema.override"
+GSCHEMA_OVERRIDE_PATH = "/usr/share/glib-2.0/schemas/90_azzio-gedit.gschema.override"
 
 # The exact command that MUST be run after the override lands so glib recompiles the
 # machine-readable gschemas.compiled (dropping the override file alone does nothing).
@@ -112,7 +112,7 @@ GEDIT_UI_SCHEMA = "org.gnome.gedit.preferences.ui"
 SHOW_TABS_MODE = "never"   # 'never' | 'auto' | 'always' (case-sensitive)
 # The editor-area font. gedit uses the system default fixed-width font UNLESS
 # use-default-font is false, in which case editor-font (a Pango font description string,
-# "<family> <size>") is used. Az'arch wants a fixed 18pt editor font, so we turn the
+# "<family> <size>") is used. Azzio wants a fixed 18pt editor font, so we turn the
 # default OFF and set editor-font to Monospace 18 (gedit's stock editor-font is
 # 'Monospace 12'; we keep the family, bump the size). Both keys live under the editor
 # preferences schema and are set in the SAME override file as show-tabs-mode/active-plugins.
@@ -131,10 +131,10 @@ GEDIT_EDITOR_FONT = f"Monospace {GEDIT_FONT_SIZE}"   # Pango font description: f
 # the system theme too. gedit 50 (the gedit-technology fork) keeps TWO scheme keys and picks
 # between them AUTOMATICALLY by the GTK dark flag (gtk-application-prefer-dark-theme): the
 # "...for-dark-theme-variant" when the app is dark, the "...for-light-theme-variant" when
-# light. So Az'arch just seeds BOTH and gedit follows the system theme for free -- no per-
-# toggle GSetting flip needed (the GTK dark flag, which `azarch theme` sets, drives it). The
+# light. So Azzio just seeds BOTH and gedit follows the system theme for free -- no per-
+# toggle GSetting flip needed (the GTK dark flag, which `azzio theme` sets, drives it). The
 # scheme ids MUST be ones the fork's libgedit-gtksourceview actually ships: 'oblivion' (dark
-# grey, kind="dark", matching the Az'arch dark look) and 'classic' (kind="light-only"). There
+# grey, kind="dark", matching the Azzio dark look) and 'classic' (kind="light-only"). There
 # is NO 'classic-dark' in this fork, so we do not use it.
 GEDIT_STYLE_SCHEME_DARK_KEY = "style-scheme-for-dark-theme-variant"
 GEDIT_STYLE_SCHEME_LIGHT_KEY = "style-scheme-for-light-theme-variant"
@@ -163,13 +163,13 @@ GEDIT_PLUGIN_METADATA_DEST = f"/usr/lib/gedit/plugins/{GEDIT_PLUGIN_METADATA_NAM
 # .plugin in the source tree -- this Python is the single source of truth). Module MUST equal
 # MODIFICATIONS_PLUGIN_MODULE (the active-plugins id) or the override enables a plugin gedit
 # can't find.
-GEDIT_PLUGIN_NAME = "Az'arch gedit modifications"
+GEDIT_PLUGIN_NAME = "Azzio gedit modifications"
 GEDIT_PLUGIN_DESCRIPTION = (
     "One window per file, no tabs, a minimal headerbar (hamburger + window controls only), "
     "and Ctrl+W exits."
 )
-GEDIT_PLUGIN_AUTHORS = "Az'arch"
-GEDIT_PLUGIN_COPYRIGHT = "Copyright © 2026 Az'arch"
+GEDIT_PLUGIN_AUTHORS = "Azzio"
+GEDIT_PLUGIN_COPYRIGHT = "Copyright © 2026 Azzio"
 GEDIT_PLUGIN_WEBSITE = "https://gedit-text-editor.org/"
 GEDIT_PLUGIN_IAGE = 3   # libpeas interface age gedit 50 loads against
 
@@ -189,7 +189,7 @@ def desktop_entry() -> str:
     module docstring). The two right-click Actions also run standalone."""
     return """\
 [Desktop Entry]
-# Az'arch notepad-mode gedit launcher. Generated by packages/gedit (edit the Python,
+# Azzio notepad-mode gedit launcher. Generated by packages/gedit (edit the Python,
 # not this file). Exec forces --standalone --new-window and DBusActivatable is false so
 # opening a file always makes a NEW WINDOW (never a tab in a running gedit). Everything
 # else is stock gedit.
@@ -221,7 +221,7 @@ Exec=gedit --standalone --new-document
 
 
 def gschema_override() -> str:
-    """/usr/share/glib-2.0/schemas/90_azarch-gedit.gschema.override -- hide the tab bar,
+    """/usr/share/glib-2.0/schemas/90_azzio-gedit.gschema.override -- hide the tab bar,
     enable the notepad-mode plugin, AND set the editor font to 18pt.
 
     A glib schema override: sets the DEFAULTS of these keys without editing the packaged
@@ -240,7 +240,7 @@ def gschema_override() -> str:
     plugins_literal = "[" + ", ".join(f"'{p}'" for p in ACTIVE_PLUGINS) + "]"
     use_default_font_literal = "true" if GEDIT_USE_DEFAULT_FONT else "false"
     return f"""\
-# Az'arch gedit override -- notepad mode. Generated by packages/gedit (edit the Python,
+# Azzio gedit override -- notepad mode. Generated by packages/gedit (edit the Python,
 # not this file). Requires `glib-compile-schemas {GLIB_SCHEMAS_DIR}` to take effect.
 # show-tabs-mode: never draw the notebook tab strip.
 # active-plugins: gedit's default plugins PLUS gedit-modifications (removes New Tab, strips the
@@ -306,7 +306,7 @@ def build_plugin(dest: Path, *, make: str = "make") -> Path:
     MUST fail the ISO build loudly rather than ship gedit without notepad mode. Returns the
     destination path."""
     dest = Path(dest)
-    with tempfile.TemporaryDirectory(prefix="azarch-gedit-plugin-build-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="azzio-gedit-plugin-build-") as tmp:
         build_dir = Path(tmp)
         for src in _plugin_src_files():
             shutil.copy2(src, build_dir / src.name)

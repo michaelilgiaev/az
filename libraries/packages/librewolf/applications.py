@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Az'arch timedate -- the Flask Time + Calendar home page (served at localhost:49154).
+"""Azzio timedate -- the Flask Time + Calendar home page (served at localhost:49154).
 
 This IS the page LibreWolf lands on: a small, pretty, easy-on-the-eyes local website
 that shows the current TIME (hour, minute, seconds) and a CALENDAR (day, month, year).
@@ -10,7 +10,7 @@ Two load-bearing design choices:
   1. TIMEZONE FOLLOWS THE SYSTEM, LIVE. The distro's timezone is configured by
      Calamares at install (default Asia/Jerusalem), but the user may change it later by
      ANY means -- the Calamares Location page, `timedatectl set-timezone`,
-     `azarch timedate --resolve`, or hand-editing the /etc/localtime symlink. All of
+     `azzio timedate --resolve`, or hand-editing the /etc/localtime symlink. All of
      those converge on ONE ground truth: the /etc/localtime symlink's target under
      /usr/share/zoneinfo (that is literally how the system stores "the timezone"). So
      this app resolves the zone by reading that symlink on EVERY request (`_system_zone`)
@@ -28,7 +28,7 @@ Two load-bearing design choices:
 
 Pure Flask + Python standard library (zoneinfo). Bound to 0.0.0.0:49154 so the local
 browser reaches it at localhost:49154; it serves only the loopback-facing home page and
-holds no state. Run in the background by the azarch-timedate systemd service (see
+holds no state. Run in the background by the azzio-timedate systemd service (see
 timedate.py -> SERVICE_UNIT), started at boot.
 """
 
@@ -48,13 +48,13 @@ PORT = 49154
 # Where the OS stores "the current timezone": /etc/localtime is a symlink into the
 # zoneinfo database, and its target path *is* the IANA zone name. Reading it live is how
 # this app follows the system zone no matter how it was changed (Calamares, timedatectl,
-# azarch timedate --resolve, a manual symlink). Kept as constants so a test can pin them.
+# azzio timedate --resolve, a manual symlink). Kept as constants so a test can pin them.
 LOCALTIME_PATH = "/etc/localtime"
 ZONEINFO_DIR = "/usr/share/zoneinfo"
 
 # Last-resort zone if /etc/localtime is missing or unreadable (e.g. a broken system, or
 # running the app off-target for a demo). Matches the distro default so the page still
-# shows a sensible, correct-for-Az'arch time rather than erroring. The system symlink,
+# shows a sensible, correct-for-Azzio time rather than erroring. The system symlink,
 # when present, always wins over this.
 FALLBACK_ZONE = "Asia/Jerusalem"
 

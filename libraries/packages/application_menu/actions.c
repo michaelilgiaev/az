@@ -1,4 +1,4 @@
-/* Az'arch application menu (C port) -- side-effect actions (launch + power).
+/* Azzio application menu (C port) -- side-effect actions (launch + power).
  * Port of actions.py. Everything is best-effort and swallows its own errors. */
 #include "actions.h"
 

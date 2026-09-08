@@ -1,4 +1,4 @@
-"""pkgbuild -- the Az'arch-authored package recipes.
+"""pkgbuild -- the Azzio-authored package recipes.
 
 These PKGBUILDs are Python f-strings emitted to disk and then fed verbatim to
 makepkg. Two failure modes here are silent and expensive:
@@ -169,10 +169,10 @@ def test_librewolf_src_runs_bsys6_make_targets():
 
 def test_librewolf_src_make_build_caps_jobs():
     # `make build` alone lets Firefox's build spawn one job per core and pin the
-    # whole machine. It must carry the -j cap fed via AZARCH_JOBS (exported by
+    # whole machine. It must carry the -j cap fed via AZZIO_JOBS (exported by
     # makepkg), defaulting to 1 when the var is unset.
     s = pkgbuild.pkgbuild_librewolf_src()
-    assert 'make build -j"${AZARCH_JOBS:-1}"' in s
+    assert 'make build -j"${AZZIO_JOBS:-1}"' in s
 
 
 def test_librewolf_src_shares_pkgver_and_lwver():
@@ -203,11 +203,11 @@ def test_calamares_pkgver_var_survives_brace_collapse():
 
 def test_calamares_cmake_build_caps_jobs():
     # `cmake --build build` auto-detects every core and pins the machine. It must
-    # carry the -j cap fed via AZARCH_JOBS (exported by makepkg), defaulting
+    # carry the -j cap fed via AZZIO_JOBS (exported by makepkg), defaulting
     # to 1 when unset. The brace pair in the recipe f-string must also have
     # collapsed to a single ${...} shell expansion.
     s = pkgbuild.pkgbuild_calamares()
-    assert 'cmake --build build -j"${AZARCH_JOBS:-1}"' in s
+    assert 'cmake --build build -j"${AZZIO_JOBS:-1}"' in s
 
 
 def test_calamares_cmake_pins_python_to_system_interpreter():
@@ -227,7 +227,7 @@ def test_calamares_cmake_pins_python_to_system_interpreter():
 def test_calamares_cmake_disables_pwquality():
     # The users module does an UNCONDITIONAL find_package(LibPWQuality) with no WITH_
     # toggle. If the build host has libpwquality, the module links libpwquality.so.1,
-    # which the Az'arch ISO does not ship -> the users viewmodule fails to dlopen on the
+    # which the Azzio ISO does not ship -> the users viewmodule fails to dlopen on the
     # target and calamares aborts. Disabling the find_package keeps the module portable
     # (and matches the design: strong-password checking is force-hidden anyway).
     s = pkgbuild.pkgbuild_calamares()
@@ -267,10 +267,10 @@ def test_calamares_patch_name_is_a_patch_file():
 
 def test_calamares_patch_is_unified_diff_touching_all_files():
     # The patch must be a -p1 unified diff (a/ b/ prefixes) that edits every file the
-    # Az'arch installer-UI refactor touches. Missing any file means one of the requested
+    # Azzio installer-UI refactor touches. Missing any file means one of the requested
     # changes was dropped:
     #   KeyboardLayoutModel.cpp -- Alt+Shift group-switcher default
-    #   page_usersetup.ui       -- rename 4 prompt labels + hostname placeholder "azarch"
+    #   page_usersetup.ui       -- rename 4 prompt labels + hostname placeholder "azzio"
     #   UsersPage.cpp           -- hide Full Name row + hide strong-password checkbox
     #   Config.cpp              -- isReady() relax + empty login/hostname errors + host seed
     #   SetPasswordJob.cpp      -- empty password locks any account
@@ -434,7 +434,7 @@ def test_calamares_defaults_patch_applies_to_pinned_source():
         assert 'return tr( "User parameter must include at least one character." )' in users
         assert 'return tr( "Hostname parameter must include at least two characters." )' in users
         # The four field-prompt labels are RENAMED to short captions in the .ui; the
-        # hostname placeholder becomes "azarch" and the login placeholder becomes "main"
+        # hostname placeholder becomes "azzio" and the login placeholder becomes "main"
         # (the login VALUE is also seeded to "main" in Config.cpp -- see above -- so the
         # placeholder is now the fallback hint shown only if the field is cleared). The
         # reuse checkbox is re-worded.
@@ -443,7 +443,7 @@ def test_calamares_defaults_patch_applies_to_pinned_source():
         assert "<string>Hostname:</string>" in ui
         assert "<string>Username Password:</string>" in ui
         assert "<string>Root Password:</string>" in ui
-        assert "<string>azarch</string>" in ui           # hostname placeholder
+        assert "<string>azzio</string>" in ui           # hostname placeholder
         assert "<string>main</string>" in ui             # login placeholder + seeded value
         assert "<string>login</string>" not in ui        # old login placeholder gone
         assert "What name do you want to use to log in?" not in ui
@@ -1017,7 +1017,7 @@ def test_calamares_networkq_qml_paints_an_opaque_dark_background():
 
 
 def test_calamares_networkq_qml_does_not_import_kirigami():
-    # The Az'arch ISO ships qt6-declarative (QtQuick/Controls/Layouts) but NOT kirigami --
+    # The Azzio ISO ships qt6-declarative (QtQuick/Controls/Layouts) but NOT kirigami --
     # only the widget `users` module is used, so kirigami was never added to the manifest.
     # The stock usersq-qt6.qml uses org.kde.kirigami, but this page must NOT: an
     # `import org.kde.kirigami` would fail to resolve at runtime on the ISO and the page
@@ -1231,15 +1231,15 @@ def test_calamares_networkcfg_static_patch_touches_only_networkcfg_main():
 
 def test_calamares_networkcfg_static_patch_writes_0600_manual_profile():
     # The added job logic must: gate on method == "manual", convert the dotted netmask to
-    # a CIDR prefix, write /etc/NetworkManager/system-connections/azarch-static.nmconnection
+    # a CIDR prefix, write /etc/NetworkManager/system-connections/azzio-static.nmconnection
     # at 0600 (NetworkManager ignores world-readable system-connections), and format the
     # keyfile with method=manual + address1=<ip>/<prefix>,<gateway> + dns=...;.
     p = pkgbuild.calamares_networkcfg_static_patch()
     added = [ln[1:] for ln in p.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
     body = "\n".join(added)
     assert 'gs.value("networkMethod") != "manual"' in body      # DHCP short-circuit
-    assert "_azarch_netmask_to_prefix" in body                   # mask -> prefix helper
-    assert "azarch-static.nmconnection" in body                  # target keyfile
+    assert "_azzio_netmask_to_prefix" in body                   # mask -> prefix helper
+    assert "azzio-static.nmconnection" in body                  # target keyfile
     assert "0o600" in body                                       # NM requires 0600
     assert "method=manual" in body
     assert '"address1="' in body
@@ -1256,7 +1256,7 @@ def test_calamares_networkcfg_static_patch_writes_0600_manual_profile():
     ):
         assert key in body, key
     # It reads the target root (already read at the top of run()) and is CALLED from run().
-    assert "_azarch_write_static_connection(root_mount_point)" in body
+    assert "_azzio_write_static_connection(root_mount_point)" in body
 
 
 def test_calamares_networkcfg_static_patch_context_lines_have_leading_space():
@@ -1301,7 +1301,7 @@ def test_calamares_networkcfg_static_patch_applies_and_main_compiles():
             dst.write_bytes(fobj.read())
 
         pristine = (work / rel).read_text()
-        assert "_azarch_write_static_connection" not in pristine
+        assert "_azzio_write_static_connection" not in pristine
 
         patch_text = pkgbuild.calamares_networkcfg_static_patch()
         dry = subprocess.run(
@@ -1316,8 +1316,8 @@ def test_calamares_networkcfg_static_patch_applies_and_main_compiles():
         assert real.returncode == 0, f"apply failed:\n{real.stdout}\n{real.stderr}"
 
         patched = (work / rel).read_text()
-        assert "azarch-static.nmconnection" in patched
-        assert "_azarch_write_static_connection(root_mount_point)" in patched
+        assert "azzio-static.nmconnection" in patched
+        assert "_azzio_write_static_connection(root_mount_point)" in patched
         # The patched job must still compile.
         py_compile.compile(str(work / rel), doraise=True)
 
@@ -1365,7 +1365,7 @@ def test_all_five_calamares_patches_apply_in_sequence_to_pinned_source():
 
         # Pristine guards for the two new features.
         assert not (work / "src/modules/networkq").exists()
-        assert "_azarch_write_static_connection" not in (
+        assert "_azzio_write_static_connection" not in (
             work / "src/modules/networkcfg/main.py"
         ).read_text()
 
@@ -1389,7 +1389,7 @@ def test_all_five_calamares_patches_apply_in_sequence_to_pinned_source():
 
         # The Network feature landed: the page module exists and the job writes the profile.
         assert (work / "src/modules/networkq/CMakeLists.txt").is_file()
-        assert "azarch-static.nmconnection" in (
+        assert "azzio-static.nmconnection" in (
             work / "src/modules/networkcfg/main.py"
         ).read_text()
         py_compile.compile(str(work / "src/modules/networkcfg/main.py"), doraise=True)
@@ -1445,7 +1445,7 @@ def test_overrides_disables_sanitize_on_shutdown():
 
 
 def test_overrides_land_on_timedate_home_and_keep_logins():
-    # Az'arch's default home page is the local timedate site (localhost:49154), and the
+    # Azzio's default home page is the local timedate site (localhost:49154), and the
     # browser must LAND on it: browser.startup.homepage = that URL AND browser.startup.
     # page = 1 (open the HOME page on startup). This REPLACED the old restore-session
     # (page = 3) behaviour per the spec ("LibreWolf should default to land on it").
@@ -1599,7 +1599,7 @@ def test_recipe_dirs_companion_files_shared_across_tiers():
 
 
 # --- calamares recipe extracted to its own module (pkgbuild_calamares) ------
-# The calamares recipe (pinned facts + the 3 Az'arch source patches + the PKGBUILD
+# The calamares recipe (pinned facts + the 3 Azzio source patches + the PKGBUILD
 # text) lives in libraries/pkgbuild_calamares.py; pkgbuild.py re-exports every name so
 # the flat `pkgbuild.X` surface these tests use is unchanged, and recipe_dirs() still
 # assembles the calamares dir from them. These tests lock that re-export.

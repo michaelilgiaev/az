@@ -1,6 +1,6 @@
-"""Az'arch calamares source patch -- region-driven English+region two-layout keyboard.
+"""Azzio calamares source patch -- region-driven English+region two-layout keyboard.
 
-One of the three Az'arch source patches applied to the pinned calamares-3.4.2 tarball
+One of the three Azzio source patches applied to the pinned calamares-3.4.2 tarball
 in the recipe's prepare() (see pkgbuild_calamares). Kept in its own module so each
 patch is a focused, independently-editable unit; pkgbuild_calamares re-exports the
 name-constant and builder below, and pkgbuild.py re-exports them in turn, so callers
@@ -29,7 +29,7 @@ from __future__ import annotations
 # None of this is expressible in a module .conf: the linkage lives entirely in
 # Calamares' C++ (the keyboard module reads GlobalStorage and drives setxkbmap),
 # so it can only be changed by patching the source. This SECOND patch (kept apart
-# from azarch-calamares-defaults.patch so the two concerns stay independent) makes
+# from azzio-calamares-defaults.patch so the two concerns stay independent) makes
 # three coordinated edits, all verified against the pinned 3.4.2 source:
 #
 #   1. locale/Config.cpp -- publish the selected zone's ISO-3166 country code to
@@ -54,12 +54,12 @@ from __future__ import annotations
 # "ara", Latin-American Spanish is "latam". The pinned tarball guarantees the
 # context lines match; a drift on a version bump makes `patch` fail LOUDLY in
 # prepare() rather than silently dropping the feature -- refresh the hunks then.
-CALAMARES_REGION_KEYBOARD_PATCH_NAME = "azarch-calamares-region-keyboard.patch"
+CALAMARES_REGION_KEYBOARD_PATCH_NAME = "azzio-calamares-region-keyboard.patch"
 
 
 def calamares_region_keyboard_patch() -> str:
     r"""Unified diff (-p1) applied to the extracted calamares-3.4.2 source in the
-    recipe's prepare(), AFTER azarch-calamares-defaults.patch: wire region selection
+    recipe's prepare(), AFTER azzio-calamares-defaults.patch: wire region selection
     on the Location page to an English+region two-layout keyboard config (see the
     block comment above). Touches locale/Config.cpp (publish locationCountry to GS)
     and keyboard/Config.h + keyboard/Config.cpp (the guessRegionKeyboardLayout()
@@ -81,7 +81,7 @@ def calamares_region_keyboard_patch() -> str:
         "     void detectCurrentKeyboardLayout();",
         "     /// @brief Based on current locale, pick a layout",
         "     void guessLocaleKeyboardLayout();",
-        "+    /// @brief Az'arch: derive an English+region two-layout config from the",
+        "+    /// @brief Azzio: derive an English+region two-layout config from the",
         '+    /// region picked on the Location page (GlobalStorage "locationCountry").',
         "+    /// @param userHadSelected true if the user had already hand-picked a layout on",
         "+    /// the keyboard page (m_state was UserSelected on entry); used to preserve that",
@@ -94,7 +94,7 @@ def calamares_region_keyboard_patch() -> str:
         "     bool m_configureGnome = false;",
         "     bool m_guessLayout = false;",
         " ",
-        "+    // Az'arch: when true, guessLocaleKeyboardLayout() ALSO derives a SECOND keyboard",
+        "+    // Azzio: when true, guessLocaleKeyboardLayout() ALSO derives a SECOND keyboard",
         "+    // layout from the region the user picked on the Location page (GlobalStorage",
         "+    // \"locationCountry\"): English (\"us\") stays the active layout and the region's",
         "+    // native layout is added as a switchable second (Alt+Shift). English-speaking",
@@ -126,7 +126,7 @@ def calamares_region_keyboard_patch() -> str:
         " Config::apply()",
         " {",
         "-    m_additionalLayoutInfo = getAdditionalLayoutInfo( m_current.selectedLayout );",
-        "+    // Az'arch: while the region-driven pair is in effect (primary is still the",
+        "+    // Azzio: while the region-driven pair is in effect (primary is still the",
         '+    // region layout guessRegionKeyboardLayout() selected), force "us" as the',
         '+    // additional layout so English stays first/active in the emitted "us,<region>"',
         "+    // -- even for Latin-script regions (latam/es/fr/...) that getAdditionalLayoutInfo()",
@@ -165,7 +165,7 @@ def calamares_region_keyboard_patch() -> str:
         " Config::guessLocaleKeyboardLayout()",
         " {",
         "-    if ( m_state != State::Initial || !m_guessLayout )",
-        "+    // Az'arch: capture whether the user had already hand-picked a layout (state",
+        "+    // Azzio: capture whether the user had already hand-picked a layout (state",
         "+    // UserSelected) BEFORE the scoped assignment below resets it -- the region",
         "+    // guess uses it to preserve that choice on a same-region revisit.",
         "+    const bool azUserHadSelected = ( m_state == State::UserSelected );",
@@ -179,7 +179,7 @@ def calamares_region_keyboard_patch() -> str:
         "             lang = newLang;",
         "         }",
         "     }",
-        "+    // Az'arch: when region-driven second layout is enabled, ignore the (always",
+        "+    // Azzio: when region-driven second layout is enabled, ignore the (always",
         "+    // English) display LANG for the keyboard and derive the layout pair from the",
         "+    // region the user picked on the Location page instead. Runs inside the same",
         "+    // Guessing scope so the programmatic selection below does not flip the state",
@@ -195,7 +195,7 @@ def calamares_region_keyboard_patch() -> str:
         "     }",
         " }",
         " ",
-        "+// Az'arch: map an ISO-3166 country code (as written to GlobalStorage",
+        "+// Azzio: map an ISO-3166 country code (as written to GlobalStorage",
         '+// "locationCountry" by the patched locale module) to the region\'s native xkb',
         "+// LAYOUT and console KEYMAP. English-speaking countries are deliberately absent:",
         "+// they get English only (no second layout). The layout codes are real",
@@ -272,7 +272,7 @@ def calamares_region_keyboard_patch() -> str:
         "+    return QString();",
         "+}",
         "+",
-        "+// Az'arch: fallback country when GlobalStorage \"locationCountry\" is not yet",
+        "+// Azzio: fallback country when GlobalStorage \"locationCountry\" is not yet",
         "+// populated on the first Keyboard activation. Derive it from the zone the locale",
         '+// module DID publish ("locationZone", e.g. "Jerusalem"/"El_Salvador"/"Riyadh").',
         '+// The default Asia/Jerusalem MUST map to "IL" so the out-of-the-box installer',
@@ -346,11 +346,11 @@ def calamares_region_keyboard_patch() -> str:
         "+        // English-only. See countryForZone().",
         '+        const QString zone = gs->value( QStringLiteral( "locationZone" ) ).toString().trimmed();',
         "+        country = countryForZone( zone ).toUpper();",
-        '+        cDebug() << "Az\'arch region keyboard: locationCountry empty; zone" << zone << "-> country" << country;',
+        '+        cDebug() << "Azzio region keyboard: locationCountry empty; zone" << zone << "-> country" << country;',
         "+    }",
-        '+    cDebug() << "Az\'arch region keyboard: locationCountry" << country;',
+        '+    cDebug() << "Azzio region keyboard: locationCountry" << country;',
         "+",
-        "+    // Az'arch: do NOT clobber a hand-picked layout on a same-region revisit. If the",
+        "+    // Azzio: do NOT clobber a hand-picked layout on a same-region revisit. If the",
         "+    // user already selected a layout by hand (userHadSelected) AND the region has not",
         "+    // changed since our last guess (country == m_regionGuessedCountry), preserve their",
         "+    // choice -- the whole point of re-running on every activate is to follow a REGION",
@@ -395,7 +395,7 @@ def calamares_region_keyboard_patch() -> str:
         "+        }",
         "+        else",
         "+        {",
-        '+            cWarning() << "Az\'arch region keyboard: layout" << regionLayout << "not in model; keeping us";',
+        '+            cWarning() << "Azzio region keyboard: layout" << regionLayout << "not in model; keeping us";',
         "+            m_additionalLayoutInfo = AdditionalLayoutInfo();",
         "+            m_regionLayout.clear();",
         "+            m_regionVConsoleKeymap.clear();",
@@ -425,7 +425,7 @@ def calamares_region_keyboard_patch() -> str:
         '     m_configureGnome = getBool( configureItems, "gnome", false );',
         " ",
         '     m_guessLayout = getBool( configurationMap, "guessLayout", true );',
-        "+    // Az'arch: opt-in region-driven second layout (English + region language,",
+        "+    // Azzio: opt-in region-driven second layout (English + region language,",
         "+    // Alt+Shift). Default false so upstream / other distros are unaffected.",
         '+    m_regionSecondLayout = getBool( configurationMap, "regionSecondLayout", false );',
         " }",
@@ -437,7 +437,7 @@ def calamares_region_keyboard_patch() -> str:
         " {",
         '     const QString regionKey = QStringLiteral( "locationRegion" );',
         '     const QString zoneKey = QStringLiteral( "locationZone" );',
-        "+    // Az'arch: also publish the ISO-3166 country code of the selected zone. Neither",
+        "+    // Azzio: also publish the ISO-3166 country code of the selected zone. Neither",
         "+    // the region (America/Asia/...) nor the zone (El_Salvador/Riyadh/...) is a",
         "+    // country code, and nothing else in GlobalStorage carries one -- but the patched",
         "+    // keyboard module needs it to pick the region's native keyboard layout. This is",

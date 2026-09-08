@@ -3,9 +3,9 @@ specification_stock_baseline -- the stock archiso `releng` package list, held as
 variable so it is not mistaken for an editable manifest.
 
 This is the ground truth for the "Stock Arch" edition in the specification: every package
-the official Arch install medium already pulls in. Az'arch builds on top of this
+the official Arch install medium already pulls in. Azzio builds on top of this
 list (libraries/packages/packages.x86_64); anything in the final package set that is
-NOT reachable from this baseline is an "Az'arch Component".
+NOT reachable from this baseline is an "Azzio Component".
 
 It lives here (a module, not a data file next to packages.x86_64) on purpose:
     * editing it is a deliberate act, not a stray keystroke while browsing the

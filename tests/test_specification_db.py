@@ -1,7 +1,7 @@
 """specification_db -- fetch and parse the Arch `core`/`extra`/`multilib` package databases.
 
 Every version, dependency edge, virtual-provides link and group membership that
-the whole Az'arch specification is computed from enters the program through this module.
+the whole Azzio specification is computed from enters the program through this module.
 It reads the *official* Arch `.db` tarballs (gzipped tar of `<pkg>-<ver>/desc`
 records) rather than the host's pacman databases, so a non-Arch build host
 cannot poison the specification with the wrong versions/names. The parsing is brittle in

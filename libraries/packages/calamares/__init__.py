@@ -1,9 +1,9 @@
 """calamares - the Calamares 3.4.2 installer configuration, authored as
 configuration-as-Python.
 
-Calamares is Az'arch's SOLE installer: the live OpenBox session auto-launches it and
-it installs Az'arch Linux to disk (OFFLINE -- the target root is unpacked from the live
-SquashFS by unpackfs, not pacstrapped over the network). Because Az'arch ships a
+Calamares is Azzio's SOLE installer: the live OpenBox session auto-launches it and
+it installs Azzio Linux to disk (OFFLINE -- the target root is unpacked from the live
+SquashFS by unpackfs, not pacstrapped over the network). Because Azzio ships a
 CRITICALLY MODIFIED calamares build (compiled from source in the makepkg stage; see
 libraries/makepkg.py and packages/pkgbuild.py), the whole configuration tree lives here
 under libraries/packages/ as one of OUR packages, not under packages/.

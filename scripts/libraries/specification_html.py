@@ -1,11 +1,11 @@
 """
-specification_html -- render the Az'arch component set as ONE self-contained, interactive
+specification_html -- render the Azzio component set as ONE self-contained, interactive
 HTML page (documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html).
 
 This is the interactive twin of the SVG (specification_svg): the same layered map -- seven
 horizontal bands from the kernel at the bottom up to the leaf applications at the
 top, every component drawn as a box coloured by category and marked by edition
-(a star marks an Az'arch Component; unmarked boxes are Stock Arch) -- but you can
+(a star marks an Azzio Component; unmarked boxes are Stock Arch) -- but you can
 actually *use* it. Click any component to open a detail panel with its
 plain-language purpose, version, edition, category, layer, size and upstream link;
 the map then highlights everything it requires (below it) and everything that
@@ -44,7 +44,7 @@ def _fmt_size(nbytes):
 
 
 EDITION_LABEL = {
-    "az'arch": "Az'arch Component",
+    "azzio": "Azzio Component",
     "stock": "Stock Arch",
 }
 
@@ -81,7 +81,7 @@ def _build_payload(packages, resolved, tiers, tags, glance, attr):
             "editionLabel": EDITION_LABEL[tag["edition"]],
             "category": tag["category"],
             "layer": layer,
-            "azarch": tag.get("azarch_note") or "",
+            "azzio": tag.get("azzio_note") or "",
             "removed": bool(tag.get("removed")),
             "requires": sorted(edges.get(p, ())),
             "requiredBy": sorted(rev.get(p, ())),
@@ -113,8 +113,8 @@ def _build_payload(packages, resolved, tiers, tags, glance, attr):
     # can be grouped the same way components are.
     # An entry's edition is decided by the MANIFEST BLOCK it lives in, not by its
     # anchor package: a line the author wrote is "stock" iff it is one of the
-    # baseline archiso releng package names, else it is an Az'arch addition. This
-    # is exactly the Stock/Az'arch delimiter in packages.x86_64.
+    # baseline archiso releng package names, else it is an Azzio addition. This
+    # is exactly the Stock/Azzio delimiter in packages.x86_64.
     stock_tokens = set(B.STOCK_PACKAGES)
     entries = []
     for e in attr["entries"]:
@@ -130,7 +130,7 @@ def _build_payload(packages, resolved, tiers, tags, glance, attr):
                 if e["kind"] == "group" else roots[0]
         excl_isize = sum(comps[p]["isize"] for p in excl)
         brings_isize = sum(comps[p]["isize"] for p in brings)
-        edition = "stock" if tok in stock_tokens else "az'arch"
+        edition = "stock" if tok in stock_tokens else "azzio"
         entries.append({
             "token": tok,
             "kind": e["kind"],
@@ -174,7 +174,7 @@ def _build_payload(packages, resolved, tiers, tags, glance, attr):
             "ram": glance["ram"],
             "closure": glance["closure"],
             "byRepo": glance["by_repo"],
-            "azarch": glance["azarch"],
+            "azzio": glance["azzio"],
             "stock": glance["stock"],
             "maxHeight": glance["max_height"],
             "size": glance["size"],
@@ -202,7 +202,7 @@ _PAGE = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Az'arch -- component map</title>
+<title>Azzio -- component map</title>
 <style>
 :root{
   --ink:#0d1117; --panel:#161b22; --panel2:#1b222b; --line:#30363d;
@@ -459,7 +459,7 @@ kbd{background:var(--ink);border:1px solid var(--line);border-radius:4px;padding
 </head>
 <body>
 <header>
-  <span class="brand">Az&#39;arch</span>
+  <span class="brand">Azzio</span>
   <div class="tabs">
     <button class="tab active" id="tabComponents" title="The layered dependency map of every component (press c)">Components</button>
     <button class="tab" id="tabEntries" title="What each packages.x86_64 entry pulls into the system (press e)">Entries</button>
@@ -473,7 +473,7 @@ kbd{background:var(--ink);border:1px solid var(--line);border-radius:4px;padding
   <label>Category</label><select id="fcat"></select>
   <label>Edition</label><select id="fed">
     <option value="">all</option>
-    <option value="az'arch">Az'arch Component</option>
+    <option value="azzio">Azzio Component</option>
     <option value="stock">Stock Arch</option>
   </select>
   <label>Sort</label><select id="sort" title="How boxes are ordered within each layer">
@@ -492,9 +492,9 @@ kbd{background:var(--ink);border:1px solid var(--line);border-radius:4px;padding
     <option value="flat" selected>Manifest order (flat)</option>
     <option value="hier">Dependency hierarchy</option>
   </select>
-  <label>Block</label><select id="eblock" title="Stock archiso baseline vs Az'arch additions">
+  <label>Block</label><select id="eblock" title="Stock archiso baseline vs Azzio additions">
     <option value="">all</option>
-    <option value="az'arch">Az'arch additions</option>
+    <option value="azzio">Azzio additions</option>
     <option value="stock">Stock Arch baseline</option>
   </select>
   <label>Sort</label><select id="esort" title="How entries are ordered">
@@ -521,7 +521,7 @@ kbd{background:var(--ink);border:1px solid var(--line);border-radius:4px;padding
 "use strict";
 const DATA = JSON.parse(document.getElementById('data').textContent);
 const C = DATA.components, ORDER = DATA.order, CATCOLORS = DATA.catColors;
-const EDITION_MARK = {"az'arch":"★","stock":""};
+const EDITION_MARK = {"azzio":"★","stock":""};
 const map = document.getElementById('map');
 const panel = document.getElementById('panel');
 let selected = null;
@@ -534,7 +534,7 @@ let filterCat = "", filterEd = "", query = "";
     ["Kernel", "linux "+g.kernel],
     ["Init", "systemd "+g.init],
     ["Components", g.closure],
-    ["Az'arch / stock", g.azarch+" / "+g.stock],
+    ["Azzio / stock", g.azzio+" / "+g.stock],
     ["Deepest chain", g.maxHeight+" hops"],
     ["Installed size", g.size],
   ];
@@ -578,7 +578,7 @@ function idxFromDisp(n){ return NLAYERS - n; }    // shown number -> internal id
     `<div class="grp how">Foundation / sinks (bottom) &#8594; leaf apps (top) `+
     `&#183; click any component to inspect it `+
     `&#183; <b style="color:var(--text)">Edition:</b>`+
-    `<span><span style="color:var(--cyan)">★</span> Az'arch Component</span>`+
+    `<span><span style="color:var(--cyan)">★</span> Azzio Component</span>`+
     `<span style="opacity:.7">(no mark) Stock Arch</span></div>`+
     `<div class="cats">${cats}</div>`+
     `<div class="grp"><span style="color:#eab308">■ requires</span>`+
@@ -656,7 +656,7 @@ function makeBox(name){
   const b = document.createElement('div');
   b.className='box'; b.dataset.name=name; b.style.setProperty('--bc',color);
   const mark = EDITION_MARK[c.edition];
-  const markColor = c.edition==="az'arch" ? "var(--cyan)" : "var(--text)";
+  const markColor = c.edition==="azzio" ? "var(--cyan)" : "var(--text)";
   b.innerHTML = `<div class="bn">${esc(name)}</div>`+
     `<div class="bv">${esc(c.version.split('-')[0])}</div>`+
     (mark?`<div class="mark" style="color:${markColor}">${mark}</div>`:``);
@@ -743,7 +743,7 @@ function clearHighlight(){
 // ---- detail panel ----
 function openPanel(name){
   const c = C[name];
-  const edClass = c.edition==="az'arch"?"ed-az":"ed-sel";
+  const edClass = c.edition==="azzio"?"ed-az":"ed-sel";
   const layer = DATA.layers[c.layer];
   const reqPills = pills(c.requires, "req");
   const reqbyPills = pills(c.requiredBy, "reqby");
@@ -763,7 +763,7 @@ function openPanel(name){
         `<span class="chip">Layer ${dispNum(c.layer)}: ${esc(layer.title)}</span>`+
         (c.removed?`<span class="chip" style="border-color:#f85149;color:#f85149">removed from ISO</span>`:``)+
       `</div>`+
-      (c.azarch? `<div class="azbox"><div class="h">What Az'arch changes</div>${esc(c.azarch)}</div>`:``)+
+      (c.azzio? `<div class="azbox"><div class="h">What Azzio changes</div>${esc(c.azzio)}</div>`:``)+
       `<div class="kv">`+
         `<span class="k">Upstream</span><span>${c.url?`<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.url)}</a>`:'&mdash;'}</span>`+
         `<span class="k">License</span><span>${esc(c.license||'—')}</span>`+
@@ -862,7 +862,7 @@ const erail = document.getElementById('erail');
 const qe = document.getElementById('qe');
 let entrySelected = null;
 let eView = "flat";       // "flat" (manifest order) | "hier" (dependency layers)
-let eBlock = "";          // "" | "az'arch" | "stock"
+let eBlock = "";          // "" | "azzio" | "stock"
 let eSort = "manifest";
 let eQuery = "";
 
@@ -881,7 +881,7 @@ function makeEnt(tok){
   const b = document.createElement('div');
   b.className='ent'; b.dataset.token=tok; b.style.setProperty('--bc',color);
   const mark = EDITION_MARK[e.edition];
-  const markColor = e.edition==="az'arch" ? "var(--cyan)" : "var(--text)";
+  const markColor = e.edition==="azzio" ? "var(--cyan)" : "var(--text)";
   const grp = e.kind==="group" ? `<span class="grp-badge" title="an Arch package group; expands to ${e.roots.length} members">group</span>` : "";
   b.innerHTML =
     `<div class="en">${esc(tok)}${grp}</div>`+
@@ -898,11 +898,11 @@ function buildEntries(){
   emap.innerHTML="";
   const toks = ENTRIES.map(e=>e.token).slice().sort(ESORTS[eSort]);
   if(eView==="flat"){
-    // Two manifest sections: Stock baseline, then Az'arch additions. Within each,
+    // Two manifest sections: Stock baseline, then Azzio additions. Within each,
     // honour the chosen sort (default = manifest order).
     const secs = [
-      ["stock","Stock Arch baseline","archiso releng packages Az'arch inherits"],
-      ["az'arch","Az'arch additions","lines Az'arch adds on top of the baseline"],
+      ["stock","Stock Arch baseline","archiso releng packages Azzio inherits"],
+      ["azzio","Azzio additions","lines Azzio adds on top of the baseline"],
     ];
     for(const [ed,title,sub] of secs){
       const list = toks.filter(t=>EBY[t].edition===ed);
@@ -990,7 +990,7 @@ function buildERail(){
       `<div class="rempty">No entries match the current block filter / search.</div>`;
     return;
   }
-  const az = vis.filter(e=>e.edition==="az'arch").length;
+  const az = vis.filter(e=>e.edition==="azzio").length;
   const stock = vis.length - az;
   const brings = vis.reduce((s,e)=>s+e.bringsCount,0);
   const exclPkgs = vis.reduce((s,e)=>s+e.exclusiveCount,0);
@@ -999,7 +999,7 @@ function buildERail(){
   const top = vis.filter(e=>e.exclusiveCount>0)
                  .sort((a,b)=> b.exclusiveCount-a.exclusiveCount || b.exclIsize-a.exclIsize)
                  .slice(0,10);
-  const scope = eBlock==="az'arch" ? "Az'arch additions"
+  const scope = eBlock==="azzio" ? "Azzio additions"
               : eBlock==="stock"   ? "Stock baseline"
               : eQuery             ? "matching entries"
               : "all manifest entries";
@@ -1015,7 +1015,7 @@ function buildERail(){
     `<div class="rsub">${scope} &mdash; what each line in packages.x86_64 pulls into the system.</div>`+
     `<div class="stats">`+
       `<div class="stat"><div class="v">${vis.length}</div><div class="l">entries shown</div></div>`+
-      `<div class="stat"><div class="v az">${az}</div><div class="l">Az'arch &middot; ${stock} stock</div></div>`+
+      `<div class="stat"><div class="v az">${az}</div><div class="l">Azzio &middot; ${stock} stock</div></div>`+
       `<div class="stat"><div class="v">${brings}</div><div class="l">package pulls (with overlap)</div></div>`+
       `<div class="stat"><div class="v exl">${fmtSize(exclBytes)}</div><div class="l">${exclPkgs} exclusive pkgs</div></div>`+
     `</div>`+
@@ -1069,7 +1069,7 @@ function clearEntryHighlight(){
 // ---- entry detail panel: exclusive vs shared breakdown ----
 function openEntryPanel(tok){
   const e=EBY[tok];
-  const edClass = e.edition==="az'arch"?"ed-az":"ed-sel";
+  const edClass = e.edition==="azzio"?"ed-az":"ed-sel";
   const rootLine = e.kind==="group"
     ? `group of ${e.roots.length}: ${e.roots.slice(0,6).map(esc).join(", ")}${e.roots.length>6?" &hellip;":""}`
     : (e.resolved && e.resolved!==tok ? `resolves to ${esc(e.resolved)}` : `package`);

@@ -1,6 +1,6 @@
-"""Az'arch calamares source patch -- installer UI defaults + the Users-page refactor.
+"""Azzio calamares source patch -- installer UI defaults + the Users-page refactor.
 
-One of the three Az'arch source patches applied to the pinned calamares-3.4.2 tarball
+One of the three Azzio source patches applied to the pinned calamares-3.4.2 tarball
 in the recipe's prepare() (see pkgbuild_calamares). Kept in its own module so each
 patch is a focused, independently-editable unit; pkgbuild_calamares re-exports the
 name-constant and builder below, and pkgbuild.py re-exports them in turn, so callers
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 
 # ---------------------------------------------------------------------------
-# calamares -- source patch: Az'arch installer UI defaults + Users-page refactor
+# calamares -- source patch: Azzio installer UI defaults + Users-page refactor
 # ---------------------------------------------------------------------------
 # A batch of installer UI decisions are made in Calamares' C++ (the module *.conf
 # schemas expose no key for them), so they can only be changed by patching the source
@@ -37,8 +37,8 @@ from __future__ import annotations
 #      hostname keeps changing as the Full Name / Login fields change. The patch seeds
 #      the template's expansion as the INITIAL hostname at module load and (via
 #      setHostName, which marks the value "custom") takes the field off the auto-derive
-#      path -- so with modules/users.conf `template: "azarch"` the field shows "azarch"
-#      by default and stays "azarch" regardless of the other inputs.
+#      path -- so with modules/users.conf `template: "azzio"` the field shows "azzio"
+#      by default and stays "azzio" regardless of the other inputs.
 #      Login: upstream leaves the Username field empty until typed. Per PROMPT.md the
 #      field must DEFAULT to containing "main" (not merely hint it), so the patch calls
 #      setLoginName("main") in the same setConfigurationMap() tail. setLoginName marks
@@ -49,7 +49,7 @@ from __future__ import annotations
 #   3a. Users page -- RENAME the four field-prompt labels in page_usersetup.ui to short
 #      "Field:" captions (the QLabel objectNames are username_label_2, hostnameLabel,
 #      password_label_2 and labelChooseRootPassword), and change the HOSTNAME field's
-#      placeholder from "Computer Name" to "azarch" and the LOGIN field's placeholder
+#      placeholder from "Computer Name" to "azzio" and the LOGIN field's placeholder
 #      from "login" to "main" (both fields are SEEDED to those values by edit 2, so each
 #      placeholder is the fallback hint shown only if the user clears the field).
 #        "What name do you want to use to log in?"          -> "Username:"
@@ -76,7 +76,7 @@ from __future__ import annotations
 #      one character." / "Hostname parameter must include at least two characters." --
 #      which both shows the field error AND (via isReady()'s
 #      loginNameStatus().isEmpty()/hostnameStatus().isEmpty() gates) disables Next until
-#      filled. Both the login ("main") and hostname ("azarch") are seeded by edit 2, so
+#      filled. Both the login ("main") and hostname ("azzio") are seeded by edit 2, so
 #      each error only appears if the user clears that field. (Config.cpp @@ -236 /
 #      @@ -301 hunks.)
 #
@@ -98,7 +98,7 @@ from __future__ import annotations
 # version. (See modules/users.conf in packages/calamares/calamares.py for the .conf
 # side: doReusePassword:true checks the reuse-for-root box by default,
 # allowWeakPasswords:false + no passwordRequirements so an empty password is accepted.)
-CALAMARES_DEFAULTS_PATCH_NAME = "azarch-calamares-defaults.patch"
+CALAMARES_DEFAULTS_PATCH_NAME = "azzio-calamares-defaults.patch"
 
 
 def calamares_defaults_patch() -> str:
@@ -142,7 +142,7 @@ def calamares_defaults_patch() -> str:
         " ",
         '     cDebug() << "Loaded" << m_list.count() << "keyboard groups";',
         "+",
-        '+    // Az\'arch: default the "Switch Keyboard" dropdown to Alt+Shift. Upstream leaves',
+        '+    // Azzio: default the "Switch Keyboard" dropdown to Alt+Shift. Upstream leaves',
         "+    // the current index at 0 (the alphabetically-first combo), so alt_shift_toggle is",
         "+    // listed but not pre-selected. Select it here, once the list is populated, so the",
         '+    // page opens with "Alt+Shift" chosen. Falls back to the upstream default (index 0)',
@@ -185,8 +185,8 @@ def calamares_defaults_patch() -> str:
         "-      <string>What is the name of this computer?</string>",
         "+      <string>Hostname:</string>",
         "      </property>",
-        # hostname field placeholder "Computer Name" -> "azarch": the field is seeded
-        # to "azarch", but if the user CLEARS it the greyed placeholder shows "azarch"
+        # hostname field placeholder "Computer Name" -> "azzio": the field is seeded
+        # to "azzio", but if the user CLEARS it the greyed placeholder shows "azzio"
         # (the default that will be used) instead of the generic "Computer Name". This
         # textBox is nested one level deeper than the prompt labels (8/9-space indent).
         # MUST stay in ascending file-line order (line 249, after 222, before 324).
@@ -194,7 +194,7 @@ def calamares_defaults_patch() -> str:
         "@@ -249,3 +249,3 @@",
         '        <property name="placeholderText">',
         "-        <string>Computer Name</string>",
-        "+        <string>azarch</string>",
+        "+        <string>azzio</string>",
         "        </property>",
         # user-password prompt "Choose a password ... safe." -> "Username Password:"
         "@@ -324,3 +324,3 @@",
@@ -229,7 +229,7 @@ def calamares_defaults_patch() -> str:
         "     connect( ui->textBoxFullName, &QLineEdit::textEdited, config, &Config::setFullName );",
         "     connect( config, &Config::fullNameChanged, this, &UsersPage::onFullNameTextEdited );",
         " ",
-        '+    // Az\'arch: hide the "What is your name?" (Full Name) row entirely. The account\'s',
+        '+    // Azzio: hide the "What is your name?" (Full Name) row entirely. The account\'s',
         "+    // GECOS/full name is not asked for; Config::isReady() no longer requires a",
         "+    // non-empty full name (see Config.cpp), so Next stays reachable with these widgets",
         "+    // gone. The QHBoxLayout that holds the field is not a widget, so each child widget",
@@ -245,7 +245,7 @@ def calamares_defaults_patch() -> str:
         "          || ( m_config->hostnameAction() == HostNameAction::SystemdHostname ) )",
         "@@ -156,1 +166,5 @@",
         "-    ui->checkBoxRequireStrongPassword->setVisible( m_config->permitWeakPasswords() );",
-        '+    // Az\'arch: never show the "Require strong passwords." checkbox. Password-strength',
+        '+    // Azzio: never show the "Require strong passwords." checkbox. Password-strength',
         "+    // enforcement is not offered on this installer (no libpwquality checks are",
         "+    // configured in users.conf, so any password -- including an empty one -- is",
         "+    // accepted). Force the checkbox hidden regardless of the config value.",
@@ -265,7 +265,7 @@ def calamares_defaults_patch() -> str:
         "-    {",
         "-        return QString();",
         "-    }",
-        "+    // Az'arch: an empty login is NOT ok -- a username is required. Returning a",
+        "+    // Azzio: an empty login is NOT ok -- a username is required. Returning a",
         "+    // non-empty status both surfaces this as the field error and (via isReady()'s",
         "+    // loginNameStatus().isEmpty() gate) keeps Next disabled until a name is typed.",
         "+    if ( m_loginName.isEmpty() )",
@@ -281,8 +281,8 @@ def calamares_defaults_patch() -> str:
         "-    {",
         "-        return QString();",
         "-    }",
-        "+    // Az'arch: an empty hostname is NOT ok -- a hostname is required. The default",
-        '+    // template seeds "azarch", but if the user clears the field this shows the error',
+        "+    // Azzio: an empty hostname is NOT ok -- a hostname is required. The default",
+        '+    // template seeds "azzio", but if the user clears the field this shows the error',
         "+    // and (via isReady()'s hostnameStatus().isEmpty() gate) blocks Next. Two-char",
         "+    // minimum mirrors HOSTNAME_MIN_LENGTH.",
         "+    if ( m_hostname.isEmpty() )",
@@ -317,13 +317,13 @@ def calamares_defaults_patch() -> str:
         "         m_forbiddenHostNames << alwaysForbiddenHostNames();",
         "         tidy( m_forbiddenHostNames );",
         "+",
-        "+        // Az'arch: seed a fixed default hostname and take it off the auto-derive",
+        "+        // Azzio: seed a fixed default hostname and take it off the auto-derive",
         "+        // path. Upstream leaves the hostname empty until the user types a name, then",
         "+        // re-expands m_hostnameTemplate on every keystroke -- so the hostname keeps",
         "+        // changing as the Login field changes. Expanding the template once here (with",
         '+        // no user data) gives the initial value, and setHostName() marks it "custom"',
         "+        // (m_customHostName = true) so nothing later recomputes it. With a literal",
-        '+        // template ("azarch") the field shows "azarch" by default and stays "azarch".',
+        '+        // template ("azzio") the field shows "azzio" by default and stays "azzio".',
         "+        const QString seededHostname = makeHostnameSuggestion( m_hostnameTemplate, QStringList(), QString() );",
         "+        if ( !seededHostname.isEmpty() )",
         "+        {",
@@ -347,7 +347,7 @@ def calamares_defaults_patch() -> str:
         "@@ -1069,4 +1076,11 @@",
         "     updateGSAutoLogin( doAutoLogin(), loginName() );",
         "+",
-        "+    // Az'arch: seed the default login to \"main\" so the Username field opens",
+        "+    // Azzio: seed the default login to \"main\" so the Username field opens",
         "+    // pre-filled (PROMPT.md). setLoginName() marks it custom (m_customLoginName),",
         "+    // so the Full-Name auto-derive path never clobbers it, and it emits",
         "+    // loginNameStatusChanged -> checkReady() (below) so readiness reflects the",
@@ -363,7 +363,7 @@ def calamares_defaults_patch() -> str:
         "     }",
         " ",
         '-    if ( m_userName == "root" && m_newPassword.isEmpty() )  //special case for disabling root account',
-        '+    // Az\'arch: an empty password locks the account (shadow "!") for ANY user, not just',
+        '+    // Azzio: an empty password locks the account (shadow "!") for ANY user, not just',
         "+    // root. The installer lets the user skip the password field; a skipped password must",
         '+    // yield a locked account (no usable password) rather than crypt("") -- an empty but',
         "+    // *valid* password that would allow passwordless login. Upstream only special-cased",

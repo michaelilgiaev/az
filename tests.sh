@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# azarch -- test entry point.
+# azzio -- test entry point.
 #
 # `bash tests.sh` is the ONE command. It is self-bootstrapping: it creates the
 # venv if it is missing, installs requirements.txt into it, and runs pytest.
@@ -66,7 +66,7 @@
 # Passing both halves of a pair (e.g. --online --offline) is a hard error. Flip both
 # at once:  bash tests.sh --online --root
 # Override either for a single run without editing the file (env wins over the file):
-#   AZARCH_TESTS_NETWORK=online AZARCH_TESTS_ROOT=true bash tests.sh
+#   AZZIO_TESTS_NETWORK=online AZZIO_TESTS_ROOT=true bash tests.sh
 # These toggles are INDEPENDENT of the output-verbosity flags (-q/--quiet, -l/--loud).
 #
 # --- HELP --------------------------------------------------------------------
@@ -105,8 +105,8 @@ LOG_QUIET="$LOGDIR/tests-quiet.log"
 # LOCAL per-machine state -- it is gitignored, NOT committed. tests.sh CREATES it (both
 # `false`) on first run if it is missing, and otherwise leaves it untouched on a normal run,
 # so a fresh clone starts with both tiers OFF (no network hang, no sudo demand) and each
-# machine keeps its own toggles. conftest.py reads the file; AZARCH_TESTS_NETWORK /
-# AZARCH_TESTS_ROOT override it for one run; we export both below so the terminal run and the
+# machine keeps its own toggles. conftest.py reads the file; AZZIO_TESTS_NETWORK /
+# AZZIO_TESTS_ROOT override it for one run; we export both below so the terminal run and the
 # two isolated log-copy runs all agree with the file. See tests/_testmodes.py for the parser
 # and precedence rules.
 MODESCONF="$REPODIR/tests/test_modes.conf"
@@ -171,9 +171,9 @@ conf_bool() {                              # conf_bool <key> -> echoes true|fals
 # the conf file, exactly as Python does (an unrecognized env is None, never a bare false). These read
 # ONLY their single argument (never the conf), so they are pure and side-effect free.
 #   * root_env_token: the generic boolean tokens only -- `online`/`offline` are meaningless for root
-#     (matches _as_bool, which _testmodes.py uses for AZARCH_TESTS_ROOT).
+#     (matches _as_bool, which _testmodes.py uses for AZZIO_TESTS_ROOT).
 #   * net_env_token:  additionally accepts the legacy words online=true / offline=false (matches
-#     _network_token, used for AZARCH_TESTS_NETWORK), then falls through to the generic tokens.
+#     _network_token, used for AZZIO_TESTS_NETWORK), then falls through to the generic tokens.
 root_env_token() {                         # root_env_token <raw> -> true|false|unknown
     local v="$1"
     v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"   # ASCII-trim both ends
@@ -200,7 +200,7 @@ usage() {
     cat <<'EOF'
 Usage: bash tests.sh [FLAGS] [PYTEST ARGS...]
 
-The ONE command to run the azarch test suite. Self-bootstrapping: builds ./venv, installs
+The ONE command to run the azzio test suite. Self-bootstrapping: builds ./venv, installs
 requirements.txt, runs pytest. Re-running is cheap. All flags below are CONSUMED here (never
 forwarded to pytest); everything else passes straight through to pytest.
 
@@ -217,7 +217,7 @@ Test-mode toggles (flip a persisted boolean in tests/test_modes.conf and EXIT; n
   --user    / --root     root tier:    skip / enable the `root`-marked tests  (default: user)
   Passing both halves of a pair is an error. Flip both at once, e.g.:  --online --root
   These are INDEPENDENT of -q/-l. Env overrides for one run (env wins over the file):
-      AZARCH_TESTS_NETWORK=online|offline   AZARCH_TESTS_ROOT=true|false
+      AZZIO_TESTS_NETWORK=online|offline   AZZIO_TESTS_ROOT=true|false
   With the root tier ENABLED, a plain `bash tests.sh` (no sudo) STOPS and asks you to
   re-run with sudo. Turn it back off with --user, or run: sudo bash tests.sh
 
@@ -317,8 +317,8 @@ if [ "$WANT_STATUS" -eq 1 ]; then
                "$label" "$conf" "$envname" "$env_raw" "$eff" "$extra" "$count"
     }
     echo "[tests] test mode status  (conf: ${MODESCONF#$REPODIR/}; env overrides the conf for one run)"
-    status_line "network:" network AZARCH_TESTS_NETWORK net_env_token
-    status_line "root:"    root    AZARCH_TESTS_ROOT    root_env_token
+    status_line "network:" network AZZIO_TESTS_NETWORK net_env_token
+    status_line "root:"    root    AZZIO_TESTS_ROOT    root_env_token
     exit 0
 fi
 
@@ -380,7 +380,7 @@ for arg in "$@"; do
 done
 
 # --- Root tier demands sudo. -------------------------------------------------
-# When the root tier is ENABLED (root = true in the conf, or AZARCH_TESTS_ROOT set truthy),
+# When the root tier is ENABLED (root = true in the conf, or AZZIO_TESTS_ROOT set truthy),
 # the root-marked tests need UID 0 to do anything real -- so a plain `bash tests.sh` without
 # sudo would only ever SKIP them, silently defeating the toggle the user just turned on.
 # Refuse instead: stop here with a clear instruction to re-run under sudo. This runs on the
@@ -390,7 +390,7 @@ done
 # cheap rather than after seconds of venv work.
 #   * Effective mode is resolved EXACTLY as the run itself resolves it (env wins over the
 #     file, via the canonical conf_bool), so the guard and the tests never disagree.
-#   * AZARCH_ALLOW_NONROOT is a TEST-ONLY escape hatch (mirrors CODER_ALLOW_NONROOT in the
+#   * AZZIO_ALLOW_NONROOT is a TEST-ONLY escape hatch (mirrors CODER_ALLOW_NONROOT in the
 #     sibling setup.sh/teardown.sh): it lets the hermetic suite drive a root-mode tests.sh as
 #     an ordinary user without the refusal. A real user never sets it, so they still stop.
 # Resolve the effective root mode EXACTLY as _testmodes.root_enabled() does: the env var wins
@@ -399,18 +399,18 @@ done
 # Getting this precedence byte-identical to Python is what keeps the guard and pytest's conftest
 # (both reading the same env var) from ever disagreeing and silently skipping the enabled tier.
 # Three divergences an adversarial review caught, all fixed by matching _as_bool's normalize:
-#   * folding: `AZARCH_TESTS_ROOT=TRUE`/`Yes`/`ON` -- Python lowercases, so truthy; the raw `case`
+#   * folding: `AZZIO_TESTS_ROOT=TRUE`/`Yes`/`ON` -- Python lowercases, so truthy; the raw `case`
 #     saw it as unrecognized -> false and waved the run through.
-#   * trimming: `AZARCH_TESTS_ROOT=" true "` or a trailing newline from `$(...)` capture -- Python
+#   * trimming: `AZZIO_TESTS_ROOT=" true "` or a trailing newline from `$(...)` capture -- Python
 #     _ascii_strip trims it truthy; an untrimmed `case` would not match.
-#   * abstain: `AZARCH_TESTS_ROOT="  "` (whitespace-only) with `root = true` in the conf -- Python
+#   * abstain: `AZZIO_TESTS_ROOT="  "` (whitespace-only) with `root = true` in the conf -- Python
 #     reads the env as None and falls to the conf (true); the old `[ -n ]` test treated the
 #     non-empty-but-blank value as "set" and skipped the conf, reading false. Now both fall through.
 # root_env_token (defined up near conf_bool, also used by --status) echoes true|false|unknown after
 # _as_bool's ASCII-trim + case-fold -- the single source of truth for parsing this env var.
-ROOT_MODE="$(root_env_token "${AZARCH_TESTS_ROOT:-}")"
+ROOT_MODE="$(root_env_token "${AZZIO_TESTS_ROOT:-}")"
 [ "$ROOT_MODE" = unknown ] && ROOT_MODE="$(conf_bool root)"   # env abstained -> the conf decides
-if [ "$ROOT_MODE" = true ] && [ "$(id -u)" -ne 0 ] && [ -z "${AZARCH_ALLOW_NONROOT:-}" ]; then
+if [ "$ROOT_MODE" = true ] && [ "$(id -u)" -ne 0 ] && [ -z "${AZZIO_ALLOW_NONROOT:-}" ]; then
     echo "[tests] the root test tier is ENABLED but you are not root." >&2
     echo "[tests] These tests need administrator rights. Please re-run with sudo:" >&2
     echo "            sudo bash tests.sh${*:+ $*}" >&2
@@ -473,16 +473,16 @@ export PYTHONDONTWRITEBYTECODE=1
 # Pin BOTH test modes for THIS run to whatever tests/test_modes.conf says (via the canonical
 # conf_bool defined near the top), and export them so the two isolated log-copy runs (child
 # subshells) resolve the SAME modes -- their repo copies do not contain the real conf file, so the
-# env vars are how they learn it. An AZARCH_TESTS_NETWORK / AZARCH_TESTS_ROOT already set in the
+# env vars are how they learn it. An AZZIO_TESTS_NETWORK / AZZIO_TESTS_ROOT already set in the
 # caller's environment WINS (lets CI or a one-off override without editing the file). A
 # missing/empty/garbage value reads false (tier OFF) -- offline cannot hang, user needs no sudo.
-if [ -z "${AZARCH_TESTS_NETWORK:-}" ]; then
+if [ -z "${AZZIO_TESTS_NETWORK:-}" ]; then
     # Export the network mode as the legacy WORD (online/offline) so `-m network` docs and
     # any word-expecting reader keep working; _testmodes.py accepts both the word and true/false.
-    [ "$(conf_bool network)" = true ] && export AZARCH_TESTS_NETWORK=online || export AZARCH_TESTS_NETWORK=offline
+    [ "$(conf_bool network)" = true ] && export AZZIO_TESTS_NETWORK=online || export AZZIO_TESTS_NETWORK=offline
 fi
-if [ -z "${AZARCH_TESTS_ROOT:-}" ]; then
-    export AZARCH_TESTS_ROOT="$(conf_bool root)"
+if [ -z "${AZZIO_TESTS_ROOT:-}" ]; then
+    export AZZIO_TESTS_ROOT="$(conf_bool root)"
 fi
 
 # Right-align the percentage and keep lines from wrapping. Below, pytest's stdout
@@ -733,8 +733,8 @@ set +o errexit
 # each copy dir HERE in the parent so the EXIT trap (via LOGCOPIES) always removes it,
 # even though the run itself is backgrounded.
 read -r -a OTHER <<< "$(other_modes "$MODE")"
-DIR1="$(mktemp -d "${TMPDIR:-/tmp}/azarch-testlog.XXXXXX")"; LOGCOPIES+=("$DIR1")
-DIR2="$(mktemp -d "${TMPDIR:-/tmp}/azarch-testlog.XXXXXX")"; LOGCOPIES+=("$DIR2")
+DIR1="$(mktemp -d "${TMPDIR:-/tmp}/azzio-testlog.XXXXXX")"; LOGCOPIES+=("$DIR1")
+DIR2="$(mktemp -d "${TMPDIR:-/tmp}/azzio-testlog.XXXXXX")"; LOGCOPIES+=("$DIR2")
 run_log_isolated "${OTHER[0]}" "$(log_path_for "${OTHER[0]}")" "$DIR1" & P_LOG1=$!
 run_log_isolated "${OTHER[1]}" "$(log_path_for "${OTHER[1]}")" "$DIR2" & P_LOG2=$!
 

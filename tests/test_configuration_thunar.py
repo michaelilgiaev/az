@@ -1,4 +1,4 @@
-"""packages.thunar -- the Az'arch Thunar file-manager setup (PROMPT task 2/4/7).
+"""packages.thunar -- the Azzio Thunar file-manager setup (PROMPT task 2/4/7).
 
 Why these tests matter: Thunar's config was authored against VERIFIED facts from the installed
 Thunar 4.20 (the thunarrc keys, the Xfconf channel property names + canonical values, the
@@ -215,16 +215,16 @@ def test_mo_catalog_shipped_under_generated_locales_root_owned():
 
 def test_gtk_menu_images_enabled_for_open_with_icons():
     # PROMPT batch item 6: "Open With" entries show app icons only if gtk-menu-images=true.
-    # It lives in ~/.config/gtk-3.0/settings.ini (the openbox shipped default + the `azarch
+    # It lives in ~/.config/gtk-3.0/settings.ini (the openbox shipped default + the `azzio
     # theme` CLI, kept byte-for-byte in lock-step -- see test_configuration_theme). Assert the
     # openbox default (a plain module) and the BUNDLED CLI (theme.py is a bundle module that
     # needs common.py's imports, so it is exec'd from the bundle) both carry it.
     import types
     from packages import openbox
-    from packages.azarch.bundle import bundle_source
+    from packages.azzio.bundle import bundle_source
     assert "gtk-menu-images=true" in openbox.gtk3_settings_ini_default()
-    cli = types.ModuleType("azarch_cli")
-    exec(compile(bundle_source(), "azarch_cli", "exec"), cli.__dict__)
+    cli = types.ModuleType("azzio_cli")
+    exec(compile(bundle_source(), "azzio_cli", "exec"), cli.__dict__)
     assert "gtk-menu-images=true" in cli.gtk3_settings_ini(True)
     assert "gtk-menu-images=true" in cli.gtk3_settings_ini(False)
 
@@ -335,7 +335,7 @@ def test_thunar_desktop_renamed_and_custom_icon():
     # the visible Name line is exactly "Thunar", not "Thunar File Manager"
     assert "Name=Thunar File Manager" not in d
     assert f"Icon={launcher.THUNAR_ICON_NAME}\n" in d
-    assert launcher.THUNAR_ICON_NAME == "azarch-thunar"  # private name (upgrade-proof)
+    assert launcher.THUNAR_ICON_NAME == "azzio-thunar"  # private name (upgrade-proof)
     # stock Exec + actions preserved
     assert "Exec=thunar %U" in d
     assert "Actions=open-home;open-computer;open-trash;" in d

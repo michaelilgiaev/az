@@ -32,7 +32,7 @@ def addstr(win, y, x, text, attr=0):
 def nav_bar(win, y, pairs):
     """Draw a left-aligned "KEY label   KEY label ..." nav bar on row y.
 
-    Structured like azarch's draw_nav: each verb is a keycap, a space, then a dim
+    Structured like azzio's draw_nav: each verb is a keycap, a space, then a dim
     label, verbs separated by a 3-space gap. NOT centred and NOT coloured -- the
     keycap is drawn normal and the label A_DIM. `pairs` is a list of (key, label).
     Shared by the search UI (terminal_user_interface._nav) and the detail view so both bottom bars

@@ -1,4 +1,4 @@
-"""packages.hypervisor -- Az'arch's per-directory QEMU/KVM VM runner (the `hypervisor` command).
+"""packages.hypervisor -- Azzio's per-directory QEMU/KVM VM runner (the `hypervisor` command).
 
 Run `hypervisor` INSIDE a directory and it spins up a QEMU/KVM virtual machine whose
 whole identity is derived from that directory: its name, disk (``<dir>.qcow2``), UEFI
@@ -8,8 +8,8 @@ each directory is an independent VM. All VM settings live in a per-directory
 that file and applies edits live where it can, reverting an invalid save so a bad
 edit never bricks the VM.
 
-This is a HOST-side tool. It is distinct from the guest-side ``azarch
---sshd-hypervisor`` (packages/azarch/sshd.py), which runs INSIDE a VM to wire its
+This is a HOST-side tool. It is distinct from the guest-side ``azzio
+--sshd-hypervisor`` (packages/azzio/sshd.py), which runs INSIDE a VM to wire its
 sshd up -- no overlap.
 
 This package is one flat directory (like packages/backup and packages/passwords):
@@ -26,7 +26,7 @@ Modules:
     configuration                   CWD-derived VM identity, paths, config (env > cfg > default)
     configuration_schema            the typed hypervisor.cfg schema, coercion, validation (pure)
     configuration_watcher           live hypervisor.cfg reload with validate + safe revert
-    configuration_defaults          user-wide default overrides (~/.config/azarch-hypervisor)
+    configuration_defaults          user-wide default overrides (~/.config/azzio-hypervisor)
     graphics                        DRM render-node selection for the GPU 3D offload
     checks                          precondition checks + die()/HypervisorError
     qemu_command                    the pure QEMU argv assembler (no launch, no I/O)
@@ -38,7 +38,7 @@ Also here (not part of the runtime import graph):
 The app is Python standard library only; the external binaries it shells out to are
 ``qemu-system-x86_64`` / ``qemu-img`` (qemu-full), ``remote-viewer`` (virt-viewer),
 the OVMF firmware (edk2-ovmf) and ``pgrep`` -- all named in the manifest. packaging.py
-ships every module flat to /usr/local/lib/azarch-hypervisor/ and installs the
+ships every module flat to /usr/local/lib/azzio-hypervisor/ and installs the
 /usr/local/bin/hypervisor launcher. This ``__init__.py`` makes the same directory
 importable as the ``packages.hypervisor`` package for the test suite.
 """

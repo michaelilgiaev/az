@@ -1,13 +1,13 @@
-"""The FN media controls -- `azarch volume` / `azarch brightness` / `azarch machine`, the
+"""The FN media controls -- `azzio volume` / `azzio brightness` / `azzio machine`, the
 centered cyan OSD bar, and the OpenBox FN keybinds that drive them.
 
-The PROMPT: add volume + brightness FN controls to the `azarch` command line interface. Resolve the machine's FN
+The PROMPT: add volume + brightness FN controls to the `azzio` command line interface. Resolve the machine's FN
 mapping (a PC's FN+F2/F3 are volume; a laptop's are brightness), make BRIGHTNESS a laptop-only
 option (a PC has no backlight), add a "Machine Type" surface that displays PC/Laptop and lets
-the user HARD-SWITCH it, and show a centered cyan (the Az'arch logo cyan) on-screen bar at 100%
+the user HARD-SWITCH it, and show a centered cyan (the Azzio logo cyan) on-screen bar at 100%
 with 7.5% steps when volume/brightness change -- reusing the speech-to-text indicator's UI.
 
-These tests pin, against the BUNDLED command line interface (the /usr/local/bin/azarch artifact) + the standalone
+These tests pin, against the BUNDLED command line interface (the /usr/local/bin/azzio artifact) + the standalone
 OSD script + the OpenBox wiring:
 
   * machine-type detection (backlight, then DMI chassis) and the persistent hard override;
@@ -17,7 +17,7 @@ OSD script + the OpenBox wiring:
   * the OpenBox rc.xml binds the XF86 audio/brightness keysyms to the subcommands, and the OSD
     script ships (executable, pinned) next to the terminal user interface binary.
 
-The command line interface is exercised via its bundle (packages.azarch.bundle.bundle_source) executed in one
+The command line interface is exercised via its bundle (packages.azzio.bundle.bundle_source) executed in one
 namespace -- exactly the artifact the compiler ships -- so the tests drive the real functions.
 """
 
@@ -29,16 +29,16 @@ import types
 
 import pytest
 
-from packages.azarch.bundle import bundle_source, MODULE_ORDER
+from packages.azzio.bundle import bundle_source, MODULE_ORDER
 from packages import openbox as desktop
 import paths
 import profile as profiledef
 
 
 def _command_line_interface():
-    """Exec the bundled azarch command line interface in a fresh module namespace (as shipped)."""
-    mod = types.ModuleType("azarch_cli_media_test")
-    exec(compile(bundle_source(), "azarch_command_line_interface", "exec"), mod.__dict__)
+    """Exec the bundled azzio command line interface in a fresh module namespace (as shipped)."""
+    mod = types.ModuleType("azzio_cli_media_test")
+    exec(compile(bundle_source(), "azzio_command_line_interface", "exec"), mod.__dict__)
     return mod
 
 
@@ -55,9 +55,9 @@ def test_machine_and_media_are_bundled_before_the_cli():
 
 
 def test_dispatch_branches_exist_in_main():
-    """`azarch volume|brightness|machine ...` must be real top-level dispatch branches, and the
+    """`azzio volume|brightness|machine ...` must be real top-level dispatch branches, and the
     top-level usage must advertise them."""
-    src = desktop.azarch_command_line_interface()
+    src = desktop.azzio_command_line_interface()
     assert 'cmd == "volume"' in src and "return cmd_volume(argv[1:])" in src
     assert 'cmd == "brightness"' in src and "return cmd_brightness(argv[1:])" in src
     assert 'cmd == "machine"' in src and "return cmd_machine(argv[1:])" in src
@@ -109,10 +109,10 @@ def test_machine_chassis_laptop_codes(monkeypatch):
 
 
 def test_machine_hard_override_persists_and_wins(tmp_path, monkeypatch):
-    """`azarch machine --pc/--laptop` writes ~/.config/azarch/machine-type and that override
+    """`azzio machine --pc/--laptop` writes ~/.config/azzio/machine-type and that override
     WINS over autodetection; `--auto` clears it. Point the pointer file at a temp home."""
     cli = _command_line_interface()
-    state = tmp_path / ".config" / "azarch" / "machine-type"
+    state = tmp_path / ".config" / "azzio" / "machine-type"
     monkeypatch.setattr(cli, "_machine_state_file", lambda: str(state))
     # autodetect would say PC (no backlight, no/という chassis) -- stub it so the test is host-free
     monkeypatch.setattr(cli, "_detect_machine_type", lambda: "PC")
@@ -135,7 +135,7 @@ def test_machine_hard_override_persists_and_wins(tmp_path, monkeypatch):
 
 
 def test_machine_status_and_unknown_option(tmp_path, monkeypatch, capsys):
-    """Bare `azarch machine` prints the recognised type; an unknown option is rc 2."""
+    """Bare `azzio machine` prints the recognised type; an unknown option is rc 2."""
     cli = _command_line_interface()
     monkeypatch.setattr(cli, "_machine_state_file", lambda: str(tmp_path / "mt"))
     monkeypatch.setattr(cli, "_detect_machine_type", lambda: "Laptop")
@@ -173,7 +173,7 @@ def test_step_clamps_at_the_edges():
 # --- volume: steps, mutes, shows the OSD ------------------------------------
 
 def test_volume_up_steps_and_shows_osd(monkeypatch, capsys):
-    """`azarch volume up` reads the current level, writes current+7.5 (clamped), and pops the
+    """`azzio volume up` reads the current level, writes current+7.5 (clamped), and pops the
     OSD. Backends + OSD are stubbed so the test is host-free."""
     cli = _command_line_interface()
     monkeypatch.setattr(cli, "_volume_read", lambda: (50.0, False))
@@ -226,7 +226,7 @@ def test_volume_get_prints_percent(monkeypatch, capsys):
 # --- brightness: LAPTOP ONLY, steps, shows the OSD --------------------------
 
 def test_brightness_is_laptop_only(monkeypatch, capsys):
-    """On a PC (is_laptop False), `azarch brightness up/down` does NOTHING and says so (rc 1) --
+    """On a PC (is_laptop False), `azzio brightness up/down` does NOTHING and says so (rc 1) --
     brightness is a laptop-only control. The backlight setter is never called."""
     cli = _command_line_interface()
     monkeypatch.setattr(cli, "is_laptop", lambda: False)
@@ -239,7 +239,7 @@ def test_brightness_is_laptop_only(monkeypatch, capsys):
 
 
 def test_brightness_up_on_laptop_steps_and_shows_osd(monkeypatch, capsys):
-    """On a laptop, `azarch brightness up` steps 7.5% off the current backlight reading and pops
+    """On a laptop, `azzio brightness up` steps 7.5% off the current backlight reading and pops
     the OSD."""
     cli = _command_line_interface()
     monkeypatch.setattr(cli, "is_laptop", lambda: True)
@@ -255,7 +255,7 @@ def test_brightness_up_on_laptop_steps_and_shows_osd(monkeypatch, capsys):
 
 
 def test_brightness_get_is_na_on_a_pc(monkeypatch, capsys):
-    """`azarch brightness get` always exits 0; on a PC (no backlight) it prints n/a rather than
+    """`azzio brightness get` always exits 0; on a PC (no backlight) it prints n/a rather than
     erroring, so a caller can query without tripping the laptop gate."""
     cli = _command_line_interface()
     monkeypatch.setattr(cli, "_brightness_read", lambda: None)
@@ -315,7 +315,7 @@ def test_parse_percent_accepts_number_percent_and_clamps():
 
 
 def test_volume_set_writes_precise_level_and_shows_osd(monkeypatch, capsys):
-    """The follow-up spec: `azarch volume` should let me select PRECISELY how much. `volume set N`
+    """The follow-up spec: `azzio volume` should let me select PRECISELY how much. `volume set N`
     writes exactly N (clamped) and pops the OSD; a missing/bad N is rc 2."""
     cli = _command_line_interface()
     written = {}
@@ -359,7 +359,7 @@ def test_media_init_seeds_50_and_100_once(tmp_path, monkeypatch):
     cli = _command_line_interface()
     assert cli.MEDIA_DEFAULT_VOLUME == 50.0
     assert cli.MEDIA_DEFAULT_BRIGHTNESS == 100.0
-    marker = tmp_path / ".config" / "azarch" / "media-seeded"
+    marker = tmp_path / ".config" / "azzio" / "media-seeded"
     monkeypatch.setattr(cli, "_media_seed_file", lambda: str(marker))
     vols, brs = [], []
     monkeypatch.setattr(cli, "_volume_write", lambda p: (vols.append(p), True)[1])
@@ -389,9 +389,9 @@ def test_media_init_skips_brightness_on_a_pc(tmp_path, monkeypatch):
 
 
 def test_media_init_is_wired_into_dispatch_and_autostart():
-    """`azarch media-init` is a real dispatch branch, and the OpenBox autostart runs it once at
+    """`azzio media-init` is a real dispatch branch, and the OpenBox autostart runs it once at
     login (both live and installed sessions) so a fresh machine boots at the defaults."""
-    src = desktop.azarch_command_line_interface()
+    src = desktop.azzio_command_line_interface()
     assert 'cmd == "media-init"' in src and "return cmd_media_init(argv[1:])" in src
     for autostart in (desktop.openbox_autostart(), desktop.openbox_autostart_installed()):
         assert "media-init" in autostart
@@ -415,13 +415,13 @@ def test_autostart_shortens_the_fn_hold_autorepeat():
 # (on_screen_display.c) -- the artifact the ISO compiles.
 
 def _osd_src() -> str:
-    return (paths.AZARCH_COMMAND_LINE_INTERFACE_DIR / "on_screen_display.c").read_text(encoding="utf-8")
+    return (paths.AZZIO_COMMAND_LINE_INTERFACE_DIR / "on_screen_display.c").read_text(encoding="utf-8")
 
 
 def test_osd_is_written_in_c_not_python():
     """The spec: this should be written in C, not Python. The OSD is on_screen_display.c (an Xlib
     program), and the old tkinter osd_indicator.py is gone."""
-    d = paths.AZARCH_COMMAND_LINE_INTERFACE_DIR
+    d = paths.AZZIO_COMMAND_LINE_INTERFACE_DIR
     assert (d / "on_screen_display.c").exists(), "on_screen_display.c (the C OSD) must exist"
     assert not (d / "osd_indicator.py").exists(), "the old tkinter OSD must be removed"
     src = _osd_src()
@@ -430,7 +430,7 @@ def test_osd_is_written_in_c_not_python():
 
 
 def test_osd_uses_the_logo_cyan_for_the_bar():
-    """The spec: use the Az'arch logo colour, cyan, for the bars. The OSD accent is #06B8FD."""
+    """The spec: use the Azzio logo colour, cyan, for the bars. The OSD accent is #06B8FD."""
     src = _osd_src()
     assert "0x06B8FD" in src
     assert "COL_ACCENT" in src and "0x06B8FD" in src
@@ -455,7 +455,7 @@ def test_osd_is_single_instance_so_it_never_flickers():
     bind, connects, and FORWARDS its line to the running window (which repaints in place) instead
     of mapping a second window."""
     src = _osd_src()
-    assert "azarch-osd" in src                        # the single-instance socket name base
+    assert "azzio-osd" in src                        # the single-instance socket name base
     assert "AF_UNIX" in src and "bind(" in src        # tries to bind the control socket
     assert "EADDRINUSE" in src                        # already-running detection
     assert "connect(" in src                          # forward to the resident instance
@@ -489,7 +489,7 @@ def test_osd_scale_is_full_range_holds_longer_and_fades():
 def test_osd_supports_mouse_hover_drag_with_a_highlight():
     """The follow-up spec: allow the user to hover with the mouse and DRAG to increase/decrease,
     with a HIGHLIGHTER indicating the drag is live. The OSD selects pointer events, drags map x
-    to a percent and run `azarch <kind> set <pct>`, and a highlight ring is drawn on hover."""
+    to a percent and run `azzio <kind> set <pct>`, and a highlight ring is drawn on hover."""
     src = _osd_src()
     assert "ButtonPressMask" in src and "PointerMotionMask" in src and "EnterWindowMask" in src
     assert "x_to_percent" in src                     # pointer x -> 0..100
@@ -514,7 +514,7 @@ def test_media_launches_the_shipped_osd_detached():
     """media.py launches the OSD DETACHED (start_new_session) with one JSON line, so the FN key
     returns instantly; and it targets the same path the ISO ships the OSD to."""
     cli = _command_line_interface()
-    assert cli.OSD_INDICATOR_BIN == desktop.AZARCH_OSD_SYSTEM_PATH == "/usr/local/lib/azarch/azarch-osd"
+    assert cli.OSD_INDICATOR_BIN == desktop.AZZIO_OSD_SYSTEM_PATH == "/usr/local/lib/azzio/azzio-osd"
     src = bundle_source()
     # the OSD is launched via Popen, detached, fed a JSON payload
     assert "start_new_session=True" in src
@@ -535,13 +535,13 @@ def test_media_osd_is_a_noop_without_display(monkeypatch):
 
 def test_openbox_binds_the_fn_media_keysyms():
     """The FN keys are wired by BINDING the XF86 media keysyms (not a fixed FN+F2/F3, which
-    differs per machine) to the `azarch` subcommands."""
+    differs per machine) to the `azzio` subcommands."""
     rc = desktop.openbox_rc_xml()
-    assert "XF86AudioRaiseVolume" in rc and "/usr/local/bin/azarch volume up" in rc
-    assert "XF86AudioLowerVolume" in rc and "/usr/local/bin/azarch volume down" in rc
-    assert "XF86AudioMute" in rc and "/usr/local/bin/azarch volume mute" in rc
-    assert "XF86MonBrightnessUp" in rc and "/usr/local/bin/azarch brightness up" in rc
-    assert "XF86MonBrightnessDown" in rc and "/usr/local/bin/azarch brightness down" in rc
+    assert "XF86AudioRaiseVolume" in rc and "/usr/local/bin/azzio volume up" in rc
+    assert "XF86AudioLowerVolume" in rc and "/usr/local/bin/azzio volume down" in rc
+    assert "XF86AudioMute" in rc and "/usr/local/bin/azzio volume mute" in rc
+    assert "XF86MonBrightnessUp" in rc and "/usr/local/bin/azzio brightness up" in rc
+    assert "XF86MonBrightnessDown" in rc and "/usr/local/bin/azzio brightness down" in rc
 
 
 def test_openbox_documents_the_per_machine_fn_mapping():
@@ -559,23 +559,23 @@ def test_osd_ships_executable_and_pinned():
     (invoked from compiler.py), NOT emitted as a text PLAN entry -- and it is pinned 0755 in the
     ISO file_permissions (archiso would otherwise ship it 0644 and the launcher's X_OK guard would
     silently skip the bar)."""
-    from packages.azarch import terminal_user_interface_build as tb
+    from packages.azzio import terminal_user_interface_build as tb
     # the build wiring targets the same lib-dir path media.py + openbox refer to
-    assert tb.OSD_BIN_SYSTEM_PATH == desktop.AZARCH_OSD_SYSTEM_PATH == "/usr/local/lib/azarch/azarch-osd"
+    assert tb.OSD_BIN_SYSTEM_PATH == desktop.AZZIO_OSD_SYSTEM_PATH == "/usr/local/lib/azzio/azzio-osd"
     assert hasattr(tb, "build_osd")
     # it is NO LONGER a text-emitted PLAN entry (that was the tkinter script era)
-    assert all(e["dest"] != "/usr/local/lib/azarch/azarch-osd" for e in desktop.emit_plan())
-    assert not hasattr(desktop, "azarch_osd"), "the text OSD emitter must be gone"
+    assert all(e["dest"] != "/usr/local/lib/azzio/azzio-osd" for e in desktop.emit_plan())
+    assert not hasattr(desktop, "azzio_osd"), "the text OSD emitter must be gone"
     # pinned executable in the ISO
     perms = profiledef.FILE_PERMISSIONS
-    assert perms["/usr/local/lib/azarch/azarch-osd"] == "0:0:755"
+    assert perms["/usr/local/lib/azzio/azzio-osd"] == "0:0:755"
     # the X client libs the OSD links are declared as build-host deps
     assert {"libx11", "libxrandr", "libxft"} <= set(tb.TERMINAL_USER_INTERFACE_BUILD_DEPS)
 
 
 def test_osd_is_not_bundled_into_the_fast_cli():
     """The OSD is a SEPARATE compiled program (on_screen_display.c); it must NOT be bundled into
-    the `azarch` script (the bundle is Python modules only), and the fast command line interface
+    the `azzio` script (the bundle is Python modules only), and the fast command line interface
     path must not import tkinter (nothing does anymore -- the OSD is C)."""
     assert "on_screen_display.c" not in MODULE_ORDER
     assert "osd_indicator.py" not in MODULE_ORDER

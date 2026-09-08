@@ -7,7 +7,7 @@ WHOLE shell -- a borderless launcher CENTERED on the screen, opened by the Super
 The menu is a COMPILED C / GTK3 program now (the earlier Tkinter/Python port was
 replaced). The C sources live directly in the package dir with a Makefile; the build
 wiring here COMPILES them into a single resident daemon binary
-(azarch-application-menu-daemon) and installs it under MENU_LIB_DIR. A thin Python
+(azzio-application-menu-daemon) and installs it under MENU_LIB_DIR. A thin Python
 launcher (installed as the bin entry point) signals that daemon.
 
 These pin the contract that (a) the build compiles + installs the daemon binary and
@@ -119,7 +119,7 @@ def test_emit_plan_targets_expected_system_paths():
     assert am.MENU_LAUNCHER_SYSTEM_PATH in dests
     assert am.MENU_DESKTOP_SYSTEM_PATH in dests
     assert am.MENU_DAEMON_BIN_SYSTEM_PATH not in dests   # compiled, not text-emitted
-    assert am.MENU_DAEMON_BIN_SYSTEM_PATH == f"{am.MENU_LIB_DIR}/azarch-application-menu-daemon"
+    assert am.MENU_DAEMON_BIN_SYSTEM_PATH == f"{am.MENU_LIB_DIR}/azzio-application-menu-daemon"
 
 
 def test_launcher_is_executable_desktop_is_conf():
@@ -163,7 +163,7 @@ def test_launcher_runs_the_daemon_binary_not_python():
     src = am.launcher_py()
     assert src.startswith("#!/usr/bin/env python3")            # the launcher is Python
     assert am.MENU_LIB_DIR in src                              # default install dir
-    assert "azarch-application-menu-daemon" in src             # ...runs the binary under it
+    assert "azzio-application-menu-daemon" in src             # ...runs the binary under it
     # It starts the binary as its own argv[0] (no `sys.executable` / `python3` prefix).
     assert "[DAEMON_BIN]" in src
     assert "sys.executable" not in src
@@ -176,7 +176,7 @@ def test_launcher_is_a_single_instance_toggle():
     # file and SIGUSR1-toggles the live instance instead of stacking a new window.
     src = am.launcher_py()
     assert "PID_FILE" in src                        # tracks the running instance
-    assert "azarch-application-menu.pid" in src
+    assert "azzio-application-menu.pid" in src
     assert "XDG_RUNTIME_DIR" in src                 # PID file under the runtime dir
     assert "os.kill(pid, 0)" in src                 # is the recorded instance alive?
     assert "SIGUSR1" in src                         # toggle (show/hide) on second click
@@ -254,7 +254,7 @@ def test_menu_is_a_single_instance_daemon():
     # The daemon is single-instance (PID file) and speaks the launcher's protocol:
     # SIGUSR1 = toggle, SIGUSR2 = show. Same contract the launcher relies on.
     src = _menu_c()
-    assert "azarch-application-menu.pid" in src             # same PID file the launcher reads
+    assert "azzio-application-menu.pid" in src             # same PID file the launcher reads
     assert "SIGUSR1" in src and "SIGUSR2" in src            # toggle / show
     assert "claim_pidfile" in src                           # single-instance guard
 

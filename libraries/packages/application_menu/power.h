@@ -1,4 +1,4 @@
-/* Az'arch application menu (C port) -- bottom power/session button.
+/* Azzio application menu (C port) -- bottom power/session button.
  *
  * Port of widgets.py PowerButton: a Breeze icon beside a label, drawn on a
  * GtkDrawingArea, that highlights on hover and can render a blue keyboard-focus

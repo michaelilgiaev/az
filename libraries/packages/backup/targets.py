@@ -3,7 +3,7 @@
 
 After `backup` has built its two local archives it calls copy_archives_to_targets():
 for each ENABLED target (see config.py) the freshly built ``*.tar.gz.gpg`` files are
-ALSO placed there. Nothing here runs unless the user opted in via ``azarch backup --configure``
+ALSO placed there. Nothing here runs unless the user opted in via ``azzio backup --configure``
 -- with the default (all-disabled) config this module is never even reached.
 
 This is a deliberately SMALL, standard-library-only distillation of the cloud/USB

@@ -1,5 +1,5 @@
 """
-pull_specifications -- orchestrator for the Az'arch distribution specification.
+pull_specifications -- orchestrator for the Azzio distribution specification.
 
 Generates documentations/SPECIFICATIONS.md: a technical specification of the OS that ships
 on the ISO, centred on the real package dependency graph (base kernel/libs at the
@@ -135,7 +135,7 @@ def read_endpoints():
 def parse_args(argv):
     p = argparse.ArgumentParser(
         prog="pull_specifications",
-        description="Generate the Az'arch distribution specification.",
+        description="Generate the Azzio distribution specification.",
     )
     p.add_argument("-o", "--output", default=DEFAULT_OUTPUT,
                    help=f"output Markdown file (default: {DEFAULT_OUTPUT})")
@@ -224,9 +224,9 @@ def _build_glance(packages, resolved, tiers, tags):
         "by_repo": by_repo,
         "closure": len(closure),
         # Two editions only: Stock Arch (already on the stock archiso releng
-        # medium) vs Az'arch Component (in the set only because Az'arch added it).
+        # medium) vs Azzio Component (in the set only because Azzio added it).
         "stock": ed_counts.get("stock", 0),
-        "azarch": ed_counts.get("az'arch", 0),
+        "azzio": ed_counts.get("azzio", 0),
         "max_height": tiers["max_height"],
         "size": f"{total_isize / 1024 ** 3:.2f} GiB",
         "endpoints": read_endpoints(),
@@ -253,7 +253,7 @@ def build(manifest_path, db_cache, mirror, offline, svg_rel="SPECIFICATIONS.svg"
 
     # Split the closure into the two editions by walking the STOCK archiso releng
     # baseline: anything that baseline already pulls in is "Stock Arch", the rest
-    # is an "Az'arch Component". The baseline is the built-in list in
+    # is an "Azzio Component". The baseline is the built-in list in
     # specification_stock_baseline, unless a file override is supplied.
     if stock_manifest_path:
         stock_tokens, _ = specification_resolve.load_manifest(stock_manifest_path)

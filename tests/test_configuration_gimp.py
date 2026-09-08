@@ -71,4 +71,4 @@ def test_modification_is_config_only_no_preload_no_desktop_override():
     # The gimprc itself must not shell out to anything (it is pure GIMP config, not a script).
     body = gimp.gimprc()
     assert "--no-splash" not in body
-    assert "azarch-gimp" not in body
+    assert "azzio-gimp" not in body

@@ -9,8 +9,8 @@ keyboard is English-only ("us"), and the timezone is Asia/Jerusalem, all fixed.
 
 The old behaviour -- IP-geolocating the timezone/country (curl ipapi.co) and
 switching the display locale from LANGUAGE_MAP -- is intentionally gone. It is
-being reimplemented as separate, user-invoked guest commands (`azarch
-timedate --resolve` / `azarch language --resolve`) tracked in
+being reimplemented as separate, user-invoked guest commands (`azzio
+timedate --resolve` / `azzio language --resolve`) tracked in
 issue #46; that work is deliberately NOT done here. LANGUAGE_MAP is retained as
 the single source of truth those future commands will consume (adding a language
 is still a one-line Python edit), but it is no longer embedded in the shipped
@@ -20,7 +20,7 @@ setup scripts.
 from __future__ import annotations
 
 # country code -> (language name, locale). Order preserved (matches the original).
-# NOTE: this is now DATA ONLY -- retained for the deferred `azarch --resolve-*`
+# NOTE: this is now DATA ONLY -- retained for the deferred `azzio --resolve-*`
 # commands (issue #46). The static locale block below no longer reads it, so the
 # live/installed systems ship English-only regardless of what is added here.
 LANGUAGE_MAP: dict[str, tuple[str, str]] = {
@@ -61,7 +61,7 @@ def _language_map_heredoc() -> str:
     return "\n".join(f"{cc}|{name}|{loc}" for cc, (name, loc) in LANGUAGE_MAP.items())
 
 
-# --- Resolver country table (the `azarch --resolve-*` guest commands) --------
+# --- Resolver country table (the `azzio --resolve-*` guest commands) --------
 # The SINGLE SOURCE OF TRUTH for the guest-side resolver: ISO-3166 country code ->
 # (locale, xkb layout, console keymap, english?). This is a richer superset of
 # LANGUAGE_MAP -- it carries the xkb LAYOUT + console KEYMAP the resolver needs to
@@ -74,7 +74,7 @@ def _language_map_heredoc() -> str:
 # (packages/pkgbuild.calamares_region_keyboard_patch): the layout codes are
 # real /usr/share/X11/xkb/rules/base.lst identifiers (Hebrew is "il" NOT "he",
 # generic Arabic is "ara", Latin-American Spanish is "latam"). The resolver embeds
-# this as a Python literal (resolver_country_table_py) into the `azarch` command line interface's
+# this as a Python literal (resolver_country_table_py) into the `azzio` command line interface's
 # COUNTRY_TABLE, so adding a country here is a one-line edit that both the installer
 # patch table and the guest resolver should mirror.
 #
@@ -192,7 +192,7 @@ RESOLVER_COUNTRY_TABLE: dict[str, tuple[str, str, str, bool]] = {
 def resolver_country_table_sh() -> str:
     """Render RESOLVER_COUNTRY_TABLE as ``CC|locale|layout|keymap|english`` lines.
     `english` is the literal 1/0. This is the data the guest resolver
-    (`azarch language --resolve`) maps an IP-geolocated country
+    (`azzio language --resolve`) maps an IP-geolocated country
     code onto. Kept as the canonical pipe-delimited rendering the tests pin the
     table's contents against; the command line interface itself embeds the Python form below."""
     out = []
@@ -202,10 +202,10 @@ def resolver_country_table_sh() -> str:
 
 
 def resolver_country_table_py() -> str:
-    """Render RESOLVER_COUNTRY_TABLE as the body of the `azarch` command line interface's COUNTRY_TABLE
+    """Render RESOLVER_COUNTRY_TABLE as the body of the `azzio` command line interface's COUNTRY_TABLE
     dict literal: one ``    'CC': ('locale', 'layout', 'keymap', english),`` line per
     country (english as the literal int 1/0). The compiler substitutes this between the
-    AZARCH_CC markers in the azarch command line interface (country_table.py, bundled into the shipped
+    AZZIO_CC markers in the azzio command line interface (country_table.py, bundled into the shipped
     script) so the guest resolver's table stays in lock-step with this single source of
     truth."""
     out = []
@@ -214,7 +214,7 @@ def resolver_country_table_py() -> str:
     return "\n".join(out)
 
 
-# Az'arch default/only display language and keyboard. English everywhere; the
+# Azzio default/only display language and keyboard. English everywhere; the
 # keymap is always "us" with no second layout and no group-toggle.
 DEFAULT_LANG = "en_US.UTF-8"
 DEFAULT_KEYMAP = "us"
@@ -229,8 +229,8 @@ DEFAULT_KEYMAP = "us"
 # and its plasma-localerc are gone).
 DEFAULT_TIME_LOCALE = "en_GB.UTF-8"
 
-# Az'arch default (and, since auto-resolve was removed, ONLY) timezone. Dynamic
-# geo detection is deferred to `azarch timedate --resolve` (issue #46).
+# Azzio default (and, since auto-resolve was removed, ONLY) timezone. Dynamic
+# geo detection is deferred to `azzio timedate --resolve` (issue #46).
 DEFAULT_TIMEZONE = "Asia/Jerusalem"
 
 
@@ -242,13 +242,13 @@ DEFAULT_TIMEZONE = "Asia/Jerusalem"
 # Keyboard policy: ENGLISH-ONLY. The layout is always "us" with no second layout
 # and no group-toggle.
 # Timezone policy: Asia/Jerusalem, unconditionally. (No IP geolocation -- that is
-# reimplemented as the user-invoked `azarch --resolve-*` commands, issue #46.)
+# reimplemented as the user-invoked `azzio --resolve-*` commands, issue #46.)
 def _detect_and_apply_locale_block() -> str:
     return f"""\
 # Static locale: English display language, English-only ("us") keyboard, the
 # Asia/Jerusalem timezone, and a day/month/year date format (LC_TIME=en_GB.UTF-8).
 # Nothing here is auto-resolved from the network -- the dynamic resolver lives in
-# the `azarch --resolve-*` commands (issue #46).
+# the `azzio --resolve-*` commands (issue #46).
 PRIMARY_LANG="{DEFAULT_LANG}"
 PRIMARY_KB="{DEFAULT_KEYMAP}"
 # Date/time locale: English but d/m/y instead of the m/d/y en_US default.
@@ -301,7 +301,7 @@ def setup_locale_sh() -> str:
     chose in the Calamares Location/Keyboard pages (verified: a Russian install came
     up English-only "us" post-boot, with a stray ru_RU.UTF-8 left in locale.gen and
     /var/log/.locale_set freshly timestamped). PROMPT: the installed system MUST keep
-    exactly what the installer set, and only `azarch --resolve-*` may ever change it.
+    exactly what the installer set, and only `azzio --resolve-*` may ever change it.
 
     The archiso live medium mounts a tmpfs at /run/archiso (its boot/cow overlay);
     an installed system has no such path. So `[ -d /run/archiso ]` is the definitive

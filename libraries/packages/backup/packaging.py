@@ -1,4 +1,4 @@
-"""Az'arch backup -- build wiring for the `backup` and `unpack` commands.
+"""Azzio backup -- build wiring for the `backup` and `unpack` commands.
 
 `backup` rolls the current user's top-level home folders (skipping ``Ignore`` and
 hidden dot files, keeping symlinks as links) into ~/backup.tar.gz.gpg AND archives the
@@ -28,10 +28,10 @@ Layers:
       archive.py                      shared tar+gpg helper (imported by both entries)
       packaging.py                    THIS module -- install paths, launchers, emit_plan()
   * INSTALLED layout (root-owned), all flat in LIB_DIR:
-      /usr/local/lib/azarch-backup/backup.py    the `backup` entry script
-      /usr/local/lib/azarch-backup/unpack.py    the `unpack` entry script
-      /usr/local/lib/azarch-backup/archive.py   the shared helper
-      /usr/local/lib/azarch-backup/<module>.py  any future working module
+      /usr/local/lib/azzio-backup/backup.py    the `backup` entry script
+      /usr/local/lib/azzio-backup/unpack.py    the `unpack` entry script
+      /usr/local/lib/azzio-backup/archive.py   the shared helper
+      /usr/local/lib/azzio-backup/<module>.py  any future working module
       /usr/local/bin/backup                      the `backup` launcher (execs backup.py)
       /usr/local/bin/unpack                      the `unpack` launcher (execs unpack.py)
 
@@ -52,7 +52,7 @@ import paths
 # passwords.LIB_DIR. The app is ONE FLAT directory: the entry script (and any module
 # it grows) sit side by side here, and the entry does `sys.path.insert(0, <its own
 # dir>)` so future bare `import <module>` calls resolve.
-LIB_DIR = "/usr/local/lib/azarch-backup"
+LIB_DIR = "/usr/local/lib/azzio-backup"
 # The entry script the `backup` launcher execs. It lands in LIB_DIR beside the other
 # modules; its own `sys.path.insert(0, <dir of __file__>)` makes the sibling
 # `import archive` resolve from wherever it is run.
@@ -141,13 +141,13 @@ exec python -u '{LIB_DIR}/{entry}' "$@"
 def launcher_sh() -> str:
     """The `backup` launcher (execs backup.py -- creates the two encrypted archives)."""
     return _launcher_sh("backup", "backup.py",
-                        "launch the Az'arch home-directory + password backup.")
+                        "launch the Azzio home-directory + password backup.")
 
 
 def unpack_launcher_sh() -> str:
     """The `unpack` launcher (execs unpack.py -- restores a .tar.gz.gpg archive)."""
     return _launcher_sh("unpack", "unpack.py",
-                        "restore an Az'arch backup archive.")
+                        "restore an Azzio backup archive.")
 
 
 # --- Emit plan --------------------------------------------------------------

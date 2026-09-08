@@ -44,8 +44,8 @@ def test_package_stores_compose_correctly():
     assert paths.PKG_REPO == paths.CACHEDIR / "pkgs" / "repo"
     assert paths.PKG_DB == paths.CACHEDIR / "pkgs" / "db"
     assert paths.PKG_SYNC_DB == paths.PKG_DB / "sync"
-    assert paths.LOCALREPO_INDEX == paths.PKG_REPO / "pacstrap-azarch-repo.db"
-    assert paths.LOCALREPO_INDEX_TAR == paths.PKG_REPO / "pacstrap-azarch-repo.db.tar.gz"
+    assert paths.LOCALREPO_INDEX == paths.PKG_REPO / "pacstrap-azzio-repo.db"
+    assert paths.LOCALREPO_INDEX_TAR == paths.PKG_REPO / "pacstrap-azzio-repo.db.tar.gz"
 
 
 def test_log_paths():
@@ -92,7 +92,7 @@ def test_workdir_docker_is_container_internal(monkeypatch):
     reloaded = _reload_with_dockerenv(monkeypatch, present=True)
     try:
         assert reloaded.in_docker() is True
-        assert reloaded.WORKDIR == Path("/tmp/azarch-build")
+        assert reloaded.WORKDIR == Path("/tmp/azzio-build")
         assert not str(reloaded.WORKDIR).startswith(str(reloaded.CACHEDIR))
     finally:
         monkeypatch.undo()

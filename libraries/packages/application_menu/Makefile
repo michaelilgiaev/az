@@ -1,5 +1,5 @@
-# Az'arch application menu (C/GTK3 port) build.
-# Produces a single resident binary: azarch-application-menu-daemon.
+# Azzio application menu (C/GTK3 port) build.
+# Produces a single resident binary: azzio-application-menu-daemon.
 CC      ?= gcc
 PKGS     = gtk+-3.0 gdk-x11-3.0 x11 glib-2.0 gdk-pixbuf-2.0 pango pangocairo cairo
 # GTK3 colour/font override + gdk_screen_width APIs are deprecated in favour of
@@ -9,7 +9,7 @@ CFLAGS  += -O2 -Wall -Wextra -std=c11 -Wno-deprecated-declarations \
 LDFLAGS += $(shell pkg-config --libs $(PKGS)) -lm
 
 OBJS = menu.o application_list.o applications.o usage.o icons.o actions.o window_watch.o window_resolve.o kickoff_scrollbar.o power.o theme.o
-BIN  = azarch-application-menu-daemon
+BIN  = azzio-application-menu-daemon
 
 # The tests now live in the repo-root tests/ dir (their single home). The `test` target
 # here just delegates there so `make test` still works from this dir; tests/Makefile

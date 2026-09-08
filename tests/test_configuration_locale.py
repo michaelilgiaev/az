@@ -5,7 +5,7 @@ As of the "no auto-resolve" change the emitted setup bash is STATIC: it must NOT
 query the network (no curl / ipapi.co), must NOT match a country against
 LANGUAGE_MAP, and must ship English (en_US.UTF-8), an English-only "us" keymap,
 and the Asia/Jerusalem timezone unconditionally. The dynamic resolver is being
-reimplemented as the user-invoked `azarch --resolve-*` commands (issue #46) and
+reimplemented as the user-invoked `azzio --resolve-*` commands (issue #46) and
 is deliberately NOT part of the shipped setup scripts. LANGUAGE_MAP survives as
 the single source of truth those future commands will consume.
 """
@@ -201,7 +201,7 @@ def test_setup_block_still_dollar_brace_clean():
     assert "}}" not in block
 
 
-# --- Resolver country table (the `azarch --resolve-*` commands) --------------
+# --- Resolver country table (the `azzio --resolve-*` commands) --------------
 
 def test_resolver_table_rows_have_five_fields():
     # Every row is CC|locale|layout|keymap|english; the guest command line interface splits on '|' and

@@ -56,11 +56,11 @@ def test_port_is_49154_everywhere():
 
 # --- emit_plan() contract ---------------------------------------------------
 EXPECTED_PLAN = {
-    "/usr/local/lib/azarch-timedate/applications.py": 0o644,
-    "/usr/local/lib/azarch-timedate/page.py": 0o644,
-    "/usr/local/lib/azarch-timedate/assets.py": 0o644,
-    "/usr/local/bin/azarch-timedate": 0o755,
-    "/etc/systemd/system/azarch-timedate.service": 0o644,
+    "/usr/local/lib/azzio-timedate/applications.py": 0o644,
+    "/usr/local/lib/azzio-timedate/page.py": 0o644,
+    "/usr/local/lib/azzio-timedate/assets.py": 0o644,
+    "/usr/local/bin/azzio-timedate": 0o755,
+    "/etc/systemd/system/azzio-timedate.service": 0o644,
 }
 
 
@@ -136,7 +136,7 @@ def test_service_unit_is_hardened_and_unprivileged():
 
 
 def test_service_name_constants_agree():
-    assert td.SERVICE_NAME == "azarch-timedate.service"
+    assert td.SERVICE_NAME == "azzio-timedate.service"
     assert td.SERVICE_SYSTEM_PATH == f"/etc/systemd/system/{td.SERVICE_NAME}"
 
 
@@ -172,7 +172,7 @@ def test_librewolf_keeps_cookie_persistence():
 # --- the timedate page ADHERES to the system theme (white/dark) --------------
 def test_page_css_is_dark_by_default_and_light_via_media_query():
     """The page's own styling follows the system theme: the :root defaults DARK (the
-    Az'arch default) and an `@media (prefers-color-scheme: light)` block overrides to a
+    Azzio default) and an `@media (prefers-color-scheme: light)` block overrides to a
     light palette. So a browser reporting dark -> dark page; light -> light page."""
     css = td.assets_py()
     # :root is the DARK palette (dark background, light foreground).
@@ -191,7 +191,7 @@ def test_librewolf_lets_the_page_see_the_real_color_scheme():
     prefers-color-scheme=light for every site, so the timedate page was stuck light even in
     the dark system theme. The overrides swap RFP for FPP-minus-CSSPrefersColorScheme so the
     page's `@media (prefers-color-scheme: light)` follows the actual system theme, and
-    ui.systemUsesDarkTheme / content-override (which `azarch theme` flips) reach content."""
+    ui.systemUsesDarkTheme / content-override (which `azzio theme` flips) reach content."""
     cfg = librewolf.overrides_cfg()
     assert 'defaultPref("privacy.resistFingerprinting", false);' in cfg
     assert 'defaultPref("privacy.fingerprintingProtection", true);' in cfg
@@ -354,7 +354,7 @@ def _zone_from_localtime(localtime: str, zoneinfo_dir: str) -> str | None:
 
 def test_zone_resolution_follows_the_symlink(tmp_path):
     """A /etc/localtime symlink into the zoneinfo tree resolves to its IANA name, and
-    following a change (as timedatectl / azarch timedate --resolve / a manual relink
+    following a change (as timedatectl / azzio timedate --resolve / a manual relink
     would do) yields the new zone -- with no caching, so the page updates itself."""
     zi = tmp_path / "zoneinfo"
     (zi / "Asia").mkdir(parents=True)

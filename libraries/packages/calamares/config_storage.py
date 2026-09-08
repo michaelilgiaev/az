@@ -20,7 +20,7 @@ def partition_conf() -> str:
     """Partitioning: Btrfs default, LUKS2 full-disk encryption offered, sane
     EFI/swap defaults, and both "Erase disk" and "Manual" modes enabled."""
     return """\
-# Partitioning behaviour for Az'arch.
+# Partitioning behaviour for Azzio.
 ---
 # Bootloader install location. "grub" pairs with the grubcfg + bootloader modules
 # in the sequence; Calamares picks EFI vs BIOS from the running firmware.
@@ -30,7 +30,7 @@ efiSystemPartition: "/boot/efi"
 efiSystemPartitionSize: 512M
 efiSystemPartitionName: EFISYSTEM
 
-# Default filesystem for the root partition. BTRFS is the Az'arch default.
+# Default filesystem for the root partition. BTRFS is the Azzio default.
 # NOTE: the Calamares 3.4.x key is `defaultFileSystemType` (verified against
 # upstream src/modules/partition/partition.conf) -- NOT `defaultFileSystem`.
 defaultFileSystemType: "btrfs"
@@ -108,7 +108,7 @@ def unpackfs_conf() -> str:
     On an archiso live medium the boot device is mounted at /run/archiso/bootmnt
     and the SquashFS root image sits at arch/x86_64/airootfs.sfs under it.
     unpackfs mounts that squashfs and rsyncs it into the target -- an OFFLINE
-    install with no pacman network access, consistent with the rest of Az'arch.
+    install with no pacman network access, consistent with the rest of Azzio.
     """
     return f"""\
 # Unpack the live filesystem to the target (offline install source).
@@ -211,7 +211,7 @@ def luksbootkeyfile_conf() -> str:
     report. See settings.conf's sequence note.
 
     The single valid key is `luks2Hash` (the PBKDF for the keyfile's LUKS2 key
-    slot: pbkdf2 / argon2i / argon2id / default). Az'arch installs LUKS1
+    slot: pbkdf2 / argon2i / argon2id / default). Azzio installs LUKS1
     (partition.conf luksGeneration: luks1, so GRUB can unlock /boot on the
     encrypted root), and LUKS1 always uses PBKDF2 -- so luks2Hash has no effect
     here. We ship it explicitly as `default` for clarity and so a future switch to
@@ -221,7 +221,7 @@ def luksbootkeyfile_conf() -> str:
 # luksbootkeyfile: embed a LUKS keyfile in the initramfs so the encrypted root is
 # unlocked automatically after GRUB's prompt (no second passphrase prompt).
 ---
-# PBKDF for the keyfile's key slot. Only meaningful for LUKS2; Az'arch uses LUKS1
+# PBKDF for the keyfile's key slot. Only meaningful for LUKS2; Azzio uses LUKS1
 # (always PBKDF2), so this is inert -- shipped as `default` for clarity.
 luks2Hash: default
 """

@@ -1,6 +1,6 @@
-"""Tests for the `azarch gpu` guest command: PCI vendor detection, the driver map,
-and the offline-repo install argv. gpu.py is bundled into /usr/local/bin/azarch
-(see packages/azarch/bundle.py), so like the other guest-CLI modules it is loaded
+"""Tests for the `azzio gpu` guest command: PCI vendor detection, the driver map,
+and the offline-repo install argv. gpu.py is bundled into /usr/local/bin/azzio
+(see packages/azzio/bundle.py), so like the other guest-CLI modules it is loaded
 here from the emitted bundle to test the SHIPPED behavior, and unit-tested directly
 for the pure detection/mapping helpers."""
 
@@ -12,14 +12,14 @@ from pathlib import Path
 
 import pytest
 
-_GPU_PATH = Path(__file__).resolve().parent.parent / "libraries/packages/azarch/gpu.py"
+_GPU_PATH = Path(__file__).resolve().parent.parent / "libraries/packages/azzio/gpu.py"
 
 
 def _load_gpu():
     """Load gpu.py as a standalone module. It calls _err/_have/_sudo by bare name at
     RUNTIME (they come from common.py in the real bundle); we inject no-op stand-ins so
     import and the pure helpers work in isolation."""
-    spec = importlib.util.spec_from_file_location("azarch_gpu", _GPU_PATH)
+    spec = importlib.util.spec_from_file_location("azzio_gpu", _GPU_PATH)
     mod = importlib.util.module_from_spec(spec)
     # Inject the bundle-provided bare-name helpers the module expects at call time.
     mod.__dict__["_err"] = lambda *a, **k: None
@@ -117,7 +117,7 @@ def test_wanted_packages_empty_for_no_vendor(tmp_path):
 def test_pacman_install_argv_uses_offline_file_repo(tmp_path):
     gpu = _load_gpu()
     argv = gpu.pacman_install_argv(["nvidia-open-dkms", "cuda"],
-                                   "/root/azarch/pacstrap-azarch-repo")
+                                   "/root/azzio/pacstrap-azzio-repo")
     joined = " ".join(argv)
     assert "pacman" in joined
     assert "--needed" in argv                   # idempotent
@@ -172,7 +172,7 @@ def test_gpu_module_is_bundled_before_cli():
     # by bare name). It has no dependency on later modules, so placing it near machine.py is fine.
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "libraries"))
-    from packages.azarch import bundle
+    from packages.azzio import bundle
     order = bundle.MODULE_ORDER
     assert "gpu.py" in order
     assert order.index("gpu.py") < order.index("command_line_interface.py")
@@ -182,20 +182,20 @@ def test_emitted_cli_defines_cmd_gpu():
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "libraries"))
     from packages import openbox
-    out = openbox.azarch_command_line_interface()
+    out = openbox.azzio_command_line_interface()
     assert "def cmd_gpu(" in out
     assert "def detect_vendors(" in out
 
 
 def _load_cli():
-    """Load the emitted, bundled /usr/local/bin/azarch as a module (matches how
+    """Load the emitted, bundled /usr/local/bin/azzio as a module (matches how
     test_configuration_openbox loads it) so dispatch is tested end-to-end."""
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "libraries"))
     from packages import openbox
-    src = openbox.azarch_command_line_interface()
+    src = openbox.azzio_command_line_interface()
     ns: dict = {}
-    exec(compile(src, "azarch_cli", "exec"), ns)
+    exec(compile(src, "azzio_cli", "exec"), ns)
     return ns
 
 
@@ -266,7 +266,7 @@ def test_old_resolve_flags_are_removed():
 
 
 def test_all_driver_packages_are_baked_into_manifest():
-    # Every package azarch gpu can install MUST ship on the ISO, so --resolve is an OFFLINE
+    # Every package azzio gpu can install MUST ship on the ISO, so --resolve is an OFFLINE
     # install (the whole point). Parse packages.x86_64 the way mkarchiso does (strip comments
     # + blanks) and assert it is a superset of the full driver map.
     gpu = _load_gpu()

@@ -60,12 +60,12 @@ def _tokenize(text: str):
 
 def test_manifest_tokenizer_drops_comments_and_blanks():
     body = (
-        "# Az'arch package manifest\n"
+        "# Azzio package manifest\n"
         "\n"
         "base\n"
         "linux    # the kernel\n"
         "  \n"
-        "# ---- Stock / Az'arch delimiter ----\n"
+        "# ---- Stock / Azzio delimiter ----\n"
         "firefox\n"
     )
     assert _tokenize(body) == ["base", "linux", "firefox"]
@@ -194,18 +194,18 @@ def test_download_conf_honours_parallel_downloads_override():
     assert "ParallelDownloads = 5" in downloader.pacman_cfg.download_conf()
 
 
-def test_no_duplicates_within_azarch_additions_block():
+def test_no_duplicates_within_azzio_additions_block():
     # packages.x86_64 has two blocks: STOCK ARCH (the upstream releng baseline) and
-    # AZ'ARCH ADDITIONS (the block the maintainer actually edits). A package listed
+    # AZZIO ADDITIONS (the block the maintainer actually edits). A package listed
     # in BOTH blocks is intentional and benign -- releng ships e.g. grub/lvm2 and the
     # installer re-declares them; pacman/mkarchiso dedup the manifest. The real
     # editing hazard is a package listed twice WITHIN the additions block, so that
     # is what we guard.
     lines = downloader.paths.PACKAGES_FILE.read_text().splitlines()
-    banner = max(i for i, l in enumerate(lines) if "AZ'ARCH ADDITIONS" in l)
+    banner = max(i for i, l in enumerate(lines) if "AZZIO ADDITIONS" in l)
     # additions content starts after the closing ===== banner line following the text.
     close = next(i for i in range(banner + 1, len(lines))
                  if set(lines[i].strip()) <= set("#= "))
     additions = _tokenize("\n".join(lines[close + 1:]))
     dupes = {t for t in additions if additions.count(t) > 1}
-    assert not dupes, f"duplicate packages within the Az'arch-additions block: {sorted(dupes)}"
+    assert not dupes, f"duplicate packages within the Azzio-additions block: {sorted(dupes)}"

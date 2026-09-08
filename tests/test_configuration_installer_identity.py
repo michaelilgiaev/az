@@ -7,7 +7,7 @@ username, a user password, a root password, and a timezone, then applies them in
 chosen zone). These pin the load-bearing bits of those three bash fragments:
 
   * env pre-seed hooks exist for every field AND an interactive fallback (`read`) is kept, so
-    a plain `azarch-install --cli` over SSH still works step by step.
+    a plain `azzio-install --cli` over SSH still works step by step.
   * passwords are read hidden (`read -s`), confirmed, and never written to a world-readable
     file; the chroot shreds the plaintext files after chpasswd.
   * the chroot applies user + root passwords via chpasswd, renames the copied `main` account
@@ -52,7 +52,7 @@ def test_collect_reads_passwords_hidden_and_confirms():
 
 
 def test_collect_skips_fullname_prompt_under_star_password():
-    # `azarch-install --auto` leaves the full name blank (spec: full_name=NULL, skip). An empty
+    # `azzio-install --auto` leaves the full name blank (spec: full_name=NULL, skip). An empty
     # AZ_INSTALL_FULLNAME cannot survive run_cli()'s `${VAR:+...}` sudo forwarding, so the collect
     # step must instead skip the full-name prompt under the auto/unattended marker
     # (AZ_INSTALL_STAR_PASSWORD) -- otherwise --auto blocks on "Your full name (optional):".
@@ -81,7 +81,7 @@ def test_collect_fullname_skipped_noninteractively_under_star(tmp_path):
                       + '\necho "FULL=[$az_fullname] USER=$az_username"\n')
     env = dict(os.environ,
                AZ_INSTALL_STAR_PASSWORD="1", AZ_INSTALL_USERNAME="main",
-               AZ_INSTALL_HOSTNAME="azarch", AZ_INSTALL_TIMEZONE="Asia/Jerusalem")
+               AZ_INSTALL_HOSTNAME="azzio", AZ_INSTALL_TIMEZONE="Asia/Jerusalem")
     env.pop("AZ_INSTALL_FULLNAME", None)  # UNSET, as --auto's dropped empty value arrives.
     r = subprocess.run(["bash", str(driver)], capture_output=True, text=True,
                        env=env, stdin=subprocess.DEVNULL, timeout=30)
@@ -120,7 +120,7 @@ def test_collect_star_password_flow_is_noninteractive(tmp_path):
                       + '\necho "STAR=$az_star_password USER=$az_username TZ=$az_timezone"\n')
     env = dict(os.environ,
                AZ_INSTALL_STAR_PASSWORD="1", AZ_INSTALL_USERNAME="main",
-               AZ_INSTALL_HOSTNAME="azarch", AZ_INSTALL_TIMEZONE="Asia/Jerusalem",
+               AZ_INSTALL_HOSTNAME="azzio", AZ_INSTALL_TIMEZONE="Asia/Jerusalem",
                AZ_INSTALL_FULLNAME="")
     r = subprocess.run(["bash", str(driver)], capture_output=True, text=True,
                        env=env, stdin=subprocess.DEVNULL, timeout=30)
@@ -161,7 +161,7 @@ def test_collect_rejects_reserved_and_existing_usernames():
 
 def test_collect_defaults_match_live_identity():
     s = idy.identity_collect_sh()
-    assert 'az_hostname="${az_hostname:-azarch}"' in s
+    assert 'az_hostname="${az_hostname:-azzio}"' in s
     assert 'az_username="${az_username:-main}"' in s
     assert 'az_timezone="${az_timezone:-Asia/Jerusalem}"' in s
 

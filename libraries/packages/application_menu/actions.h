@@ -1,4 +1,4 @@
-/* Az'arch application menu (C port) -- side-effect actions (launch + power).
+/* Azzio application menu (C port) -- side-effect actions (launch + power).
  * Port of actions.py. Fire-and-forget; never blocks or crashes the menu. */
 #ifndef AZ_ACTIONS_H
 #define AZ_ACTIONS_H

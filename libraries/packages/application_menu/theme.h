@@ -1,8 +1,8 @@
-/* Az'arch application menu (C/GTK3) -- shared palette + geometry constants.
+/* Azzio application menu (C/GTK3) -- shared palette + geometry constants.
  *
  * The geometry numbers and font sizes are compile-time constants. The COLOURS are
  * RUNTIME-selected so the menu follows the system theme (dark by default, light when the
- * user runs `azarch theme --white`): every colour is an az_color(role) accessor that
+ * user runs `azzio theme --white`): every colour is an az_color(role) accessor that
  * returns the dark or light hex string depending on the system color-scheme, read ONCE at
  * startup by az_theme_init(). The AZ_*_COLOR names below are kept as macros that expand to
  * that accessor, so every existing call site (widget_bg(w, AZ_BG_COLOR),

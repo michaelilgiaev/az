@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The `backup` command -- Az'arch's home-directory + password-store backup.
+"""The `backup` command -- Azzio's home-directory + password-store backup.
 
 Running `backup` prompts ONCE for a passphrase and then produces TWO encrypted
 archives in your home directory:
@@ -31,7 +31,7 @@ Both archives are encrypted with the SAME passphrase you typed (one prompt).
 
 WHY tar + gpg (no rar), and how the passphrase is kept off the process list, live in
 the shared archive.py helper this script imports. This stays Python standard library
-only; the only external binary is ``gpg`` (gnupg), already in the Az'arch manifest.
+only; the only external binary is ``gpg`` (gnupg), already in the Azzio manifest.
 The cloud upload / rotation / GitHub / QEMU machinery from the original prototype in
 ``data/backup.py`` is deliberately NOT here -- we build this up one focused step at a
 time.
@@ -182,7 +182,7 @@ def build_passwords_archive(home, passphrase, out_path):
     # Decrypt into a private (0700) temp dir; gpg writes the plaintext 0600. If the
     # passphrase is wrong, gpg_decrypt_to_file removes the partial output and returns
     # False -- we treat that as "mismatch" (do not fail the whole run).
-    tmp_dir = tempfile.mkdtemp(prefix="azarch-backup-")
+    tmp_dir = tempfile.mkdtemp(prefix="azzio-backup-")
     plain_path = os.path.join(tmp_dir, "passwords.txt")
     try:
         if not archive.gpg_decrypt_to_file(store_path, plain_path, passphrase):
@@ -236,7 +236,7 @@ def main(argv=None):
         return 0
 
     # NO header / plan block: the output is deliberately STRIPPED DOWN (step five item 3).
-    # There is no "Az'arch backup" banner, no rule, and no Home/Items/Store/Skip rows -- and
+    # There is no "Azzio backup" banner, no rule, and no Home/Items/Store/Skip rows -- and
     # crucially no "Skip: ... 'Vault' ..." line, which was factually WRONG (the password store
     # IS backed up, into ~/passwords.tar.gz.gpg). We go straight to the passphrase prompt (its
     # live keyboard line is printed inside prompt_passphrase, right where the user types) and
@@ -280,7 +280,7 @@ def main(argv=None):
     else:  # "failed" -- gpg/tar error building the passwords archive
         user_interface.warn("could not build the password-store archive.")
 
-    # 3) Optional cloud / USB copy -- ONLY when the user opted in via `azarch backup
+    # 3) Optional cloud / USB copy -- ONLY when the user opted in via `azzio backup
     #    --configure` (config default is all-disabled -> this whole block is skipped and
     #    behaviour is exactly the local-only backup). The copy is best-effort: a
     #    failed/absent target warns but never fails the run, since the local archives are the

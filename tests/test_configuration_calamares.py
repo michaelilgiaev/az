@@ -41,8 +41,8 @@ EXPECTED_FILES = {
     "modules/grubcfg.conf",
     "modules/bootloader.conf",
     "modules/finished.conf",
-    "branding/azarch/branding.desc",
-    "branding/azarch/show.qml",
+    "branding/azzio/branding.desc",
+    "branding/azzio/show.qml",
 }
 
 
@@ -138,8 +138,8 @@ def test_settings_exec_ordering_constraints():
 
 
 def test_network_page_in_show_sequence_before_users():
-    # The Az'arch "Network" page (networkq QML view module, added by the
-    # azarch-calamares-networkq source patch) is shown immediately BEFORE `users` (per the
+    # The Azzio "Network" page (networkq QML view module, added by the
+    # azzio-calamares-networkq source patch) is shown immediately BEFORE `users` (per the
     # user's request), so the page order reads partition -> network -> user account ->
     # summary. It is a `show` (UI) step, not an exec step. Show-order is independent of the
     # exec order: `networkcfg` still runs at exec time regardless of where the page sits.
@@ -185,7 +185,7 @@ def test_luksbootkeyfile_runs_before_fstab_and_initcpiocfg():
 
 
 def test_luksbootkeyfile_conf_schema():
-    # The module's only valid key is luks2Hash. Az'arch uses LUKS1 so it is inert,
+    # The module's only valid key is luks2Hash. Azzio uses LUKS1 so it is inert,
     # but it must parse and carry a recognized value.
     doc = yaml.safe_load(calamares.luksbootkeyfile_conf())
     assert set(doc) == {"luks2Hash"}
@@ -420,12 +420,12 @@ def test_shellprocess_removes_installer_from_installed_desktop():
     assert f"rm -f {csp.INSTALLER_DESKTOP_LAUNCHER}" in cmd
     assert f"rm -f {csp.INSTALLER_SKEL_LAUNCHER}" in cmd
     # It targets the live user's home Desktop launcher specifically.
-    assert csp.INSTALLER_DESKTOP_LAUNCHER == "/home/main/Desktop/azarch-install.desktop"
+    assert csp.INSTALLER_DESKTOP_LAUNCHER == "/home/main/Desktop/azzio-install.desktop"
 
 
 def test_shellprocess_removes_installer_menu_entry_post_install():
     # The installer must NOT appear ANYWHERE post-installation, so the system-wide
-    # application-menu launcher (/usr/share/applications/azarch-install.desktop) is removed
+    # application-menu launcher (/usr/share/applications/azzio-install.desktop) is removed
     # too (previously it was left in place). calamares itself is also try_removed by the
     # packages module, so keeping the entry would just leave a dead launcher in the menu.
     from packages.calamares import calamares_shellprocess as csp
@@ -435,16 +435,16 @@ def test_shellprocess_removes_installer_menu_entry_post_install():
     assert f"rm -f {csp.INSTALLER_MENU_DESKTOP}" in cmd
     # Single source of truth: the path this removes is exactly the one openbox.py ships.
     assert csp.INSTALLER_MENU_DESKTOP == desktop.INSTALL_MENU_DESKTOP_PATH
-    assert csp.INSTALLER_MENU_DESKTOP == "/usr/share/applications/azarch-install.desktop"
+    assert csp.INSTALLER_MENU_DESKTOP == "/usr/share/applications/azzio-install.desktop"
 
 
 def test_shellprocess_removes_installer_wrapper_post_install():
-    # The privileged Calamares launcher wrapper (/usr/local/bin/azarch-install) makes sense on
+    # The privileged Calamares launcher wrapper (/usr/local/bin/azzio-install) makes sense on
     # the LIVE medium (the autostart + both installer launchers exec it), but must NOT survive
-    # onto the INSTALLED system: once Calamares has installed Az'arch there is nothing left to
-    # install, so a leftover azarch-install wrapper is dead weight. The OFFLINE unpackfs install
+    # onto the INSTALLED system: once Calamares has installed Azzio there is nothing left to
+    # install, so a leftover azzio-install wrapper is dead weight. The OFFLINE unpackfs install
     # copies the whole live rootfs, so this root-owned file lands on the target and the cleanup
-    # step must delete it (post-install requirement: no azarch-install wrapper on the installed
+    # step must delete it (post-install requirement: no azzio-install wrapper on the installed
     # system). The LIVE ISO is unchanged -- the wrapper is still shipped there.
     from packages.calamares import calamares_shellprocess as csp
     from packages import openbox as desktop
@@ -453,7 +453,7 @@ def test_shellprocess_removes_installer_wrapper_post_install():
     assert f"rm -f {csp.INSTALLER_WRAPPER}" in cmd
     # Single source of truth: the path this removes is exactly the one openbox.py ships.
     assert csp.INSTALLER_WRAPPER == desktop.INSTALL_WRAPPER_PATH
-    assert csp.INSTALLER_WRAPPER == "/usr/local/bin/azarch-install"
+    assert csp.INSTALLER_WRAPPER == "/usr/local/bin/azzio-install"
     # The LIVE medium still ships the wrapper (an emit_plan entry writes it to that path):
     # the cleanup only strips it from the TARGET chroot, not from the live ISO.
     plan_dests = {e["dest"] for e in desktop.emit_plan()}
@@ -1118,15 +1118,15 @@ def test_users_no_autologin_on_installed_system():
     assert d["doAutologin"] is False
 
 
-def test_users_hostname_template_is_literal_azarch():
-    # "What is the name of this computer?" defaults to "azarch" and must NOT change
+def test_users_hostname_template_is_literal_azzio():
+    # "What is the name of this computer?" defaults to "azzio" and must NOT change
     # as the Full Name / Login fields change. Calamares reads the hostname suggestion
-    # from the top-level `hostname` submap's `template`. A LITERAL "azarch" (no
-    # ${...} macros) expands to exactly "azarch" for any user input; the paired
+    # from the top-level `hostname` submap's `template`. A LITERAL "azzio" (no
+    # ${...} macros) expands to exactly "azzio" for any user input; the paired
     # calamares source patch seeds it as the initial value and freezes it. If a macro
     # ever crept into this template the hostname would go reactive again, so pin it.
     d = yaml.safe_load(calamares.users_conf())
-    assert d["hostname"]["template"] == "azarch"
+    assert d["hostname"]["template"] == "azzio"
     assert "$" not in d["hostname"]["template"]  # no ${first}/${product}/... macros
 
 
@@ -1180,7 +1180,7 @@ def test_users_conf_shell_is_under_user_submap():
 
 
 def test_users_conf_password_is_skippable_and_reuse_for_root_default_checked():
-    # Az'arch PROMPT: the user password defaults EMPTY and is SKIPPABLE, and the
+    # Azzio PROMPT: the user password defaults EMPTY and is SKIPPABLE, and the
     # reuse-password checkbox ("Use username password for root password.") defaults
     # CHECKED.
     #
@@ -1241,7 +1241,7 @@ def test_locale_conf_defaults_to_asia_jerusalem():
 # --- keyboard.conf: no auto-resolve (the Hebrew-preselect fix) --------------
 
 def test_keyboard_conf_enables_region_second_layout():
-    # Az'arch region-driven keyboard: when the user picks a non-English region on the
+    # Azzio region-driven keyboard: when the user picks a non-English region on the
     # Location page, the region's native layout is added as a switchable SECOND layout
     # (English "us" stays first/active, Alt+Shift), live in the installer and persisted
     # to the target. This needs guessLayout:true (guessLocaleKeyboardLayout(), which the
@@ -1254,7 +1254,7 @@ def test_keyboard_conf_enables_region_second_layout():
 
 
 def test_keyboard_conf_uses_plain_xorg_not_locale1():
-    # Az'arch is Openbox/X11 and setup-locale.sh already wrote
+    # Azzio is Openbox/X11 and setup-locale.sh already wrote
     # /etc/X11/xorg.conf.d/00-keyboard.conf with "us"; managing that file directly
     # (useLocale1 false) is what lets the module read "us" as the current layout.
     d = yaml.safe_load(calamares.keyboard_conf())
@@ -1349,7 +1349,7 @@ def test_bootloader_no_schema_rejected_keys():
 def test_bootloader_grub_identity():
     d = yaml.safe_load(calamares.bootloader_conf())
     assert d["efiBootLoader"] == "grub"
-    assert d["efiBootloaderId"] == "azarch"
+    assert d["efiBootloaderId"] == "azzio"
 
 
 # --- finished.conf (Restart-now option on the Finish page) ------------------
@@ -1402,16 +1402,16 @@ def test_branding_images():
 
 def test_branding_component_and_product_strings():
     d = yaml.safe_load(calamares.branding_desc())
-    assert d["componentName"] == "azarch"
-    assert d["strings"]["productName"] == "Az'arch Linux"
-    assert d["strings"]["bootloaderEntryName"] == "Az'arch"
+    assert d["componentName"] == "azzio"
+    assert d["strings"]["productName"] == "Azzio Linux"
+    assert d["strings"]["bootloaderEntryName"] == "Azzio"
 
 
 # --- module identity constants ---------------------------------------------
 
 def test_module_identity_constants():
-    assert calamares.BRANDING == "azarch"
-    assert calamares.PRODUCT == "Az'arch Linux"
+    assert calamares.BRANDING == "azzio"
+    assert calamares.PRODUCT == "Azzio Linux"
     # The branding paths in emit_map interpolate BRANDING.
     m = calamares.emit_map()
     assert f"branding/{calamares.BRANDING}/branding.desc" in m
@@ -1491,8 +1491,8 @@ _BUILDER_FOR_FILE = {
     "modules/grubcfg.conf": "grubcfg_conf",
     "modules/bootloader.conf": "bootloader_conf",
     "modules/finished.conf": "finished_conf",
-    "branding/azarch/branding.desc": "branding_desc",
-    "branding/azarch/show.qml": "branding_show_qml",
+    "branding/azzio/branding.desc": "branding_desc",
+    "branding/azzio/show.qml": "branding_show_qml",
 }
 
 
@@ -1515,7 +1515,7 @@ def test_shared_constants_reexported_from_config_constants():
 
     for name in ("BRANDING", "PRODUCT", "PRODUCT_ICON_FILE", "ARCHISO_SFS"):
         assert getattr(calamares, name) == getattr(config_constants, name)
-    assert calamares.BRANDING == "azarch"
+    assert calamares.BRANDING == "azzio"
 
 
 def test_config_submodules_are_independently_importable():
@@ -1533,7 +1533,7 @@ def test_config_submodules_are_independently_importable():
     assert config_storage.unpackfs_conf().count("squashfs") == 1
     assert "doReusePassword: true" in config_system.users_conf()
     assert "systemctl -i reboot" in config_system.finished_conf()
-    assert "componentName: azarch" in config_branding.branding_desc()
+    assert "componentName: azzio" in config_branding.branding_desc()
 
 
 def test_facade_builders_are_the_submodule_builders():

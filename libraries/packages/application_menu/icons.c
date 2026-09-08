@@ -1,4 +1,4 @@
-/* Az'arch application menu (C port) -- icon resolution to GdkPixbuf.
+/* Azzio application menu (C port) -- icon resolution to GdkPixbuf.
  * One-to-one port of icons.py. See icons.h. */
 #include "icons.h"
 
@@ -82,11 +82,11 @@ AzIcons *az_icons_new(int size) {
                                      (GDestroyNotify)g_object_unref);
     const char *cache_home = g_getenv("XDG_CACHE_HOME");
     if (cache_home && cache_home[0])
-        r->cache_dir = g_build_filename(cache_home, "azarch-application-menu",
+        r->cache_dir = g_build_filename(cache_home, "azzio-application-menu",
                                         "icons", NULL);
     else
         r->cache_dir = g_build_filename(g_get_home_dir(), ".cache",
-                                        "azarch-application-menu", "icons", NULL);
+                                        "azzio-application-menu", "icons", NULL);
     g_mkdir_with_parents(r->cache_dir, 0755);
     return r;
 }

@@ -9,13 +9,13 @@ installed beside applications.py and page.py (see timedate.PLAN) and imported at
 `import assets`.
 
 Nothing here holds state or touches the network; the builders are pure functions of their
-arguments. `ACCENT` (the Az'arch cyan) lives here as the single source of truth for the
+arguments. `ACCENT` (the Azzio cyan) lives here as the single source of truth for the
 page's highlight colour, shared by the SVG, the CSS, and imported by page.py for the seed.
 """
 
 from __future__ import annotations
 
-# Az'arch accent (same cyan as os-release ANSI_COLOR "38;2;6;184;253"). Single source of
+# Azzio accent (same cyan as os-release ANSI_COLOR "38;2;6;184;253"). Single source of
 # truth for the page's highlight colour so the brand stays consistent across the SVG hands,
 # the CSS accents, and the sun/moon body.
 ACCENT = "#06B8FD"
@@ -60,7 +60,7 @@ def analog_svg() -> str:
 
 
 def css() -> str:
-    """All page styling (inlined into the single <style>). Calm dark theme on the Az'arch
+    """All page styling (inlined into the single <style>). Calm dark theme on the Azzio
     cyan accent, with a light-mode fallback. Laid out as a centered column: the two clocks
     side by side, the sun/moon horizon under them, then the calendar."""
     return f""":root {{
@@ -428,7 +428,7 @@ def script(seed_json: str) -> str:
     el.dayname.textContent = (p.weekday || "").toUpperCase();
     el.date.textContent = two(p.day) + " " + MONTHS[p.month - 1] + " " + p.year;
     el.zone.textContent = state.zone;
-    document.title = two(h12) + ":" + two(p.minute) + " " + ampm + " \\u00b7 Az'arch";
+    document.title = two(h12) + ":" + two(p.minute) + " " + ampm + " \\u00b7 Azzio";
 
     // Smooth analog hands. Seconds include the fractional part so the hand sweeps.
     var sec = p.second + p.frac;

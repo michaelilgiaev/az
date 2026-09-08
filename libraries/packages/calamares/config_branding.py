@@ -14,13 +14,13 @@ from __future__ import annotations
 from .config_constants import PRODUCT_ICON_FILE
 
 
-# --- 7. branding/azarch/branding.desc --------------------------------------
+# --- 7. branding/azzio/branding.desc --------------------------------------
 def branding_desc() -> str:
     """Product identity + a single-slide QML slideshow placeholder + colors."""
     return """\
-# Branding for the Az'arch Linux installer.
+# Branding for the Azzio Linux installer.
 ---
-componentName: azarch
+componentName: azzio
 
 # Interval used when the slideshow QML advances (ms). Single slide -> no cycling.
 welcomeStyleCalamares: false
@@ -33,17 +33,17 @@ windowPlacement: center
 
 # Product strings shown throughout the UI.
 strings:
-    productName:         Az'arch Linux
-    shortProductName:    Az'arch
+    productName:         Azzio Linux
+    shortProductName:    Azzio
     version:             rolling
     shortVersion:        rolling
-    versionedName:       Az'arch Linux (rolling)
-    shortVersionedName:  Az'arch rolling
-    bootloaderEntryName: Az'arch
-    productUrl:          https://github.com/michaelilgiaev/azarch
-    supportUrl:          https://github.com/michaelilgiaev/azarch
-    knownIssuesUrl:      https://github.com/michaelilgiaev/azarch/issues
-    releaseNotesUrl:     https://github.com/michaelilgiaev/azarch
+    versionedName:       Azzio Linux (rolling)
+    shortVersionedName:  Azzio rolling
+    bootloaderEntryName: Azzio
+    productUrl:          https://github.com/michaelilgiaev/azzio
+    supportUrl:          https://github.com/michaelilgiaev/azzio
+    knownIssuesUrl:      https://github.com/michaelilgiaev/azzio/issues
+    releaseNotesUrl:     https://github.com/michaelilgiaev/azzio
     donateUrl:           ""
 
 # Optional images (product logo / window icon).
@@ -82,14 +82,14 @@ style:
 def branding_show_qml() -> str:
     """A minimal, valid Calamares slideshow (slideshowAPI 2). One static, centered
     slide -- no external assets, NO motivational/marketing copy (the user asked for
-    a "get out of my way" installer): just "Installing Az'arch Linux" with the "Az'"
+    a "get out of my way" installer): just "Installing Azzio Linux" with the "Az'"
     wordmark blue, and a small dim status line. Matches the near-black + blue theme
     (bg #030712, brand #3b82f6, muted #64748b) of branding.desc.
 
     Single slide, so the Timer does not cycle (goToNextSlide would loop back to the
     same slide); it is kept only because Presentation expects the structure."""
     return """\
-/* Az'arch Linux -- minimal single-slide installer slideshow (no marketing copy). */
+/* Azzio Linux -- minimal single-slide installer slideshow (no marketing copy). */
 import QtQuick 2.0
 import calamares.slideshow 1.0
 

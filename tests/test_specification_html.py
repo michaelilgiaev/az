@@ -136,9 +136,9 @@ def _fixture(*, app_desc="app desc", app_url="http://example/app"):
     }
     tags = {
         "app": {
-            "edition": "az'arch",
+            "edition": "azzio",
             "category": "System",
-            "azarch_note": "note",
+            "azzio_note": "note",
             "removed": False,
         },
         "lib": {"edition": "stock", "category": "Shared library"},
@@ -151,7 +151,7 @@ def _fixture(*, app_desc="app desc", app_url="http://example/app"):
         "ram": "2 GiB",
         "closure": 2,
         "by_repo": {"core": 1, "extra": 1},
-        "azarch": 1,
+        "azzio": 1,
         "stock": 1,
         "max_height": 1,
         "size": "2.00 GiB",
@@ -176,7 +176,7 @@ def test_glance_has_exact_camelcase_key_set():
     g = _payload()["glance"]
     assert set(g) == {
         "base", "desktop", "kernel", "init", "ram", "closure",
-        "byRepo", "azarch", "stock", "maxHeight", "size", "isoVersion",
+        "byRepo", "azzio", "stock", "maxHeight", "size", "isoVersion",
     }
 
 
@@ -196,7 +196,7 @@ def test_glance_values_carried_through_verbatim():
     assert g["kernel"] == "6.9"
     assert g["init"] == "256"
     assert g["closure"] == 2
-    assert g["azarch"] == 1
+    assert g["azzio"] == 1
     assert g["stock"] == 1
     assert g["size"] == "2.00 GiB"
 
@@ -217,7 +217,7 @@ def test_component_size_strings_use_fmt_size():
 
 def test_component_edition_label_lookup():
     comps = _payload()["components"]
-    assert comps["app"]["editionLabel"] == "Az'arch Component"
+    assert comps["app"]["editionLabel"] == "Azzio Component"
     assert comps["lib"]["editionLabel"] == "Stock Arch"
 
 

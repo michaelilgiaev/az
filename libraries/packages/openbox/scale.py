@@ -1,4 +1,4 @@
-"""The Az'arch GLOBAL UI SCALE -- ONE source of truth every app (installed or not) obeys.
+"""The Azzio GLOBAL UI SCALE -- ONE source of truth every app (installed or not) obeys.
 
 THE PROBLEM (PROMPT). The desktop "felt like" 1.35 scale, but that was a FICTION assembled from
 a few independent hand-tuned font constants (the app-menu theme.h points, kitty/gedit font sizes,
@@ -13,7 +13,7 @@ STANDARD, app-agnostic desktop scaling channels, so ANY conformant app picks it 
     ~/.Xresources and loaded with `xrdb` at session start (packages/openbox .xinitrc). GTK,
     Qt and most toolkits read the X DPI from here; the cursor scales too.
   * GTK: gtk-xft-dpi = Xft.dpi * 1024 (GTK's millipoint unit) in ~/.config/gtk-3.0/settings.ini
-    and gtk-4.0 (packages/azarch/theme.py + the openbox default). GTK3/4 scale ALL point sizes
+    and gtk-4.0 (packages/azzio/theme.py + the openbox default). GTK3/4 scale ALL point sizes
     (fonts, and via the theme, most metrics) by this -- so every GTK app, including our own
     application menu, grows with the scale without shipping fixed points.
   * Session env (exported from the OpenBox session so every child inherits it): GDK_SCALE=1
@@ -41,7 +41,7 @@ this scale so "at scale 1.0 it is stock, at 1.35 it matches today's look":
     stays EXPLICITLY scaled: pt(OPENBOX_TITLE_STOCK).
   * Thunar's zoom + em font already compose with the scale (relative), so they are unchanged.
 
-CHANGING THE SCALE LATER. `azarch display scale <factor>` (packages/azarch/display) rewrites the
+CHANGING THE SCALE LATER. `azzio display scale <factor>` (packages/azzio/display) rewrites the
 ONE value's downstream files (.Xresources, settings.ini, the session env) and re-applies it live
 (re-run xrdb, re-export), so a scale change propagates everywhere -- Thunar (which composes) and
 the app menu (once it reads the shared channel) included. The SCALE_OPTIONS below are the choices
@@ -52,8 +52,8 @@ Pure standard library (returns numbers/strings). A test pins the channel math + 
 
 from __future__ import annotations
 
-# THE ONE SCALE. 1.35 is the Az'arch default (what the desktop was hand-tuned to look like). A
-# `azarch display scale` change rewrites the downstream files from a chosen SCALE_OPTIONS value;
+# THE ONE SCALE. 1.35 is the Azzio default (what the desktop was hand-tuned to look like). A
+# `azzio display scale` change rewrites the downstream files from a chosen SCALE_OPTIONS value;
 # this constant is the build-time default that seeds them.
 GLOBAL_SCALE = 1.35
 
@@ -155,13 +155,13 @@ def menu_scale_header(scale: float = GLOBAL_SCALE) -> str:
     fixed-PIXEL geometry (window/icon/row sizes) by AZ_SCALED(); the POINT fonts are left STOCK
     and scale via gtk-xft-dpi (the DPI channel) instead. A DEFAULT copy at scale 1.0 (100/100)
     ships in the source tree so the C tests compile stock; build_daemon OVERWRITES it with this
-    scaled version. `azarch display scale` triggers a rebuild path? No -- the menu binary is
+    scaled version. `azzio display scale` triggers a rebuild path? No -- the menu binary is
     built into the ISO; a live scale change scales the menu's FONTS (via Xft.dpi, which the menu
     reads live through GTK) immediately, and its pixel geometry is fixed at the build scale (a
     deliberate, documented limitation -- the fractional font scaling is what the eye notices)."""
     num, den = _scale_ratio(scale)
     return f"""\
-/* Az'arch application-menu UI scale -- GENERATED from packages/openbox/scale (edit the Python, not
+/* Azzio application-menu UI scale -- GENERATED from packages/openbox/scale (edit the Python, not
  * this file). The build (application_menu.build_daemon) OVERWRITES the scale-1.0 default shipped
  * in the source tree with the real GLOBAL_SCALE ratio, so the menu's fixed-PIXEL geometry in
  * theme.h derives from the single scale source. Point FONTS stay stock and scale via the DPI

@@ -87,9 +87,9 @@ ENV OVERRIDES (override hypervisor.cfg at runtime, not persisted):
   SHARE_HOST_GPU=1  SSH=1  FULLSCREEN=1  ASK_QUIT=1  FORCE=1  YES=1  VENUS=1  DRYRUN=1
 
 EXAMPLE:
-  cd ~/Hypervisors/azarch
-  hypervisor install azarch-2026.07.23-x86_64.iso --ssh
-  hypervisor run azarch.qcow2 --iso azarch-2026.07.23-x86_64.iso"""
+  cd ~/Hypervisors/azzio
+  hypervisor install azzio-2026.07.23-x86_64.iso --ssh
+  hypervisor run azzio.qcow2 --iso azzio-2026.07.23-x86_64.iso"""
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -98,10 +98,10 @@ def main(argv: list[str] | None = None) -> int:
     rest = argv[1:]
 
     try:
-        # `--configure` edits the GLOBAL user defaults (~/.config/azarch-hypervisor);
+        # `--configure` edits the GLOBAL user defaults (~/.config/azzio-hypervisor);
         # it is NOT a per-directory VM action, so it runs BEFORE Config.from_cwd() and
         # works from anywhere (an empty dir with no disk/iso would make from_cwd resolve
-        # a VM that does not exist). Mirrors `azarch backup --configure`.
+        # a VM that does not exist). Mirrors `azzio backup --configure`.
         if cmd in ("--configure", "-c", "configure"):
             return _do_configure(rest)
 
@@ -149,8 +149,8 @@ def _configure_usage() -> str:
 
 def _do_configure(rest: list[str]) -> int:
     """The `hypervisor --configure` surface: manage the global default overrides. Returns an
-    exit code. Non-interactive (the bare-`azarch` TUI drives --set/--status/--reset); mirrors
-    `azarch backup --configure`. Never raises HypervisorError -- it validates via the schema
+    exit code. Non-interactive (the bare-`azzio` TUI drives --set/--status/--reset); mirrors
+    `azzio backup --configure`. Never raises HypervisorError -- it validates via the schema
     and reports its own errors so a bad --set is a clean non-zero exit, not a traceback."""
     if not rest or rest[0] in ("-h", "--help", "help"):
         print(_configure_usage())

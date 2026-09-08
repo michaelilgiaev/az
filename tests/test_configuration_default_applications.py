@@ -1,4 +1,4 @@
-"""packages.azarch.default_applications -- the XDG mimeapps.list + exo terminal (PROMPT task 6).
+"""packages.azzio.default_applications -- the XDG mimeapps.list + exo terminal (PROMPT task 6).
 
 Why these tests matter: the defaults are a single source-of-truth table flattened into
 mimeapps.list; a MIME type mapped twice would make the default ambiguous, and a wrong handler
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from packages.azarch import default_applications as da
+from packages.azzio import default_applications as da
 
 
 def test_no_mime_is_mapped_twice():

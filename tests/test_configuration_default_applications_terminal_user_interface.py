@@ -1,5 +1,5 @@
-"""The azarch TUI's "Default Applications" screen + the `azarch default-applications` CLI, and
-the LOCK-STEP that keeps them derived from packages/azarch/default_applications.py (PROMPT: the
+"""The azzio TUI's "Default Applications" screen + the `azzio default-applications` CLI, and
+the LOCK-STEP that keeps them derived from packages/azzio/default_applications.py (PROMPT: the
 TUI must derive its rows/labels from that single source, no second hardcoded copy -- mirror the
 wallpaper.py <-> model.c pattern where a test pins the strings).
 
@@ -13,14 +13,14 @@ from __future__ import annotations
 
 import types
 
-from packages.azarch import default_applications as da
-from packages.azarch.bundle import bundle_source
+from packages.azzio import default_applications as da
+from packages.azzio.bundle import bundle_source
 import paths
 
 
 def _bundled():
-    mod = types.ModuleType("azarch_cli_da")
-    exec(compile(bundle_source(), "azarch_cli_da", "exec"), mod.__dict__)
+    mod = types.ModuleType("azzio_cli_da")
+    exec(compile(bundle_source(), "azzio_cli_da", "exec"), mod.__dict__)
     return mod
 
 
@@ -29,7 +29,7 @@ def _model_c() -> str:
     # probes), model_tree.c (static screen TREE: ROWS_* + SCREENS[]), and model_default_applications.c
     # (the runtime Default Applications screens + the AZ_DA_CATS descriptor table). Read all
     # three so a row/screen/table check finds it wherever it lives.
-    d = paths.LIBDIR / "packages/azarch"
+    d = paths.LIBDIR / "packages/azzio"
     return "\n".join((d / f).read_text(encoding="utf-8")
                      for f in ("model.c", "model_tree.c", "model_default_applications.c"))
 
@@ -141,12 +141,12 @@ def test_model_c_builds_defaultapps_screens_at_runtime():
     # the candidate rows resolve live (the whole point: the list self-resolves from installed apps).
     assert "az_da_screen" in model
     assert 'strncmp(id, "defaultapps."' in model
-    # The rows are built as `azarch default-applications set <key> <id>` applies (label == the bare
+    # The rows are built as `azzio default-applications set <key> <id>` applies (label == the bare
     # .desktop id, NOT "Set to ..."). Pin the set-command shape + that the old default-app row
     # labels ("Set to LibreWolf" / "Set to Firefox" / "Set to gedit", ...) are gone. ("Set to X%"
     # still legitimately labels the Volume/Brightness rows, which are unrelated -- so pin the
     # specific app-name labels that used to exist on the Default Applications screens.)
-    assert "azarch default-applications set %s %s" in model
+    assert "azzio default-applications set %s %s" in model
     for gone in ("Set to LibreWolf", "Set to Firefox", "Set to gedit", "Set to VLC",
                  "Set to Thunar", "Set to kitty", "Set to Qalculate", "Set to GIMP"):
         assert gone not in model, f"old default-app label still present: {gone!r}"
@@ -190,7 +190,7 @@ def test_model_c_discloses_single_desktop_dir_matching_source():
     # user-writable dir, the AZ_DA_DIRS_LINE macro DEFINED in terminal_user_interface.h (shared by
     # model_tree.c's list screen and model_default_applications.c's per-category screens); its
     # literal must equal default_applications.DESKTOP_DIR_DISPLAY exactly.
-    header = (paths.LIBDIR / "packages/azarch/terminal_user_interface.h").read_text(encoding="utf-8")
+    header = (paths.LIBDIR / "packages/azzio/terminal_user_interface.h").read_text(encoding="utf-8")
     assert f'#define AZ_DA_DIRS_LINE "{da.DESKTOP_DIR_DISPLAY}"' in header, \
         f"AZ_DA_DIRS_LINE (in the header) must be the single path {da.DESKTOP_DIR_DISPLAY!r}"
     # exactly one path -> the system dirs must NOT appear in the disclosed macro line.
@@ -203,7 +203,7 @@ def test_model_c_discloses_single_desktop_dir_matching_source():
     # the user pushed back on the wordy "To add or override an app, drop its .desktop into ...
     # (the list below resolves ...)" line: it is now just ".desktop directory: <dir>/" (trailing
     # slash, nothing else). Guard the exact terse literal AND that the old prose is gone from it.
-    per_category = (paths.LIBDIR / "packages/azarch/model_default_applications.c").read_text(encoding="utf-8")
+    per_category = (paths.LIBDIR / "packages/azzio/model_default_applications.c").read_text(encoding="utf-8")
     assert '".desktop directory: " AZ_DA_DIRS_LINE "/"' in per_category, \
         "per-category screen must disclose the dir as terse '.desktop directory: <dir>/'"
     assert "drop its .desktop into" not in per_category, \

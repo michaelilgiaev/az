@@ -1,16 +1,16 @@
 """The on-disk install pipeline scripts, authored in Python and emitted as the
 real .sh/.conf/.service files the ISO ships.
 
-  installer_sh()             azarch-iso-installer.sh: partition, CLONE the live rootfs
+  installer_sh()             azzio-iso-installer.sh: partition, CLONE the live rootfs
                              verbatim into the target, run chroot-setup
   chroot_setup_sh()          runs inside arch-chroot: locale, bootloader, services
   setup_pkgs_sh()            live-ISO oneshot: firewall tweaks
   first_boot_sh/service/conf first-boot-once mechanism on the installed system
 
-WHY A VERBATIM ROOTFS CLONE (not pacstrap): the Az'arch desktop shell is a set of
+WHY A VERBATIM ROOTFS CLONE (not pacstrap): the Azzio desktop shell is a set of
 COMPILED C daemons + generated helper binaries (the application-menu daemon, the
 window-switcher daemon, the terminal UI, the OSD, the /usr/local/bin launchers, the
-wallpapers, /etc/xdg/azarch-picom.conf, the timedate app, ...). The compiler emits
+wallpapers, /etc/xdg/azzio-picom.conf, the timedate app, ...). The compiler emits
 them as root-owned files straight into the ISO airootfs; NONE are owned by a pacman
 package. So a fresh `pacstrap` of packages.x86_64 + a hand-copy of a few files (the
 old approach) left every one of those binaries ABSENT on the installed system: X and
@@ -56,15 +56,15 @@ LIGHT_BLUE='\\033[1;34m'
 RED='\\033[1;31m'
 RESET='\\033[0m'
 
-echo -e "${LIGHT_BLUE}Welcome to azarch Installation${RESET}"
+echo -e "${LIGHT_BLUE}Welcome to azzio Installation${RESET}"
 echo -e "${RED}WARNING:${RESET} This will erase everything on the targeted disk using wipefs -a, removing all filesystem, RAID, and partition-table signatures${RESET}"
 echo "Select an installation option:"
-echo "1. Automatically detect largest disk (excludes USB drives) and install azarch"
-echo "2. Manually select disk to erase and install azarch"
-# Non-interactive pre-seed (used by `azarch-install --cli --auto` / `--disk`, so an SSH
+echo "1. Automatically detect largest disk (excludes USB drives) and install azzio"
+echo "2. Manually select disk to erase and install azzio"
+# Non-interactive pre-seed (used by `azzio-install --cli --auto` / `--disk`, so an SSH
 # install can run unattended): if AZ_INSTALL_CHOICE is set we use it instead of prompting;
 # AZ_INSTALL_DISK pre-answers the manual device prompt. Unset -> the interactive read runs,
-# so a plain `azarch-install --cli` over SSH still works step by step.
+# so a plain `azzio-install --cli` over SSH still works step by step.
 if [ -n "$AZ_INSTALL_CHOICE" ]; then
     choice="$AZ_INSTALL_CHOICE"
     echo "Enter option (1 or 2): $choice (pre-seeded)"
@@ -146,7 +146,7 @@ if [ -d "/sys/firmware/efi" ]; then
   is_uefi=1
 fi
 
-# Root filesystem. Defaults to ext4 (a plain `azarch-install --cli` is unchanged); the
+# Root filesystem. Defaults to ext4 (a plain `azzio-install --cli` is unchanged); the
 # `--auto` mode pre-seeds AZ_INSTALL_FILESYSTEM=btrfs for parity with the Calamares GUI,
 # whose defaultFileSystemType is btrfs. Only ext4/btrfs are supported by this scripted
 # path (a flat filesystem -- no subvolumes; the rsync clone has no subvolume layout).
@@ -155,7 +155,7 @@ fi
 root_fs="${AZ_INSTALL_FILESYSTEM:-ext4}"
 case "$root_fs" in
     ext4|btrfs) ;;
-    *) echo "azarch-install: unsupported AZ_INSTALL_FILESYSTEM '$root_fs' (use ext4 or btrfs)"; exit 1 ;;
+    *) echo "azzio-install: unsupported AZ_INSTALL_FILESYSTEM '$root_fs' (use ext4 or btrfs)"; exit 1 ;;
 esac
 
 # Collect the account / hostname / timezone answers (Calamares Users + Location parity) NOW,
@@ -166,7 +166,7 @@ esac
 # unattended install -- AZ_INSTALL_CHOICE/DISK imply "proceed without asking").
 if [ -z "$AZ_INSTALL_CHOICE" ]; then
     echo
-    echo -e "${RED}About to ERASE $largest_disk and install azarch as host '$az_hostname' (user '$az_username').${RESET}"
+    echo -e "${RED}About to ERASE $largest_disk and install azzio as host '$az_hostname' (user '$az_username').${RESET}"
     read -rp "Type YES to proceed: " az_confirm
     if [ "$az_confirm" != "YES" ]; then
         echo "Aborted; no changes were made."
@@ -220,8 +220,8 @@ fi
 echo "Cloning the live system onto the target (this is the whole desktop)..."
 # CLONE THE LIVE ROOTFS VERBATIM into the mounted target -- the Calamares `unpackfs` path,
 # done with rsync. The live running `/` is the SquashFS root plus the live overlay: it already
-# contains EVERYTHING the installed system needs -- every compiled Az'arch daemon/binary under
-# /usr/local, the wallpapers, /etc/xdg/azarch-picom.conf, the branded /usr/lib/os-release, the
+# contains EVERYTHING the installed system needs -- every compiled Azzio daemon/binary under
+# /usr/local, the wallpapers, /etc/xdg/azzio-picom.conf, the branded /usr/lib/os-release, the
 # planted per-app overrides (kitty icon, gedit launcher), the fastfetch config, the first-boot
 # unit + script, the /home/main desktop dotfiles (.bash_profile -> exec startx, .xinitrc,
 # .config/openbox/*, themes), the getty@tty1 autologin drop-in, the /etc/{passwd,shadow,group}
@@ -269,7 +269,7 @@ mkdir -p /mnt/proc /mnt/sys /mnt/dev /mnt/run /mnt/tmp
 chmod 1777 /mnt/tmp
 
 echo "Copying chroot setup..."
-cp /root/azarch/chroot-setup.sh /mnt/chroot-setup.sh
+cp /root/azzio/chroot-setup.sh /mnt/chroot-setup.sh
 chmod +x /mnt/chroot-setup.sh
 
 echo "Running chroot setup..."
@@ -353,15 +353,15 @@ grub-mkconfig -o /boot/grub/grub.cfg
 systemctl enable NetworkManager
 
 # FIRST-BOOT ONESHOT (NTP-on-first-boot). The compiler stages these three files ONLY under
-# /root/azarch on the ISO (never at their runtime paths), so the verbatim clone does NOT place
-# them -- we must install them from /root/azarch here (the old pacstrap installer hand-copied
+# /root/azzio on the ISO (never at their runtime paths), so the verbatim clone does NOT place
+# them -- we must install them from /root/azzio here (the old pacstrap installer hand-copied
 # them the same way). Home paths use /home/main because this runs BEFORE the identity rename;
 # the identity step below re-points the unit's ExecStart + the script's CONFIG_FILE to
 # /home/$az_login if the account was renamed (see installer_identity.identity_chroot_sh).
 mkdir -p /home/main/.config/first-boot
-cp /root/azarch/first-boot-setup.sh /home/main/.config/first-boot/first-boot-setup.sh
-cp /root/azarch/first-boot-setup.conf /home/main/.config/first-boot/first-boot-setup.conf
-cp /root/azarch/first-boot-setup.service /etc/systemd/system/first-boot-setup.service
+cp /root/azzio/first-boot-setup.sh /home/main/.config/first-boot/first-boot-setup.sh
+cp /root/azzio/first-boot-setup.conf /home/main/.config/first-boot/first-boot-setup.conf
+cp /root/azzio/first-boot-setup.service /etc/systemd/system/first-boot-setup.service
 chown 1000:998 /home/main/.config
 chmod 755 /home/main/.config/first-boot/first-boot-setup.sh
 chmod 644 /etc/systemd/system/first-boot-setup.service
@@ -398,7 +398,7 @@ az_login="${{az_login:-main}}"
 mkdir -p "/home/$az_login/.config/openbox" /etc/skel/.config/openbox
 {_csp.installer_cleanup_command("/home/$az_login")}
 
-echo -e "\\e[94mazarch disk installation complete, you can reboot now.\\e[0m"
+echo -e "\\e[94mazzio disk installation complete, you can reboot now.\\e[0m"
 """
     # Apply the collected identity (user/passwords/hostname/timezone) as the LAST step, AFTER
     # the `main`-hardcoded home setup above (so those lines still see the original account and
@@ -411,10 +411,10 @@ echo -e "\\e[94mazarch disk installation complete, you can reboot now.\\e[0m"
 def setup_pkgs_sh() -> str:
     """Live-ISO oneshot: firewall setup + SSH host keys.
 
-    Firewall baseline (the Az'arch default the `azarch network firewall` command later
+    Firewall baseline (the Azzio default the `azzio network firewall` command later
     manages live): ENABLED, incoming DENY (silent drop, not reject -- no ICMP telling a
     scanner the box is here), outgoing ALLOW, and port 49154 explicitly DENIED. 49154 is
-    the Az'arch timedate home page (Flask on localhost:49154); it must stay reachable ONLY
+    the Azzio timedate home page (Flask on localhost:49154); it must stay reachable ONLY
     by the machine itself, so the deny rule guarantees it is never exposed off-box even if a
     later rule loosens the default. The sshd variant opens :22 afterwards via its own oneshot
     (system.SSHD_HYPERVISOR_SETUP_SERVICE runs `ufw allow ssh`), so ssh works there without

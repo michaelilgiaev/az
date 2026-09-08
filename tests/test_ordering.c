@@ -1,4 +1,4 @@
-/* Az'arch window switcher -- ordering unit tests. Compiled against the SHIPPING
+/* Azzio window switcher -- ordering unit tests. Compiled against the SHIPPING
  * ordering.c (via tests/Makefile). Pure asserts, no framework; non-zero exit on
  * failure. Asserts the exact librewolf/kitty/hypervisor/thunar/alphabetical order
  * the user asked for, plus same-app grouping and the hypervisor title/WM_CLASS match. */

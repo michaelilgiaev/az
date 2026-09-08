@@ -625,7 +625,7 @@ in-tree, so no module or package is needed):
 
 After that it appears at ~/shared on every boot, owned by your guest user.
 (virtiofsd preserves the host uid/gid; when host and guest both use uid 1000,
-ownership lines up. An Az'arch guest already auto-mounts it via the shipped
+ownership lines up. An Azzio guest already auto-mounts it via the shipped
 home-main-shared.mount systemd unit -- no need to run the above.)
 
 ----------------------------------------------------------------------------
@@ -651,7 +651,7 @@ def do_share_offline(cfg: Config) -> None:
     an unknown guest layout offline risks corrupting it."""
     guest_uid = os.environ.get("GUEST_UID", "1000")
     guest_gid = os.environ.get("GUEST_GID", "1000")
-    # The guest's login name inside the VM. Defaults to the Az'arch guest account (`main`,
+    # The guest's login name inside the VM. Defaults to the Azzio guest account (`main`,
     # the autologin user the ISO provisions), but is overridable for a differently-named
     # guest -- so this is NOT a host-side /home/<user> hard-code (it names the GUEST's home
     # inside its own disk, mirroring the adjacent GUEST_UID/GID overrides).

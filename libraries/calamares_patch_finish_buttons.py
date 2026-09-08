@@ -1,6 +1,6 @@
-"""Az'arch calamares source patch -- hide Back + Next on the Finish page.
+"""Azzio calamares source patch -- hide Back + Next on the Finish page.
 
-One of the three Az'arch source patches applied to the pinned calamares-3.4.2 tarball
+One of the three Azzio source patches applied to the pinned calamares-3.4.2 tarball
 in the recipe's prepare() (see pkgbuild_calamares). Kept in its own module so each
 patch is a focused, independently-editable unit; pkgbuild_calamares re-exports the
 name-constant and builder below, and pkgbuild.py re-exports them in turn, so callers
@@ -41,11 +41,11 @@ from __future__ import annotations
 # call), so both calls WIN for their step; every other non-final UI step falls through the
 # else branch's stepIsExecute() guard and keeps its normal button visibility.
 #
-# Kept in its OWN patch (not folded into azarch-calamares-defaults.patch) so the two
+# Kept in its OWN patch (not folded into azzio-calamares-defaults.patch) so the two
 # concerns stay independent -- defaults is the Users/Keyboard UI, this is a libcalamaresui
 # navigation tweak. Same fail-loud-on-drift contract: the pinned tarball guarantees the
 # context; a version bump that moves these lines makes `patch` abort the build.
-CALAMARES_FINISH_BUTTONS_PATCH_NAME = "azarch-calamares-finish-buttons.patch"
+CALAMARES_FINISH_BUTTONS_PATCH_NAME = "azzio-calamares-finish-buttons.patch"
 
 
 def calamares_finish_buttons_patch() -> str:
@@ -69,7 +69,7 @@ def calamares_finish_buttons_patch() -> str:
         "         UPDATE_BUTTON_PROPERTY( quitVisible, true );",
         '         UPDATE_BUTTON_PROPERTY( quitIcon, "dialog-ok-apply" );',
         "         updateCancelEnabled( true );",
-        "+        // Az'arch: on the very last step (the Finish page) hide BOTH the Back and Next",
+        "+        // Azzio: on the very last step (the Finish page) hide BOTH the Back and Next",
         "+        // buttons -- the install is complete, there is nowhere to go back to and nothing",
         '+        // to advance to; only the "Done" (quit) button, kept visible just above, remains.',
         "+        // This runs after next()'s own updateBackAndNextVisibility() call (updateButtonLabels",
@@ -93,7 +93,7 @@ def calamares_finish_buttons_patch() -> str:
         "         updateCancelEnabled( !settings->disableCancel()",
         "                              && !( stepIsExecute( m_steps, m_currentStep ) && settings->disableCancelDuringExec() ) );",
         "+",
-        "+        // Az'arch: hide Back+Next while the install (exec) step is running -- they are",
+        "+        // Azzio: hide Back+Next while the install (exec) step is running -- they are",
         "+        // disabled (greyed) there anyway (ExecutionViewStep returns false for both), so",
         "+        // PROMPT.md asks for them gone. Only the exec step matches; other UI steps keep",
         "+        // their normal navigation buttons.",

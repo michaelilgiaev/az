@@ -10,7 +10,7 @@ Mirrors the directory scheme the old compile.sh used, so the Docker bind mounts
     libraries/packages/    EVERY package the build ships, each its OWN directory module
                            (a dir with an __init__.py): the pacman manifest file
                            (packages.x86_64) plus one directory per package. This holds
-                           BOTH the things WE author (application_menu/, azarch/,
+                           BOTH the things WE author (application_menu/, azzio/,
                            passwords/, and the critically-modified calamares/) AND the
                            upstream software we merely tailor (openbox/, librewolf/,
                            kitty/, gedit/, thunar/, fastfetch/, the per-app tweaks) --
@@ -25,7 +25,7 @@ Mirrors the directory scheme the old compile.sh used, so the Docker bind mounts
     logs/                  compile-full.log + compile-steps.log
 
 In DOCKER the disposable WORKDIR is moved OUT of the bind-mounted cache/ to a
-container-internal path (/tmp/azarch-build) so its root-owned mkarchiso scratch
+container-internal path (/tmp/azzio-build) so its root-owned mkarchiso scratch
 dies with the container and can never leave root-owned files locked on the host
 (a hard `docker kill` sends an untrappable SIGKILL that skips the handback). The
 persistent stores (cache/pkgs, cache/pacman-pkg) and the ISO (output/) stay on
@@ -41,13 +41,13 @@ from pathlib import Path
 REPODIR = Path(__file__).resolve().parents[1]
 LIBDIR = REPODIR / "libraries"
 # The compiler's own modules now live flat in libraries/ (there is no separate
-# `azarch` package anymore), so the compiler package dir IS libraries/ itself.
+# `azzio` package anymore), so the compiler package dir IS libraries/ itself.
 PKGDIR = LIBDIR
 # EVERY package the build ships (baked into the ISO), each its own directory module under here.
 # This is the single home for BOTH the things WE author -- the package manifest (packages.x86_64),
-# the application-menu source tree + build wiring (application_menu/), the `azarch` guest command
-# line interface (azarch/), the passwords manager (passwords/), the critically-modified calamares
-# install config (calamares/) -- AND the upstream software we merely tailor to Az'arch (openbox/,
+# the application-menu source tree + build wiring (application_menu/), the `azzio` guest command
+# line interface (azzio/), the passwords manager (passwords/), the critically-modified calamares
+# install config (calamares/) -- AND the upstream software we merely tailor to Azzio (openbox/,
 # librewolf/, kitty/, gedit/, thunar/, fastfetch/, the per-app tweaks). package_discovery imports
 # each directory-with-__init__.py from here. All pure Python standard library, so there is NO
 # shared requirements.txt here (the only one in the repo is the repo-root requirements.txt the
@@ -90,7 +90,7 @@ def in_docker() -> bool:
 # On a NATIVE run there are no bind mounts, so keeping it in-repo (cache/build) is
 # fine and keeps everything discoverable under the repo.
 if in_docker():
-    WORKDIR = Path("/tmp/azarch-build")
+    WORKDIR = Path("/tmp/azzio-build")
 else:
     WORKDIR = CACHEDIR / "build"
 
@@ -106,8 +106,8 @@ PKG_SYNC_DB = PKG_DB / "sync"
 # on purpose: PKG_REPO (and PKG_DB) are cp -r'd wholesale into the ISO payload, and
 # build-only metadata has no business on the installed target's offline repo.
 PKG_FINGERPRINTS = CACHEDIR / "pkgs" / "recipe-fingerprints"
-LOCALREPO_INDEX = PKG_REPO / "pacstrap-azarch-repo.db"
-LOCALREPO_INDEX_TAR = PKG_REPO / "pacstrap-azarch-repo.db.tar.gz"
+LOCALREPO_INDEX = PKG_REPO / "pacstrap-azzio-repo.db"
+LOCALREPO_INDEX_TAR = PKG_REPO / "pacstrap-azzio-repo.db.tar.gz"
 
 # pacstrap's CacheDir, injected into the profile pacman.conf so the ~1200 live-ISO
 # packages are reused across builds instead of re-downloaded.
@@ -119,24 +119,24 @@ STEPS_LOG = LOGDIR / "compile-steps.log"
 
 # Verbatim data files.
 PACKAGES_FILE = PACKAGESDIR / "packages.x86_64"
-# The Az'arch application-menu package (C / GTK3): the menu source files (menu.c +
+# The Azzio application-menu package (C / GTK3): the menu source files (menu.c +
 # siblings, theme.h, Makefile) live DIRECTLY here alongside application_menu.py -- the
 # build wiring that COMPILES them into the daemon binary and installs it, ships the
 # pure-Python launcher (launcher.py), and generates the .desktop entry. The whole menu
 # is OURS, so it is a package here, not a patch.
 APPLICATION_MENU_DIR = PACKAGESDIR / "application_menu"
-# The Az'arch window-switcher package (C / GTK3): the alt-tab overlay (switcher.c +
+# The Azzio window-switcher package (C / GTK3): the alt-tab overlay (switcher.c +
 # windows/thumbnail/layout/ordering, a Makefile) lives DIRECTLY here alongside
 # window_switcher.py -- the build wiring that compiles them into the daemon binary and
 # ships the launcher. It reuses four application-menu translation units as build inputs.
 WINDOW_SWITCHER_DIR = PACKAGESDIR / "window_switcher"
-# The Az'arch timedate site (Flask Time + Calendar home page): applications.py/page.py/assets.py +
+# The Azzio timedate site (Flask Time + Calendar home page): applications.py/page.py/assets.py +
 # timedate.py (the build wiring that copies them into the airootfs, installs the launcher, and
 # ships the systemd service). LibreWolf lands on this page (startup + Home), so the site was
 # FOLDED INTO the librewolf package as sibling submodules -- its sources live in
 # packages/librewolf/. Served at localhost:49154. timedate.py reads its own sources from here.
 TIMEDATE_DIR = PACKAGESDIR / "librewolf"
-# The Az'arch passwords package (encrypted GPG/AES256 terminal password manager): ONE flat
+# The Azzio passwords package (encrypted GPG/AES256 terminal password manager): ONE flat
 # directory holding the entry script (passwords.py), the one-time setup script, every working
 # module (config/cryptography/model/terminal_user_interface/...), and packaging.py (the build
 # wiring that copies them into the airootfs and installs the /usr/local/bin/passwords
@@ -144,14 +144,14 @@ TIMEDATE_DIR = PACKAGESDIR / "librewolf"
 # The `passwords` command unlocks a store at ~/Vault/passwords.txt.gpg (see
 # packages/passwords/config.py).
 PASSWORDS_DIR = PACKAGESDIR / "passwords"
-# The Az'arch backup package (home-directory backup -- the `backup` command): a flat
+# The Azzio backup package (home-directory backup -- the `backup` command): a flat
 # directory holding the entry script (backup.py) and packaging.py (the build wiring
 # that copies it into the airootfs and installs the /usr/local/bin/backup launcher).
 # A pure-Python app we author, so it lives under libraries/packages/ like passwords.
 # `backup` rolls the user's top-level home folders (skipping ~/Ignore and dot files,
 # keeping symlinks as links) into ~/backup_<date>.tar.gz.gpg (GPG/AES256).
 BACKUP_DIR = PACKAGESDIR / "backup"
-# The Az'arch hypervisor package (per-directory QEMU/KVM VM runner -- the `hypervisor`
+# The Azzio hypervisor package (per-directory QEMU/KVM VM runner -- the `hypervisor`
 # command): a flat directory holding the entry script (command_line_interface.py), every
 # working module (configuration/configuration_schema/configuration_watcher/
 # configuration_defaults/graphics/checks/qemu_command/virtual_machine) and packaging.py
@@ -160,28 +160,28 @@ BACKUP_DIR = PACKAGESDIR / "backup"
 # it lives under libraries/packages/ like backup. `hypervisor` spins up a QEMU/KVM VM
 # whose identity is derived from the directory it is run in (name/disk/NVRAM/shared/SSH),
 # with all settings in a per-directory hypervisor.cfg. HOST-side tool -- distinct from the
-# guest-side `azarch --sshd-hypervisor`.
+# guest-side `azzio --sshd-hypervisor`.
 HYPERVISOR_DIR = PACKAGESDIR / "hypervisor"
-# The `azarch` guest command line interface is a Python PACKAGE now (libraries/packages/azarch/): it grew a
+# The `azzio` guest command line interface is a Python PACKAGE now (libraries/packages/azzio/): it grew a
 # `theme` subcommand (and more to come), so the single module was split into small modules
-# (common, country_table, resolver, theme, sshd, command_line_interface). The single /usr/local/bin/azarch
+# (common, country_table, resolver, theme, sshd, command_line_interface). The single /usr/local/bin/azzio
 # script that ships to the guest is reassembled from those modules by the package's
 # bundle.bundle_source(); the compiler then injects the country->locale table from
-# packages/calamares/locale.py between the AZARCH_CC markers (which now live in
-# country_table.py). See packages/openbox openbox.azarch_command_line_interface().
+# packages/calamares/locale.py between the AZZIO_CC markers (which now live in
+# country_table.py). See packages/openbox openbox.azzio_command_line_interface().
 #
-# This dir ALSO holds the bare-`azarch` TERMINAL UI's C sources (main.c/render.c/model.c/
-# preview.c, terminal_user_interface.h + siblings, Makefile) -- there is only ONE program, `azarch`, and the UI
+# This dir ALSO holds the bare-`azzio` TERMINAL UI's C sources (main.c/render.c/model.c/
+# preview.c, terminal_user_interface.h + siblings, Makefile) -- there is only ONE program, `azzio`, and the UI
 # is C for speed, so it lives next to the Python command line interface it drives rather than in a separate
-# package. packages/azarch/terminal_user_interface_build.py is the build wiring that compiles them into the
-# azarch binary; bare `azarch` execs it (see packages/azarch/terminal_user_interface.py). terminal_user_interface_build's
+# package. packages/azzio/terminal_user_interface_build.py is the build wiring that compiles them into the
+# azzio binary; bare `azzio` execs it (see packages/azzio/terminal_user_interface.py). terminal_user_interface_build's
 # _csrc_files() picks up only the C inputs, never the .py modules, so the two coexist here.
-AZARCH_COMMAND_LINE_INTERFACE_DIR = PACKAGESDIR / "azarch"
-# The module whose source carries the AZARCH_CC_TABLE_START/END markers (the compiler
+AZZIO_COMMAND_LINE_INTERFACE_DIR = PACKAGESDIR / "azzio"
+# The module whose source carries the AZZIO_CC_TABLE_START/END markers (the compiler
 # regenerates the COUNTRY_TABLE literal between them from the single source of truth).
-AZARCH_COMMAND_LINE_INTERFACE_TABLE_MODULE = AZARCH_COMMAND_LINE_INTERFACE_DIR / "country_table.py"
+AZZIO_COMMAND_LINE_INTERFACE_TABLE_MODULE = AZZIO_COMMAND_LINE_INTERFACE_DIR / "country_table.py"
 
-# Inside the archiso profile tree, the airootfs root and the azarch payload dir
+# Inside the archiso profile tree, the airootfs root and the azzio payload dir
 # baked into the live/installed system.
 AIROOTFS = WORKDIR / "work" / "x86_64" / "airootfs"
 

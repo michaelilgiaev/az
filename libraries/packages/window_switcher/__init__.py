@@ -1,4 +1,4 @@
-"""window_switcher - the Az'arch alt-tab window switcher (OUR switcher, Windows-style).
+"""window_switcher - the Azzio alt-tab window switcher (OUR switcher, Windows-style).
 
 The desktop is OpenBox with no panel; OpenBox's built-in NextWindow switcher is a
 vertical icon-only list the user disliked. This package replaces it with a horizontal,
@@ -9,7 +9,7 @@ corner, the selected tile highlighted. Alt+Tab advances; releasing Alt commits.
 
 Like the application menu, it is a C / GTK3 resident daemon: the sources live directly in
 this directory (switcher.c + siblings, a Makefile), and window_switcher.py is the build
-wiring that COMPILES them into azarch-window-switcher-daemon, ships the pure-Python
+wiring that COMPILES them into azzio-window-switcher-daemon, ships the pure-Python
 launcher (launcher.py, the bin entry point), and returns the emit plan. It REUSES four
 application-menu translation units (window_resolve/applications/icons/theme) as build inputs.
 

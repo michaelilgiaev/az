@@ -1,4 +1,4 @@
-/* Az'arch application menu (C port) -- icon resolution to GdkPixbuf.
+/* Azzio application menu (C port) -- icon resolution to GdkPixbuf.
  *
  * Port of icons.py. Given an Icon= value it finds the best matching icon on
  * disk across the theme chain (breeze-dark -> breeze -> Adwaita -> hicolor),

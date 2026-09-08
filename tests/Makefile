@@ -1,11 +1,11 @@
-# Az'arch -- C test runner for the compiled C packages.
+# Azzio -- C test runner for the compiled C packages.
 #
-# The C sources live in libraries/packages/{application_menu,azarch}/ (the bare-`azarch` terminal user interface
-# is C inside the azarch package now); this dir is the single home for their tests (the Python
+# The C sources live in libraries/packages/{application_menu,azzio}/ (the bare-`azzio` terminal user interface
+# is C inside the azzio package now); this dir is the single home for their tests (the Python
 # pytest suite lives here too, run by `bash tests.sh`).
 #
 #   make -C tests test      headless C unit tests -- the application-menu (test_applications.c
-#                           + the shipping applications.c) AND the bare-`azarch` terminal user interface model
+#                           + the shipping applications.c) AND the bare-`azzio` terminal user interface model
 #                           (test_terminal_user_interface_model.c + the shipping model.c). No GTK/X/kitty needed.
 #                           This is what the top-level `make test` and the package Makefiles'
 #                           `test` targets delegate to.
@@ -14,7 +14,7 @@
 # translation units and resolve their headers. Nothing here dirties the package trees.
 CC      ?= gcc
 APP_DIR  = ../libraries/packages/application_menu
-TERMINAL_USER_INTERFACE_DIR  = ../libraries/packages/azarch
+TERMINAL_USER_INTERFACE_DIR  = ../libraries/packages/azzio
 
 TEST_BIN    = test_applications
 TEST_PKGS   = glib-2.0

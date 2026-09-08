@@ -1,4 +1,4 @@
-/* Az'arch application menu (C port) -- unit tests for the hidden-id / installer
+/* Azzio application menu (C port) -- unit tests for the hidden-id / installer
  * swap and app scanning. Lives in the repo-root tests/ dir (the single home for the
  * suite) and is built with `make -C tests test`, which compiles this against the
  * SHIPPING applications.c from libraries/packages/application_menu/ (resolved via the tests
@@ -7,7 +7,7 @@
  *
  * The key contract (the installer fix): calamares.desktop is HIDDEN (its stock
  * "Install System" entry runs a dead `pkexec calamares` with no polkit agent),
- * and azarch-install.desktop ("Az'arch Linux Installer", passwordless-sudo Exec)
+ * and azzio-install.desktop ("Azzio Linux Installer", passwordless-sudo Exec)
  * is SHOWN so the menu launches/re-opens it. This mirrors what the C daemon ships
  * and must stay swapped relative to the old Python behaviour.
  */
@@ -28,16 +28,16 @@ static void test_installer_swap(void) {
     g_print("installer swap:\n");
     CHECK(az_is_hidden_desktop_id("calamares.desktop") == TRUE,
           "calamares.desktop is HIDDEN");
-    CHECK(az_is_hidden_desktop_id("azarch-install.desktop") == FALSE,
-          "azarch-install.desktop is SHOWN");
+    CHECK(az_is_hidden_desktop_id("azzio-install.desktop") == FALSE,
+          "azzio-install.desktop is SHOWN");
 }
 
 /* --- other denylist ids stay hidden -------------------------------------- */
 static void test_denylist(void) {
     g_print("denylist:\n");
     const char *hidden[] = {
-        "azarch-application-menu.desktop",
-        "azarch-application-menu-shortcut.desktop",
+        "azzio-application-menu.desktop",
+        "azzio-application-menu-shortcut.desktop",
         "bssh.desktop", "bvnc.desktop", "avahi-discover.desktop",
         "kdesystemsettings.desktop", "lstopo.desktop", "htop.desktop",
         "lftp.desktop", "cups.desktop", "org.kde.kmenuedit.desktop",
@@ -143,18 +143,18 @@ static void test_pin_first(void) {
 /* --- live-session detection (via the test override) ---------------------- */
 static void test_live_session(void) {
     g_print("live session:\n");
-    g_setenv("AZARCH_FORCE_LIVE", "1", TRUE);
-    CHECK(az_is_live_session() == TRUE, "AZARCH_FORCE_LIVE=1 -> live");
-    g_setenv("AZARCH_FORCE_LIVE", "true", TRUE);
-    CHECK(az_is_live_session() == TRUE, "AZARCH_FORCE_LIVE=true -> live");
-    g_setenv("AZARCH_FORCE_LIVE", "0", TRUE);
-    CHECK(az_is_live_session() == FALSE, "AZARCH_FORCE_LIVE=0 -> installed");
-    g_setenv("AZARCH_FORCE_LIVE", "false", TRUE);
-    CHECK(az_is_live_session() == FALSE, "AZARCH_FORCE_LIVE=false -> installed");
-    g_unsetenv("AZARCH_FORCE_LIVE");
+    g_setenv("AZZIO_FORCE_LIVE", "1", TRUE);
+    CHECK(az_is_live_session() == TRUE, "AZZIO_FORCE_LIVE=1 -> live");
+    g_setenv("AZZIO_FORCE_LIVE", "true", TRUE);
+    CHECK(az_is_live_session() == TRUE, "AZZIO_FORCE_LIVE=true -> live");
+    g_setenv("AZZIO_FORCE_LIVE", "0", TRUE);
+    CHECK(az_is_live_session() == FALSE, "AZZIO_FORCE_LIVE=0 -> installed");
+    g_setenv("AZZIO_FORCE_LIVE", "false", TRUE);
+    CHECK(az_is_live_session() == FALSE, "AZZIO_FORCE_LIVE=false -> installed");
+    g_unsetenv("AZZIO_FORCE_LIVE");
     /* installer id is the expected basename */
-    CHECK(g_strcmp0(az_installer_desktop_id(), "azarch-install.desktop") == 0,
-          "installer desktop id is azarch-install.desktop");
+    CHECK(g_strcmp0(az_installer_desktop_id(), "azzio-install.desktop") == 0,
+          "installer desktop id is azzio-install.desktop");
 }
 
 int main(void) {

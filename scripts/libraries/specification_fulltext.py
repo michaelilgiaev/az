@@ -29,12 +29,12 @@ import specification_svg
 # Stable one-line explanation of each edition tag, shown in the legend and used
 # as the long form when a component is displayed on its own.
 EDITION_LABEL = {
-    "az'arch": "az'arch  (Az'arch Component: in the set only because Az'arch "
+    "azzio": "azzio  (Azzio Component: in the set only because Azzio "
                "added it on top of stock archiso)",
     "stock": "stock    (Stock Arch: already on the stock archiso releng medium)",
 }
 EDITION_SHORT = {
-    "az'arch": "az'arch",
+    "azzio": "azzio",
     "stock": "stock",
 }
 
@@ -127,11 +127,11 @@ def _component_block(pkg, packages, resolved, tiers, tags):
     out.append(f"layer:    {layer} of {len(LAYER_ROLE) - 1}  ({LAYER_ROLE[layer]})")
     out.append(f"repo:     {repo}    installed size: {_fmt_size(isize)}    "
                f"license: {rec.get('license') or '(unknown)'}")
-    # Az'arch-specific note, when present, is important enough to call out.
-    if tag.get("azarch_note"):
+    # Azzio-specific note, when present, is important enough to call out.
+    if tag.get("azzio_note"):
         shipped = "REMOVED (not shipped on the ISO)" if tag.get("removed") \
-            else "shipped, with Az'arch changes"
-        out.extend(_wrap_field("az'arch", f"{tag['azarch_note']}  [{shipped}]"))
+            else "shipped, with Azzio changes"
+        out.extend(_wrap_field("azzio", f"{tag['azzio_note']}  [{shipped}]"))
     out.append("")
     # Position in the graph: depth stats then the real edges.
     out.append(f"depth:    {tiers['trans_deps'][pkg]} pkgs pulled in below it "
@@ -194,7 +194,7 @@ def render_fulltext(packages, resolved, tiers, tags, glance, svg_rel, general_re
 
     # ---- title / header ------------------------------------------------- #
     w(RULE)
-    w("AZ'ARCH -- FULL COMPONENT SPECIFICATION")
+    w("AZZIO -- FULL COMPONENT SPECIFICATION")
     w(RULE)
     w("")
     w("Every single component of the distribution, fully expanded -- nothing")
@@ -226,8 +226,8 @@ def render_fulltext(packages, resolved, tiers, tags, glance, svg_rel, general_re
         ("  from core / extra / multilib",
          f'{glance["by_repo"]["core"]} / {glance["by_repo"]["extra"]} / '
          f'{glance["by_repo"]["multilib"]}'),
-        ("Az'arch Component / Stock Arch",
-         f'{glance["azarch"]} / {glance["stock"]}'),
+        ("Azzio Component / Stock Arch",
+         f'{glance["azzio"]} / {glance["stock"]}'),
         ("Deepest dependency chain", f'{glance["max_height"]} hops (leaf -> base)'),
         ("Total installed size", glance["size"]),
     ]
@@ -243,7 +243,7 @@ def render_fulltext(packages, resolved, tiers, tags, glance, svg_rel, general_re
     w("  purpose:     what it is, in plain language (from the Arch package DB)")
     w("  upstream:    the project's home page")
     w("  edition:     one of --")
-    for ed in ("az'arch", "stock"):
+    for ed in ("azzio", "stock"):
         w(f"                 {EDITION_LABEL[ed]}")
     w("  category:    a single human-language role")
     w("  layer:       0 (sinks) .. 6 (leaf apps) -- real dependency depth")

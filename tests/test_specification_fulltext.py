@@ -158,19 +158,19 @@ def test_rule_and_thin_widths():
 # --- EDITION_SHORT / EDITION_LABEL keys ------------------------------------
 
 def test_edition_maps_share_the_same_two_keys():
-    assert set(F.EDITION_SHORT) == set(F.EDITION_LABEL) == {"az'arch", "stock"}
+    assert set(F.EDITION_SHORT) == set(F.EDITION_LABEL) == {"azzio", "stock"}
 
 
 def test_edition_short_is_identity_labelled():
-    assert F.EDITION_SHORT["az'arch"] == "az'arch"
+    assert F.EDITION_SHORT["azzio"] == "azzio"
     assert F.EDITION_SHORT["stock"] == "stock"
 
 
 def test_edition_label_apostrophe_form():
-    # The literal apostrophe form "az'arch" (not "azarch") is the brand spelling
+    # The literal apostrophe form "azzio" (not "azzio") is the brand spelling
     # printed in the legend and in every entry's edition line.
-    assert F.EDITION_LABEL["az'arch"].startswith("az'arch")
-    assert "Az'arch Component" in F.EDITION_LABEL["az'arch"]
+    assert F.EDITION_LABEL["azzio"].startswith("azzio")
+    assert "Azzio Component" in F.EDITION_LABEL["azzio"]
     assert F.EDITION_LABEL["stock"].startswith("stock")
 
 
@@ -237,8 +237,8 @@ def _fixture():
         "trans_dependents": {"foo": 0, "bar": 1},
     }
     tags = {
-        "foo": {"edition": "az'arch", "category": "Application",
-                "azarch_note": "added by azarch", "removed": False},
+        "foo": {"edition": "azzio", "category": "Application",
+                "azzio_note": "added by azzio", "removed": False},
         "bar": {"edition": "stock", "category": "Shared library"},
     }
     return packages, resolved, tiers, tags
@@ -266,8 +266,8 @@ def test_component_block_shipped_note_branch():
     packages, resolved, tiers, tags = _fixture()
     block = F._component_block("foo", packages, resolved, tiers, tags)
     text = "\n".join(block)
-    # removed=False -> "shipped, with Az'arch changes".
-    assert "[shipped, with Az'arch changes]" in text
+    # removed=False -> "shipped, with Azzio changes".
+    assert "[shipped, with Azzio changes]" in text
     assert "REMOVED" not in text
 
 
@@ -289,8 +289,8 @@ def test_component_block_optional_deps_one_per_line_unwrapped():
 
 def test_component_block_missing_record_uses_defaults():
     # rec = {} -> version '?', repo '?', size '0 B', placeholder desc, no upstream.
-    tags = {"ghost": {"edition": "az'arch", "category": "X",
-                      "azarch_note": "was here", "removed": True}}
+    tags = {"ghost": {"edition": "azzio", "category": "X",
+                      "azzio_note": "was here", "removed": True}}
     resolved = {"closure": ["ghost"], "edges": {}}
     tiers = {"heights": {}, "rev": {},
              "trans_deps": {"ghost": 0}, "trans_dependents": {"ghost": 0}}
@@ -319,7 +319,7 @@ def _glance():
     return {
         "base": "archiso", "desktop": "openbox", "kernel": "6.9", "init": "256",
         "ram": "50%", "closure": 2, "by_repo": {"core": 1, "extra": 1, "multilib": 0},
-        "azarch": 1, "stock": 1, "max_height": 5, "size": "1.0 GiB",
+        "azzio": 1, "stock": 1, "max_height": 5, "size": "1.0 GiB",
     }
 
 
@@ -366,7 +366,7 @@ def test_render_fulltext_index_lists_every_component():
     assert "COMPONENT INDEX" in out
     # Index rows use the short edition tag and the version.
     assert "foo" in out and "bar" in out
-    assert "az'arch" in out and "stock" in out
+    assert "azzio" in out and "stock" in out
 
 
 def test_render_fulltext_at_a_glance_uses_glance_values():
