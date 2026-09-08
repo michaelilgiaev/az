@@ -166,7 +166,7 @@ def _index_block(order, packages, tags):
     return out
 
 
-def render_fulltext(packages, resolved, tiers, tags, glance, svg_rel, general_rel):
+def render_fulltext(packages, resolved, tiers, tags, glance, graph_rel, general_rel):
     """Return the complete component listing as plain text.
 
     Components are grouped by dependency layer (kernel at the bottom up to leaf
@@ -201,7 +201,7 @@ def render_fulltext(packages, resolved, tiers, tags, glance, svg_rel, general_re
     w("collapsed. For each package: what it is (in plain language), which")
     w("layer of the stack it sits in, what it depends on, and what depends on")
     w("it. This is the exhaustive companion to:")
-    w(f"  - {svg_rel}   (the at-a-glance layered graph)")
+    w(f"  - {graph_rel}   (the interactive layered graph)")
     w(f"  - {general_rel}   (prose + subsystem breakdown)")
     w("")
     w("The plain-language 'purpose' of each component is the official Arch")

@@ -27,7 +27,6 @@ import specification_db
 import specification_resolve
 import specification_classify
 import specification_render
-import specification_svg
 import specification_fulltext
 import specification_html
 import specification_stock_baseline
@@ -40,7 +39,6 @@ DEFAULT_MANIFEST = os.path.join(REPO_ROOT, "libraries", "packages", "packages.x8
 # file, so it is not mistaken for an editable manifest. --stock-manifest can
 # still point at a file to override it; None means "use the module".
 DEFAULT_OUTPUT = os.path.join(REPO_ROOT, "documentation", "SPECIFICATIONS_GENERAL.md")
-DEFAULT_SVG = os.path.join(REPO_ROOT, "documentation", "SPECIFICATIONS_COMPONENTS_OVERVIEW.svg")
 DEFAULT_FULLTEXT = os.path.join(REPO_ROOT, "documentation",
                                 "SPECIFICATIONS_COMPONENTS_FULL.txt")
 DEFAULT_HTML = os.path.join(REPO_ROOT, "documentation",
@@ -139,9 +137,6 @@ def parse_args(argv):
     )
     p.add_argument("-o", "--output", default=DEFAULT_OUTPUT,
                    help=f"output Markdown file (default: {DEFAULT_OUTPUT})")
-    p.add_argument("--svg", default=DEFAULT_SVG,
-                   help=f"output SVG diagram (default: {DEFAULT_SVG}); "
-                        "the Markdown links to it")
     p.add_argument("--fulltext", default=DEFAULT_FULLTEXT,
                    help=f"output full component listing text file "
                         f"(default: {DEFAULT_FULLTEXT}); every component, "
@@ -233,12 +228,14 @@ def _build_glance(packages, resolved, tiers, tags):
     }
 
 
-def build(manifest_path, db_cache, mirror, offline, svg_rel="SPECIFICATIONS.svg",
+def build(manifest_path, db_cache, mirror, offline,
+          graph_rel="SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html",
           general_rel="SPECIFICATIONS_GENERAL.md",
           stock_manifest_path=None):
-    """Run the full pipeline. Return (markdown, svg, fulltext, html).
+    """Run the full pipeline. Return (markdown, fulltext, html).
 
-    stock_manifest_path=None uses the built-in baseline
+    graph_rel is the relative link the prose points at for the dependency graph
+    (the interactive HTML map). stock_manifest_path=None uses the built-in baseline
     (specification_stock_baseline.STOCK_PACKAGES); pass a path to override it from a file.
     """
     db_paths = specification_db.fetch_databases(db_cache, mirror=mirror, offline=offline)
@@ -280,26 +277,27 @@ def build(manifest_path, db_cache, mirror, offline, svg_rel="SPECIFICATIONS.svg"
           f"editions {dict(ed_counts)}", file=sys.stderr)
 
     glance = _build_glance(packages, resolved, tiers, tags)
-    md = specification_render.render(packages, resolved, tiers, tags, glance, svg_rel)
-    svg = specification_svg.render_svg(packages, resolved, tiers, tags, glance)
+    md = specification_render.render(packages, resolved, tiers, tags, glance, graph_rel)
     full = specification_fulltext.render_fulltext(packages, resolved, tiers, tags, glance,
-                                         svg_rel, general_rel)
+                                         graph_rel, general_rel)
     page = specification_html.render_html(packages, resolved, tiers, tags, glance)
-    return md, svg, full, page
+    return md, full, page
 
 
 def main(argv=None):
     args = parse_args(argv if argv is not None else sys.argv[1:])
-    svg_rel = os.path.relpath(args.svg, os.path.dirname(args.output))
+    # The prose points at the interactive HTML map as the dependency-graph artifact,
+    # linked relative to the general Markdown's directory (both live in documentations/).
+    graph_rel = os.path.relpath(args.html, os.path.dirname(args.output))
     # cross-link inside the full-text file points back to the general Markdown,
-    # relative to the full-text file's own directory (the SVG link reuses svg_rel;
-    # all three artifacts are co-located in documentations/)
+    # relative to the full-text file's own directory (the graph link reuses graph_rel;
+    # all artifacts are co-located in documentations/)
     ft_dir = os.path.dirname(args.fulltext)
     general_rel_ft = os.path.relpath(args.output, ft_dir)
-    md, svg, full, page = build(args.manifest, args.db_cache, args.mirror,
-                                args.offline, svg_rel=svg_rel,
-                                general_rel=general_rel_ft,
-                                stock_manifest_path=args.stock_manifest)
+    md, full, page = build(args.manifest, args.db_cache, args.mirror,
+                           args.offline, graph_rel=graph_rel,
+                           general_rel=general_rel_ft,
+                           stock_manifest_path=args.stock_manifest)
 
     if args.stdout:
         sys.stdout.write(md)
@@ -310,11 +308,6 @@ def main(argv=None):
         f.write(md)
     print(f"[specification] wrote {args.output} "
           f"({md.count(chr(10)) + 1} lines, {len(md)} bytes)", file=sys.stderr)
-
-    os.makedirs(os.path.dirname(args.svg), exist_ok=True)
-    with open(args.svg, "w") as f:
-        f.write(svg)
-    print(f"[specification] wrote {args.svg} ({len(svg)} bytes)", file=sys.stderr)
 
     os.makedirs(os.path.dirname(args.fulltext), exist_ok=True)
     with open(args.fulltext, "w") as f:

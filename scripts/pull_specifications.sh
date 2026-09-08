@@ -2,17 +2,15 @@
 #
 # pull_specifications.sh -- generate the Azzio DISTRIBUTION specification.
 #
-# This produces four artifacts:
+# This produces three artifacts:
 #   documentations/SPECIFICATIONS_GENERAL.md  the general / developer view:
 #                                     at-a-glance facts, what Azzio changes on
 #                                     top of Arch, and the subsystem breakdown.
 #                                     No dependency-graph tables (those are below).
-#   documentations/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg  a navigable layered
-#                                     image of the dependency graph, kernel at the
-#                                     bottom up to leaf apps at the top, boxes
-#                                     coloured by category and marked by edition.
 #   documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html  the interactive
-#                                     twin of the SVG: the same layered map, but
+#                                     layered map of the dependency graph, kernel at
+#                                     the bottom up to leaf apps at the top, boxes
+#                                     coloured by category and marked by edition;
 #                                     open it in a browser and click any component
 #                                     to inspect it and highlight its dependencies.
 #   documentations/SPECIFICATIONS_COMPONENTS_FULL.txt  the exhaustive listing:
@@ -38,7 +36,6 @@
 #
 # Options (forwarded to the Python orchestrator):
 #   -o, --output FILE   write the general Markdown here (default: documentations/SPECIFICATIONS_GENERAL.md)
-#       --svg FILE      write the components graph SVG here (default: documentations/SPECIFICATIONS_COMPONENTS_OVERVIEW.svg)
 #       --html FILE     write the interactive HTML map here (default: documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
 #       --fulltext FILE write the full component listing here (default: documentations/SPECIFICATIONS_COMPONENTS_FULL.txt)
 #   -m, --manifest FILE package manifest (default: libraries/packages/packages.x86_64)
@@ -55,7 +52,7 @@ PY_ENTRY="$SELF_DIR/libraries/pull_specifications.py"
 
 case "${1:-}" in
     -h|--help)
-        sed -n '3,49p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+        sed -n '3,46p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
         exit 0
         ;;
 esac
