@@ -1586,6 +1586,26 @@ def test_recipe_dirs_full_tier():
     assert "make fetch" in dict(dirs)["librewolf"]["PKGBUILD"]
 
 
+def test_thunar_configure_enables_maintainer_mode():
+    # REGRESSION: the vendored Thunar source is a git checkout, so it ships NO pre-generated
+    # built sources (thunar-marshal.c/.h, the gdbus-codegen stubs, thunar-resources.c). Those
+    # are produced by rules gated behind `if MAINTAINER_MODE` in thunar/Makefile.am, and the
+    # tree's configure.ac uses the bare AM_MAINTAINER_MODE() which DEFAULTS OFF. Because the
+    # recipe runs its own ./configure (NOCONFIGURE=1 stops autogen before it would pass the flag
+    # itself), we MUST pass --enable-maintainer-mode or `make` dies with
+    # "No rule to make target 'thunar-marshal.c'". Lock the flag in, and lock in that it is
+    # passed to configure AFTER the autogen bootstrap (order matters: autogen writes configure).
+    s = pkgbuild.pkgbuild_thunar()
+    # Anchor on the real command lines, not the prose that also mentions these tokens: the
+    # autogen bootstrap runs with NOCONFIGURE=1, the configure command opens a `\`-continued
+    # block, and the flag is one of that block's indented continuation lines.
+    assert "NOCONFIGURE=1 ./autogen.sh\n" in s
+    autogen_at = s.index("NOCONFIGURE=1 ./autogen.sh\n")
+    configure_at = s.index("./configure \\")
+    flag_at = s.index("\n    --enable-maintainer-mode \\")
+    assert autogen_at < configure_at < flag_at
+
+
 def test_recipe_dirs_companion_files_shared_across_tiers():
     # The .desktop is the sole companion file now and is identical across tiers. (The
     # AutoConfig override is no longer packaged -- it ships as a home file.)

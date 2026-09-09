@@ -30,7 +30,7 @@ to end:
         packages/file_manager/home_directory (the SAME set as the on-disk home layout).
       - actions.py  -- ~/.config/Thunar/uca.xml (Edit with gedit on any file, Edit with gimp on
         images, Create Link via zenity, Open Terminal Here via kitty) + the `link` helper script.
-      - launcher.py -- the thunar.desktop override (Name="Thunar", custom Azzio icon) + icon files.
+      - launcher.py -- the thunar.desktop override (Name="Azzio File Manager", custom Azzio icon) + icon files.
       - templates.py -- the ~/Templates "Create Document" set (an empty text doc + the LibreOffice
         ODF trio) and ~/.config/user-dirs.dirs pointing XDG_TEMPLATES_DIR at ~/Templates.
 

@@ -5200,7 +5200,7 @@ thunar_window_update_title (ThunarWindow *window)
   if (G_UNLIKELY (window_title_style == THUNAR_WINDOW_TITLE_STYLE_FOLDER_NAME_WITHOUT_THUNAR_SUFFIX || window_title_style == THUNAR_WINDOW_TITLE_STYLE_FULL_PATH_WITHOUT_THUNAR_SUFFIX))
     title = g_strdup_printf ("%s", name);
   else
-    title = g_strdup_printf ("%s - %s", name, "Thunar");
+    title = g_strdup_printf ("%s - %s", name, "Azzio File Manager");
   gtk_window_set_title (GTK_WINDOW (window), title);
   g_free (title);
   g_free (parse_name);

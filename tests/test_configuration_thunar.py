@@ -173,6 +173,23 @@ def test_mo_overrides_relabel_the_hardcoded_strings():
     assert o['_Open With "%s"'] == "_Edit with %s"               # item 7 (built-in -> "Edit with gedit")
     assert o["Create _Folder..."] == "Create New _Folder..."     # item 8 wording
     assert o["Create _Document"] == "Create New _Document..."     # item 8 wording
+    # App identity: the product name "Thunar" -> "Azzio File Manager" in every gettext-wrapped
+    # display string (application name, Preferences title, About blurb).
+    assert o["Thunar"] == "Azzio File Manager"
+    assert o["Thunar Preferences"] == "Azzio File Manager Preferences"
+    assert o[
+        "Thunar is a fast and easy to use file manager\n"
+        "for the Xfce Desktop Environment."
+    ].startswith("Azzio File Manager is a fast")
+
+
+def test_window_title_suffix_relabelled_in_vendored_source():
+    # The window title-bar suffix is a BARE C literal (g_strdup_printf("%s - %s", name, "...")),
+    # not a gettext string, so the .mo override cannot reach it -- it is relabelled directly in the
+    # vendored fork's thunar-window.c to "Azzio File Manager" (like the symlink-resolve change).
+    win_c = (thunar.SOURCE_DIR / "thunar" / "thunar-window.c").read_text()
+    assert 'g_strdup_printf ("%s - %s", name, "Azzio File Manager")' in win_c
+    assert 'g_strdup_printf ("%s - %s", name, "Thunar")' not in win_c
 
 
 def test_mo_bytes_are_a_valid_gettext_catalog(tmp_path):
