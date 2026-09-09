@@ -393,12 +393,14 @@ def pkgbuild_thunar() -> str:
 
 pkgname=thunar
 pkgver={THUNAR_VERSION}
-# pkgrel=2 (extra/thunar is -1): our repo is appended AFTER [extra] on an ONLINE build
-# (pacman.append_local_repo lists the local repo last), so pacstrap would pick extra/'s
-# UNPATCHED thunar for the same version. A higher pkgrel makes OURS strictly newer, so pacman
-# selects it regardless of repo order (and on an OFFLINE build [extra] is dropped, so ours wins
-# anyway). If extra ever ships thunar-4.20.9-2+ or a newer pkgver, bump the vendored source
-# tag (packages/file_manager.SOURCE_VERSION) and this rel in lock-step.
+# pkgrel=2 (extra/thunar is -1): a version bump documenting that this is our patched
+# rebuild, one rel above extra/'s. NOTE: the higher pkgrel is NOT what makes ours win --
+# pacman selecting `-S thunar` picks the package from the FIRST repo in config order that
+# carries the name, NOT the globally-highest version (verified: `pacman -Sddp thunar` with
+# extra ahead of our repo returns 4.20.9-1). Ours wins because pacman.append_local_repo now
+# lists [pacstrap-azzio-repo] BEFORE [core]/[extra] on an online build (and switch_to_local_repo
+# DROPS [extra] on an offline build). If extra ever ships thunar-4.20.9-2+ or a newer pkgver,
+# bump the vendored source tag (packages/file_manager.SOURCE_VERSION) and this rel in lock-step.
 pkgrel=2
 pkgdesc="Azzio File Manager (Thunar fork: resolves symlink paths)"
 arch=('x86_64')

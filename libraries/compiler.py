@@ -1483,13 +1483,16 @@ def _probe_and_maybe_switch(W: Path, conf: str, localrepo: Path, bar: ProgressBa
     if ok:
         print("    [+] No local repo cached, mirrors reachable -- building online "
               "(Arch packages fetched; our own from the local repo).")
-        # Even here the local file:// repo must be appended: our OWN packages
-        # (calamares, librewolf) live on no mirror and are built into this repo by the
-        # makepkg stage (14) BEFORE mkarchiso (15) runs, so pacstrap resolves Arch
-        # packages from the mirrors and ours from file://. Listed last, so the network
-        # repos win any shared name (they do not overlap). SigLevel=Never on the local
-        # repo, so our unsigned built packages need no .sig. This is the ONLY branch
-        # that still contacts the network, and only because nothing is cached yet.
+        # Even here the local file:// repo must be added: our OWN packages (calamares,
+        # librewolf) live on no mirror, and we OVERRIDE thunar (ours 4.20.9-2 vs extra's
+        # -1). append_local_repo lists our repo BEFORE [core]/[extra] so pacman prefers
+        # ours for any name we carry -- REQUIRED because pacman picks by repo order, not
+        # by highest version, so a repo listed after [extra] would have extra's stock
+        # thunar (and stock librewolf) shadow ours, and the ISO would ship the unfixed
+        # binaries. Safe: our repo came from the same pinned ALA snapshot, so every
+        # non-overridden name is byte-identical. SigLevel=Never on the local repo, so our
+        # unsigned built packages need no .sig. This is the ONLY branch that still contacts
+        # the network, and only because nothing is cached yet.
         conf = pacman.append_local_repo(conf, str(localrepo))
         emit.write_text(W / "pacman.conf", conf)
     else:

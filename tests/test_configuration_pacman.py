@@ -170,6 +170,22 @@ def test_append_local_repo_is_idempotent():
     assert once.count("[pacstrap-azzio-repo]") == 1
 
 
+def test_append_local_repo_ordered_before_network_repos():
+    # THE BUG: our local repo carries packages we OVERRIDE (thunar-4.20.9-2 vs
+    # extra's -1). pacman picks a package from the FIRST repo in config order that
+    # has it -- it does NOT pick the globally-highest version across repos. So if
+    # our repo is listed AFTER [extra], extra's stock thunar-1 shadows our -2 and the
+    # ISO ships the unfixed binary. Our repo MUST precede [core]/[extra] so our
+    # override wins. (Verified empirically with `pacman -Sddp thunar` against both
+    # DBs: repo-last -> 4.20.9-1, repo-first -> 4.20.9-2.)
+    conf = pacman.build_profile_conf()
+    out = pacman.append_local_repo(conf, "/mnt/repo")
+    local = out.index("[pacstrap-azzio-repo]")
+    assert "\n[core]\n" in out and "\n[extra]\n" in out, "network repos must be kept"
+    assert local < out.index("\n[core]\n"), "local repo must precede [core]"
+    assert local < out.index("\n[extra]\n"), "local repo must precede [extra]"
+
+
 # --- switch_to_local_repo: fully-offline rebuild ---------------------------
 
 def test_switch_to_local_repo_drops_network_repos():
