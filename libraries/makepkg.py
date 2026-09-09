@@ -28,8 +28,6 @@ if they are not -- exactly like the rest of the cache-first design.
 
 from __future__ import annotations
 
-import hashlib
-import json
 import math
 import os
 import pwd
@@ -264,87 +262,29 @@ def _repo_has_all(pkg_repo: Path, names: tuple[str, ...]) -> bool:
 
 
 # --- own-package recipe fingerprinting --------------------------------------
-# The offline default tier SKIPS makepkg when the own packages are already in the
-# repo (the fast rerun). That skip used to be content-BLIND: _repo_has_all only
-# checked that a file named `calamares-*.pkg.tar.zst` existed, never whether it was
-# built from the CURRENT recipe. So editing a recipe -- e.g. adding the networkq
-# source patch to the calamares PKGBUILD -- did NOT invalidate the cached package:
-# the stale binary (built before the patch existed) was reused, and the ISO shipped
-# a calamares whose settings.conf listed `networkq` but whose modules dir had no
-# such module, so Calamares aborted at startup with "networkq@networkq could not be
-# loaded". This mirrors the manifest-coverage bug cache_is_complete() already guards
-# (a warm cache that nonetheless lacks a newly-added package): the fix is the same
-# shape -- treat a recipe change as an incomplete cache so the run goes ONLINE and
-# `makepkg -f` rebuilds the package from the new recipe.
+# The staleness gate lives in fingerprint.py (split out to keep this module within the
+# size budget). Re-exported here so every caller/test keeps using them as makepkg.<name>.
+# _repo_is_current stays below: it is the orchestration gate that pairs the fingerprint
+# check with _repo_has_all (the package-file-exists check), both of which live here.
 #
-# The fingerprint is a hash of every file in the recipe (PKGBUILD + all companion
-# files, e.g. the five calamares patches), so ANY change to the recipe -- including
-# an edit to a single patch -- flips it. It is written next to the built package as
-# a sidecar and re-checked on reuse.
-FINGERPRINT_SUFFIX = ".recipe-fingerprint"
-
-
-def _recipe_fingerprint(files: dict[str, str]) -> str:
-    """A stable content hash of one recipe (the {filename: content} dict emitted by
-    pkgbuild.recipe_dirs). Sorted by filename so the digest is order-independent, and
-    both names and bodies are folded in so adding/removing/renaming a companion file
-    (a patch) changes the result. Pure -- unit-tested."""
-    h = hashlib.sha256()
-    for name in sorted(files):
-        h.update(name.encode("utf-8"))
-        h.update(b"\0")
-        h.update(files[name].encode("utf-8"))
-        h.update(b"\0")
-    return h.hexdigest()
-
-
-def _current_recipe_fingerprints(full_compile: bool) -> dict[str, str]:
-    """Map each produced package name -> the fingerprint of the recipe that would
-    build it right now. The recipe DIR name (recipe_dirs' first tuple element) is the
-    package name for our recipes (calamares/librewolf/thunar), which is the key the
-    sidecar files and produced_names use."""
-    return {
-        dirname: _recipe_fingerprint(files)
-        for dirname, files in pkgbuild_cfg.recipe_dirs(full_compile)
-    }
-
-
-def _fingerprint_dir() -> Path:
-    """Where the recipe-fingerprint sidecars live -- a dedicated dir, NOT PKG_REPO
-    (which is cp -r'd wholesale into the ISO payload; build metadata stays out of it).
-    Read at call time so tests that monkeypatch paths.PKG_FINGERPRINTS take effect."""
-    return paths.PKG_FINGERPRINTS
-
-
-def _fingerprint_path(fp_dir: Path, name: str) -> Path:
-    return fp_dir / f"{name}{FINGERPRINT_SUFFIX}"
-
-
-def _write_recipe_fingerprint(fp_dir: Path, name: str, fingerprint: str) -> None:
-    """Record the recipe fingerprint for a freshly built package so a later run can
-    tell whether the cached package still matches the recipe. Best-effort: a write
-    failure just means the next run treats the cache as stale and rebuilds (safe --
-    never ships a stale package), so it must not abort the build."""
-    try:
-        fp_dir.mkdir(parents=True, exist_ok=True)
-        _fingerprint_path(fp_dir, name).write_text(
-            json.dumps({"name": name, "fingerprint": fingerprint}) + "\n"
-        )
-    except OSError as e:
-        print(f"    [!] Could not write recipe fingerprint for {name}: {e} "
-              "(cache will be treated as stale next run).")
-
-
-def _read_recipe_fingerprint(fp_dir: Path, name: str) -> str | None:
-    """The fingerprint recorded for a previously built package, or None if the
-    sidecar is absent/unreadable/malformed (any of which means 'can't prove it's
-    current' -> caller must rebuild)."""
-    try:
-        data = json.loads(_fingerprint_path(fp_dir, name).read_text())
-    except (OSError, ValueError):
-        return None
-    fp = data.get("fingerprint") if isinstance(data, dict) else None
-    return fp if isinstance(fp, str) else None
+# Why it exists: the offline default tier SKIPS makepkg when the own packages are already
+# in the repo (the fast rerun). That skip used to be content-BLIND -- it only checked a
+# file named `calamares-*.pkg.tar.zst` existed, never whether it was built from the CURRENT
+# recipe. So editing a recipe (the networkq patch on calamares, or thunar's vendored C) did
+# NOT invalidate the cached package: the stale binary was reused and the ISO/box shipped it.
+# The fingerprint (see fingerprint.py) folds in every recipe file AND any vendored source
+# tree, so any change forces a rebuild.
+from fingerprint import (  # noqa: E402  (grouped with the fingerprinting section)
+    FINGERPRINT_SUFFIX,
+    FingerprintError,
+    _current_recipe_fingerprints,
+    _fingerprint_dir,
+    _fingerprint_path,
+    _read_recipe_fingerprint,
+    _recipe_fingerprint,
+    _source_tree_fingerprint,
+    _write_recipe_fingerprint,
+)
 
 
 def _repo_is_current(pkg_repo: Path, full_compile: bool,

@@ -192,6 +192,126 @@ def test_recipe_fingerprint_changes_when_patch_added():
     assert makepkg._recipe_fingerprint(before) != makepkg._recipe_fingerprint(after)
 
 
+# --- vendored source-tree fingerprinting -----------------------------------
+# The thunar regression: a recipe whose source is a VENDORED DIRECTORY
+# (recipe_source_trees, e.g. packages/file_manager/source) had that tree copied into
+# the recipe dir OUTSIDE the {filename: content} dict, so _recipe_fingerprint never
+# saw it. Editing the vendored C (e.g. thunar-window.c to drop the Help menu) did NOT
+# flip the recipe fingerprint, so the offline cache reused the pre-edit binary and the
+# ISO/box shipped an UNFIXED thunar. These pin the tree-content hash that now guards it.
+def test_source_tree_fingerprint_changes_on_file_content(tmp_path):
+    tree = tmp_path / "src"
+    (tree / "sub").mkdir(parents=True)
+    (tree / "sub" / "a.c").write_text("orig")
+    before = makepkg._source_tree_fingerprint(tree)
+    (tree / "sub" / "a.c").write_text("EDITED")
+    assert makepkg._source_tree_fingerprint(tree) != before
+
+
+def test_source_tree_fingerprint_changes_when_file_added(tmp_path):
+    tree = tmp_path / "src"
+    tree.mkdir()
+    (tree / "a.c").write_text("a")
+    before = makepkg._source_tree_fingerprint(tree)
+    (tree / "b.c").write_text("b")
+    assert makepkg._source_tree_fingerprint(tree) != before
+
+
+def test_source_tree_fingerprint_stable_across_calls(tmp_path):
+    # Pure/deterministic: same bytes on disk -> same digest (no mtime/order noise).
+    tree = tmp_path / "src"
+    (tree / "d").mkdir(parents=True)
+    (tree / "d" / "x.c").write_text("x")
+    (tree / "y.c").write_text("y")
+    assert makepkg._source_tree_fingerprint(tree) == makepkg._source_tree_fingerprint(tree)
+
+
+def test_source_tree_fingerprint_tracks_relative_path(tmp_path):
+    # Same content under a different relative path must differ (a moved/renamed file
+    # is a real recipe change), so paths are folded in, not just bytes.
+    t1 = tmp_path / "one"
+    (t1 / "a").mkdir(parents=True)
+    (t1 / "a" / "f.c").write_text("body")
+    t2 = tmp_path / "two"
+    (t2 / "b").mkdir(parents=True)
+    (t2 / "b" / "f.c").write_text("body")
+    assert makepkg._source_tree_fingerprint(t1) != makepkg._source_tree_fingerprint(t2)
+
+
+def test_source_tree_fingerprint_injective_with_nul_content(tmp_path):
+    # Content can contain any byte (the real tree has binary PNG icons). A naive
+    # NUL-delimited encoding would let these two DIFFERENT trees collide to one hash:
+    #   A: one file "a" with bytes  \x00 b \x00 Y
+    #   B: two files "a"=empty, "b"=b"Y"
+    # both flatten to  a \0 \0 b \0 Y \0  under delimiter-joining. Length-prefixing
+    # must keep them distinct so a stale package is never reused.
+    a = tmp_path / "A"
+    a.mkdir()
+    (a / "a").write_bytes(b"\x00b\x00Y")
+    b = tmp_path / "B"
+    b.mkdir()
+    (b / "a").write_bytes(b"")
+    (b / "b").write_bytes(b"Y")
+    assert makepkg._source_tree_fingerprint(a) != makepkg._source_tree_fingerprint(b)
+
+
+def test_source_tree_fingerprint_tracks_exec_bit(tmp_path):
+    # build() runs ./autogen.sh directly and the copy preserves mode, so flipping a
+    # script's owner-exec bit changes build behaviour and MUST flip the fingerprint
+    # even though the file bytes are identical.
+    tree = tmp_path / "src"
+    tree.mkdir()
+    script = tree / "autogen.sh"
+    script.write_text("#!/bin/sh\n")
+    script.chmod(0o644)
+    before = makepkg._source_tree_fingerprint(tree)
+    script.chmod(0o755)
+    assert makepkg._source_tree_fingerprint(tree) != before
+
+
+def test_source_tree_fingerprint_raises_on_missing_tree(tmp_path):
+    # A declared-but-absent source tree is a build-config error; returning the empty
+    # digest would silently mask it and reuse a stale package forever. Fail loud.
+    import pytest
+    with pytest.raises(makepkg.FingerprintError):
+        makepkg._source_tree_fingerprint(tmp_path / "does-not-exist")
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    with pytest.raises(makepkg.FingerprintError):
+        makepkg._source_tree_fingerprint(empty)
+
+
+def test_current_fingerprints_fold_in_source_tree(tmp_path, monkeypatch):
+    # The end-to-end guard: editing a recipe's vendored source tree MUST change that
+    # recipe's entry in _current_recipe_fingerprints (so the stale-cache gate rebuilds).
+    tree = tmp_path / "vendored"
+    (tree / "thunar").mkdir(parents=True)
+    win = tree / "thunar" / "thunar-window.c"
+    win.write_text("/* pretend thunar source */\n")
+    monkeypatch.setattr(
+        makepkg.pkgbuild_cfg, "recipe_source_trees", lambda: {"thunar": tree}
+    )
+    before = makepkg._current_recipe_fingerprints(full_compile=False)["thunar"]
+    win.write_text("/* Azzio: Help menu removed */\n")
+    after = makepkg._current_recipe_fingerprints(full_compile=False)["thunar"]
+    assert before != after
+
+
+def test_current_fingerprints_unaffected_for_treeless_recipe(tmp_path, monkeypatch):
+    # A recipe with NO source tree (calamares) must be identical whether or not the
+    # source-tree map is consulted -- the tree hash only applies where a tree exists.
+    monkeypatch.setattr(
+        makepkg.pkgbuild_cfg, "recipe_source_trees", lambda: {}
+    )
+    fps = makepkg._current_recipe_fingerprints(full_compile=False)
+    # calamares is text-only; its fingerprint equals the pure recipe-text hash.
+    text_only = {
+        dirname: makepkg._recipe_fingerprint(files)
+        for dirname, files in makepkg.pkgbuild_cfg.recipe_dirs(False)
+    }
+    assert fps["calamares"] == text_only["calamares"]
+
+
 def test_fingerprint_sidecar_round_trips(tmp_path):
     makepkg._write_recipe_fingerprint(tmp_path, "calamares", "abc123")
     assert makepkg._read_recipe_fingerprint(tmp_path, "calamares") == "abc123"
