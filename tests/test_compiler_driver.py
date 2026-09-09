@@ -741,3 +741,59 @@ def test_probe_goes_online_only_when_no_local_repo(monkeypatch, tmp_path):
     # drops append_local_repo from the online branch (the one thing the network-repo
     # assertion above would not catch).
     assert "[pacstrap-azzio-repo]" in written
+
+
+# --- build conf is RE-resolved after the local repo is populated ------------
+#
+# run() resolves the mkarchiso build pacman.conf at step 11 (bar.step "Resolve
+# build pacman.conf and mirrors") -- BEFORE step 12 warms the package cache and
+# step 13 folds our OWN packages (calamares/librewolf) into cache/pkgs/repo/. On a
+# COLD build the local repo index does not exist yet at step 11, so
+# _probe_and_maybe_switch cannot take its offline (file://-only) arm; when the host
+# is a foreign distro (Manjaro) whose mirrorlist the probe Includes, the probe also
+# fails, so the conf is left with NO local repo and multilib commented. mkarchiso's
+# pacstrap then reads that stale conf and aborts with "target not found: calamares"
+# (local-repo-only) and the four lib32-* multilib targets (logs/compile-full.log).
+#
+# The fix: run() must RE-resolve the build conf AFTER _refold_own_packages_into_repo
+# (the index now exists on disk) and BEFORE the mkarchiso pass, so the tested
+# offline-from-local-repo arm actually runs on a cold build. These pin that.
+
+
+def test_finalize_build_pacman_conf_switches_to_local_repo(monkeypatch, tmp_path):
+    # With the local repo index present, the finalize helper must rewrite W/pacman.conf
+    # to install purely from the file:// local repo (which by step 13 holds calamares
+    # AND every lib32-* package) -- no active network Include left to fail on.
+    W = tmp_path / "profile"
+    W.mkdir()
+    localrepo = tmp_path / "repo"
+    localrepo.mkdir()
+    idx = localrepo / "pacstrap-azzio-repo.db"
+    idx.write_text("")
+    monkeypatch.setattr(compiler.paths, "LOCALREPO_INDEX", idx)
+    monkeypatch.setattr(compiler.paths, "PKG_REPO", localrepo)
+    # Seed a stale step-11 conf that still names the network repos (the else/online arm).
+    stale = compiler.pacman.build_profile_conf(cachedir=str(tmp_path / "pacman-pkg") + "/")
+    (W / "pacman.conf").write_text(stale)
+
+    compiler._finalize_build_pacman_conf(W)
+
+    written = (W / "pacman.conf").read_text()
+    assert "[pacstrap-azzio-repo]" in written
+    assert _active(written, "Include = /etc/pacman.d/mirrorlist") == []
+    assert _active(written, "[core]") == [] and _active(written, "[extra]") == []
+
+
+def test_run_reresolves_build_conf_after_repo_is_populated():
+    # Source-order invariant: the build pacman.conf must be RE-resolved to the local
+    # repo AFTER the own packages are folded in and BEFORE the mkarchiso pass. Guards
+    # against reverting to "resolve once at step 11" (the observed compile failure).
+    src = inspect.getsource(compiler.run)
+    refold = src.index("_refold_own_packages_into_repo(")
+    finalize = src.index("_finalize_build_pacman_conf(")
+    mkarchiso = src.index("_run_mkarchiso(")
+    assert refold < finalize < mkarchiso, (
+        "run() must re-resolve the build pacman.conf (_finalize_build_pacman_conf) "
+        "after _refold_own_packages_into_repo and before _run_mkarchiso, so mkarchiso "
+        "pacstraps against the now-complete local repo (calamares + lib32-*)."
+    )
