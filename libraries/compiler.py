@@ -72,8 +72,8 @@ from packages import gedit
 from packages.file_manager import home_directory
 # The per-application tweaks that expose ONLY emit_plan() (kitty, vlc, libreoffice, gimp,
 # file_manager, xviewer) are NOT imported by name -- _emit_apps discovers them. (file_manager folds
-# in the ~/Templates "Create Document" set from its templates submodule, and builds the Thunar
-# binary itself from vendored source, so there is no standalone templates or thunar package.)
+# in the ~/Templates "Create Document" set from its templates submodule, and builds the file manager
+# binary itself from vendored source, so there is no standalone templates or file_manager package.)
 # The packages the
 # compiler already drives explicitly (the desktop pair openbox/librewolf, plus application_menu,
 # passwords, calamares, and the azzio guest command line interface) are excluded from that
@@ -459,7 +459,7 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
 
     # The build pacman.conf was resolved at step 11, BEFORE the cache + our own packages
     # existed. Now that the local repo is complete (every pinned Arch package including
-    # the lib32-* multilib set, plus our calamares/librewolf/thunar, all indexed),
+    # the lib32-* multilib set, plus our calamares/librewolf/file_manager, all indexed),
     # RE-resolve it to install purely from that file:// repo -- otherwise a cold build
     # (empty cache + foreign-host mirrors the step-11 probe cannot reach) would pacstrap
     # against a conf with no local repo and abort on "target not found: calamares" and
@@ -779,7 +779,7 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
 
     # The per-application tweaks are DISCOVERED, not hard-coded: every package exposing an
     # emit_plan() (kitty icon | vlc vlcrc | gedit .desktop + gschema | libreoffice
-    # registrymodifications.xcu | gimp gimprc | thunar thunarrc/xfconf/gtk.css/bookmarks/uca.xml
+    # registrymodifications.xcu | gimp gimprc | file_manager thunarrc/xfconf/gtk.css/bookmarks/uca.xml
     # + icon + the ~/Templates "Create Document" set | xviewer icon | ... plus any newly-added
     # packages/<app>/__init__.py) contributes its entries here, EXCEPT the ones the compiler
     # drives by name (_EXPLICIT_PACKAGES: the desktop pair openbox/librewolf, application_menu,
@@ -823,7 +823,7 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
             if skel_dest is not None:
                 emit.render_svg_png(r["asset"], skel_dest, r["size"], mode=entry["mode"])
             continue
-        # Binary-content entries (e.g. thunar's compiled gettext .mo catalog): the builder
+        # Binary-content entries (e.g. the file manager's compiled gettext .mo catalog): the builder
         # returns raw bytes written verbatim (no newline normalization). System locale
         # catalogs are root-owned, so skel_dest is None for them; the mirror is handled
         # generically in case a HOME binary is ever added.
@@ -868,7 +868,7 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
 def _emit_homedir(airootfs: Path, home: Path) -> None:
     """Create the home-directory LAYOUT -- the top-level folders and convenience symlinks
     that packages.file_manager.home_directory defines as the single source of truth (and that
-    Thunar's sidebar mirrors). Unlike the emit_plan() modules this emits no file CONTENT:
+    the file manager's sidebar mirrors). Unlike the emit_plan() modules this emits no file CONTENT:
     directories and symlinks are not text, so it walks home_directory's plain data with
     emit.mkdir()/emit.link() rather than a builder loop.
 
@@ -890,7 +890,7 @@ def _emit_homedir(airootfs: Path, home: Path) -> None:
         # 1. The top-level directories (Desktop, Downloads, ... Videos).
         for name in home_directory.DIRECTORIES:
             emit.mkdir(root / name)
-        # 1b. Extra non-sidebar directories (~/Templates for the Thunar Create Document set).
+        # 1b. Extra non-sidebar directories (~/Templates for the file manager Create Document set).
         for name in home_directory.EXTRA_DIRECTORIES:
             emit.mkdir(root / name)
         # 2. The XDG trash chain -- created BEFORE the Trash symlink so it does not dangle.
@@ -1469,7 +1469,7 @@ def _finalize_build_pacman_conf(W: Path) -> None:
 
     By this point (after _refold_own_packages_into_repo) cache/pkgs/repo/ holds every
     pinned Arch package -- INCLUDING the lib32-* multilib set the download step fetched --
-    plus our built calamares/librewolf/thunar, and the reconciled index exists. Switching
+    plus our built calamares/librewolf/file_manager, and the reconciled index exists. Switching
     the conf to that all-file:// SigLevel=Never repo makes pacstrap resolve the ENTIRE
     manifest locally, with no network Include to stall on. Idempotent: an already-offline
     conf (the complete-cache path) just gets re-written to the same local repo.
@@ -1521,12 +1521,12 @@ def _probe_and_maybe_switch(W: Path, conf: str, localrepo: Path, bar: ProgressBa
         print("    [+] No local repo cached, mirrors reachable -- building online "
               "(Arch packages fetched; our own from the local repo).")
         # Even here the local file:// repo must be added: our OWN packages (calamares,
-        # librewolf) live on no mirror, and we OVERRIDE thunar (ours 4.20.9-2 vs extra's
-        # -1). append_local_repo lists our repo BEFORE [core]/[extra] so pacman prefers
-        # ours for any name we carry -- REQUIRED because pacman picks by repo order, not
-        # by highest version, so a repo listed after [extra] would have extra's stock
-        # thunar (and stock librewolf) shadow ours, and the ISO would ship the unfixed
-        # binaries. Safe: our repo came from the same pinned ALA snapshot, so every
+        # librewolf) live on no mirror, and we OVERRIDE stock thunar with our file_manager
+        # package (provides/replaces thunar). append_local_repo lists our repo BEFORE
+        # [core]/[extra] so pacman prefers ours for any name we carry -- REQUIRED because
+        # pacman picks by repo order, not by highest version, so a repo listed after [extra]
+        # would have extra's stock thunar (and stock librewolf) shadow ours, and the ISO
+        # would ship the unfixed binaries. Safe: our repo came from the same pinned ALA snapshot, so every
         # non-overridden name is byte-identical. SigLevel=Never on the local repo, so our
         # unsigned built packages need no .sig. This is the ONLY branch that still contacts
         # the network, and only because nothing is cached yet.
@@ -1751,7 +1751,7 @@ def cache_is_complete() -> bool:
     if not paths.PKG_SYNC_DB.is_dir() or not any(paths.PKG_SYNC_DB.glob("*.db")):
         return False
     # Own-packages clause, recipe-AWARE: the offline repo must hold a package for
-    # every own package (calamares, librewolf, thunar) AND that package must have
+    # every own package (calamares, librewolf, file_manager) AND that package must have
     # been built from the CURRENT recipe. _repo_is_current pairs the existence check
     # with a recipe-fingerprint match, so EDITING a recipe -- e.g. adding the networkq
     # source patch to the calamares PKGBUILD -- demotes this run to online and rebuilds
@@ -1761,7 +1761,7 @@ def cache_is_complete() -> bool:
     # the manifest-coverage clause below. produced_names is tier-independent, and
     # _repo_is_current derives the fingerprint set from recipe_dirs the same way, so
     # full_compile=False is correct regardless of the eventual --full-compile flag
-    # (the recipe FILES are identical across tiers for calamares/thunar; librewolf's
+    # (the recipe FILES are identical across tiers for calamares/file_manager; librewolf's
     # differ, but a librewolf-recipe change correctly forces a rebuild either way).
     if not makepkg._repo_is_current(paths.PKG_REPO, full_compile=False):
         return False

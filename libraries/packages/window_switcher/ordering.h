@@ -1,7 +1,7 @@
 /* Azzio window switcher -- fixed leading order + alphabetical tail.
  *
  * The user's spec: alt-tab shows one tile per window, left to right, ordered
- *   1 librewolf, 2 kitty, 3 the hypervisor display, 4 thunar,
+ *   1 librewolf, 2 kitty, 3 the hypervisor display, 4 the file manager,
  *   5 everything else, alphabetical.
  * This module is the pure comparator that realizes that order. No GTK/X, so it is
  * unit-tested headless (tests/test_ordering.c).
@@ -22,7 +22,7 @@ typedef struct {
     int stack_index;    /* position in _NET_CLIENT_LIST, stable tiebreak */
 } AzWinIdent;
 
-/* Leading rank: 1 librewolf, 2 kitty, 3 hypervisor, 4 thunar, 5 everything else. */
+/* Leading rank: 1 librewolf, 2 kitty, 3 hypervisor, 4 the file manager, 5 everything else. */
 int az_order_rank(const AzWinIdent *w);
 
 /* g_ptr_array_sort comparator over AzWinIdent*: rank asc, then (rank 5) display_name

@@ -212,11 +212,11 @@ HOME_OWNER = (1000, 998)
 WALLPAPER_POINTER_FILE = f"{HOME}/.config/azzio/wallpaper"
 
 
-# The live Thunar sidebar sync helper, launched (with --watch) from the OpenBox autostart so
-# additions to the home directory show up in Thunar's shortcuts pane at runtime (PROMPT). Kept
+# The live file manager sidebar sync helper, launched (with --watch) from the OpenBox autostart so
+# additions to the home directory show up in the file manager's shortcuts pane at runtime (PROMPT). Kept
 # in lock-step with packages/file_manager/live_sidebar.SYNC_SCRIPT_DEST (a test pins them equal);
 # this constant is the single name the autostart refers to it by, held here to avoid importing
-# the thunar package into openbox (mirrors how AZZIO_OSD_SYSTEM_PATH is handled).
+# the file_manager package into openbox (mirrors how AZZIO_OSD_SYSTEM_PATH is handled).
 THUNAR_SIDEBAR_SYNC = "/usr/local/lib/azzio/azzio-sidebar-sync"
 
 
@@ -784,9 +784,9 @@ def gtk3_settings_ini_default() -> str:
         "gtk-theme-name=Adwaita-dark\n"
         "gtk-application-prefer-dark-theme=1\n"
         "gtk-icon-theme-name=Adwaita\n"
-        # Show icons in menus (PROMPT Thunar batch item 6). GTK3's gtk-menu-images defaults to
-        # FALSE, which is why Thunar's "Open With" entries render without their app icons; setting
-        # it true restores them (Thunar builds those items with xfce_gtk_image_menu_item, which
+        # Show icons in menus (PROMPT file manager batch item 6). GTK3's gtk-menu-images defaults to
+        # FALSE, which is why the file manager's "Open With" entries render without their app icons; setting
+        # it true restores them (the file manager builds those items with xfce_gtk_image_menu_item, which
         # honours this GtkSetting). Harmless/desirable for every other GTK app's menus too.
         "gtk-menu-images=true\n"
     )
@@ -1315,7 +1315,7 @@ command -v xset >/dev/null 2>&1 && xset r rate 300 25 &
 #    machine but never clobbers a level the user has since chosen. Silent (no OSD), always rc 0.
 [ -x '{AZZIO_BIN_PATH}' ] && '{AZZIO_BIN_PATH}' media-init >/dev/null 2>&1 &
 
-# 6. Live Thunar sidebar: keep ~/.config/gtk-3.0/bookmarks in sync with the ACTUAL home
+# 6. Live file manager sidebar: keep ~/.config/gtk-3.0/bookmarks in sync with the ACTUAL home
 #    contents so anything the user adds to $HOME shows up in the shortcuts pane (PROMPT). The
 #    helper regenerates the bookmarks now and then watches the home dir mtime, re-emitting in
 #    the required order (dirs -> files -> symlinks -> Trash last), symlinks resolved. Guarded
@@ -1928,7 +1928,7 @@ PLAN = [
     },
     {
         # Seed OUR menu's launch-frequency store so a fresh profile opens with
-        # LibreWolf, kitty, Thunar at the top (it otherwise sorts
+        # LibreWolf, kitty, the file manager at the top (it otherwise sorts
         # alphabetically with no history). Home-owned data file (0o644), mirrored into
         # /etc/skel so a Calamares-installed user inherits the same starting order.
         # Fully dynamic afterwards -- the daemon re-sorts as apps are opened.

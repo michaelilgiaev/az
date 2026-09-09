@@ -196,7 +196,7 @@ CURATED = {
     "oxygen": "GUI toolkit/framework", "oxygen-sounds": "Desktop shell",
     # desktop apps
     "konsole": "Desktop app", "dolphin": "Desktop app", "gwenview": "Desktop app",
-    "thunar": "Desktop app", "xviewer": "Desktop app",
+    "file_manager": "Desktop app", "xviewer": "Desktop app",
     "thunar-volman": "Desktop app", "thunar-archive-plugin": "Desktop app",
     "tumbler": "Desktop app", "zenity": "Desktop app", "exo": "Desktop app",
     "spectacle": "Desktop app", "kcalc": "Desktop app", "kclock": "Desktop app",

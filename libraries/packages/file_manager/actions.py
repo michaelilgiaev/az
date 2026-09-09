@@ -1,12 +1,12 @@
-"""Thunar custom actions (~/.config/Thunar/uca.xml) + the `link` helper script they call.
+"""File manager custom actions (~/.config/Thunar/uca.xml) + the `link` helper script they call.
 
-Thunar's "Custom Actions" are a first-class feature: uca.xml lists actions, each with a
-shell <command> and CONDITIONS (a filename <patterns> glob plus type flags -- <directories/>,
+The file manager's "Custom Actions" are a first-class feature: uca.xml lists actions, each with
+a shell <command> and CONDITIONS (a filename <patterns> glob plus type flags -- <directories/>,
 <image-files/>, <text-files/>, <audio-files/>, <video-files/>, <other-files/> -- that decide
 when the action appears in the right-click menu). %f/%F substitute the selected path(s), %d
 the parent directory. This module ships a FULL uca.xml (it REPLACES the stock example file --
-Thunar reads the user's ~/.config/Thunar/uca.xml in full, it is not merged with the system
-/etc/xdg/Thunar/uca.xml) with exactly the actions Azzio wants (PROMPT task 2):
+the file manager reads the user's ~/.config/Thunar/uca.xml in full, it is not merged with the
+system /etc/xdg/Thunar/uca.xml) with exactly the actions Azzio wants (PROMPT task 2):
 
   1. Edit with gimp    -- on IMAGE files only (<image-files/>), runs `gimp %F`.
   2. Create Link ...    -- on a directory / folder BACKGROUND (<directories/> + the current
@@ -18,12 +18,12 @@ Thunar reads the user's ~/.config/Thunar/uca.xml in full, it is not merged with 
                           helper stack; the exo TerminalEmulator helper is ALSO pointed at
                           kitty by packages/azzio/default_applications.py as belt-and-braces.
 
-XML SCHEMA (verified against the installed Thunar's /etc/xdg/Thunar/uca.xml + what Thunar
-writes back): the DOCTYPE/`<actions>` wrapper, and inside each `<action>` the child ORDER
-icon, patterns, name, unique-id, command, description, then the type-condition empty
-elements. <unique-id> is any stable string (Thunar uses a timestamp-counter; we use fixed
-ids -- the build has no clock and Thunar does not require uniqueness across machines, only
-within the file). <startup-notify/> asks the launcher feedback cursor.
+XML SCHEMA (verified against the installed file manager's /etc/xdg/Thunar/uca.xml + what the
+file manager writes back): the DOCTYPE/`<actions>` wrapper, and inside each `<action>` the
+child ORDER icon, patterns, name, unique-id, command, description, then the type-condition empty
+elements. <unique-id> is any stable string (the file manager uses a timestamp-counter; we use
+fixed ids -- the build has no clock and the file manager does not require uniqueness across
+machines, only within the file). <startup-notify/> asks the launcher feedback cursor.
 
 THE `link` HELPER (PROMPT task 2, verbatim behaviour). A shell FUNCTION cannot be exec'd by a
 custom action, so the logic ships as a real script at LINK_SCRIPT_DEST (root-owned, 0755,
@@ -35,12 +35,12 @@ system-wide). Given `link <name> <target>`:
 The Create Link action wraps it: zenity prompts for the name and the target, then the script
 runs with the folder as the working directory (`--working-directory %f` semantics via `cd`).
 
-WHY THERE IS NO "Edit with gedit" CUSTOM ACTION HERE (PROMPT batch item 7). Thunar's context
-menu ALREADY shows the built-in default-opener at the very top: for a text file whose default
-is gedit it reads `Open With "gedit"`. Shipping our OWN "Edit with gedit" uca action produced a
-SECOND, duplicate entry. The fix keeps exactly ONE entry, at the top, literally "Edit with
-gedit" (no quotes): the gettext .mo override (packages/file_manager/locale) relabels the
-built-in format `_Open With "%s"` to `_Edit with %s`, so that top item renders "Edit with
+WHY THERE IS NO "Edit with gedit" CUSTOM ACTION HERE (PROMPT batch item 7). The file manager's
+context menu ALREADY shows the built-in default-opener at the very top: for a text file whose
+default is gedit it reads `Open With "gedit"`. Shipping our OWN "Edit with gedit" uca action
+produced a SECOND, duplicate entry. The fix keeps exactly ONE entry, at the top, literally
+"Edit with gedit" (no quotes): the gettext .mo override (packages/file_manager/locale) relabels
+the built-in format `_Open With "%s"` to `_Edit with %s`, so that top item renders "Edit with
 gedit" -- and we DROP the custom gedit action to avoid the duplicate. "Edit with gimp" stays a
 uca action (images only), since gimp is not a default handler and would otherwise not appear.
 
@@ -55,8 +55,8 @@ from xml.sax.saxutils import escape as _xml_escape
 # The live user's home (matches openbox.HOME / the airootfs /home/main tree).
 HOME = "/home/main"
 
-# Where Thunar reads the user's custom actions. Shipping this REPLACES the stock example
-# (Thunar reads ~/.config/Thunar/uca.xml in full).
+# Where the file manager reads the user's custom actions. Shipping this REPLACES the stock
+# example (the file manager reads ~/.config/Thunar/uca.xml in full).
 UCA_PATH = f"{HOME}/.config/Thunar/uca.xml"
 
 # The `link` helper script (a real script -- a shell function cannot be exec'd by a custom
@@ -77,8 +77,8 @@ def link_script() -> str:
     return """\
 #!/usr/bin/env bash
 # Azzio `link` helper. Generated by packages/file_manager (edit the Python, not this file).
-# Thunar's "Create Link" custom action calls this after prompting (via zenity) for a name and
-# a target, with the working directory set to the folder the action was invoked in.
+# The file manager's "Create Link" custom action calls this after prompting (via zenity) for a
+# name and a target, with the working directory set to the folder the action was invoked in.
 #
 #   link <name> <target>
 #     target is a URL  (scheme:// or www.*) -> writes a <name>.html redirect file
@@ -127,30 +127,31 @@ def uca_xml() -> str:
     Open Terminal Here (folder/background). "Edit with gedit" is deliberately NOT a uca action
     (see the module docstring, PROMPT batch item 7): it comes from the built-in default-opener,
     relabelled to "Edit with gedit" by the gettext .mo override, so there is no duplicate. The
-    child-element order and condition tags match Thunar's schema (verified against Thunar).
+    child-element order and condition tags match the file manager's schema (verified against the
+    file manager).
 
     The `link` helper is invoked by absolute path (LINK_SCRIPT_DEST); the terminal action runs
     kitty directly with --working-directory. unique-ids are fixed (the build has no clock;
-    Thunar only needs them unique within this file).
+    the file manager only needs them unique within this file).
 
     NOTE the <range></range> element after <patterns> on EVERY action: it is REQUIRED for the
     folder-only actions (Create Link, Open Terminal Here) to appear on the folder BACKGROUND
-    (the current directory with nothing selected) -- verified against Thunar 4.20: WITHOUT
-    <range/> those actions only show when a directory is explicitly selected, exactly as the
-    stock "Open Terminal Here" ships it. It is harmless on the gimp file action, so it is on all
-    of them for a uniform, stock-matching schema."""
+    (the current directory with nothing selected) -- verified against the file manager 4.20:
+    WITHOUT <range/> those actions only show when a directory is explicitly selected, exactly as
+    the stock "Open Terminal Here" ships it. It is harmless on the gimp file action, so it is on
+    all of them for a uniform, stock-matching schema."""
     # XML-escape command bodies: the Create Link command contains shell `&&`, and `&`/`<`/`>`
     # are invalid raw in XML text -- an unescaped `&&` makes the WHOLE file not well-formed, so
-    # Thunar's parser stops there and silently drops that action AND every action after it
-    # (verified: this is why Create Link + Open Terminal Here vanished until the `&&` was
-    # escaped). Thunar un-escapes when it reads the command back. gedit/gimp/kitty commands have
-    # no special chars, but escaping all of them is uniform and correct.
+    # the file manager's parser stops there and silently drops that action AND every action after
+    # it (verified: this is why Create Link + Open Terminal Here vanished until the `&&` was
+    # escaped). The file manager un-escapes when it reads the command back. gedit/gimp/kitty
+    # commands have no special chars, but escaping all of them is uniform and correct.
     create_link_cmd = _xml_escape(_CREATE_LINK_COMMAND)
     terminal_cmd = _xml_escape(f"{TERMINAL_BIN} --working-directory %f")
     return f"""\
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Azzio Thunar custom actions. Generated by packages/file_manager (edit the Python, not
-     this file). REPLACES the stock example uca.xml (Thunar reads this file in full). -->
+<!-- Azzio file-manager custom actions. Generated by packages/file_manager (edit the Python, not
+     this file). REPLACES the stock example uca.xml (the file manager reads this file in full). -->
 <actions>
   <action>
     <icon>gimp</icon>

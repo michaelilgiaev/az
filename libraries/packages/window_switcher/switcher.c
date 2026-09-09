@@ -457,7 +457,7 @@ static void show_switcher(AzSwitcher *s, int dir) {
 /* Map a number-key event to a 1-based tile SLOT, or 0 if the key is not a digit. 1..9 are
  * slots 1..9 and 0 is slot 10 -- so the ten leftmost tiles are directly reachable. Both the
  * number ROW (GDK_KEY_1..0) and the keypad (GDK_KEY_KP_1..0) are accepted. The strip is ordered
- * librewolf, kitty, hypervisor, thunar, then the rest (ordering.c), so slot 1 == librewolf and
+ * librewolf, kitty, hypervisor, the file manager, then the rest (ordering.c), so slot 1 == librewolf and
  * slot 2 == kitty exactly as the user expects ("librewolf=1, kitty=2 ... press 1 -> librewolf"):
  * the slot is the on-screen 1-based POSITION, which for the ranked apps equals their rank. */
 static int digit_slot(guint keyval) {

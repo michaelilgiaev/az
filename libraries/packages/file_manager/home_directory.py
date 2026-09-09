@@ -1,9 +1,9 @@
 """Home-directory LAYOUT -- the single source of truth for the user's top-level folders
-and convenience symlinks (and, by reference, Thunar's sidebar shortcuts).
+and convenience symlinks (and, by reference, the file manager's sidebar shortcuts).
 
 This is a SUBMODULE of the file_manager package (packages/file_manager/home_directory.py): the folder
-layout and Thunar's sidebar are built from the SAME list, so the data lives right next to the
-sidebar code that consumes it. compiler._emit_homedir imports it as packages.file_manager.home_directory.
+layout and the file manager's sidebar are built from the SAME list, so the data lives right next
+to the sidebar code that consumes it. compiler._emit_homedir imports it as packages.file_manager.home_directory.
 
 WHAT THIS SHIPS. A fixed set of top-level DIRECTORIES in the home directory (Desktop,
 Downloads, Vault, Documents, Ignore, Music, Pictures, Projects, Videos) plus a handful of
@@ -17,10 +17,10 @@ convenience SYMLINKS that surface otherwise-hidden dot locations as plain top-le
     SSH    -> .ssh
 
 WHY THIS IS A MODULE AND NOT JUST COMPILER CODE. The SAME list drives two things: the
-directories/symlinks created on disk, AND Thunar's sidebar shortcuts (the shortcuts pane
-lists exactly this set). Keeping the list here, as data, means the folder layout and the
+directories/symlinks created on disk, AND the file manager's sidebar shortcuts (the shortcuts
+pane lists exactly this set). Keeping the list here, as data, means the folder layout and the
 file-manager sidebar can never drift -- packages/file_manager/ imports LAYOUT from this module
-and builds ~/.config/gtk-3.0/bookmarks (the GTK bookmarks Thunar reads) from it. Add a
+and builds ~/.config/gtk-3.0/bookmarks (the GTK bookmarks the file manager reads) from it. Add a
 folder here and it appears both on disk and in the sidebar.
 
 DIRECTORIES vs CONTENT FILES. Unlike the emit_plan() app packages, this data emits no
@@ -41,7 +41,7 @@ spec dirs exist. So TRASH_DIRS creates the chain (.local/share/Trash/files AND
 .local/share/Trash/info -- the spec requires both; `info` holds the .trashinfo metadata)
 before the symlink is made, so Trash resolves to a real directory from first login.
 
-Pure standard library (only data + the resolved-path helper Thunar's sidebar uses).
+Pure standard library (only data + the resolved-path helper the file manager's sidebar uses).
 """
 
 from __future__ import annotations
@@ -52,8 +52,8 @@ HOME = "/home/main"
 
 # --- The top-level directories -------------------------------------------------
 # Created in the home directory (and /etc/skel). ORDER is meaningful: it is the order the
-# Thunar sidebar lists them (packages/file_manager builds bookmarks from this list), so the
-# folders appear in the sidebar top-to-bottom exactly as written here. Names only (no
+# file manager's sidebar lists them (packages/file_manager builds bookmarks from this list), so
+# the folders appear in the sidebar top-to-bottom exactly as written here. Names only (no
 # leading path) -- they are created directly under the home dir.
 DIRECTORIES: tuple[str, ...] = (
     "Desktop",
@@ -87,10 +87,11 @@ LINKS: tuple[tuple[str, str], ...] = (
 TRASH_LINK_NAME = "Trash"
 
 # NOTE: there is NO ".home-directory" symlink or "Home Directory" sidebar bookmark anymore. The
-# user deleted the "Home Directory" entry from Thunar's Places sidebar ("just delete it, we dont
-# actually need it there is a home button"), so the previous distinct-URI symlink trick that
-# backed that bookmark is gone. The built-in username Home shortcut stays hidden via
-# file_manager/settings.HIDDEN_BOOKMARKS[file:///home/main]; navigating home uses Thunar's Home button.
+# user deleted the "Home Directory" entry from the file manager's Places sidebar ("just delete
+# it, we dont actually need it there is a home button"), so the previous distinct-URI symlink
+# trick that backed that bookmark is gone. The built-in username Home shortcut stays hidden via
+# file_manager/settings.HIDDEN_BOOKMARKS[file:///home/main]; navigating home uses the file
+# manager's Home button.
 
 # --- The XDG trash chain -------------------------------------------------------
 # The trash spec's two required dirs, created (relative to the home dir) BEFORE the
@@ -105,9 +106,10 @@ TRASH_DIRS: tuple[str, ...] = (
 # --- Extra (non-sidebar) directories -------------------------------------------
 # Directories created in the home layout that are NOT part of the sidebar shortcut set (so they
 # are deliberately kept OUT of DIRECTORIES above, which drives the sidebar). ~/Templates holds
-# the Thunar "Create Document" template set (the sibling packages/file_manager/templates ships the
-# template FILES and the XDG_TEMPLATES_DIR pointer -- PROMPT batch item 8). Created in both
-# /home/main and /etc/skel by compiler._emit_homedir so the submenu works for live + installed.
+# the file manager's "Create Document" template set (the sibling packages/file_manager/templates
+# ships the template FILES and the XDG_TEMPLATES_DIR pointer -- PROMPT batch item 8). Created in
+# both /home/main and /etc/skel by compiler._emit_homedir so the submenu works for live +
+# installed.
 EXTRA_DIRECTORIES: tuple[str, ...] = (
     "Templates",
 )
@@ -117,8 +119,8 @@ def resolved_home_path(rel_or_link_target: str) -> str:
     """Return the ABSOLUTE, symlink-resolved home path for a layout entry's target.
 
     Used by packages/file_manager to point each sidebar bookmark at the REAL location (so
-    entering a shortcut shows the resolved path in Thunar's location bar, not the symlink
-    path). A plain directory name like "Config" whose link target is ".config" resolves to
+    entering a shortcut shows the resolved path in the file manager's location bar, not the
+    symlink path). A plain directory name like "Config" whose link target is ".config" resolves to
     "/home/main/.config"; a directory like "Downloads" resolves to "/home/main/Downloads".
     The target is relative to HOME, so this just joins it onto HOME and normalizes (no
     filesystem access -- pure string, correct for the build host and the target alike)."""
@@ -130,9 +132,9 @@ def resolved_home_path(rel_or_link_target: str) -> str:
 def sidebar_entries() -> list[tuple[str, str]]:
     """Return the sidebar shortcut list as (label, absolute_resolved_target) pairs, in the
     required display ORDER (PROMPT: directories -> files -> symbolic links -> "Trash" LAST).
-    This is the single list packages/file_manager turns into the GTK bookmarks file and Thunar
-    renders in the shortcuts pane -- so the sidebar and the on-disk layout are the same set,
-    by construction, in the same order.
+    This is the single list packages/file_manager turns into the GTK bookmarks file and the file
+    manager renders in the shortcuts pane -- so the sidebar and the on-disk layout are the same
+    set, by construction, in the same order.
 
     The curated layout has: real DIRECTORIES (the dirs group), no plain files, and the LINKS
     (all symlinks -- the symlinks group), of which "Trash" is forced to the very end. So the

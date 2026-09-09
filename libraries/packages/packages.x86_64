@@ -331,31 +331,36 @@ mailcap
 librewolf
 gedit
 gimp
-# --- Thunar file manager (GTK) --------------------------------------------
-# Thunar (Xfce's GTK file manager) is the chosen file manager: a Qt file manager was
-# tried first but customizing it meant fighting hardcoded C++ strings, QRC templates and
-# lockdowns. Thunar is the better fit -- it matches the rest of the GTK desktop
-# (gedit/gimp/xviewer + the
-# Adwaita theme + the QT_QPA_PLATFORMTHEME=gtk3 bridge), is minimal and stable, and its
-# custom right-click actions (~/.config/Thunar/uca.xml) are a first-class feature that
-# runs any command with mime/pattern conditions -- exactly what the "Create Link" and
-# "Edit with gedit/gimp" requirements need. Configured by modifications/thunar/.
-thunar
-# thunar-volman: removable-media handling (auto-mount/auto-run of USB drives, discs).
-# Thunar's "Removable drives and media" is this plugin; without it Thunar cannot manage
-# hotplugged volumes. (Its extra Settings launcher is suppressed in the app menu.)
+# --- Azzio File Manager (GTK) ----------------------------------------------
+# file_manager is Azzio's OWN GTK file manager (packages/file_manager), the chosen file
+# manager: a Qt file manager was tried first but customizing it meant fighting hardcoded C++
+# strings, QRC templates and lockdowns. The GTK file manager is the better fit -- it matches the
+# rest of the GTK desktop (gedit/gimp/xviewer + the Adwaita theme + the QT_QPA_PLATFORMTHEME=gtk3
+# bridge), is minimal and stable, and its custom right-click actions (~/.config/Thunar/uca.xml,
+# the on-disk path the binary reads) are a first-class feature that runs any command with
+# mime/pattern conditions -- exactly what the "Create Link" and "Edit with gedit/gimp"
+# requirements need. This is OUR package (pkgbuild.pkgbuild_file_manager), built from the vendored
+# source; it provides+conflicts+replaces the stock `thunar` package, so the two plugins below
+# (which depend on `thunar`) bind to it and stock thunar is never co-installed. Configured by
+# packages/file_manager.
+file_manager
+# thunar-volman: removable-media handling (auto-mount/auto-run of USB drives, discs). This is the
+# "Removable drives and media" plugin; without it the file manager cannot manage hotplugged
+# volumes. It `depend`s on `thunar`, satisfied by file_manager's provide. (Its extra Settings
+# launcher is suppressed in the app menu.)
 thunar-volman
 # thunar-archive-plugin: "Extract Here" / "Create Archive" right-click entries, backed by
-# file-roller (already pulled in). Makes archives first-class in the context menu.
+# file-roller (already pulled in). Makes archives first-class in the context menu. Also
+# `depend`s on `thunar`, satisfied by file_manager's provide.
 thunar-archive-plugin
-# tumbler: the thumbnail service Thunar calls to render image/video/PDF thumbnails in the
-# icon view. Without it Thunar shows generic icons instead of previews.
+# tumbler: the thumbnail service the file manager calls to render image/video/PDF thumbnails in
+# the icon view. Without it the file manager shows generic icons instead of previews.
 tumbler
 # zenity: GTK dialog helper. The "Create Link" custom action prompts for a name + target
 # via zenity (GTK, fits the desktop better than kdialog). Also generally useful for
 # shell-driven GUI prompts.
 zenity
-# exo: provides exo-open, the Xfce "preferred applications" launcher Thunar's default
+# exo: provides exo-open, the Xfce "preferred applications" launcher the file manager's default
 # "Open Terminal Here" uses (`exo-open --launch TerminalEmulator`). Azzio points the
 # preferred TerminalEmulator at kitty (packages/azzio/default_applications.py).
 exo

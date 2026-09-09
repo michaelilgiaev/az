@@ -1537,17 +1537,17 @@ def test_overrides_delivered_to_profile_path_not_opt():
 
 def test_recipe_dirs_default_tier():
     # DEFAULT tier: calamares first (Arch dropped extra/calamares, so it must be
-    # built here now), then thunar (rebuilt from the vendored source, which already
+    # built here now), then file_manager (built from the vendored source, which already
     # carries the symlink-resolve change), then librewolf. calamares carries its PKGBUILD
     # + the five source patches (installer UI defaults, region keyboard, finish-page
-    # buttons, the Network page, and the networkcfg static-profile job); thunar carries
+    # buttons, the Network page, and the networkcfg static-profile job); file_manager carries
     # ONLY its PKGBUILD (the source tree is copied in separately, no patch companion);
     # the librewolf dir carries PKGBUILD + the .desktop, its PKGBUILD the repackage
-    # recipe (no bsys6 make targets). (Recipe-dir key stays "thunar" -- it doubles as the
-    # produced package name; only our Python identifiers moved to file_manager.)
+    # recipe (no bsys6 make targets). (Recipe-dir key is "file_manager" -- it MUST equal the
+    # produced package name so the staleness gate globs file_manager-*.pkg.tar.zst.)
     dirs = pkgbuild.recipe_dirs(False)
     names = [name for name, _ in dirs]
-    assert names == ["calamares", "thunar", "librewolf"]
+    assert names == ["calamares", "file_manager", "librewolf"]
     assert set(dict(dirs)["calamares"]) == {
         "PKGBUILD",
         pkgbuild.CALAMARES_DEFAULTS_PATCH_NAME,
@@ -1556,10 +1556,10 @@ def test_recipe_dirs_default_tier():
         pkgbuild.CALAMARES_NETWORKQ_PATCH_NAME,
         pkgbuild.CALAMARES_NETWORKCFG_STATIC_PATCH_NAME,
     }
-    # thunar now builds from the VENDORED source tree (packages/file_manager), copied into the
+    # file_manager builds from the VENDORED source tree (packages/file_manager), copied into the
     # recipe dir by makepkg._emit_recipes (recipe_source_trees), so PKGBUILD is the ONLY text
     # companion -- the symlink-resolve change is baked into that source, not a patch file.
-    assert set(dict(dirs)["thunar"]) == {"PKGBUILD"}
+    assert set(dict(dirs)["file_manager"]) == {"PKGBUILD"}
     files = dict(dirs)["librewolf"]
     # PKGBUILD + the .desktop only. The AutoConfig override is NO LONGER a companion
     # (it ships as a home file at the profile path -- /opt was never read).
@@ -1568,11 +1568,11 @@ def test_recipe_dirs_default_tier():
 
 
 def test_recipe_dirs_full_tier():
-    # FULL tier: calamares first (index 0), then thunar, then librewolf; librewolf's
+    # FULL tier: calamares first (index 0), then file_manager, then librewolf; librewolf's
     # PKGBUILD is now the from-source recipe (has the bsys6 make targets).
     dirs = pkgbuild.recipe_dirs(True)
     names = [name for name, _ in dirs]
-    assert names == ["calamares", "thunar", "librewolf"]
+    assert names == ["calamares", "file_manager", "librewolf"]
     assert dirs[0][0] == "calamares"
     assert set(dict(dirs)["calamares"]) == {
         "PKGBUILD",
@@ -1582,13 +1582,13 @@ def test_recipe_dirs_full_tier():
         pkgbuild.CALAMARES_NETWORKQ_PATCH_NAME,
         pkgbuild.CALAMARES_NETWORKCFG_STATIC_PATCH_NAME,
     }
-    # thunar: PKGBUILD-only text companion in BOTH tiers (built from the vendored source tree).
-    assert set(dict(dirs)["thunar"]) == {"PKGBUILD"}
+    # file_manager: PKGBUILD-only text companion in BOTH tiers (built from the vendored source).
+    assert set(dict(dirs)["file_manager"]) == {"PKGBUILD"}
     assert "make fetch" in dict(dirs)["librewolf"]["PKGBUILD"]
 
 
-def test_thunar_configure_enables_maintainer_mode():
-    # REGRESSION: the vendored Thunar source is a git checkout, so it ships NO pre-generated
+def test_file_manager_configure_enables_maintainer_mode():
+    # REGRESSION: the vendored file-manager source is a git checkout, so it ships NO pre-generated
     # built sources (thunar-marshal.c/.h, the gdbus-codegen stubs, thunar-resources.c). Those
     # are produced by rules gated behind `if MAINTAINER_MODE` in thunar/Makefile.am, and the
     # tree's configure.ac uses the bare AM_MAINTAINER_MODE() which DEFAULTS OFF. Because the
@@ -1605,6 +1605,37 @@ def test_thunar_configure_enables_maintainer_mode():
     configure_at = s.index("./configure \\")
     flag_at = s.index("\n    --enable-maintainer-mode \\")
     assert autogen_at < configure_at < flag_at
+
+
+def test_file_manager_pkgname_is_file_manager_not_thunar():
+    # The package is Azzio's OWN file manager: its pkgname is `file_manager`, NOT `thunar`.
+    # (It replaces stock thunar via provides/conflicts/replaces below, but its own name is ours.)
+    s = pkgbuild.pkgbuild_file_manager()
+    assert "pkgname=file_manager\n" in s
+    assert "pkgname=thunar\n" not in s
+
+
+def test_file_manager_has_no_semver_pkgver():
+    # It is our own thing, not a versioned upstream drop-in, so it carries NO semver -- the pkgver
+    # is a plain monotonic integer. The old pinned 4.20.9 must be gone, and there is no
+    # FILE_MANAGER_VERSION / SOURCE_VERSION constant feeding it anymore.
+    s = pkgbuild.pkgbuild_file_manager()
+    assert "pkgver=1\n" in s
+    assert "4.20.9" not in s
+    assert not hasattr(pkgbuild, "FILE_MANAGER_VERSION")
+    from packages import file_manager as fm
+    assert not hasattr(fm, "SOURCE_VERSION")
+
+
+def test_file_manager_replaces_stock_thunar():
+    # It must provides+conflicts+replaces the stock `thunar` package so (a) the two consumers
+    # that depend on `thunar` (thunar-volman, thunar-archive-plugin) resolve against it and
+    # (b) stock extra/thunar is never co-installed. The provide is UNVERSIONED (the deps are
+    # unversioned and this package has no semver to expose).
+    s = pkgbuild.pkgbuild_file_manager()
+    assert "provides=('thunar')" in s
+    assert "conflicts=('thunar')" in s
+    assert "replaces=('thunar')" in s
 
 
 def test_recipe_dirs_companion_files_shared_across_tiers():

@@ -30,7 +30,7 @@ fractional scale rides on the DPI channels, GDK_SCALE stays 1, and Qt gets an ex
 
 RECONCILING THE OLD HAND-TUNED CONSTANTS. Each app that was independently bumped now DERIVES from
 this scale so "at scale 1.0 it is stock, at 1.35 it matches today's look":
-  * GTK apps (the application menu, gedit's UI, Thunar) scale their POINT fonts automatically via
+  * GTK apps (the application menu, gedit's UI, the file manager) scale their POINT fonts automatically via
     gtk-xft-dpi, so their font constants become STOCK (scale-1.0) values -- the DPI channel does
     the bump. (The app menu ALSO scales its fixed-PIXEL window/icon dims via ui_px(), since
     gtk-xft-dpi scales points, not pixels -- see application_menu.)
@@ -39,11 +39,11 @@ this scale so "at scale 1.0 it is stock, at 1.35 it matches today's look":
     STOCK as well. Both end up visually equal at any scale (the "kitty == gedit" invariant).
   * the OpenBox titlebar font does NOT read the X DPI (OpenBox renders it at a fixed size), so it
     stays EXPLICITLY scaled: pt(OPENBOX_TITLE_STOCK).
-  * Thunar's zoom + em font already compose with the scale (relative), so they are unchanged.
+  * the file manager's zoom + em font already compose with the scale (relative), so they are unchanged.
 
 CHANGING THE SCALE LATER. `azzio display scale <factor>` (packages/azzio/display) rewrites the
 ONE value's downstream files (.Xresources, settings.ini, the session env) and re-applies it live
-(re-run xrdb, re-export), so a scale change propagates everywhere -- Thunar (which composes) and
+(re-run xrdb, re-export), so a scale change propagates everywhere -- the file manager (which composes) and
 the app menu (once it reads the shared channel) included. The SCALE_OPTIONS below are the choices
 the Display screen offers.
 

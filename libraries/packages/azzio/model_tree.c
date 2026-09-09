@@ -696,7 +696,7 @@ static const AzScreen SCREENS[] = {
      .rows=ROWS_DISPLAY,   .nrows=AZN(ROWS_DISPLAY)},
     {.id="display.scale", .title="Global Scale",
      .subtitle="The ONE UI scale every app obeys (Xft.dpi + Xcursor.size, re-applied live via "
-               "xrdb). Thunar and DPI-aware apps rescale at once; others on next launch.",
+               "xrdb). The file manager and DPI-aware apps rescale at once; others on next launch.",
      .current=az_status_display_scale, .rows=ROWS_DISPLAY_SCALE, .nrows=AZN(ROWS_DISPLAY_SCALE)},
     {.id="display.resolution", .title="Resolution",
      .subtitle="Wraps xrandr --output --mode. List the modes, then pick one (or type "

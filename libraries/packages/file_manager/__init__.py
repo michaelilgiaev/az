@@ -1,31 +1,35 @@
 """Azzio File Manager -- the vendored, version-controlled source + config in one package.
 
-Azzio File Manager is Azzio's fork of Thunar (Xfce's GTK file manager). This package OWNS it end
-to end:
+Azzio File Manager is Azzio's OWN GTK file manager. This package OWNS it end to end:
 
   * SOURCE. The full source tree is vendored under packages/file_manager/source/ (a `git clone`
-    of the pinned upstream Thunar tag, committed straight into the Azzio repo and relicensed
-    GPL-3.0 -- see SOURCE_COMMIT/SOURCE_VERSION below). The ONE Azzio behaviour change (always
-    show the fully-resolved, symlink-dereferenced path in the location bar/title, which the 4.20
-    series has no misc-resolve-links pref for) is applied DIRECTLY to the committed C source
-    (source/thunar/thunar-window.c) rather than as a build-time patch, so the modification is
-    itself version-controlled and auditable with `git diff`. There is no separate .patch artifact.
-    pkgbuild.pkgbuild_file_manager() builds this vendored tree from source (via ./autogen.sh, since a
-    git checkout ships no generated ./configure) and makepkg drops the package into the offline
-    repo, exactly like calamares/librewolf. makepkg._emit_recipes copies SOURCE_DIR into the
-    recipe dir at build time (see pkgbuild.recipe_source_trees), so the vendored tree itself is
-    never touched by the build.
+    pinned by SOURCE_COMMIT below, committed straight into the Azzio repo and relicensed GPL-3.0).
+    It carries NO semver -- it is our own thing, not a versioned upstream drop-in. The ONE Azzio
+    behaviour change (always show the fully-resolved, symlink-dereferenced path in the location
+    bar/title, which the vendored code base has no config lever for) is applied DIRECTLY to the
+    committed C source (source/thunar/thunar-window.c) rather than as a build-time patch, so the
+    modification is itself version-controlled and auditable with `git diff`. There is no separate
+    .patch artifact. pkgbuild.pkgbuild_file_manager() builds this vendored tree from source (via
+    ./autogen.sh, since a git checkout ships no generated ./configure) and makepkg drops the
+    package into the offline repo, exactly like calamares/librewolf. makepkg._emit_recipes copies
+    SOURCE_DIR into the recipe dir at build time (see pkgbuild.recipe_source_trees), so the
+    vendored tree itself is never touched by the build. The built package is `pkgname=file_manager`
+    and provides+conflicts+replaces the stock `thunar` package, so it IS the file manager on the
+    image and the Xfce plugins that depend on `thunar` bind to it.
 
-  * CONFIG. The Azzio-taste configuration, folded in from the former packages/thunar (the pieces
-    are split into focused submodules and re-exported here, INCLUDING home_directory, the
-    home-layout data -- Thunar's sidebar and the on-disk home layout are built from the same list):
+  * CONFIG. The Azzio-taste configuration (the pieces are split into focused submodules and
+    re-exported here, INCLUDING home_directory, the home-layout data -- the file manager's sidebar
+    and the on-disk home layout are built from the same list). NOTE: the config targets the ON-DISK
+    paths the built binary actually reads (it still keeps the upstream ~/.config/Thunar/* names,
+    the `thunar` xfconf channel and the thunar.desktop launcher) -- those are the binary's runtime
+    contract, not our brand, so they are left as-is:
 
       - settings.py -- the preferences (view, TEXT-ENTRY location bar, shortcuts side pane, no
         expandable-folder arrows, split view off, removable-volume management off, the ~20% zoom
         bump) rendered into BOTH thunarrc AND the Xfconf channel XML from one table, plus the
-        Thunar-scoped gtk.css that carries the font half of the +20% bump in scale-relative em.
-        Also the hidden-bookmarks/hidden-devices arrays that remove the Devices/Network/Computer/
-        Recent side-pane clutter.
+        file-manager-scoped gtk.css that carries the font half of the +20% bump in scale-relative
+        em. Also the hidden-bookmarks/hidden-devices arrays that remove the Devices/Network/
+        Computer/Recent side-pane clutter.
       - sidebar.py  -- ~/.config/gtk-3.0/bookmarks, the shortcuts pane, built from
         packages/file_manager/home_directory (the SAME set as the on-disk home layout).
       - actions.py  -- ~/.config/Thunar/uca.xml (Edit with gedit on any file, Edit with gimp on
@@ -46,9 +50,9 @@ WHAT LANDS WHERE:
     + PNG rasterizations), and the thunar.desktop override (a package-owned path -> staged for
     the post-pacstrap install hook via pacman.ISO_APP_OVERRIDES, not the overlay).
 
-The suppression of the extra Thunar/Xfce app-menu launchers (Bulk Rename, Thunar Preferences,
-About Xfce, Removable Drives) is done in pacman.ISO_APP_OVERRIDES via NoDisplay overrides (see
-pacman.py), not here -- those are separate package-owned .desktop files.
+The suppression of the extra file-manager/Xfce app-menu launchers (Bulk Rename, file-manager
+Preferences, About Xfce, Removable Drives) is done in pacman.ISO_APP_OVERRIDES via NoDisplay
+overrides (see pacman.py), not here -- those are separate package-owned .desktop files.
 """
 
 from __future__ import annotations
@@ -65,18 +69,21 @@ from . import sidebar
 from . import templates
 
 # --- vendored source facts --------------------------------------------------
-# The Azzio File Manager source tree is committed under packages/file_manager/source/ at the
-# pinned upstream tag below (a git clone, relicensed GPL-3.0 -- upstream is GPL-2.0-or-later, so
-# "or later" lets us ship it under GPL-3.0). makepkg._emit_recipes copies SOURCE_DIR into the
-# recipe dir as ./SOURCE_SUBDIR at build time, and pkgbuild.pkgbuild_file_manager's prepare() copies it
+# The Azzio File Manager source tree is committed under packages/file_manager/source/ (a git clone
+# pinned by SOURCE_COMMIT below, relicensed GPL-3.0 -- the lineage is GPL-2.0-or-later, so "or
+# later" lets us ship it under GPL-3.0). makepkg._emit_recipes copies SOURCE_DIR into the recipe
+# dir as ./SOURCE_SUBDIR at build time, and pkgbuild.pkgbuild_file_manager's prepare() copies it
 # from there into a writable build tree. SOURCE_SUBDIR is a stable relative string so the recipe
 # fingerprint does not depend on the absolute path (host vs container).
-#   Upstream: https://gitlab.xfce.org/xfce/thunar  (tag thunar-{SOURCE_VERSION}, commit SOURCE_COMMIT)
+#
+# There is deliberately NO version constant here: Azzio File Manager is OUR OWN thing, not a
+# versioned upstream drop-in, so it carries no semver -- the pkgver is a plain monotonic integer
+# set in pkgbuild.pkgbuild_file_manager. The git commit is the only pinned source fact.
+#   Lineage: https://gitlab.xfce.org/xfce/thunar  (commit SOURCE_COMMIT)
 # The ONE Azzio behaviour change (always show the fully-resolved, symlink-dereferenced path in
 # the location bar/title) is applied DIRECTLY to the committed C source (source/thunar/
 # thunar-window.c), so the modification is itself version-controlled and auditable with git diff.
 # There is no separate .patch artifact and no build-time patch step -- the tree already carries it.
-SOURCE_VERSION = "4.20.9"
 SOURCE_COMMIT = "05a586b8a0608b0d855e3153fcb5207b0b091ef5"
 SOURCE_SUBDIR = "source"                       # the vendored tree dirname, and its name in $srcdir
 SOURCE_DIR = Path(__file__).resolve().parent / SOURCE_SUBDIR
@@ -109,8 +116,8 @@ def emit_plan() -> list[dict]:
     thunar.desktop entry's dest matches an ISO_APP_OVERRIDES target so it is staged for the
     post-pacstrap install hook. Returns FRESH dicts so a caller cannot mutate module state.
 
-    NOTE: this plan is the CONFIG only. The Thunar BINARY is produced from the vendored source
-    (SOURCE_DIR) by the makepkg stage via pkgbuild.pkgbuild_file_manager, not here."""
+    NOTE: this plan is the CONFIG only. The file-manager BINARY is produced from the vendored
+    source (SOURCE_DIR) by the makepkg stage via pkgbuild.pkgbuild_file_manager, not here."""
     plan: list[dict] = [
         # --- HOME config files (skel-mirrored) ---
         {   # thunarrc: the classic GKeyFile (fresh-profile seed + no-xfconfd fallback).
@@ -119,13 +126,13 @@ def emit_plan() -> list[dict]:
             "mode": _CONF,
             "owner": "home",
         },
-        {   # the Xfconf channel XML: the runtime store Thunar 4.20 actually reads.
+        {   # the Xfconf channel XML: the runtime store the file-manager binary actually reads.
             "builder": settings.xfconf_channel_xml,
             "dest": settings.XFCONF_FILE_MANAGER_PATH,
             "mode": _CONF,
             "owner": "home",
         },
-        {   # the Thunar-scoped gtk.css (font half of the +20% bump).
+        {   # the file-manager-scoped gtk.css (font half of the +20% bump).
             "builder": settings.gtk_css,
             "dest": settings.GTK_CSS_PATH,
             "mode": _CONF,
@@ -164,9 +171,9 @@ def emit_plan() -> list[dict]:
             "owner": "root",
         },
     ]
-    # The NoDisplay overrides that hide the extra Thunar/Xfce launchers (Bulk Rename, Thunar
-    # Preferences, Removable Drives, About Xfce) from the application menu (PROMPT task 3).
-    # Each is a package-owned .desktop, so its dest matches an ISO_APP_OVERRIDES target and
+    # The NoDisplay overrides that hide the extra file-manager/Xfce launchers (Bulk Rename,
+    # file-manager Preferences, Removable Drives, About Xfce) from the application menu (PROMPT
+    # task 3). Each is a package-owned .desktop, so its dest matches an ISO_APP_OVERRIDES target and
     # compiler._emit_apps stages the body for the post-pacstrap install hook. The body is a
     # fixed string per launcher, so a default-arg lambda captures it as the builder.
     for dest, body in menu_cleanup.builders():
@@ -191,10 +198,10 @@ def emit_plan() -> list[dict]:
     # default-opener to "Edit with %s", and the Create Folder/Document labels -- PROMPT batch
     # items 3/7/8). A BINARY blob (bytes_builder), shipped ROOT-owned at the standard system
     # locale path for EACH locale the ISO generates, so it takes effect with the session LANG.
-    # Both dests are in pacman.ISO_APP_OVERRIDES: the en_GB path is package-owned (thunar ships
-    # it), so it is NoExtract'd + planted post-pacstrap -- planting it in the overlay aborts
-    # pacstrap ("thunar.mo exists in filesystem"). compiler._emit_apps redirects the bytes to
-    # the post-pacstrap staging dir when the dest matches an override target.
+    # Both dests are in pacman.ISO_APP_OVERRIDES: the en_GB path is package-owned (our
+    # file_manager package ships it), so it is NoExtract'd + planted post-pacstrap -- planting it
+    # in the overlay aborts pacstrap ("thunar.mo exists in filesystem"). compiler._emit_apps
+    # redirects the bytes to the post-pacstrap staging dir when the dest matches an override target.
     for loc in locale.LOCALES:
         plan.append({
             "builder": None,

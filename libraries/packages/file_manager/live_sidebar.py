@@ -1,20 +1,20 @@
-"""Live Thunar sidebar -- keep ~/.config/gtk-3.0/bookmarks in sync with the ACTUAL home
-directory contents at runtime, AND make a running Thunar's "Places" pane reflect the change
-LIVE (PROMPT step five item 6: Places must POPULATE and UPDATE as directories are added/removed,
-with no manual refresh).
+"""Live file manager sidebar -- keep ~/.config/gtk-3.0/bookmarks in sync with the ACTUAL home
+directory contents at runtime, AND make a running file manager's "Places" pane reflect the
+change LIVE (PROMPT step five item 6: Places must POPULATE and UPDATE as directories are
+added/removed, with no manual refresh).
 
 THE PROBLEM (two layers).
   1. GTK bookmarks are a STATIC file. packages/file_manager/sidebar builds it once at BUILD time from
      home_directory's curated set, so a folder/file/symlink the user creates in $HOME AFTER
      install never shows up in the shortcuts pane on its own. "Anything added to home shows up"
      needs a RUNTIME regenerator.
-  2. Even once the file IS regenerated, a running Thunar only refreshes its Places pane if it
-     NOTICES the file changed. Thunar's ThunarShortcutsModel watches the bookmarks file with a
+  2. Even once the file IS regenerated, a running file manager only refreshes its Places pane if
+     it NOTICES the file changed. Its ThunarShortcutsModel watches the bookmarks file with a
      per-file GFileMonitor (inotify). If the regenerator installs the new file with an atomic
      `mv` (a fresh inode renamed over the path), inotify keeps watching the OLD, now-unlinked
-     inode and NEVER sees the new content -- so Places stays stale until Thunar restarts (the
-     reported bug). The regenerator must therefore rewrite the SAME inode IN PLACE so an
-     IN_MODIFY/IN_CLOSE_WRITE fires and Thunar reloads.
+     inode and NEVER sees the new content -- so Places stays stale until the file manager
+     restarts (the reported bug). The regenerator must therefore rewrite the SAME inode IN PLACE
+     so an IN_MODIFY/IN_CLOSE_WRITE fires and the file manager reloads.
 
 THE MECHANISM. A tiny POSIX-sh helper (azzio-sidebar-sync) that regenerates the bookmarks file
 from the CURRENT top-level home contents, in the SAME required order as the static seed
@@ -33,8 +33,8 @@ two modes:
                                       periodic" watcher) and matches the repo's other
                                       autostart-launched helpers.
   In BOTH modes the install is an IN-PLACE rewrite of the existing bookmarks inode (only when the
-  content actually changed), NOT an atomic rename -- so Thunar's file monitor fires and Places
-  refreshes live (see regen()'s install block for the full rationale).
+  content actually changed), NOT an atomic rename -- so the file manager's file monitor fires and
+  Places refreshes live (see regen()'s install block for the full rationale).
 
 WIRING. The OpenBox session autostart (packages/openbox) launches
 `azzio-sidebar-sync --watch &` -- both the LIVE and the INSTALLED autostart (via the shared
@@ -43,8 +43,9 @@ system helper (like the other /usr/local/lib/azzio tools); it operates on the in
 own $HOME, so it needs no privilege.
 
 ORDERING (matches home_directory.sidebar_entries + the static seed):
-  1. real DIRECTORIES  (alphabetical), EXCEPT Desktop (Thunar's built-in place already provides
-     it at the same path -- adding ours would duplicate it, same reason sidebar.py skips it).
+  1. real DIRECTORIES  (alphabetical), EXCEPT Desktop (the file manager's built-in place already
+     provides it at the same path -- adding ours would duplicate it, same reason sidebar.py skips
+     it).
   2. regular FILES     (alphabetical).
   3. SYMLINKS          (alphabetical), each bookmarked at its RESOLVED target, EXCEPT "Trash".
   4. "Trash" LAST      (it is a symlink but the spec pins it to the very end).
@@ -73,7 +74,8 @@ GTK_BOOKMARKS_PATH = f"{HOME}/.config/gtk-3.0/bookmarks"
 # the regenerated file starts straight at the directories. The built-in username Home stays
 # hidden via settings.HIDDEN_BOOKMARKS[file:///home/main].
 
-# The Desktop entry is skipped (Thunar's built-in place already provides it -- see sidebar.py).
+# The Desktop entry is skipped (the file manager's built-in place already provides it -- see
+# sidebar.py).
 SKIP_NAMES = ("Desktop",)
 
 # The Trash shortcut name, pinned to the very end of the ordering (home_directory.TRASH_LINK_NAME).
@@ -96,7 +98,7 @@ def sync_script() -> str:
     the location bar shows the real target); for a dir/file it is the entry path, percent-encoded
     so a spaced path is a valid single-token URI. Every non-blank line is a bookmark (the GTK
     format has no comments), so the file carries none. The bookmarks are installed by an IN-PLACE rewrite of the existing inode
-    (only when the content changed) so a running Thunar's per-file monitor fires and Places
+    (only when the content changed) so a running file manager's per-file monitor fires and Places
     refreshes live -- NOT an atomic rename, which would leave the monitor on a stale inode."""
     skip_case = "|".join(SKIP_NAMES)          # e.g. "Desktop"
     trash = TRASH_NAME
@@ -104,11 +106,12 @@ def sync_script() -> str:
     return f"""\
 #!/bin/sh
 # azzio-sidebar-sync -- regenerate ~/.config/gtk-3.0/bookmarks from the CURRENT top-level home
-# contents so anything the user adds to $HOME shows up in Thunar's sidebar (PROMPT). Generated
-# by packages/file_manager/live_sidebar (edit the Python, not this file). Order: real dirs ->
-# files -> symlinks -> "Trash" last; symlink bookmarks point at their resolved target. Runs as
-# the invoking user on their own $HOME (no privilege). `--watch` polls a signature of the home
-# listing and rewrites the bookmarks IN PLACE on change so Thunar's Places pane refreshes live.
+# contents so anything the user adds to $HOME shows up in the file manager's sidebar (PROMPT).
+# Generated by packages/file_manager/live_sidebar (edit the Python, not this file). Order: real
+# dirs -> files -> symlinks -> "Trash" last; symlink bookmarks point at their resolved target.
+# Runs as the invoking user on their own $HOME (no privilege). `--watch` polls a signature of the
+# home listing and rewrites the bookmarks IN PLACE on change so the file manager's Places pane
+# refreshes live.
 set -u
 
 BM="$HOME/.config/gtk-3.0/bookmarks"
@@ -137,7 +140,7 @@ regen() {{
     for path in "$HOME"/*; do
         [ -e "$path" ] || [ -L "$path" ] || continue   # skip the literal glob on an empty dir
         name=${{path##*/}}                                 # basename (space-safe)
-        # Skip entries Thunar's built-in places already provide (Desktop).
+        # Skip entries the file manager's built-in places already provide (Desktop).
         case "$name" in
             {skip_case}) continue ;;
         esac
@@ -178,14 +181,14 @@ regen() {{
         # LIVE-UPDATE FIX (PROMPT step five item 6). Only install when the content actually
         # CHANGED, and install by REWRITING $BM's EXISTING INODE IN PLACE -- NOT by `mv`.
         #
-        # WHY IN PLACE. A running Thunar (its ThunarShortcutsModel) watches the bookmarks file
-        # with a per-file GFileMonitor (inotify). An atomic `mv tmp $BM` REPLACES the inode:
+        # WHY IN PLACE. A running file manager (its ThunarShortcutsModel) watches the bookmarks
+        # file with a per-file GFileMonitor (inotify). An atomic `mv tmp $BM` REPLACES the inode:
         # inotify keeps its watch on the OLD (now-unlinked) inode and NEVER sees the new file,
-        # so Places would not refresh until Thunar restarts (the reported bug). Truncating and
-        # rewriting the SAME inode (`cat > "$BM"`) fires IN_MODIFY/IN_CLOSE_WRITE on the watched
-        # path, which GFileMonitor reports as CHANGED -> Thunar reloads Places live. The file is
-        # tiny (a dozen lines) so the rewrite is effectively atomic, and Thunar reloads on the
-        # post-write CLOSE event, not mid-write.
+        # so Places would not refresh until the file manager restarts (the reported bug).
+        # Truncating and rewriting the SAME inode (`cat > "$BM"`) fires IN_MODIFY/IN_CLOSE_WRITE
+        # on the watched path, which GFileMonitor reports as CHANGED -> the file manager reloads
+        # Places live. The file is tiny (a dozen lines) so the rewrite is effectively atomic, and
+        # the file manager reloads on the post-write CLOSE event, not mid-write.
         if [ ! -e "$BM" ] || ! cmp -s "$tmp" "$BM"; then
             cat "$tmp" > "$BM" 2>/dev/null || cp -f "$tmp" "$BM" 2>/dev/null
         fi
