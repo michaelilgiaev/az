@@ -152,6 +152,62 @@ def test_installer_base_conf_enables_multilib():
     assert "NoExtract   = usr/lib/os-release" not in conf
 
 
+def _ignorepkg_directive(conf):
+    """The single active `IgnorePkg = ...` directive line in a conf, or None if it is
+    commented/absent. Skips the explanatory comment line (which also says 'IgnorePkg')."""
+    for line in conf.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("IgnorePkg"):
+            return stripped
+    return None
+
+
+def test_installer_base_conf_freezes_every_azzio_package():
+    # The installed /etc/pacman.conf must list every frozen Azzio package in IgnorePkg so a
+    # routine `pacman -Syu` never replaces our hand-built fork with a stock Arch build.
+    conf = pacman.installer_base_conf()
+    directive = _ignorepkg_directive(conf)
+    assert directive is not None, "installer_base_conf must emit an active IgnorePkg line"
+    listed = directive.split("=", 1)[1].split()
+    for pkg in pacman.FROZEN_PKGS:
+        assert pkg in listed, f"{pkg} must be frozen in the installed IgnorePkg"
+
+
+def test_installer_base_conf_ignorepkg_is_single_sourced_from_frozen_pkgs():
+    # The directive is generated verbatim from FROZEN_PKGS -- adding a future Azzio package to
+    # that one constant is all it takes to freeze it (no second edit to the conf text).
+    conf = pacman.installer_base_conf()
+    assert _ignorepkg_directive(conf) == f"IgnorePkg   = {' '.join(pacman.FROZEN_PKGS)}"
+
+
+def test_installer_base_conf_freezes_thunar_specifically():
+    # thunar (Azzio's Thunar fork, file_manager) is the one named package that is a real pacman
+    # package and shares a name with extra/thunar, so it is the one exposed to the upgrade trap.
+    assert "thunar" in pacman.FROZEN_PKGS
+    assert "thunar" in _ignorepkg_directive(pacman.installer_base_conf())
+
+
+def test_non_pacman_azzio_apps_are_not_in_ignorepkg():
+    # azzio / window_switcher / application_menu / hypervisor ship under /usr/local via
+    # emit_plan(), are not pacman packages, and MUST NOT be listed: a bogus IgnorePkg name is a
+    # misleading no-op. Guard against someone "helpfully" adding the source-dir names.
+    directive = _ignorepkg_directive(pacman.installer_base_conf()) or ""
+    for name in ("azzio", "window_switcher", "window-switcher", "application_menu",
+                 "application-menu", "azzio-application-menu-daemon",
+                 "azzio-window-switcher", "hypervisor"):
+        assert name not in directive.split()
+
+
+def test_build_and_pacstrap_confs_do_not_freeze_packages():
+    # The INITIAL install must still seed Azzio's own versions, so the transient build/pacstrap
+    # confs leave IgnorePkg commented -- freezing there could block the very install of ours.
+    for conf in (pacman.build_profile_conf(),
+                 pacman.build_profile_conf(cachedir="/build/cache/pacman-pkg"),
+                 pacman.installer_pacstrap_conf()):
+        assert _ignorepkg_directive(conf) is None
+        assert "#IgnorePkg   =" in conf
+
+
 # --- append_local_repo: online build, keep network repos + add local -------
 
 def test_append_local_repo_adds_section():
@@ -253,6 +309,25 @@ def test_options_block_empty_noextract_leaves_commented():
 def test_options_block_noextract_paths_injected():
     ob = pacman._options_block(cachedir=None, noextract=["usr/lib/os-release"])
     assert "NoExtract   = usr/lib/os-release" in ob
+
+
+def test_options_block_no_ignorepkg_leaves_commented():
+    # ignorepkg defaults to None (and an empty tuple is falsy) -> the commented
+    # placeholder "#IgnorePkg   =" is emitted, never an active empty IgnorePkg. This is
+    # what the build/pacstrap confs rely on so the INITIAL install still seeds ours.
+    for arg in (None, ()):
+        ob = pacman._options_block(cachedir=None, ignorepkg=arg)
+        assert "#IgnorePkg   =" in ob
+        for line in ob.splitlines():
+            assert not line.startswith("IgnorePkg")
+
+
+def test_options_block_ignorepkg_generalizes_to_multiple_packages():
+    # The freeze is single-sourced from one constant, so adding a future Azzio package must be
+    # a one-line edit. Prove the rendering handles MORE than one name (space-separated, the
+    # pacman-native IgnorePkg format) -- e.g. the day librewolf/calamares are added to the set.
+    ob = pacman._options_block(cachedir=None, ignorepkg=("thunar", "librewolf"))
+    assert "IgnorePkg   = thunar librewolf" in ob
 
 
 # --- _net_repos: multilib active vs commented -------------------------------
