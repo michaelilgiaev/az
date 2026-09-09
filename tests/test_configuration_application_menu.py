@@ -456,13 +456,13 @@ def test_gtk3_build_deps_are_provisioned_on_the_build_host():
     )
 
 
-# --- Usage seed (contract: LibreWolf, kitty, Thunar) -------------------------
+# --- Usage seed (contract: LibreWolf, kitty, File Manager) -------------------
 
 def test_usage_seed_orders_the_default_top_three():
     # A fresh profile has no launch history, so the menu would sort alphabetically. The
-    # seed store fixes the STARTING top THREE to LibreWolf, kitty, Thunar (descending),
-    # keyed by .desktop id -- EXACTLY three per the user's request. (Thunar replaced Dolphin
-    # as the file manager.)
+    # seed store fixes the STARTING top THREE to LibreWolf, kitty, File Manager (descending),
+    # keyed by .desktop id -- EXACTLY three per the user's request. (The file manager replaced
+    # Dolphin as the file manager.)
     seed = json.loads(am.usage_seed_json())
     ranked = sorted(seed.items(), key=lambda kv: -kv[1])
     assert [k for k, _ in ranked] == [

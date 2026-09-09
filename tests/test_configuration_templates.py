@@ -1,10 +1,10 @@
-"""packages.file_manager.templates -- the ~/Templates "Create Document" set for Thunar (PROMPT batch 8).
+"""packages.file_manager.templates -- the ~/Templates "Create Document" set for the file manager (PROMPT batch 8).
 
 The templates module was FOLDED INTO the file_manager package (it is a submodule now,
 packages/file_manager/templates.py, imported as `from packages.file_manager import templates`), so it is
-tested here alongside the rest of the Thunar setup rather than as its own top-level package.
+tested here alongside the rest of the file-manager setup rather than as its own top-level package.
 
-Why these tests matter: Thunar populates its Create Document submenu from ~/Templates, and the
+Why these tests matter: the file manager populates its Create Document submenu from ~/Templates, and the
 LibreOffice templates must be VALID ODF packages (mimetype stored first + a manifest) or
 LibreOffice refuses to open the copy. These pin: the template SET, the XDG_TEMPLATES_DIR
 pointer, that the ODF files are real ZIP/ODF packages, the emit-plan wiring (HOME,
@@ -40,7 +40,7 @@ def test_template_set_covers_text_and_libreoffice_trio():
 
 
 def test_user_dirs_points_templates_at_templates_dir():
-    # PROMPT batch item 8: XDG_TEMPLATES_DIR must be ~/Templates (else Thunar scans all of
+    # PROMPT batch item 8: XDG_TEMPLATES_DIR must be ~/Templates (else the file manager scans all of
     # $HOME, the stock xdg-user-dirs default) so the Create Document submenu finds our set.
     u = templates.user_dirs_dirs()
     assert 'XDG_TEMPLATES_DIR="$HOME/Templates"' in u

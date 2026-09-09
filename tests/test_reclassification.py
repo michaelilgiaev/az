@@ -23,7 +23,7 @@ ships" invariant -- at unit-test time.
 `packages/` carries no top-level `__init__.py` -- it is an implicit namespace package, resolved
 off PYTHONPATH (= libraries/). Every SUB-directory of packages/ is a REGULAR package with its
 own `__init__.py`, so it resolves under the namespace `packages` and package_discovery can find
-it. The four merges (home_directory->thunar, scale->openbox, ckbcomp->calamares,
+it. The four merges (home_directory->file_manager, scale->openbox, ckbcomp->calamares,
 timedate->librewolf) live as files INSIDE their target package, so they no longer appear as
 top-level entries.
 """
@@ -68,7 +68,7 @@ def test_our_packages_import_from_packages_bucket():
 def test_every_packages_subdirectory_is_a_regular_package():
     # Every SUB-directory of libraries/packages/ must carry an __init__.py so it is a real,
     # importable package that package_discovery loads (application_menu, azzio, calamares,
-    # passwords, openbox, librewolf, kitty, gedit, thunar, ...). A directory without one would
+    # passwords, openbox, librewolf, kitty, gedit, file_manager, ...). A directory without one would
     # be silently skipped by discovery.
     packages_dir = paths.PACKAGESDIR
     for child in packages_dir.iterdir():

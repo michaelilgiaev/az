@@ -2,7 +2,7 @@
 
 OpenBox's built-in NextWindow switcher is a vertical, icon-only list; this package
 replaces it with a horizontal, Windows-like overlay of LIVE window thumbnails, ordered
-librewolf / kitty / hypervisor / thunar / alphabetical. Like the application menu it is a
+librewolf / kitty / hypervisor / file manager / alphabetical. Like the application menu it is a
 COMPILED C / GTK3 resident daemon (built once, kept hidden) driven by a thin Python
 launcher that signals it (--next -> SIGUSR1, --prev -> SIGUSR2).
 

@@ -1,9 +1,9 @@
 """packages.file_manager.home_directory -- the single source of truth for the home-directory layout
-(top-level folders + convenience symlinks) that Thunar's sidebar also mirrors.
+(top-level folders + convenience symlinks) that the file manager's sidebar also mirrors.
 
 Why these tests matter: compiler._emit_homedir walks this module's plain data
 (DIRECTORIES/LINKS/TRASH_DIRS) with emit.mkdir()/emit.link() into BOTH /home/main and
-/etc/skel, and packages/file_manager builds the GTK bookmarks Thunar reads from the SAME data.
+/etc/skel, and packages/file_manager builds the GTK bookmarks the file manager reads from the SAME data.
 Two invariants are load-bearing and guarded here:
 
   * Symlink targets must be RELATIVE -- an absolute /home/main/... target would dangle
@@ -91,7 +91,7 @@ def test_sidebar_entries_are_directories_then_links_resolved():
     targets = dict(entries)
     # A directory shortcut points at itself.
     assert targets["Desktop"] == "/home/main/Desktop"
-    # A symlink shortcut points at the RESOLVED target (so Thunar shows the real path,
+    # A symlink shortcut points at the RESOLVED target (so the file manager shows the real path,
     # not the /home/main/Config symlink path) -- PROMPT task 2 "display the ACTUAL path".
     assert targets["Config"] == "/home/main/.config"
     assert targets["Cache"] == "/home/main/.cache"

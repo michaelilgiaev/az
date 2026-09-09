@@ -217,7 +217,7 @@ WALLPAPER_POINTER_FILE = f"{HOME}/.config/azzio/wallpaper"
 # in lock-step with packages/file_manager/live_sidebar.SYNC_SCRIPT_DEST (a test pins them equal);
 # this constant is the single name the autostart refers to it by, held here to avoid importing
 # the file_manager package into openbox (mirrors how AZZIO_OSD_SYSTEM_PATH is handled).
-THUNAR_SIDEBAR_SYNC = "/usr/local/lib/azzio/azzio-sidebar-sync"
+FILE_MANAGER_SIDEBAR_SYNC = "/usr/local/lib/azzio/azzio-sidebar-sync"
 
 
 # --- Application menu wiring (single source of truth in application_menu.py) --
@@ -1320,8 +1320,8 @@ command -v xset >/dev/null 2>&1 && xset r rate 300 25 &
 #    helper regenerates the bookmarks now and then watches the home dir mtime, re-emitting in
 #    the required order (dirs -> files -> symlinks -> Trash last), symlinks resolved. Guarded
 #    so a missing helper never breaks the session.
-[ -x '{THUNAR_SIDEBAR_SYNC}' ] && \\
-    setsid '{THUNAR_SIDEBAR_SYNC}' --watch >/dev/null 2>&1 < /dev/null &
+[ -x '{FILE_MANAGER_SIDEBAR_SYNC}' ] && \\
+    setsid '{FILE_MANAGER_SIDEBAR_SYNC}' --watch >/dev/null 2>&1 < /dev/null &
 
 # 7. SPICE guest agent (the SESSION half): spice-vdagent needs a running X session, so it is
 #    started HERE (spice-vdagentd, the system daemon it talks to, is enabled via systemd). On a

@@ -4,7 +4,7 @@ Why these tests matter: the defaults are a single source-of-truth table flattene
 mimeapps.list; a MIME type mapped twice would make the default ambiguous, and a wrong handler
 id would silently point a file type at the wrong app. These lock the exact category->handler
 mapping the user specified, the no-double-mapping invariant, and the exo TerminalEmulator=kitty
-wiring (which is what Thunar's "Open Terminal Here" uses).
+wiring (which is what the file manager's "Open Terminal Here" uses).
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ def test_category_handlers_match_the_spec():
     assert handlers["Spreadsheet"] == "libreoffice-calc.desktop"
     assert handlers["PDF"] == "librewolf.desktop"
     assert handlers["Source Code"] == "org.gnome.gedit.desktop"
-    assert handlers["File Manager"] == "thunar.desktop"   # Thunar, not Dolphin
+    assert handlers["File Manager"] == "thunar.desktop"   # the file manager, not Dolphin
     assert handlers["Plain Text"] == "org.gnome.gedit.desktop"
     assert handlers["Calculator"] == "qalculate-gtk.desktop"
     assert handlers["Terminal"] == "kitty.desktop"
@@ -78,7 +78,7 @@ def test_collision_guard_actually_fires(monkeypatch):
 
 
 def test_helpers_rc_sets_terminal_to_kitty():
-    # PROMPT task 6: exo preferred TerminalEmulator = kitty (Thunar's Open Terminal Here uses it).
+    # PROMPT task 6: exo preferred TerminalEmulator = kitty (the file manager's Open Terminal Here uses it).
     rc = da.helpers_rc()
     assert "TerminalEmulator=kitty" in rc
 

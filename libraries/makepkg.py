@@ -272,7 +272,7 @@ def _repo_has_all(pkg_repo: Path, names: tuple[str, ...]) -> bool:
 # Why it exists: the offline default tier SKIPS makepkg when the own packages are already
 # in the repo (the fast rerun). That skip used to be content-BLIND -- it only checked a
 # file named `calamares-*.pkg.tar.zst` existed, never whether it was built from the CURRENT
-# recipe. So editing a recipe (the networkq patch on calamares, or thunar's vendored C) did
+# recipe. So editing a recipe (the networkq patch on calamares, or file_manager's vendored C) did
 # NOT invalidate the cached package: the stale binary was reused and the ISO/box shipped it.
 # The fingerprint (see fingerprint.py) folds in every recipe file AND any vendored source
 # tree, so any change forces a rebuild.
@@ -318,7 +318,7 @@ def _emit_recipes(scratch: Path, full_compile: bool) -> list[Path]:
     A recipe may also declare a local source TREE (pkgbuild.recipe_source_trees) -- a vendored,
     version-controlled directory that cannot be carried as a text companion. For such a recipe
     the tree is COPIED into the recipe dir under its own basename so the PKGBUILD's local
-    source=() entry finds it (thunar's git-cloned tree works this way). The copy is what makepkg
+    source=() entry finds it (file_manager's git-cloned tree works this way). The copy is what makepkg
     consumes, so the vendored original is never mutated by the build."""
     source_trees = pkgbuild_cfg.recipe_source_trees()
     dirs: list[Path] = []

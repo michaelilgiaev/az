@@ -2,7 +2,7 @@
   <!-- Azzio "Photos" (xviewer) icon. Replaces xviewer's off-putting "spying eye" default
        with the universal photo glyph (a framed picture of a sun over mountains) in the
        Azzio blue gradient on the dark rounded-rect badge, matching assets/icons/azzio.svg
-       and assets/icons/thunar.svg (same #010512 rx 56 square, same cyan to blue gradient).
+       and assets/icons/file_manager.svg (same #010512 rx 56 square, same cyan to blue gradient).
        Rasterized to hicolor PNGs by modifications/xviewer. -->
   <defs>
     <linearGradient id="azPhoto" x1="0" y1="0" x2="0" y2="1">
