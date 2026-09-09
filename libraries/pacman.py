@@ -70,8 +70,7 @@ HoldPkg     = pacman glibc
 Architecture = auto
 
 # Pacman won't upgrade packages listed in IgnorePkg and members of IgnoreGroup
-#IgnorePkg   =
-#IgnoreGroup =
+{ignorepkg_line}#IgnoreGroup =
 
 #NoUpgrade   =
 {noextract_line}
@@ -264,8 +263,54 @@ def app_override_cp_sh(prefix: str = "", src_dir: str = "/root/azzio/apps") -> s
     return "\n".join(lines) + "\n"
 
 
-def _options_block(cachedir: str | None, noextract: list[str] | None = None) -> str:
+# --- Frozen Azzio packages (never upgraded on the INSTALLED system) ---------
+# Azzio's OWN hand-built packages are version-controlled and have NOTHING to do with the
+# Arch mirrors. On the end-user box, `pacman -Syu`/-Su/-Sy must NEVER upgrade, downgrade,
+# or replace them -- otherwise the instant an Arch repo ships a higher release of a package
+# that shares the name, a routine update would silently overwrite our fork with stock
+# upstream and undo every Azzio change. IgnorePkg is pacman's supported "do not touch these"
+# lever: a listed package is skipped on -Syu with "warning: <pkg>: ignoring package upgrade".
+#
+# THIS LIST HOLDS ONLY REAL PACMAN PACKAGES. The user named five source dirs to freeze
+# (file_manager, azzio, window_switcher, application_menu, hypervisor), but only ONE of them
+# is actually a pacman package:
+#
+#   file_manager  -> pkgname `thunar` (Azzio's Thunar fork, PKGBUILD-built -- pkgbuild.py).
+#                    This is the ONLY one exposed to the upgrade trap: extra/thunar exists and
+#                    is 4.20.9-1 today, so the day it ships 4.20.9-3 / 4.20.10 a bare -Syu WOULD
+#                    replace our -2 fork. Frozen here. (Our repo being ordered first only wins
+#                    the initial fresh install; IgnorePkg is what protects it forever after.)
+#
+#   azzio / window_switcher / application_menu / hypervisor  -> NOT pacman packages. They are
+#                    C daemons / Python bundles the compiler writes straight into the airootfs
+#                    under /usr/local/{bin,lib}/ via emit_plan() (azzio, azzio-window-switcher,
+#                    azzio-application-menu-daemon, hypervisor); pacman never records them in its
+#                    database. pacman only ever upgrades/replaces packages it OWNS, so files under
+#                    /usr/local owned by no package are already invisible to -Syu -- there is no
+#                    pkgname to match and no repo package that shares those names. They need no
+#                    IgnorePkg entry, and adding one would be a MISLEADING no-op: pacman does not
+#                    validate IgnorePkg names against installed packages, so a bogus name neither
+#                    errors nor protects anything. So they are deliberately absent here.
+#
+# calamares and librewolf ARE also Azzio-built pacman packages (makepkg.PRODUCED), but the user
+# did not name them for the freeze, so they are intentionally NOT frozen -- do not conflate this
+# set with PRODUCED. Adding a future Azzio pacman package to the freeze is a one-line edit here.
+FROZEN_PKGS = ("thunar",)
+
+
+def _options_block(
+    cachedir: str | None,
+    noextract: list[str] | None = None,
+    ignorepkg: tuple[str, ...] | None = None,
+) -> str:
     cachedir_line = f"CacheDir     = {cachedir}\n" if cachedir else "#CacheDir     = /var/cache/pacman/pkg/\n"
+    # IgnorePkg freezes Azzio's own packages on the INSTALLED system so -Syu never
+    # replaces them (see FROZEN_PKGS). Only installer_base_conf passes this; the build/
+    # pacstrap/download confs leave it commented so the INITIAL install still seeds our
+    # versions (freezing there would block the very install that installs ours).
+    ignorepkg_line = (
+        f"IgnorePkg   = {' '.join(ignorepkg)}\n" if ignorepkg else "#IgnorePkg   =\n"
+    )
     # A single NoExtract line takes multiple space-separated paths. We NoExtract the
     # files the ISO overrides with its own airootfs copies so pacstrap's owning
     # package (filesystem) does not lay down a conflicting file:
@@ -273,7 +318,11 @@ def _options_block(cachedir: str | None, noextract: list[str] | None = None) -> 
     noextract_line = (
         f"NoExtract   = {' '.join(noextract)}" if noextract else "#NoExtract   ="
     )
-    return _STD_HEADER.format(cachedir_line=cachedir_line, noextract_line=noextract_line)
+    return _STD_HEADER.format(
+        cachedir_line=cachedir_line,
+        noextract_line=noextract_line,
+        ignorepkg_line=ignorepkg_line,
+    )
 
 
 def _net_repos(multilib: bool) -> str:
@@ -425,8 +474,12 @@ def switch_to_local_repo(conf: str, localrepo_path: str) -> str:
 
 def installer_base_conf() -> str:
     """The /etc/pacman.conf shipped to the INSTALLED system: plain Arch defaults
-    with multilib enabled and no build tweaks."""
-    conf = _options_block(cachedir=None, noextract=None)
+    with multilib enabled and no build tweaks -- PLUS IgnorePkg listing Azzio's own
+    hand-built packages (FROZEN_PKGS) so a routine `pacman -Syu` on the end-user box
+    never upgrades, downgrades, or replaces them with a stock Arch build. This is the
+    same file Calamares lays down as the installed target's /etc/pacman.conf, so the
+    freeze persists on the real system, not just the ephemeral live ISO session."""
+    conf = _options_block(cachedir=None, noextract=None, ignorepkg=FROZEN_PKGS)
     conf += _STD_TESTING_TAIL
     conf += _net_repos(multilib=True)
     conf += "\n" + _CUSTOM_EXAMPLE
