@@ -122,10 +122,12 @@ static gboolean on_draw(GtkWidget *w, cairo_t *cr, gpointer data) {
         const char *name_col = (selected || hovered) ? AZ_SELECT_TEXT : AZ_TEXT_COLOR;
         const char *sub_col  = (selected || hovered) ? AZ_SELECT_TEXT : AZ_SUBTEXT_COLOR;
 
-        /* Name (baseline-ish anchored at NAME_DY; Tk text anchor 'w' is vertical
+        /* Header = category (type_label), description = project Name. The big
+         * header line carries the app's category and the small subtitle its
+         * name (baseline-ish anchored at NAME_DY; Tk text anchor 'w' is vertical
          * center of the line, so center the layout on that y). */
         pango_layout_set_font_description(lay, l->font_name);
-        pango_layout_set_text(lay, r->entry->name, -1);
+        pango_layout_set_text(lay, r->entry->type_label, -1);
         int tw, th;
         pango_layout_get_pixel_size(lay, &tw, &th);
         set_src(cr, name_col);
@@ -133,7 +135,7 @@ static gboolean on_draw(GtkWidget *w, cairo_t *cr, gpointer data) {
         pango_cairo_show_layout(cr, lay);
 
         pango_layout_set_font_description(lay, l->font_sub);
-        pango_layout_set_text(lay, r->entry->type_label, -1);
+        pango_layout_set_text(lay, r->entry->name, -1);
         pango_layout_get_pixel_size(lay, &tw, &th);
         set_src(cr, sub_col);
         cairo_move_to(cr, AZ_TEXT_X, y + AZ_SUB_DY - th / 2.0);

@@ -183,13 +183,41 @@ def test_mo_overrides_relabel_the_hardcoded_strings():
     ].startswith("Azzio File Manager is a fast")
 
 
-def test_window_title_suffix_relabelled_in_vendored_source():
-    # The window title-bar suffix is a BARE C literal (g_strdup_printf("%s - %s", name, "...")),
-    # not a gettext string, so the .mo override cannot reach it -- it is relabelled directly in the
-    # vendored fork's thunar-window.c to "Azzio File Manager" (like the symlink-resolve change).
+def test_window_title_is_fixed_file_manager_in_vendored_source():
+    # PROMPT: the Openbox title bar must show ONLY "File Manager" -- not the folder name and not
+    # the product-name suffix. The title is a BARE C literal (gettext .mo overrides cannot reach
+    # it), so thunar_window_update_title in the vendored fork's thunar-window.c is patched to set a
+    # fixed "File Manager" and the upstream folder-name/"%s - %s"-suffix logic is dropped.
     win_c = (thunar.SOURCE_DIR / "thunar" / "thunar-window.c").read_text()
-    assert 'g_strdup_printf ("%s - %s", name, "Azzio File Manager")' in win_c
+    assert 'gtk_window_set_title (GTK_WINDOW (window), "File Manager");' in win_c
+    # The old folder+suffix builders are gone (either the "Azzio File Manager" relabel or the
+    # original "Thunar" literal would put the folder name / product name back in the title bar).
+    assert 'g_strdup_printf ("%s - %s", name, "Azzio File Manager")' not in win_c
     assert 'g_strdup_printf ("%s - %s", name, "Thunar")' not in win_c
+
+
+def test_help_menu_removed_from_vendored_source():
+    # PROMPT: remove the file-manager Help menu's About and Contents items, and the Help menu
+    # itself. The whole Help menu lives in thunar-window.c (built programmatically, no .ui file):
+    # a top-level _Help menu whose submenu is populated with _Contents + _About. Excising it means
+    # the two THUNAR_WINDOW_ACTION_HELP_MENU create-menu calls (menubar + right-click menu), the
+    # thunar_window_update_help_menu populator, the _Contents/_About action-entry rows and their
+    # callbacks, and the three enum values are all gone from the vendored fork.
+    win_c = (thunar.SOURCE_DIR / "thunar" / "thunar-window.c").read_text()
+    win_h = (thunar.SOURCE_DIR / "thunar" / "thunar-window.h").read_text()
+    # The Help menu is no longer created in either the menubar or the context menu.
+    assert "THUNAR_WINDOW_ACTION_HELP_MENU" not in win_c
+    assert "THUNAR_WINDOW_ACTION_HELP_MENU" not in win_h
+    # About + Contents items, their populator and callbacks are gone.
+    assert "thunar_window_update_help_menu" not in win_c
+    assert "thunar_window_action_contents" not in win_c
+    assert "thunar_window_action_about" not in win_c
+    assert "THUNAR_WINDOW_ACTION_CONTENTS" not in win_c and "THUNAR_WINDOW_ACTION_CONTENTS" not in win_h
+    assert "THUNAR_WINDOW_ACTION_ABOUT" not in win_c and "THUNAR_WINDOW_ACTION_ABOUT" not in win_h
+    # No stray "_Help"/"_Contents"/"_About" menu labels remain from the removed action entries.
+    assert 'N_ ("_Help")' not in win_c
+    assert 'N_ ("_Contents")' not in win_c
+    assert 'N_ ("_About")' not in win_c
 
 
 def test_mo_bytes_are_a_valid_gettext_catalog(tmp_path):
