@@ -3,7 +3,7 @@
  * A minimal, self-drawn scrollbar, because both the classic Tk scrollbar AND the
  * default GTK scrollbar are too heavy for this borderless launcher. It is:
  *   * ARROW-LESS -- just a slider, no stepper buttons.
- *   * a single ROUNDED (pill) thumb, translucent cyan-grey, ~6px wide.
+ *   * a single ROUNDED (pill) thumb, translucent cyan-grey (AZ_SCROLL_THUMB_WIDTH).
  *   * NO visible track at rest; on hover the thumb brightens and a faint groove
  *     fades in behind it.
  *   * HIDDEN entirely when everything fits (nothing to scroll).

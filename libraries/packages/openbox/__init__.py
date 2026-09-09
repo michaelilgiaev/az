@@ -384,15 +384,27 @@ fi
 # padding.height(2) top and bottom, and OpenBox sizes the min/max/close BUTTONS to that
 # same label height -- so the whole bar (and its buttons) come out small.
 #
-# We want the bar 1.5x the stock height (an earlier round DOUBLED it, which overshot).
-# We ship our own theme, "Azzio": a byte-for-byte copy of the stock Clearlooks
-# openbox-3 themerc with only the size-driving fields grown, landing halfway between
-# stock and the (too-tall) doubled values. It is a fresh theme dir (not an edit of the
+# The bar had been grown to ~1.5x stock; the user then found the topbar TOO BIG and asked
+# to cut it 25%, and to drop the two-tone gradient for ONE flat colour. So Azzio ships its
+# own theme, "Azzio": the stock Clearlooks openbox-3 themerc with the size-driving fields
+# tuned and the titlebar/buttons flattened. It is a fresh theme dir (not an edit of the
 # packaged Clearlooks) so the airootfs overlay owns it and a package update to openbox
 # cannot revert it:
-#   * padding.height 2 -> 7    (top+bottom padding around the label -> taller bar)
-#   * padding.width  3 -> 6     (matching horizontal breathing room)
+#   * padding.height 2 -> 5     (top+bottom padding around the label; was 7, now * 0.75)
+#   * padding.width  3 -> 4     (matching horizontal breathing room; was 6, now * 0.75)
 #   * window.handle.width 3->0  (REMOVE the bottom handle -- see below)
+#
+# 25% SMALLER: the dominant half of the height is the title FONT set in rc.xml's <theme>
+# (pt 12 -> 9, i.e. * 0.75, derived in scale.py). Smaller font => shorter label => OpenBox
+# draws smaller buttons, so the min/max/close targets come down WITH the bar (icons
+# accounted for); the padding above trims the remaining top/bottom slack by the same 0.75.
+#
+# ONE FLAT COLOUR: the titlebar + its buttons were a splitvertical GRADIENT (top colour ->
+# a darker bottom split) -- the "two color split" the user saw. They are now `Flat Solid`,
+# filled with the gradient's old BOTTOM colour (title_bg_to_split), so the whole bar is a
+# single consistent colour. The buttons take their own bottom split, hover stays flat cyan,
+# pressed was already flat. Flat Solid ignores the Raised bg.highlight/shadow bevel, so the
+# bar renders as one true flat colour. Menu/OSD are NOT the topbar and keep their gradients.
 #
 # THE BOTTOM "THIN WHITE BAR": OpenBox draws a HANDLE -- a full-width strip along the
 # BOTTOM edge of every decorated window -- whose height is window.handle.width and whose
@@ -403,17 +415,12 @@ fi
 # Left / Right / corner mouse contexts resize on the window's invisible border edges
 # regardless of the visible handle, and keepBorder keeps the 1px frame on maximized
 # windows -- so only the cosmetic strip is removed, not the ability to drag-resize.
-# The dominant half of the height comes from the larger title FONT set in rc.xml's
-# <theme> (size 8 -> 12, i.e. exactly 1.5x stock). Bigger font => taller label =>
-# OpenBox draws bigger buttons, so the min/max/close targets grow with the bar.
-# Everything else (the #8CB0DC cyan gradient, the button gradients/hover/pressed states,
-# the menu/osd styling) is copied verbatim so the look is identical, only 1.5x larger.
 # Azzio ships TWO OpenBox titlebar themes -- a LIGHT one ("Azzio", the classic
 # Clearlooks-cyan look) and a DARK one ("Azzio-Dark", the default). Both are generated
-# from openbox_theme_rc(dark) below: identical GEOMETRY (the ~1.5x titlebar + no bottom
-# handle), only the colour palette differs. rc.xml's <theme><name> selects one, and
-# `azzio theme --dark|--white` rewrites that name + `openbox --reconfigure`s. Dark is the
-# out-of-the-box default (rc.xml ships <name>Azzio-Dark</name>).
+# from openbox_theme_rc(dark) below: identical GEOMETRY (the 25%-smaller titlebar + no
+# bottom handle + flat colour), only the colour palette differs. rc.xml's <theme><name>
+# selects one, and `azzio theme --dark|--white` rewrites that name + `openbox
+# --reconfigure`s. Dark is the out-of-the-box default (rc.xml ships <name>Azzio-Dark</name>).
 OPENBOX_THEME_NAME = "Azzio"            # the LIGHT theme name (classic Clearlooks-cyan)
 OPENBOX_THEME_NAME_DARK = "Azzio-Dark"  # the DARK theme name (the default)
 OPENBOX_THEME_DIR = f"{HOME}/.themes/{OPENBOX_THEME_NAME}/openbox-3"
@@ -424,14 +431,15 @@ OPENBOX_THEME_THEMERC_DARK = f"{OPENBOX_THEME_DIR_DARK}/themerc"
 OPENBOX_THEME_DEFAULT = OPENBOX_THEME_NAME_DARK
 
 # The two padding fields (in px) that set the titlebar height, and the resize-handle
-# width. The padding fields are pinned so a test can prove the bar was grown to ~1.5x
-# stock; each lands halfway between stock Clearlooks and the earlier (overshot) doubled
-# value. The handle width is 0 to REMOVE the near-white bottom handle bar entirely (the
-# "thin white bar under a window" the user asked to drop); resizing is unaffected (the
-# rc.xml edge/corner mouse contexts do not depend on the visible handle). Shared by BOTH
-# the light and dark themes (only colours differ between them).
-OPENBOX_THEME_PADDING_HEIGHT = 7    # stock Clearlooks: 2 (was 12 when doubled)
-OPENBOX_THEME_PADDING_WIDTH = 6     # stock Clearlooks: 3 (was 8 when doubled)
+# width. The bar was SHRUNK 25% from the earlier ~1.5x size (the user found the topbar
+# too big): padding.height 7 -> 5 and padding.width 6 -> 4 (each * 0.75, rounded), paired
+# with the 25%-smaller title font (pt 12 -> 9 via scale.py). The handle width is 0 to
+# REMOVE the near-white bottom handle bar entirely (the "thin white bar under a window"
+# the user asked to drop); resizing is unaffected (the rc.xml edge/corner mouse contexts
+# do not depend on the visible handle). Shared by BOTH the light and dark themes (only
+# colours differ between them).
+OPENBOX_THEME_PADDING_HEIGHT = 5    # was 7 (7 * 0.75 = 5.25 -> 5); stock Clearlooks: 2
+OPENBOX_THEME_PADDING_WIDTH = 4     # was 6 (6 * 0.75 = 4.5 -> 4); stock Clearlooks: 3
 OPENBOX_THEME_HANDLE_WIDTH = 0      # stock Clearlooks: 3 -> 0 removes the bottom bar
 
 # The LIGHT palette: the stock Clearlooks colours (unchanged -- this is the classic cyan
@@ -452,27 +460,23 @@ _OB_LIGHT = {
     "handle_bg": "#eaebec", "grip_bg": "#eaebec",
     "win_border": "#585a5d",
     # active_sep is the FLAT 1px line OpenBox draws at the titlebar's BOTTOM edge (between
-    # titlebar and client). The title bg is a splitvertical GRADIENT, so its bottom-edge pixel
-    # is the colorTo split (#7AA1D1), NOT the top color -- the separator must match THAT end or
-    # a faint hairline shows where the old cyan line was. Pinned to title_bg_to_split so it is
-    # invisible (same "drop the thin bar under the window" intent as window.handle.width 0).
+    # titlebar and client). The titlebar is a FLAT SOLID fill of title_bg_to_split (#7AA1D1),
+    # so the separator is pinned to that same colour and is invisible (same "drop the thin bar
+    # under the window" intent as window.handle.width 0).
+    # The *_to_split fields are the single flat fill colours used by the titlebar/buttons; the
+    # old gradient top/mid stops were dropped when the bar was flattened to one colour.
     "active_sep": "#7AA1D1",
-    "title_bg": "#8CB0DC", "title_bg_split": "#99BAE3",
-    "title_bg_to": "#86ABD9", "title_bg_to_split": "#7AA1D1",
+    "title_bg_to_split": "#7AA1D1",
     "active_text": "#ffffff",
-    "abtn_bg": "#92B4DF", "abtn_bg_split": "#B0CAEB",
-    "abtn_bg_to": "#86ABD9", "abtn_bg_to_split": "#769FD0",
+    "abtn_bg_to_split": "#769FD0",
     "abtn_border": "#49678B", "abtn_image": "#F4F5F6",
-    "abtn_hover_bg": "#b5d3ef", "abtn_hover_bg_split": "#b5d3ef",
-    "abtn_hover_bg_to": "#9cbae7", "abtn_hover_bg_to_split": "#8caede",
+    "abtn_hover_bg_to_split": "#8caede",
     "abtn_hover_border": "#4A658C", "abtn_hover_image": "#ffffff",
     "abtn_pressed_bg": "#7aa1d2",
     "inactive_sep": "#96999d",
-    "ititle_bg": "#E3E2E0", "ititle_bg_split": "#EBEAE9",
-    "ititle_bg_to": "#DEDCDA", "ititle_bg_to_split": "#D5D3D1",
+    "ititle_bg_to_split": "#D5D3D1",
     "inactive_text": "#70747d",
-    "ibtn_bg": "#ffffff", "ibtn_bg_split": "#ffffff",
-    "ibtn_bg_to": "#F9F8F8", "ibtn_bg_to_split": "#E9E7E6",
+    "ibtn_bg_to_split": "#E9E7E6",
     "ibtn_border": "#928F8B", "ibtn_image": "#6D6C6C",
     "osd_border": "#aaaaaa",
     "osd_bg": "#F0EFEE", "osd_bg_split": "#f5f5f4",
@@ -496,28 +500,24 @@ _OB_DARK = {
     "win_border": "#05080a",
     # active_sep is the FLAT 1px line OpenBox draws at the titlebar's BOTTOM edge (between
     # titlebar and client). It USED to be #046a8f, a stray bright-cyan bar under a focused,
-    # non-maximized window (the reported visual bug). The title bg is a splitvertical GRADIENT
-    # whose bottom-edge pixel is the colorTo split (#0a0f14) -- matching the top color (#1b2730)
-    # would leave a faint LIGHT hairline where the cyan was, so it is pinned to the BOTTOM value
-    # (#0a0f14) instead; the line then draws the same colour as the titlebar pixel above it and
-    # is invisible (same "drop the thin bar under the window" intent as window.handle.width 0).
+    # non-maximized window (the reported visual bug). The titlebar is now a FLAT SOLID fill of
+    # title_bg_to_split (#0a0f14), so the separator is pinned to that same colour; the line then
+    # draws the same colour as the titlebar pixel above it and is invisible (same "drop the thin
+    # bar under the window" intent as window.handle.width 0).
+    # The *_to_split fields are the single flat fill colours used by the titlebar/buttons; the
+    # old gradient top/mid stops were dropped when the bar was flattened to one colour.
     "active_sep": "#0a0f14",
-    "title_bg": "#1b2730", "title_bg_split": "#22303a",
-    "title_bg_to": "#121a21", "title_bg_to_split": "#0a0f14",
+    "title_bg_to_split": "#0a0f14",
     "active_text": "#ffffff",
-    "abtn_bg": "#1b2730", "abtn_bg_split": "#22303a",
-    "abtn_bg_to": "#121a21", "abtn_bg_to_split": "#0a0f14",
+    "abtn_bg_to_split": "#0a0f14",
     "abtn_border": "#05080a", "abtn_image": "#dee4ea",
-    "abtn_hover_bg": "#06b8fd", "abtn_hover_bg_split": "#3fc6fd",
-    "abtn_hover_bg_to": "#04a8e8", "abtn_hover_bg_to_split": "#0499d6",
+    "abtn_hover_bg_to_split": "#0499d6",
     "abtn_hover_border": "#046a8f", "abtn_hover_image": "#ffffff",
     "abtn_pressed_bg": "#0499d6",
     "inactive_sep": "#05080a",
-    "ititle_bg": "#0a0f14", "ititle_bg_split": "#121a21",
-    "ititle_bg_to": "#0d141a", "ititle_bg_to_split": "#0a1015",
+    "ititle_bg_to_split": "#0a1015",
     "inactive_text": "#8b98a3",
-    "ibtn_bg": "#0a0f14", "ibtn_bg_split": "#121a21",
-    "ibtn_bg_to": "#0d141a", "ibtn_bg_to_split": "#0a1015",
+    "ibtn_bg_to_split": "#0a1015",
     "ibtn_border": "#05080a", "ibtn_image": "#8b98a3",
     "osd_border": "#06090c",
     "osd_bg": "#0a0f14", "osd_bg_split": "#121a21",
@@ -534,12 +534,14 @@ def openbox_theme_rc(dark: bool = True) -> str:
     """One Azzio OpenBox themerc -- the DARK palette (default) when dark=True, else the
     LIGHT (classic Clearlooks-cyan) palette.
 
-    Both share the stock Clearlooks GEOMETRY with the titlebar-height fields grown
-    (padding.height/width) and the bottom resize handle REMOVED (window.handle.width 0, so
-    the near-white bottom bar does not draw). Paired with the larger title <font> in rc.xml
-    (size 12), this grows the bar to about 1.5x stock and the min/max/close buttons OpenBox
-    sizes to the label. ONLY the colours differ between dark and light (see _OB_DARK /
-    _OB_LIGHT); the light theme keeps the exact Clearlooks originals.
+    Both share one GEOMETRY -- the titlebar SHRUNK 25% from its earlier ~1.5x size
+    (padding.height/width trimmed) with the bottom resize handle REMOVED
+    (window.handle.width 0, so the near-white bottom bar does not draw). Paired with the
+    smaller title <font> in rc.xml (pt 9 == 12 * 0.75), the bar is 25% shorter and the
+    min/max/close buttons OpenBox sizes to the label come down with it. The titlebar and
+    its buttons are a SINGLE FLAT colour (the old gradient's bottom split), no two-tone
+    split. ONLY the colours differ between dark and light (see _OB_DARK / _OB_LIGHT); the
+    light theme keeps the Clearlooks-cyan bottom colour.
 
     Shipped to ~/.themes/<name>/openbox-3/themerc (a user theme search path OpenBox scans
     alongside /usr/share/themes) and mirrored into /etc/skel so the installed user inherits
@@ -547,11 +549,11 @@ def openbox_theme_rc(dark: bool = True) -> str:
     c = _OB_DARK if dark else _OB_LIGHT
     variant = "DARK (the default)" if dark else "LIGHT (classic Clearlooks-cyan)"
     return f"""\
-# Azzio OpenBox theme -- {variant}. ~1.5x titlebar, NO bottom handle.
+# Azzio OpenBox theme -- {variant}. 25%-smaller flat-colour titlebar, NO bottom handle.
 # Generated by packages.openbox (edit the Python, not this file). Geometry matches stock
-# Clearlooks (padding.height/width grown; window.handle.width 0 removes the bottom bar);
-# only the colour palette differs between the dark and light Azzio themes. The larger
-# title FONT is set in rc.xml's <theme>.
+# Clearlooks (padding.height/width trimmed 25%; window.handle.width 0 removes the bottom
+# bar; titlebar + buttons are one Flat Solid colour); only the colour palette differs
+# between the dark and light Azzio themes. The title FONT size is set in rc.xml's <theme>.
 
 # Fonts (halos)
 *.font: shadow=n
@@ -559,7 +561,7 @@ window.active.label.text.font:shadow=y:shadowtint=30:shadowoffset=1
 window.inactive.label.text.font:shadow=y:shadowtint=00:shadowoffset=0
 menu.items.font:shadow=y:shadowtint=0:shadowoffset=1
 
-# general stuff -- padding.height/width GROWN to ~1.5x the titlebar (was 2 / 3),
+# general stuff -- padding.height/width set for the 25%-smaller titlebar (stock was 2 / 3),
 # handle width set to 0 to REMOVE the near-white bottom handle bar (was 3).
 border.width: 1
 padding.width: {OPENBOX_THEME_PADDING_WIDTH}
@@ -625,52 +627,46 @@ window.*.border.color: {c["win_border"]}
 
 window.active.title.separator.color: {c["active_sep"]}
 
-*.title.bg: Raised Gradient splitvertical
-*.title.bg.color: {c["title_bg"]}
-*.title.bg.color.splitTo: {c["title_bg_split"]}
-*.title.bg.colorTo: {c["title_bg_to"]}
-*.title.bg.colorTo.splitTo: {c["title_bg_to_split"]}
+# ONE FLAT COLOUR (was a splitvertical gradient): the titlebar is a solid fill of the
+# gradient's old BOTTOM colour (title_bg_to_split), so there is no top/bottom two-tone
+# split -- the whole bar is one consistent colour. Flat Solid ignores the Raised
+# bg.highlight/shadow bevel above, so it renders truly flat.
+*.title.bg: Flat Solid
+*.title.bg.color: {c["title_bg_to_split"]}
 
 window.active.label.bg: Parentrelative
 window.active.label.text.color: {c["active_text"]}
 
-window.active.button.*.bg: Flat Gradient splitvertical Border
+# Buttons flattened to match the bar: a solid fill of each state's old bottom colour, so
+# the min/max/close targets read as the same flat colour as the titlebar (their glyphs,
+# image.color, still draw on top).
+window.active.button.*.bg: Flat Solid Border
 
-window.active.button.*.bg.color: {c["abtn_bg"]}
-window.active.button.*.bg.color.splitTo: {c["abtn_bg_split"]}
-window.active.button.*.bg.colorTo: {c["abtn_bg_to"]}
-window.active.button.*.bg.colorTo.splitTo: {c["abtn_bg_to_split"]}
+window.active.button.*.bg.color: {c["abtn_bg_to_split"]}
 
 window.active.button.*.bg.border.color: {c["abtn_border"]}
 window.active.button.*.image.color: {c["abtn_image"]}
 
-window.active.button.hover.bg.color: {c["abtn_hover_bg"]}
-window.active.button.hover.bg.color.splitTo: {c["abtn_hover_bg_split"]}
-window.active.button.hover.bg.colorTo: {c["abtn_hover_bg_to"]}
-window.active.button.hover.bg.colorTo.splitTo: {c["abtn_hover_bg_to_split"]}
+window.active.button.hover.bg: Flat Solid Border
+window.active.button.hover.bg.color: {c["abtn_hover_bg_to_split"]}
 window.active.button.hover.bg.border.color: {c["abtn_hover_border"]}
 window.active.button.hover.image.color: {c["abtn_hover_image"]}
 
 window.active.button.pressed.bg: Flat solid Border
 window.active.button.pressed.bg.color: {c["abtn_pressed_bg"]}
 
-# inactive
+# inactive -- flattened to its own bottom colour too, so an unfocused window is the same
+# single-colour bar as a focused one (just the dimmer inactive palette).
 window.inactive.title.separator.color: {c["inactive_sep"]}
 
-window.inactive.title.bg: Raised Gradient splitvertical
-window.inactive.title.bg.color: {c["ititle_bg"]}
-window.inactive.title.bg.color.splitTo: {c["ititle_bg_split"]}
-window.inactive.title.bg.colorTo: {c["ititle_bg_to"]}
-window.inactive.title.bg.colorTo.splitTo: {c["ititle_bg_to_split"]}
+window.inactive.title.bg: Flat Solid
+window.inactive.title.bg.color: {c["ititle_bg_to_split"]}
 
 window.inactive.label.bg: Parentrelative
 window.inactive.label.text.color: {c["inactive_text"]}
 
-window.inactive.button.*.bg: Flat Gradient splitVertical Border
-window.inactive.button.*.bg.color: {c["ibtn_bg"]}
-window.inactive.button.*.bg.color.splitto: {c["ibtn_bg_split"]}
-window.inactive.button.*.bg.colorTo: {c["ibtn_bg_to"]}
-window.inactive.button.*.bg.colorTo.splitto: {c["ibtn_bg_to_split"]}
+window.inactive.button.*.bg: Flat Solid Border
+window.inactive.button.*.bg.color: {c["ibtn_bg_to_split"]}
 window.inactive.button.*.bg.border.color: {c["ibtn_border"]}
 window.inactive.button.*.image.color: {c["ibtn_image"]}
 

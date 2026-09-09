@@ -155,7 +155,7 @@ static gboolean on_press(GtkWidget *w, GdkEventButton *e, gpointer data) {
         scroll_to_pixel(s, e->y);
     }
     /* Route ALL further pointer events here until release, even when the pointer
-     * drifts off the 12px-wide bar onto the list. Without this, motion is delivered
+     * drifts off the narrow bar onto the list. Without this, motion is delivered
      * to whatever window sits under the pointer, so a real drag that wanders a few
      * px sideways stops feeding on_motion and the thumb freezes/stutters -- the
      * "laggy, not smooth when I drag it" bug. */
@@ -203,7 +203,7 @@ static gboolean on_leave(GtkWidget *w, GdkEventCrossing *e, gpointer data) {
 static void on_adj_changed(GtkAdjustment *adj, gpointer data) {
     (void)adj;
     AzScrollbar *s = data;
-    /* Reserve the 12px track only when there is something to scroll, giving the
+    /* Reserve the track column only when there is something to scroll, giving the
      * column back to the list otherwise -- but do it by COLLAPSING THE WIDTH, never
      * by gtk_widget_set_visible. Mapping/unmapping the bar's GdkWindow on a filter
      * change forced a full relayout of the override-redirect toplevel that left the

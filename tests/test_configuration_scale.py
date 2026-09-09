@@ -36,8 +36,8 @@ def test_channel_math():
 
 def test_scaled_helpers():
     assert scale.ui_px(100, 1.35) == 135
-    assert scale.pt(9, 1.35) == 12             # openbox titlebar stock 9 -> 12
-    assert scale.pt(9, 1.0) == 9
+    assert scale.pt(7, 1.35) == 9              # openbox titlebar stock 7 -> 9 (the 25%-smaller bar)
+    assert scale.pt(7, 1.0) == 7
 
 
 # --- the standard channels are wired ----------------------------------------
@@ -76,9 +76,10 @@ def test_kitty_and_gedit_font_derive_from_scale():
 
 
 def test_openbox_titlebar_font_derives_from_scale():
-    # The DPI-blind OpenBox titlebar is explicitly scaled: pt(stock) == 12 at the default.
+    # The DPI-blind OpenBox titlebar is explicitly scaled: pt(stock) == 9 at the default
+    # (the 25%-smaller bar; stock 7 -> 9).
     assert openbox.TITLE_FONT_SIZE == scale.pt(scale.OPENBOX_TITLE_FONT_STOCK)
-    assert openbox.TITLE_FONT_SIZE == 12   # today's ~1.5x titlebar at the 1.35 default
+    assert openbox.TITLE_FONT_SIZE == 9   # the 25%-smaller titlebar at the 1.35 default
     # and it is emitted into rc.xml.
     assert f"<size>{openbox.TITLE_FONT_SIZE}</size>" in openbox.openbox_rc_xml()
 

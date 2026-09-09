@@ -121,8 +121,9 @@ def pt(stock_pt: int, scale: float = GLOBAL_SCALE) -> int:
 TERMINAL_EDITOR_FONT_STOCK = 13     # was hardcoded 18 (== round(13 * 1.35))
 
 # The OpenBox titlebar font is DPI-BLIND (OpenBox renders it at a fixed pt), so it is scaled
-# EXPLICITLY via pt(). Stock 9 -> pt(9) == 12, the current ~1.5x-stock titlebar value.
-OPENBOX_TITLE_FONT_STOCK = 9        # pt(9) == 12 (the current titlebar font)
+# EXPLICITLY via pt(). Stock 7 -> pt(7) == 9: the titlebar was shrunk 25% (12 * 0.75 == 9),
+# so the whole bar (OpenBox sizes the min/max/close buttons to the label) came down with it.
+OPENBOX_TITLE_FONT_STOCK = 7        # pt(7) == 9 (12 * 0.75; the 25%-smaller titlebar font)
 
 # The application menu is GTK: its POINT fonts scale via gtk-xft-dpi automatically, so these are
 # STOCK sizes (the DPI channel bumps them). Its fixed-PIXEL dims are scaled by ui_px() instead

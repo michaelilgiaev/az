@@ -430,8 +430,8 @@ AzAppList *az_applist_new(AzIcons *icons, AzActivateFn on_activate, gpointer use
      * relayout expose stays on-theme rather than flashing the X default black. */
     widget_bg(l->area, AZ_BG_COLOR);
 
-    /* Pack the custom scrollbar in a row to the RIGHT of the list, reserving its 12px
-     * column exactly like Tk (the scrollbar packed side="right", fill="y"). This
+    /* Pack the custom scrollbar in a row to the RIGHT of the list, reserving its
+     * column (AZ_SCROLL_TRACK_WIDTH) exactly like Tk (packed side="right", fill="y"). This
      * makes the list genuinely narrower (so the selection outline stops before the bar,
      * matching Tk) rather than floating over it; when the bar auto-hides (content fits)
      * it gives the column back to the list, like Tk's pack_forget. */

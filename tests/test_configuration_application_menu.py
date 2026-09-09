@@ -108,6 +108,22 @@ def test_menu_makefile_builds_theme_object():
     assert "theme.o" in mk
 
 
+def test_scrollbar_pill_is_twice_as_big():
+    # The user asked for the app-menu scrollbar "twice as big". The pill's two WIDTH
+    # constants in theme.h were doubled together (visible thumb 4 -> 8, reserved column
+    # 9 -> 18), so the pill stays centered in its column and the proportions are unchanged,
+    # only larger. THUMB_MIN is the pill's minimum VERTICAL length (grab-ability), NOT a
+    # thickness axis, so it is deliberately left as-is (doubling it would change scroll feel,
+    # not the bar's visible size). All three are AZ_SCALED() so they still follow the UI scale.
+    h = (CSRC_DIR / "theme.h").read_text(encoding="utf-8")
+    assert "#define AZ_SCROLL_THUMB_WIDTH  AZ_SCALED(8)" in h    # was 4, doubled
+    assert "#define AZ_SCROLL_TRACK_WIDTH  AZ_SCALED(18)" in h   # was 9, doubled with it
+    assert "#define AZ_SCROLL_THUMB_MIN    AZ_SCALED(24)" in h   # vertical min, unchanged
+    # The old (half-size) widths must be gone, or the bar was not actually grown.
+    assert "AZ_SCROLL_THUMB_WIDTH  AZ_SCALED(4)" not in h
+    assert "AZ_SCROLL_TRACK_WIDTH  AZ_SCALED(9)" not in h
+
+
 # --- Emit plan: the launcher + .desktop (the daemon binary is compiled) ------
 
 def test_emit_plan_targets_expected_system_paths():
