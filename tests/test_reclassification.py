@@ -10,7 +10,7 @@ future edit could silently violate:
                         with an __init__.py). This holds BOTH the things WE author
                         (application_menu/, azzio/, passwords/, and the critically-modified
                         calamares/) AND the upstream software we merely tailor (openbox/,
-                        librewolf/, kitty/, gedit/, thunar/, fastfetch/, the per-app tweaks).
+                        librewolf/, kitty/, gedit/, file_manager/, fastfetch/, the per-app tweaks).
                         There is NO separate modifications/ tree anymore.
 
 This is also a genuine IMPORT hazard: the compiler's package-cache module is `downloader`

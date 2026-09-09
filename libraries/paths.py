@@ -13,7 +13,7 @@ Mirrors the directory scheme the old compile.sh used, so the Docker bind mounts
                            BOTH the things WE author (application_menu/, azzio/,
                            passwords/, and the critically-modified calamares/) AND the
                            upstream software we merely tailor (openbox/, librewolf/,
-                           kitty/, gedit/, thunar/, fastfetch/, the per-app tweaks) --
+                           kitty/, gedit/, file_manager/, fastfetch/, the per-app tweaks) --
                            all pure stdlib (no requirements.txt). package_discovery
                            imports each directory-with-__init__.py, so a package is added
                            or removed just by creating/deleting its directory.
@@ -48,7 +48,7 @@ PKGDIR = LIBDIR
 # the application-menu source tree + build wiring (application_menu/), the `azzio` guest command
 # line interface (azzio/), the passwords manager (passwords/), the critically-modified calamares
 # install config (calamares/) -- AND the upstream software we merely tailor to Azzio (openbox/,
-# librewolf/, kitty/, gedit/, thunar/, fastfetch/, the per-app tweaks). package_discovery imports
+# librewolf/, kitty/, gedit/, file_manager/, fastfetch/, the per-app tweaks). package_discovery imports
 # each directory-with-__init__.py from here. All pure Python standard library, so there is NO
 # shared requirements.txt here (the only one in the repo is the repo-root requirements.txt the
 # compiler itself uses for its test/dev deps). (Our OWN package recipes live in the flat

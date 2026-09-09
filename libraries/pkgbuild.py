@@ -89,12 +89,12 @@ LIBREWOLF_PGP_KEY = "662E3CDD6FE329002D0CA5BB40339DD82B12EF16"
 # is the Azzio symlink-resolve modification, baked DIRECTLY into the committed C source
 # (packages/file_manager owns it; see that package's __init__ docstring). No tarball URL and no
 # sha256: the source is local and version-controlled, so integrity comes from git, not a download
-# hash. No build-time patch companion either -- the tree already carries the change. THUNAR_VERSION
+# hash. No build-time patch companion either -- the tree already carries the change. FILE_MANAGER_VERSION
 # is the only pinned fact left here (the pkgver); the source dirname and pinned commit live on the
 # file_manager package (single source of truth for the source).
 from packages import file_manager as _file_manager  # noqa: E402  (source facts live on the package)
 
-THUNAR_VERSION = _file_manager.SOURCE_VERSION
+FILE_MANAGER_VERSION = _file_manager.SOURCE_VERSION
 
 
 # ---------------------------------------------------------------------------
@@ -350,7 +350,7 @@ package() {{
 # builder and no patch companion in the recipe dir.
 
 
-def pkgbuild_thunar() -> str:
+def pkgbuild_file_manager() -> str:
     src = _file_manager.SOURCE_SUBDIR
     return f"""\
 # Maintainer: Azzio <https://github.com/michaelilgiaev/azzio>
@@ -364,7 +364,7 @@ def pkgbuild_thunar() -> str:
 # the default file manager. It needs ONE behaviour change the stock 4.20 series
 # cannot be configured to do: always show the fully-resolved (symlink-dereferenced)
 # path in the location bar/title (the misc-resolve-links pref only exists in Thunar
-# >= 4.21.6). This recipe builds the SAME version Arch's extra/ ships ({THUNAR_VERSION})
+# >= 4.21.6). This recipe builds the SAME version Arch's extra/ ships ({FILE_MANAGER_VERSION})
 # -- a drop-in replacement for the `thunar` package -- from the VENDORED source, which
 # already carries that change. (pkgname stays `thunar` so it replaces extra/thunar and
 # every consumer, .desktop, xfconf channel and locale catalog keeps working.)
@@ -392,7 +392,7 @@ def pkgbuild_thunar() -> str:
 # =============================================================================
 
 pkgname=thunar
-pkgver={THUNAR_VERSION}
+pkgver={FILE_MANAGER_VERSION}
 # pkgrel=2 (extra/thunar is -1): a version bump documenting that this is our patched
 # rebuild, one rel above extra/'s. NOTE: the higher pkgrel is NOT what makes ours win --
 # pacman selecting `-S thunar` picks the package from the FIRST repo in config order that
@@ -529,8 +529,12 @@ def recipe_dirs(full_compile: bool) -> list[tuple[str, dict[str, str]]]:
     # symlink-resolve behaviour is not optional and is baked into that source. PKGBUILD is the
     # only text companion; the source TREE is copied into the recipe dir separately by
     # makepkg._emit_recipes (see recipe_source_trees), not carried here as a string.
+    # NOTE: the recipe-dir KEY stays "thunar" -- it doubles as the produced PACKAGE name
+    # (pkgname=thunar) that the staleness gate globs for (makepkg._repo_has_all/_repo_is_current
+    # key off this dir name). Only the source/config package folder and our Python identifiers
+    # were renamed to file_manager; this build-internal key must equal the package it produces.
     thunar = ("thunar", {
-        "PKGBUILD": pkgbuild_thunar(),
+        "PKGBUILD": pkgbuild_file_manager(),
     })
     if full_compile:
         librewolf = ("librewolf", {"PKGBUILD": pkgbuild_librewolf_src(), **lw_common})
@@ -547,11 +551,12 @@ def recipe_source_trees() -> dict[str, Path]:
     hashed into the recipe fingerprint). makepkg._emit_recipes copies each tree into the recipe
     dir under its own basename; the PKGBUILD's prepare() then copies it from $startdir into a
     writable build tree (makepkg's source=() array cannot name a directory, so the tree is NOT a
-    source=() entry -- see pkgbuild_thunar).
+    source=() entry -- see pkgbuild_file_manager).
 
     Only thunar uses this today: its source is the git-cloned tree vendored on the file_manager
     package (packages/file_manager.SOURCE_DIR), copied in as ./<SOURCE_SUBDIR>. calamares and
-    librewolf fetch their source in-recipe (tarball / git+), so they are absent here."""
+    librewolf fetch their source in-recipe (tarball / git+), so they are absent here. The key is
+    the recipe-dir name "thunar" (== the produced package name), matching recipe_dirs above."""
     return {"thunar": _file_manager.SOURCE_DIR}
 
 

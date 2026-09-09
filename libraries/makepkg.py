@@ -61,7 +61,7 @@ BUILDER_USER = "azziobuilder"
 #
 # `thunar` is DIFFERENT from calamares/librewolf: it IS a real Arch package (in extra/ and in
 # the manifest packages.x86_64), which Azzio REBUILDS from source with a symlink-resolve patch
-# (pkgbuild.pkgbuild_thunar, pkgrel 2 so ours outranks extra/'s -1). Listing it here
+# (pkgbuild.pkgbuild_file_manager, pkgrel 2 so ours outranks extra/'s -1). Listing it here
 # excludes it from the Arch `pacman -Sw` download -- so ONLY our patched thunar lands in the
 # offline repo (no redundant fetch of extra/'s, and no ambiguity about which is installed). The
 # manifest still lists `thunar` (it must be pacstrapped); it is simply satisfied from our repo.

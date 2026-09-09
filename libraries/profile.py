@@ -146,9 +146,9 @@ FILE_PERMISSIONS = {
     # would ship it 0644 unless pinned -- and then media.py's os.access(..., X_OK) guard fails and
     # the FN keys change the volume/brightness with NO on-screen bar.
     "/usr/local/lib/azzio/azzio-osd": "0:0:755",
-    # The live Thunar-sidebar sync helper (/usr/local/lib/azzio/azzio-sidebar-sync), which
+    # The live file-manager sidebar sync helper (/usr/local/lib/azzio/azzio-sidebar-sync), which
     # regenerates ~/.config/gtk-3.0/bookmarks from the live home contents and (with --watch)
-    # keeps Thunar's Places pane in sync. SAME archiso mode-normalization as the binaries above:
+    # keeps the file manager's Places pane in sync. SAME archiso mode-normalization as the binaries above:
     # live_sidebar.emit_plan() emits it 0755, but the squashfs ships it 0644 unless pinned here --
     # and then the OpenBox autostart's `[ -x '/usr/local/lib/azzio/azzio-sidebar-sync' ]` guard
     # FAILS, so the --watch daemon never launches and Places never updates when a folder is added
@@ -184,7 +184,16 @@ FILE_PERMISSIONS = {
 }
 
 
-def profiledef_sh(variant: str = "base") -> str:
+def profiledef_sh(variant: str = "base", threads: int | None = None) -> str:
+    # `threads` caps the zstd bootstrap-tarball compression below. Left as -T0 it
+    # would grab EVERY logical core and freeze the machine for the whole compress
+    # pass; we instead pin it to the ONE shared, headroom-leaving cap so the same
+    # rule that governs the compilers (makepkg.build_jobs) governs mkarchiso too.
+    # Imported lazily so this module keeps no import-time dependency on the makepkg
+    # build stage (and callers can still inject an explicit count for tests).
+    if threads is None:
+        import makepkg
+        threads = makepkg.build_jobs()
     bootmodes = " ".join(f"'{m}'" for m in BOOTMODES)
     perms = "\n".join(f'  ["{p}"]="{v}"' for p, v in FILE_PERMISSIONS.items())
     iso_name = iso_name_for(variant)
@@ -209,10 +218,10 @@ airootfs_image_type="squashfs"
 
 ### This line fixes an odd bug that appeared out of nowhere
 ### \"\"\"FATAL ERROR: xz uncompress failed with error code 9\"\"\"
-airootfs_image_tool_options=('-comp' 'zstd' '-Xcompression-level' '15')
+airootfs_image_tool_options=('-comp' 'zstd' '-Xcompression-level' '15' '-processors' '{threads}')
 ###
 
-bootstrap_tarball_compression=('zstd' '-c' '-T0' '--auto-threads=logical' '--long' '-19')
+bootstrap_tarball_compression=('zstd' '-c' '-T{threads}' '--long' '-19')
 file_permissions=(
 {perms}
 )

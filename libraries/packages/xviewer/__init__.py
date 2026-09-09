@@ -4,14 +4,14 @@ xviewer (the GTK image viewer, the Azzio "Photos" default -- image/* maps to it 
 packages/azzio/default_applications.py) ships with a default icon that reads like a staring
 eye ("it looks like it's spying, genuinely off-putting"). Azzio replaces it with a clean
 custom icon -- a framed picture of a sun over mountains in the Azzio blue-gradient-on-dark
-badge (assets/icons/xviewer.svg, the same visual identity as the kitty/thunar/installer icons).
+badge (assets/icons/xviewer.svg, the same visual identity as the kitty/file_manager/installer icons).
 
-HOW (the kitty/thunar icon pattern). The SVG asset is the single source of truth. We ship it
+HOW (the kitty/file_manager icon pattern). The SVG asset is the single source of truth. We ship it
 to the hicolor SCALABLE apps dir under OUR OWN icon name (XVIEWER_ICON_NAME = azzio-xviewer)
 and rasterize it to the standard PNG sizes there, then OVERRIDE xviewer.desktop's Icon= to
 that name. Using a NEW icon name (not overwriting the package's `xviewer` icon files) means an
 xviewer package upgrade that reships its own icons cannot revert ours -- our name is ours
-alone (the same reasoning packages/file_manager uses for azzio-thunar).
+alone (the same reasoning packages/file_manager uses for azzio-file-manager).
 
 WHAT LANDS WHERE:
   * the custom icon (scalable SVG + PNG rasterizations) under /usr/share/icons/hicolor/... --

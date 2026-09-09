@@ -8,7 +8,7 @@ profile it reads ~/.config/Thunar/thunarrc, migrates it into the Xfconf "thunar"
 the RUNTIME source of truth on the real desktop (where xfconfd runs) is the channel XML,
 while thunarrc is what a fresh profile migrates FROM and what Thunar falls back to when
 xfconfd is absent. To be correct in BOTH cases -- and never let the two drift -- this
-module keeps the settings ONCE (SETTINGS below) and renders both thunarrc() and
+module keeps the settings ONCE (SETTINGS below) and renders both file_manager_rc() and
 xfconf_channel_xml() from it. (The same belt-and-braces the repo uses for the gtk2/3/4
 settings.ini trio.)
 
@@ -81,8 +81,8 @@ HOME = "/home/main"
 
 # Where Thunar reads its two config forms. thunarrc is the classic GKeyFile; the Xfconf
 # channel XML is the migrated runtime store (the real source of truth once xfconfd has run).
-THUNARRC_PATH = f"{HOME}/.config/Thunar/thunarrc"
-XFCONF_THUNAR_PATH = f"{HOME}/.config/xfce4/xfconf/xfce-perchannel-xml/thunar.xml"
+FILE_MANAGER_RC_PATH = f"{HOME}/.config/Thunar/thunarrc"
+XFCONF_FILE_MANAGER_PATH = f"{HOME}/.config/xfce4/xfconf/xfce-perchannel-xml/thunar.xml"
 # The Thunar-scoped GTK CSS (font half of the +20% bump). ~/.config/gtk-3.0/gtk.css is the
 # per-user CSS GTK3 loads; the rules here are SELECTOR-SCOPED to Thunar's window node so no
 # other GTK app is affected.
@@ -90,7 +90,7 @@ GTK_CSS_PATH = f"{HOME}/.config/gtk-3.0/gtk.css"
 
 # The ~20% font bump, in em (relative to the inherited/globally-scaled GTK font, so it
 # composes with the desktop scale rather than pinning pixels). 1.2 == +20%.
-THUNAR_FONT_SCALE = 1.2
+FILE_MANAGER_FONT_SCALE = 1.2
 
 # --- The single source of truth -------------------------------------------------
 # Ordered so both rendered files list settings the same way. Each entry:
@@ -166,7 +166,7 @@ HIDDEN_BOOKMARKS: tuple[str, ...] = (
     # REMOVE the built-in Home shortcut entirely. The user deleted the sidebar's Home entry
     # ("just delete it, we dont actually need it there is a home button"), so we hide the
     # built-in Home (its URI is exactly "file:///home/main") and ship NO replacement bookmark
-    # (see thunar/sidebar.py). The Places sidebar therefore has no Home row at all; Thunar's
+    # (see file_manager/sidebar.py). The Places sidebar therefore has no Home row at all; Thunar's
     # Home toolbar button covers navigating home.
     f"file://{HOME}",
 )
@@ -185,7 +185,7 @@ HIDDEN_DEVICES: tuple[str, ...] = (
 # device -- there is no config that permanently deletes the heading widget itself.)
 
 
-def _bool_thunarrc(value: bool) -> str:
+def _bool_file_manager_rc(value: bool) -> str:
     """thunarrc stores booleans as the tokens TRUE/FALSE (verified: Thunar reads/writes
     these exact tokens in the [Configuration] group)."""
     return "TRUE" if value else "FALSE"
@@ -196,7 +196,7 @@ def _bool_xfconf(value: bool) -> str:
     return "true" if value else "false"
 
 
-def thunarrc() -> str:
+def file_manager_rc() -> str:
     """Return ~/.config/Thunar/thunarrc -- the classic GKeyFile Thunar migrates FROM on a
     fresh profile and falls back to when xfconfd is absent. One `[Configuration]` group with
     the CamelCase keys; rendered from SETTINGS so it never drifts from the Xfconf XML."""
@@ -208,7 +208,7 @@ def thunarrc() -> str:
         "[Configuration]",
     ]
     for rc_key, _prop, kind, value in SETTINGS:
-        rendered = _bool_thunarrc(value) if kind == "bool" else str(value)
+        rendered = _bool_file_manager_rc(value) if kind == "bool" else str(value)
         lines.append(f"{rc_key}={rendered}")
     return "\n".join(lines) + "\n"
 
@@ -219,7 +219,7 @@ def xfconf_channel_xml() -> str:
     (declaration `<?xml version="1.1"?>`, `<channel name="thunar" version="1.0">`,
     `<property .../>`) and the canonical values are VERIFIED against the installed Thunar
     (captured by round-tripping the settings through xfconf-query). Rendered from the SAME
-    SETTINGS table as thunarrc()."""
+    SETTINGS table as file_manager_rc()."""
     lines = [
         '<?xml version="1.1" encoding="UTF-8"?>',
         "",
@@ -251,11 +251,11 @@ def gtk_css() -> str:
     The selector `window.thunar-window` targets Thunar's top-level window (its CSS node name
     is `thunar-window`, verified in the 4.20 binary); the descendant selectors cover the file
     area (`.standard-view`) and the sidebar (`.sidebar`/`.shortcuts-pane`). The size is set in
-    EM (THUNAR_FONT_SCALE = 1.2 -> +20%), which is RELATIVE to the inherited GTK font -- so
+    EM (FILE_MANAGER_FONT_SCALE = 1.2 -> +20%), which is RELATIVE to the inherited GTK font -- so
     when the global desktop scale changes the inherited size, this rides on top of it and
     Thunar stays ~20% larger at ANY scale (never an absolute pixel size). GTK3 loads this
     file for every app, but only Thunar windows match the selector."""
-    pct = f"{THUNAR_FONT_SCALE:g}em"
+    pct = f"{FILE_MANAGER_FONT_SCALE:g}em"
     return f"""\
 /* Azzio Thunar font bump (~20 percent). Generated by packages/file_manager (edit the Python, not
    this file). SCOPED to Thunar's window node so no other GTK app is affected. The size is in

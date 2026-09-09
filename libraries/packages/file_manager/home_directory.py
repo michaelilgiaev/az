@@ -90,7 +90,7 @@ TRASH_LINK_NAME = "Trash"
 # user deleted the "Home Directory" entry from Thunar's Places sidebar ("just delete it, we dont
 # actually need it there is a home button"), so the previous distinct-URI symlink trick that
 # backed that bookmark is gone. The built-in username Home shortcut stays hidden via
-# thunar/settings.HIDDEN_BOOKMARKS[file:///home/main]; navigating home uses Thunar's Home button.
+# file_manager/settings.HIDDEN_BOOKMARKS[file:///home/main]; navigating home uses Thunar's Home button.
 
 # --- The XDG trash chain -------------------------------------------------------
 # The trash spec's two required dirs, created (relative to the home dir) BEFORE the

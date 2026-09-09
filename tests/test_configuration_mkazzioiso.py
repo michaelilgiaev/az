@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 
 import pytest
 
@@ -254,6 +255,40 @@ def test_profiledef_names_the_sshd_iso():
     # the recipe's profile.ISO_NAME_SSHD).
     assert 'iso_name="azzio-headed-ssh"' in pd
     assert pd.startswith("#!/usr/bin/env bash")
+
+
+def test_guest_bootstrap_zstd_threads_are_capped_not_all_cores():
+    # The guest `azzio mkazzioiso` tool runs mkarchiso from inside the live system, so
+    # its bootstrap-tarball zstd must ALSO leave headroom instead of grabbing every core
+    # with -T0 -- otherwise building the ssh ISO from a running Azzio freezes the box.
+    pd = mk.profiledef_sh(threads=20)
+    assert "'-T0'" not in pd
+    assert "'-T20'" in pd
+
+
+def test_guest_bootstrap_zstd_defaults_to_a_positive_capped_count():
+    # With no explicit count it computes an affinity-aware, headroom-leaving default
+    # on its own (the guest tool is standalone and cannot import the build-host cap),
+    # and that default is a concrete positive integer -- never -T0.
+    pd = mk.profiledef_sh()
+    assert "'-T0'" not in pd
+    assert re.search(r"'-T([1-9]\d*)'", pd), pd
+
+
+def test_guest_squashfs_processors_capped_in_tool_options():
+    # Same mkarchiso reality as the recipe build: the -processors cap for mksquashfs
+    # must ride on airootfs_image_tool_options (mkarchiso ignores MKSQUASHFS_OPTIONS),
+    # so a guest-side ISO build does not pin every core during squashfs compression.
+    pd = mk.profiledef_sh(threads=20)
+    tool_line = [l for l in pd.splitlines() if "airootfs_image_tool_options=" in l][0]
+    assert "'-comp' 'zstd'" in tool_line
+    assert "'-processors' '20'" in tool_line
+
+
+def test_guest_squashfs_processors_defaults_to_positive_count():
+    pd = mk.profiledef_sh()
+    tool_line = [l for l in pd.splitlines() if "airootfs_image_tool_options=" in l][0]
+    assert re.search(r"'-processors' '([1-9]\d*)'", tool_line), tool_line
 
 
 def test_sshd_service_matches_the_baked_variant():

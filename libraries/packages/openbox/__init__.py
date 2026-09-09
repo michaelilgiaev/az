@@ -1020,7 +1020,7 @@ def openbox_rc_xml() -> str:
     </keybind>
     <!-- Alt+Tab: the Azzio window switcher (packages/window_switcher), which REPLACES
          OpenBox's built-in vertical icon list. A horizontal, Windows-like overlay of LIVE
-         window thumbnails, ordered librewolf/kitty/hypervisor/thunar/alphabetical. The
+         window thumbnails, ordered librewolf/kitty/hypervisor/file_manager/alphabetical. The
          launcher signals the resident daemon (the next flag advances forward, prev
          backward). Releasing Alt (the daemon grabs the seat, so it sees the release)
          commits the selection. -->

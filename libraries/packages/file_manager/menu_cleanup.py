@@ -65,7 +65,7 @@ NoDisplay=true
 
 def builders() -> list[tuple[str, str]]:
     """Return (dest_path, body) pairs for each hidden launcher's NoDisplay override, so the
-    thunar emit_plan can turn them into owner="root" entries whose dest matches an
+    file_manager emit_plan can turn them into owner="root" entries whose dest matches an
     ISO_APP_OVERRIDES target (staged for the post-pacstrap install hook)."""
     out: list[tuple[str, str]] = []
     for basename, name, exec_line, icon in SUPPRESSED:
