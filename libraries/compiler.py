@@ -67,12 +67,13 @@ from packages import openbox
 from packages import fastfetch
 from packages import librewolf
 from packages import gedit
-# The home-directory LAYOUT data (dirs/links/trash; no emit_plan) was folded into the thunar
-# package (Thunar's sidebar is built from the same list), so _emit_homedir reads it from there.
-from packages.thunar import home_directory
-# The per-application tweaks that expose ONLY emit_plan() (kitty, vlc, libreoffice, gimp, thunar,
-# xviewer) are NOT imported by name -- _emit_apps discovers them. (thunar folds in the ~/Templates
-# "Create Document" set from its templates submodule, so there is no standalone templates package.)
+# The home-directory LAYOUT data (dirs/links/trash; no emit_plan) lives on the file_manager
+# package (the file manager's sidebar is built from the same list), so _emit_homedir reads it there.
+from packages.file_manager import home_directory
+# The per-application tweaks that expose ONLY emit_plan() (kitty, vlc, libreoffice, gimp,
+# file_manager, xviewer) are NOT imported by name -- _emit_apps discovers them. (file_manager folds
+# in the ~/Templates "Create Document" set from its templates submodule, and builds the Thunar
+# binary itself from vendored source, so there is no standalone templates or thunar package.)
 # The packages the
 # compiler already drives explicitly (the desktop pair openbox/librewolf, plus application_menu,
 # passwords, calamares, and the azzio guest command line interface) are excluded from that
@@ -857,7 +858,7 @@ def _emit_apps(airootfs: Path, home: Path, ea: Path) -> None:
 
 def _emit_homedir(airootfs: Path, home: Path) -> None:
     """Create the home-directory LAYOUT -- the top-level folders and convenience symlinks
-    that packages.thunar.home_directory defines as the single source of truth (and that
+    that packages.file_manager.home_directory defines as the single source of truth (and that
     Thunar's sidebar mirrors). Unlike the emit_plan() modules this emits no file CONTENT:
     directories and symlinks are not text, so it walks home_directory's plain data with
     emit.mkdir()/emit.link() rather than a builder loop.

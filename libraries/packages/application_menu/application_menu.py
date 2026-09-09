@@ -108,7 +108,7 @@ MENU_ICON_NAME = "application-menu"
 # dark surface (NOT app-tile badges). They are shipped under Azzio-SPECIFIC names
 # (azzio-sleep, ...) that no stock theme defines, so the menu's icon resolver (icons.c,
 # which walks the theme chain and returns the FIRST match) picks OURS -- exactly the
-# new-name reasoning packages/xviewer + packages/thunar use so a theme/package update cannot
+# new-name reasoning packages/xviewer + packages/file_manager use so a theme/package update cannot
 # revert them. menu.c references these AZ_ICON_* names; a test pins the two lists equal.
 #
 # Each: the source-of-truth SVG asset -> our icon name. Shipped to the hicolor SCALABLE apps

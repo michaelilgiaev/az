@@ -1,4 +1,4 @@
-"""packages.thunar.live_sidebar -- the runtime GTK-bookmarks sync (PROMPT: additions to
+"""packages.file_manager.live_sidebar -- the runtime GTK-bookmarks sync (PROMPT: additions to
 the home dir must show up in Thunar's sidebar automatically).
 
 Why these tests matter: the sidebar is otherwise STATIC (a build-time file), so "anything the
@@ -34,9 +34,9 @@ from __future__ import annotations
 import os
 import subprocess
 
-from packages.thunar import home_directory
+from packages.file_manager import home_directory
 from packages import openbox
-from packages.thunar import live_sidebar, sidebar
+from packages.file_manager import live_sidebar, sidebar
 
 
 # --- static seed ordering (home_directory.sidebar_entries) ------------------
@@ -85,9 +85,9 @@ def test_sync_helper_emitted_root_owned_executable():
     e = next(x for x in plan if x["dest"] == live_sidebar.SYNC_SCRIPT_DEST)
     assert e["owner"] == "root"
     assert e["mode"] == 0o755
-    # the whole thunar plan includes it too.
-    from packages import thunar
-    assert live_sidebar.SYNC_SCRIPT_DEST in {x["dest"] for x in thunar.emit_plan()}
+    # the whole file_manager plan includes it too.
+    from packages import file_manager
+    assert live_sidebar.SYNC_SCRIPT_DEST in {x["dest"] for x in file_manager.emit_plan()}
 
 
 def test_sync_helper_is_pinned_executable_in_the_iso():

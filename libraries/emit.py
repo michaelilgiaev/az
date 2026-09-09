@@ -40,7 +40,7 @@ def write_exec(path: Path, text: str) -> Path:
 def write_bytes(path: Path, data: bytes, mode: int = 0o644) -> Path:
     """Write generated BINARY content verbatim (no newline normalization), creating parent
     dirs. For artifacts whose bytes are meaningful and must not be touched -- e.g. a compiled
-    gettext .mo catalog (packages/thunar/locale.mo_bytes)."""
+    gettext .mo catalog (packages/file_manager/locale.mo_bytes)."""
     path = Path(path)
     _ensure_parent(path)
     path.write_bytes(data)

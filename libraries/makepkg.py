@@ -371,13 +371,29 @@ def _repo_is_current(pkg_repo: Path, full_compile: bool,
 
 def _emit_recipes(scratch: Path, full_compile: bool) -> list[Path]:
     """Write each recipe dir (PKGBUILD + companions) from pkgbuild into
-    scratch/. Returns the list of recipe dirs to build, in order."""
+    scratch/. Returns the list of recipe dirs to build, in order.
+
+    A recipe may also declare a local source TREE (pkgbuild.recipe_source_trees) -- a vendored,
+    version-controlled directory that cannot be carried as a text companion. For such a recipe
+    the tree is COPIED into the recipe dir under its own basename so the PKGBUILD's local
+    source=() entry finds it (thunar's git-cloned tree works this way). The copy is what makepkg
+    consumes, so the vendored original is never mutated by the build."""
+    source_trees = pkgbuild_cfg.recipe_source_trees()
     dirs: list[Path] = []
     for dirname, files in pkgbuild_cfg.recipe_dirs(full_compile):
         d = scratch / dirname
         d.mkdir(parents=True, exist_ok=True)
         for filename, content in files.items():
             emit.write_text(d / filename, content)
+        tree = source_trees.get(dirname)
+        if tree is not None:
+            dest = d / tree.name
+            if dest.exists():
+                shutil.rmtree(dest)
+            # copy the vendored source tree into the recipe dir (dest basename == tree basename,
+            # which is what the PKGBUILD's local source=() names). Dereference symlinks so the
+            # recipe dir holds a real, self-contained tree.
+            shutil.copytree(tree, dest, symlinks=False)
         dirs.append(d)
     return dirs
 

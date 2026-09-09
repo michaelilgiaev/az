@@ -28,7 +28,7 @@ Thunar's "Open Terminal Here" uses (`exo-open --launch TerminalEmulator`). We sh
   * a kitty TerminalEmulator HELPER .desktop (/usr/share/xfce4/helpers/kitty.desktop, an
     X-XFCE-Helper in the TerminalEmulator category) so exo knows how to launch kitty.
 VERIFIED in the VM: with both in place, `exo-open --launch TerminalEmulator` (and with
---working-directory) opens kitty. (packages/thunar's uca.xml ALSO runs kitty directly for
+--working-directory) opens kitty. (packages/file_manager's uca.xml ALSO runs kitty directly for
 its Open Terminal Here action, so the terminal is kitty by both paths.)
 
 THE FILE MANAGER default is Thunar via inode/directory (in CATEGORIES below) AND exo's
