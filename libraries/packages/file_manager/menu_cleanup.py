@@ -1,7 +1,7 @@
-"""Application-menu cleanup (PROMPT task 3) -- hide the extra Thunar/Xfce launchers.
+"""Application-menu cleanup -- hide the extra file-manager/Xfce launchers.
 
-Installing Thunar (and its companions) drops several .desktop launchers into the application
-menu that Azzio does NOT want cluttering it:
+Installing Azzio File Manager (the `thunar` package) and its companions drops several .desktop
+launchers into the application menu that Azzio does NOT want cluttering it:
 
   * thunar-bulk-rename.desktop      "Bulk Rename"              (owned by thunar)
   * thunar-settings.desktop         "Thunar Preferences"      (owned by thunar)

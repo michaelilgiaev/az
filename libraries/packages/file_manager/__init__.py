@@ -1,21 +1,20 @@
-"""Azzio file manager -- the vendored, version-controlled Thunar (source + config in one package).
+"""Azzio File Manager -- the vendored, version-controlled source + config in one package.
 
-Thunar (Xfce's GTK file manager) is the Azzio file manager. This package OWNS it end to end:
+Azzio File Manager is Azzio's fork of Thunar (Xfce's GTK file manager). This package OWNS it end
+to end:
 
-  * SOURCE. The full Thunar source tree is vendored under packages/file_manager/thunar/ (a
-    `git clone` of the pinned upstream tag, committed straight into the Azzio repo -- see
-    SOURCE_COMMIT/SOURCE_VERSION below). The ONE Azzio behaviour change (always show the
-    fully-resolved, symlink-dereferenced path in the location bar/title, which the 4.20 series
-    has no misc-resolve-links pref for) is applied DIRECTLY to the committed C source
-    (thunar/thunar-window.c) rather than as a build-time patch, so the modification is itself
-    version-controlled and auditable with `git diff`. azzio-thunar-resolve-symlink.patch is
-    kept beside this file purely as the human-readable record of that change (the diff vs
-    pristine upstream); it is NOT applied at build time -- the tree already carries it.
+  * SOURCE. The full source tree is vendored under packages/file_manager/source/ (a `git clone`
+    of the pinned upstream Thunar tag, committed straight into the Azzio repo and relicensed
+    GPL-3.0 -- see SOURCE_COMMIT/SOURCE_VERSION below). The ONE Azzio behaviour change (always
+    show the fully-resolved, symlink-dereferenced path in the location bar/title, which the 4.20
+    series has no misc-resolve-links pref for) is applied DIRECTLY to the committed C source
+    (source/thunar/thunar-window.c) rather than as a build-time patch, so the modification is
+    itself version-controlled and auditable with `git diff`. There is no separate .patch artifact.
     pkgbuild.pkgbuild_thunar() builds this vendored tree from source (via ./autogen.sh, since a
     git checkout ships no generated ./configure) and makepkg drops the package into the offline
     repo, exactly like calamares/librewolf. makepkg._emit_recipes copies SOURCE_DIR into the
-    thunar recipe dir at build time (see pkgbuild.recipe_source_trees), so the vendored tree
-    itself is never touched by the build.
+    recipe dir at build time (see pkgbuild.recipe_source_trees), so the vendored tree itself is
+    never touched by the build.
 
   * CONFIG. The Azzio-taste configuration, folded in from the former packages/thunar (the pieces
     are split into focused submodules and re-exported here, INCLUDING home_directory, the
@@ -66,21 +65,21 @@ from . import sidebar
 from . import templates
 
 # --- vendored source facts --------------------------------------------------
-# The Thunar source tree is committed under packages/file_manager/thunar/ at the pinned tag
-# below. The build recipe (pkgbuild.pkgbuild_thunar) references SOURCE_SUBDIR by NAME as a local
-# source=() entry -- a stable relative string so the recipe fingerprint does not depend on the
-# absolute path (host vs container). makepkg._emit_recipes copies SOURCE_DIR into the recipe dir
-# under that name at build time.
-#   Project : https://gitlab.xfce.org/xfce/thunar
-#   Tag     : thunar-{SOURCE_VERSION}  (annotated-tag commit SOURCE_COMMIT)
-#   License : GPL-2.0-or-later (COPYING in the tree)
+# The Azzio File Manager source tree is committed under packages/file_manager/source/ at the
+# pinned upstream tag below (a git clone, relicensed GPL-3.0 -- upstream is GPL-2.0-or-later, so
+# "or later" lets us ship it under GPL-3.0). makepkg._emit_recipes copies SOURCE_DIR into the
+# recipe dir as ./SOURCE_SUBDIR at build time, and pkgbuild.pkgbuild_thunar's prepare() copies it
+# from there into a writable build tree. SOURCE_SUBDIR is a stable relative string so the recipe
+# fingerprint does not depend on the absolute path (host vs container).
+#   Upstream: https://gitlab.xfce.org/xfce/thunar  (tag thunar-{SOURCE_VERSION}, commit SOURCE_COMMIT)
+# The ONE Azzio behaviour change (always show the fully-resolved, symlink-dereferenced path in
+# the location bar/title) is applied DIRECTLY to the committed C source (source/thunar/
+# thunar-window.c), so the modification is itself version-controlled and auditable with git diff.
+# There is no separate .patch artifact and no build-time patch step -- the tree already carries it.
 SOURCE_VERSION = "4.20.9"
 SOURCE_COMMIT = "05a586b8a0608b0d855e3153fcb5207b0b091ef5"
-SOURCE_SUBDIR = "thunar"                       # the vendored tree dirname, and its name in $srcdir
+SOURCE_SUBDIR = "source"                       # the vendored tree dirname, and its name in $srcdir
 SOURCE_DIR = Path(__file__).resolve().parent / SOURCE_SUBDIR
-# The audit record of the Azzio modification (diff of the vendored tree vs pristine upstream).
-# Documentation only -- the change is already baked into SOURCE_DIR; this is not applied.
-RESOLVE_SYMLINK_PATCH = Path(__file__).resolve().parent / "azzio-thunar-resolve-symlink.patch"
 
 # Re-export the public constants callers/tests reach for (paths + the icon name), so
 # `from packages import file_manager; file_manager.THUNARRC_PATH` works like the flat modules.
