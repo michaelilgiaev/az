@@ -1,13 +1,13 @@
-"""packages.file_manager -- the Azzio File Manager (Thunar-based) setup (PROMPT task 2/4/7).
+"""packages.file_manager -- the Azzio File Manager (file-manager-based) setup (PROMPT task 2/4/7).
 
-Why these tests matter: Thunar's config was authored against VERIFIED facts from the installed
-Thunar 4.20 (the thunarrc keys, the Xfconf channel property names + canonical values, the
-uca.xml schema, the sidebar built-in URIs). Each of those is a silent-regression trap -- a
-drifted key/value or a malformed uca.xml is accepted by the build but breaks the feature at
-runtime. These lock the load-bearing details:
+Why these tests matter: the file manager's config was authored against VERIFIED facts from the
+installed file manager 4.20 (the thunarrc keys, the Xfconf channel property names + canonical
+values, the uca.xml schema, the sidebar built-in URIs). Each of those is a silent-regression
+trap -- a drifted key/value or a malformed uca.xml is accepted by the build but breaks the
+feature at runtime. These lock the load-bearing details:
 
-  * thunarrc AND the Xfconf channel XML render the SAME settings (they must not drift; Thunar
-    reads the channel at runtime and thunarrc on a fresh profile / no-xfconfd).
+  * thunarrc AND the Xfconf channel XML render the SAME settings (they must not drift; the file
+    manager reads the channel at runtime and thunarrc on a fresh profile / no-xfconfd).
   * the location bar is the text entry, the side pane is the shortcuts pane, expandable
     folders + split view are off, removable-volume management is off.
   * the uca.xml is WELL-FORMED XML with all four actions (an unescaped `&&` once dropped the
@@ -31,9 +31,9 @@ from packages.file_manager import actions, launcher, locale, menu_cleanup, setti
 # --- thunarrc + xfconf channel (settings.py) --------------------------------
 
 def test_thunarrc_and_xfconf_render_the_same_settings():
-    # The two files must carry identical values (Thunar migrates thunarrc -> xfconf and uses
-    # the channel at runtime; a drift means the fresh-profile seed and the runtime store
-    # disagree). Compare the shared SETTINGS table's presence in both.
+    # The two files must carry identical values (the file manager migrates thunarrc -> xfconf
+    # and uses the channel at runtime; a drift means the fresh-profile seed and the runtime
+    # store disagree). Compare the shared SETTINGS table's presence in both.
     rc = settings.file_manager_rc()
     xml = settings.xfconf_channel_xml()
     for rc_key, prop, kind, value in settings.SETTINGS:
@@ -99,8 +99,8 @@ def test_xfconf_channel_is_wellformed_xml_and_hides_builtins():
 
 
 def test_gtk_css_font_bump_is_scoped_and_relative():
-    # PROMPT task 7: the font bump is Thunar-SCOPED (selector on the thunar-window node) and
-    # RELATIVE (em, composes with the global scale) -- never an absolute px size.
+    # PROMPT task 7: the font bump is file-manager-SCOPED (selector on the thunar-window node)
+    # and RELATIVE (em, composes with the global scale) -- never an absolute px size.
     css = settings.gtk_css()
     assert "window.thunar-window" in css
     assert "em;" in css                  # relative unit
@@ -108,7 +108,7 @@ def test_gtk_css_font_bump_is_scoped_and_relative():
     assert f"{settings.FILE_MANAGER_FONT_SCALE:g}em" in css
 
 
-# --- Thunar refinements batch (settings.py) ---------------------------------
+# --- File manager refinements batch (settings.py) ---------------------------
 
 def test_default_view_is_icon_view():
     # PROMPT batch item 2: default view = Icon view (was ThunarDetailsView/list).
@@ -164,7 +164,7 @@ def test_resolve_links_pref_present_but_documented_as_4_21_only():
 # --- gettext .mo override (locale.py) ---------------------------------------
 
 def test_mo_overrides_relabel_the_hardcoded_strings():
-    # The .mo catalog relabels the hardcoded Thunar strings. The shortcuts sidebar section
+    # The .mo catalog relabels the hardcoded file-manager strings. The shortcuts sidebar section
     # header "Places" is renamed to "Home" (user request, step SEVEN) -- it is a hardcoded
     # gettext msgid in the thunar binary (verified via `strings /usr/bin/thunar`), so the
     # catalog is the supported lever. Assert that override plus the others.
@@ -221,8 +221,8 @@ def test_help_menu_removed_from_vendored_source():
 
 
 def test_mo_bytes_are_a_valid_gettext_catalog(tmp_path):
-    # The pure-Python .mo generator must produce a catalog real gettext can read (Thunar uses
-    # C gettext). Write it and load it back with Python's gettext (same binary format).
+    # The pure-Python .mo generator must produce a catalog real gettext can read (the file
+    # manager uses C gettext). Write it and load it back with Python's gettext (same binary format).
     import gettext
     d = tmp_path / "en_US" / "LC_MESSAGES"
     d.mkdir(parents=True)
@@ -278,7 +278,7 @@ def test_gtk_menu_images_enabled_for_open_with_icons():
 # --- uca.xml + link script (actions.py) -------------------------------------
 
 def test_uca_xml_is_wellformed_with_the_three_actions():
-    # A malformed uca.xml (e.g. an unescaped &&) makes Thunar drop actions silently. After the
+    # A malformed uca.xml (e.g. an unescaped &&) makes the file manager drop actions silently. After the
     # batch (item 7), "Edit with gedit" is NOT a uca action anymore -- it comes from the built-in
     # default-opener relabelled by the gettext .mo -- so the uca set is gimp + Create Link +
     # Open Terminal (in that order).
@@ -295,7 +295,7 @@ def test_uca_xml_is_wellformed_with_the_three_actions():
 
 def test_uca_gimp_on_images_only():
     # PROMPT batch item 7: keep "Edit with gimp" on IMAGES only. (gedit is handled by the .mo
-    # relabel of the built-in default-opener, tested in test_configuration_thunar_locale-style
+    # relabel of the built-in default-opener, tested in test_configuration_file_manager_locale-style
     # asserts below, not as a uca action.)
     dom = minidom.parseString(actions.uca_xml())
     acts = dom.getElementsByTagName("action")
@@ -348,8 +348,8 @@ def test_sidebar_bookmarks_come_from_home_directory_resolved():
 
 
 def test_sidebar_skips_desktop_to_avoid_builtin_duplicate():
-    # Thunar shows a built-in Desktop at the same path; adding our own would DUPLICATE it, so
-    # sidebar.py skips Desktop (the built-in serves it). Verified in the VM.
+    # The file manager shows a built-in Desktop at the same path; adding our own would DUPLICATE it,
+    # so sidebar.py skips Desktop (the built-in serves it). Verified in the VM.
     bm = sidebar.gtk_bookmarks()
     assert "Desktop" in sidebar._BUILTIN_PROVIDED
     assert " Desktop\n" not in bm  # no "... Desktop" bookmark line
@@ -389,7 +389,7 @@ def test_file_manager_desktop_renamed_and_custom_icon():
 # --- menu cleanup (menu_cleanup.py) -----------------------------------------
 
 def test_menu_cleanup_hides_the_four_extra_launchers():
-    # PROMPT task 3: Bulk Rename, Thunar Preferences, About Xfce (+ Removable Drives) hidden
+    # PROMPT task 3: Bulk Rename, File Manager Preferences, About Xfce (+ Removable Drives) hidden
     # via NoDisplay=true.
     basenames = {b for b, _n, _e, _i in menu_cleanup.SUPPRESSED}
     assert "thunar-bulk-rename.desktop" in basenames
@@ -444,7 +444,7 @@ def test_emit_plan_desktop_overrides_match_iso_app_overrides():
 def test_mo_locale_catalog_dests_are_iso_app_overrides():
     # REGRESSION (build broke with "thunar: .../en_GB/LC_MESSAGES/thunar.mo exists in
     # filesystem"): the `thunar` package OWNS the en_GB locale catalog, so every locale .mo
-    # dest Thunar emits MUST be in pacman.ISO_APP_OVERRIDES -- otherwise compiler._emit_apps
+    # dest the file manager emits MUST be in pacman.ISO_APP_OVERRIDES -- otherwise compiler._emit_apps
     # plants it in the airootfs overlay and pacstrap's pre-extraction file-conflict check
     # aborts the whole ISO build. This pins the fix so the .mo cannot regress back into the
     # overlay path.

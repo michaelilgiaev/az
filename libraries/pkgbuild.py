@@ -467,7 +467,7 @@ build() {{
   # flags below (otherwise xdt-autogen would run configure with its defaults). REQUIRED
   # VERSION is satisfied by xfce4-dev-tools in makedepends.
   NOCONFIGURE=1 ./autogen.sh
-  # Match a stock Thunar build. gtk-doc/apidocs off (extra deps, pointless on the ISO).
+  # Match a stock FileManager build. gtk-doc/apidocs off (extra deps, pointless on the ISO).
   # --enable-maintainer-mode is REQUIRED for a git checkout: the rules that generate the
   # built sources (thunar-marshal.c/.h via glib-genmarshal, the gdbus-codegen stubs, the
   # gresource bundle) live inside `if MAINTAINER_MODE` in thunar/Makefile.am, and this

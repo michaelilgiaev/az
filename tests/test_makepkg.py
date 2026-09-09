@@ -193,12 +193,12 @@ def test_recipe_fingerprint_changes_when_patch_added():
 
 
 # --- vendored source-tree fingerprinting -----------------------------------
-# The thunar regression: a recipe whose source is a VENDORED DIRECTORY
+# The file manager regression: a recipe whose source is a VENDORED DIRECTORY
 # (recipe_source_trees, e.g. packages/file_manager/source) had that tree copied into
 # the recipe dir OUTSIDE the {filename: content} dict, so _recipe_fingerprint never
 # saw it. Editing the vendored C (e.g. thunar-window.c to drop the Help menu) did NOT
 # flip the recipe fingerprint, so the offline cache reused the pre-edit binary and the
-# ISO/box shipped an UNFIXED thunar. These pin the tree-content hash that now guards it.
+# ISO/box shipped an UNFIXED file manager. These pin the tree-content hash that now guards it.
 def test_source_tree_fingerprint_changes_on_file_content(tmp_path):
     tree = tmp_path / "src"
     (tree / "sub").mkdir(parents=True)

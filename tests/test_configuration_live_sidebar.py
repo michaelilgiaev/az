@@ -1,5 +1,5 @@
 """packages.file_manager.live_sidebar -- the runtime GTK-bookmarks sync (PROMPT: additions to
-the home dir must show up in Thunar's sidebar automatically).
+the home dir must show up in the file manager's sidebar automatically).
 
 Why these tests matter: the sidebar is otherwise STATIC (a build-time file), so "anything the
 user adds shows up" needs a runtime helper. These pin: the required ORDER (dirs -> files ->
@@ -12,9 +12,9 @@ They also pin the LIVE-UPDATE fix. Two things must both hold for Places to refre
 
   1. The helper rewrites the regenerated bookmarks IN PLACE (same inode across regenerations),
      not via an atomic rename, so the file monitor watching it fires a CHANGED event. (On
-     Thunar 4.20 / GTK 3.24 the monitor is a GFileMonitor on the bookmarks FILE, which the GLib
-     inotify backend implements by watching the PARENT DIRECTORY and filtering for the
-     `bookmarks` basename -- verified on the live hypervisor: thunar's inotify fd watches the
+     the file manager 4.20 / GTK 3.24 the monitor is a GFileMonitor on the bookmarks FILE, which
+     the GLib inotify backend implements by watching the PARENT DIRECTORY and filtering for the
+     `bookmarks` basename -- verified on the live hypervisor: the file manager's inotify fd watches the
      ~/.config/gtk-3.0 dir inode, not the file inode. An in-place `cat > "$BM"` fires
      IN_MODIFY/IN_CLOSE_WRITE for that basename -> GLib CHANGED -> GtkBookmarksManager reloads.)
      And it does NOT rewrite when nothing changed (no needless CHANGED events / flicker).
@@ -75,8 +75,8 @@ def test_sync_script_is_wired_into_both_autostarts():
 
 
 def test_sync_path_lock_step_with_openbox():
-    # openbox holds the path as a constant (to avoid importing thunar); it must not drift.
-    assert openbox.THUNAR_SIDEBAR_SYNC == live_sidebar.SYNC_SCRIPT_DEST
+    # openbox holds the path as a constant (to avoid importing the file manager); it must not drift.
+    assert openbox.FILE_MANAGER_SIDEBAR_SYNC == live_sidebar.SYNC_SCRIPT_DEST
     assert live_sidebar.SYNC_SCRIPT_DEST == "/usr/local/lib/azzio/azzio-sidebar-sync"
 
 
@@ -217,7 +217,7 @@ def _bookmarks_path(tmp_home):
 
 def test_regen_rewrites_bookmarks_in_place_same_inode(tmp_path):
     """Part of the live-update fix: on a change the helper rewrites the EXISTING bookmarks inode
-    IN PLACE (so Thunar's GFileMonitor -- which GLib's inotify backend runs by watching the PARENT
+    IN PLACE (so the file manager's GFileMonitor -- which GLib's inotify backend runs by watching the PARENT
     DIR and filtering for the `bookmarks` basename, verified on the box -- fires a CHANGED event
     and Places refreshes live) instead of renaming a fresh temp over it. (The OTHER half of the
     fix, the ISO exec-bit pin that lets the watcher actually run, is pinned above.) Pin that the
@@ -234,7 +234,7 @@ def test_regen_rewrites_bookmarks_in_place_same_inode(tmp_path):
     _run_sync(tmp_path)                                   # regenerate
 
     assert bm.stat().st_ino == inode_before, (
-        "bookmarks inode changed -> an atomic rename was used; Thunar's monitor would miss it")
+        "bookmarks inode changed -> an atomic rename was used; the file manager's monitor would miss it")
     after = bm.read_text()
     assert after != before and "NewProject" in after     # content really did update in place
 
@@ -278,7 +278,7 @@ def test_regen_does_not_rewrite_when_nothing_changed(tmp_path):
 def test_install_uses_in_place_write_not_atomic_rename(tmp_path):
     """Source-level guard: the generated script installs the bookmarks by rewriting the file in
     place (`cat "$tmp" > "$BM"`), NOT by `mv`-ing the temp over it. A future refactor that
-    reintroduces an atomic rename (which breaks Thunar's live monitor) trips this."""
+    reintroduces an atomic rename (which breaks the file manager's live monitor) trips this."""
     script = live_sidebar.sync_script()
     assert 'cat "$tmp" > "$BM"' in script                # in-place rewrite of the watched inode
     assert 'mv -f "$tmp" "$BM"' not in script            # NOT an atomic rename over the path

@@ -736,7 +736,7 @@ def test_probe_goes_online_only_when_no_local_repo(monkeypatch, tmp_path):
     written = (W / "pacman.conf").read_text()
     assert _active(written, "Include = /etc/pacman.d/mirrorlist") != []
     # The local file:// repo MUST still be appended: our own packages (calamares/
-    # librewolf/thunar) live on no mirror and are built into it at step 14, so a cold
+    # librewolf/file_manager) live on no mirror and are built into it at step 14, so a cold
     # build would fail to resolve them without this. Guards against a future edit that
     # drops append_local_repo from the online branch (the one thing the network-repo
     # assertion above would not catch).
