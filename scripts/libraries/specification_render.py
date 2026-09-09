@@ -12,10 +12,9 @@ re-renders correctly when the manifest changes, with no hand edits.
 
 It deliberately does NOT enumerate components. The full component detail -- every
 package, its version, and the base->top dependency edges -- lives entirely in the
-two companion component artifacts:
+companion component artifact:
   * SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html -- the tiered dependency graph, interactive
-  * SPECIFICATIONS_COMPONENTS_FULL.txt           -- the raw, fully-expanded listing
-The general specification points at those; it does not reproduce their tables. Because it
+The general specification points at it; it does not reproduce its tables. Because it
 carries no per-package tables, it cannot drift from the closure.
 
 Only specification_classify is imported (for CATEGORY_ORDER and AZZIO_CONFIGURED); the
@@ -149,8 +148,8 @@ def render(packages, resolved, tiers, tags, glance, graph_rel):
         f"derived live from the resolved package set. It describes what the medium "
         f"*is* and how it behaves; it does not enumerate components. The full "
         f"base->top dependency graph, with every package and version, lives in the "
-        f"companion interactive map [`{graph_rel}`]({graph_rel}) and the other "
-        f"component artifact listed in the last section.")
+        f"companion interactive map [`{graph_rel}`]({graph_rel}) described in the "
+        f"last section.")
     d.w()
     d.w("---")
     d.w()
@@ -360,14 +359,11 @@ def render(packages, resolved, tiers, tags, glance, graph_rel):
     d.w()
     d.w("This document does not list packages. The complete component enumeration "
         "-- every package, its version, and the dependency edges between them -- "
-        "lives in two companion artifacts, all in `documentations/`:")
+        "lives in a companion artifact in `documentations/`:")
     d.w()
     d.w(f"- [`{graph_rel}`]({graph_rel}) -- **interactive map**: the base->top "
         f"dependency graph, navigable, coloured by category and marked with the "
         f"edition tags above, with search and per-package detail.")
-    d.w("- `SPECIFICATIONS_COMPONENTS_FULL.txt` -- **raw full listing**: every "
-        "component, fully expanded, in plain text, for anyone who wants the "
-        "unadorned data.")
     d.w()
     d.w("---")
     d.w()

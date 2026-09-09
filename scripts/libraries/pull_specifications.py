@@ -27,7 +27,6 @@ import specification_db
 import specification_resolve
 import specification_classify
 import specification_render
-import specification_fulltext
 import specification_html
 import specification_stock_baseline
 
@@ -38,10 +37,8 @@ DEFAULT_MANIFEST = os.path.join(REPO_ROOT, "libraries", "packages", "packages.x8
 # edition) lives in code as specification_stock_baseline.STOCK_PACKAGES, not as a data
 # file, so it is not mistaken for an editable manifest. --stock-manifest can
 # still point at a file to override it; None means "use the module".
-DEFAULT_OUTPUT = os.path.join(REPO_ROOT, "documentation", "SPECIFICATIONS_GENERAL.md")
-DEFAULT_FULLTEXT = os.path.join(REPO_ROOT, "documentation",
-                                "SPECIFICATIONS_COMPONENTS_FULL.txt")
-DEFAULT_HTML = os.path.join(REPO_ROOT, "documentation",
+DEFAULT_OUTPUT = os.path.join(REPO_ROOT, "documentations", "SPECIFICATIONS_GENERAL.md")
+DEFAULT_HTML = os.path.join(REPO_ROOT, "documentations",
                             "SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html")
 DEFAULT_CACHE = os.path.join(REPO_ROOT, "cache", "specification-db")
 # These four modules are read as SOURCE TEXT for the regex extraction below (not
@@ -137,10 +134,6 @@ def parse_args(argv):
     )
     p.add_argument("-o", "--output", default=DEFAULT_OUTPUT,
                    help=f"output Markdown file (default: {DEFAULT_OUTPUT})")
-    p.add_argument("--fulltext", default=DEFAULT_FULLTEXT,
-                   help=f"output full component listing text file "
-                        f"(default: {DEFAULT_FULLTEXT}); every component, "
-                        "fully expanded, with human-language descriptions")
     p.add_argument("--html", default=DEFAULT_HTML,
                    help=f"output interactive HTML component map "
                         f"(default: {DEFAULT_HTML}); the SVG map, but navigable")
@@ -230,9 +223,8 @@ def _build_glance(packages, resolved, tiers, tags):
 
 def build(manifest_path, db_cache, mirror, offline,
           graph_rel="SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html",
-          general_rel="SPECIFICATIONS_GENERAL.md",
           stock_manifest_path=None):
-    """Run the full pipeline. Return (markdown, fulltext, html).
+    """Run the full pipeline. Return (markdown, html).
 
     graph_rel is the relative link the prose points at for the dependency graph
     (the interactive HTML map). stock_manifest_path=None uses the built-in baseline
@@ -278,10 +270,8 @@ def build(manifest_path, db_cache, mirror, offline,
 
     glance = _build_glance(packages, resolved, tiers, tags)
     md = specification_render.render(packages, resolved, tiers, tags, glance, graph_rel)
-    full = specification_fulltext.render_fulltext(packages, resolved, tiers, tags, glance,
-                                         graph_rel, general_rel)
     page = specification_html.render_html(packages, resolved, tiers, tags, glance)
-    return md, full, page
+    return md, page
 
 
 def main(argv=None):
@@ -289,15 +279,9 @@ def main(argv=None):
     # The prose points at the interactive HTML map as the dependency-graph artifact,
     # linked relative to the general Markdown's directory (both live in documentations/).
     graph_rel = os.path.relpath(args.html, os.path.dirname(args.output))
-    # cross-link inside the full-text file points back to the general Markdown,
-    # relative to the full-text file's own directory (the graph link reuses graph_rel;
-    # all artifacts are co-located in documentations/)
-    ft_dir = os.path.dirname(args.fulltext)
-    general_rel_ft = os.path.relpath(args.output, ft_dir)
-    md, full, page = build(args.manifest, args.db_cache, args.mirror,
-                           args.offline, graph_rel=graph_rel,
-                           general_rel=general_rel_ft,
-                           stock_manifest_path=args.stock_manifest)
+    md, page = build(args.manifest, args.db_cache, args.mirror,
+                     args.offline, graph_rel=graph_rel,
+                     stock_manifest_path=args.stock_manifest)
 
     if args.stdout:
         sys.stdout.write(md)
@@ -308,12 +292,6 @@ def main(argv=None):
         f.write(md)
     print(f"[specification] wrote {args.output} "
           f"({md.count(chr(10)) + 1} lines, {len(md)} bytes)", file=sys.stderr)
-
-    os.makedirs(os.path.dirname(args.fulltext), exist_ok=True)
-    with open(args.fulltext, "w") as f:
-        f.write(full)
-    print(f"[specification] wrote {args.fulltext} "
-          f"({full.count(chr(10)) + 1} lines, {len(full)} bytes)", file=sys.stderr)
 
     os.makedirs(os.path.dirname(args.html), exist_ok=True)
     with open(args.html, "w") as f:
