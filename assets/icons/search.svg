@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Azzio "Search" icon (the magnifier in the application-menu search box). Azzio blue
+       gradient on a TRANSPARENT background, matching the power-row glyphs (sleep/lock/
+       restart/shutdown). REPLACES the KDE/breeze-like edit-find. Shipped as azzio-search so
+       it wins icon resolution. Rasterized by packages/application_menu. -->
+  <defs>
+    <linearGradient id="azGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+  </defs>
+  <!-- Lens: a ring (thick round stroke), r=58 centred up-left at (108,108). -->
+  <circle cx="108" cy="108" r="58" fill="none" stroke="url(#azGrad)" stroke-width="22"/>
+  <!-- Handle: a thick round stroke from the lens edge down to the bottom-right. -->
+  <path fill="none" stroke="url(#azGrad)" stroke-width="24" stroke-linecap="round"
+        d="M150 150 L206 206"/>
+</svg>

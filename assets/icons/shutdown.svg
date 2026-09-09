@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Azzio "Shut Down" (power off) icon. The universal IEC power glyph (a broken ring with
+       a vertical bar through the top gap) in the Azzio blue gradient on a TRANSPARENT
+       background (inline power-row glyph, not an app tile). REPLACES the KDE/breeze-like
+       system-shutdown. Shipped as azzio-shutdown so it wins icon resolution. Rasterized by
+       packages/application_menu. -->
+  <defs>
+    <linearGradient id="azGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+  </defs>
+  <!-- The ring: an arc with a gap centred at the TOP (the power-symbol break). r=74 centred
+       (128,132); the arc runs from just right of top, clockwise all the way to just left of
+       top, as a thick round stroke. -->
+  <path fill="none" stroke="url(#azGrad)" stroke-width="22" stroke-linecap="round"
+        d="M162 68
+           A74 74 0 1 1 94 68"/>
+  <!-- The vertical bar through the top gap (the power symbol's "I"). -->
+  <path fill="none" stroke="url(#azGrad)" stroke-width="22" stroke-linecap="round"
+        d="M128 44 V116"/>
+</svg>

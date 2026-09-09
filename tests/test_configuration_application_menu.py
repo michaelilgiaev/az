@@ -145,8 +145,90 @@ def test_launcher_is_executable_desktop_is_conf():
 
 
 def test_emitted_content_is_nonempty():
+    # Only the TEXT-builder entries (launcher + .desktop) carry a builder; the glyph-icon
+    # entries (icons_plan()) are asset/render copies with builder None, checked separately.
     for e in am.emit_plan():
+        if e.get("builder") is None:
+            continue
         assert e["builder"]().strip(), f"empty content for {e['dest']}"
+
+
+def test_menu_uses_custom_azzio_glyph_icons_not_stock_names():
+    # The power row + search used to resolve the STOCK freedesktop names, which land on the
+    # installed Adwaita theme's generic (KDE/breeze-ish) glyphs the user asked to replace.
+    # menu.c must now reference OUR Azzio icon names (azzio-*) and NONE of the old stock ones,
+    # so the resolver returns our brand glyphs instead.
+    src = _menu_c()
+    for stock in ("system-suspend", "system-lock-screen", "system-reboot",
+                  "system-shutdown", "edit-find"):
+        assert stock not in src, f"stock icon name {stock!r} still referenced in menu.c"
+    for name in ("azzio-sleep", "azzio-lock", "azzio-restart", "azzio-shutdown",
+                 "azzio-search"):
+        assert name in src, f"custom icon name {name!r} missing from menu.c"
+
+
+def test_menu_glyph_icon_names_match_between_c_and_python():
+    # The C AZ_ICON_* defines (menu.c) and the Python MENU_GLYPH_ICONS list must name the
+    # SAME icons -- the Python side ships them under those hicolor names, the C side asks the
+    # resolver for them, so a drift on either side would ship an icon the menu never requests
+    # (or request one never shipped -> the grey placeholder). Pin the two lists equal.
+    src = _menu_c()
+    # The C names, read from the #define table (value in quotes).
+    c_names = dict(re.findall(r'#define\s+(AZ_ICON_\w+)\s+"([^"]+)"', src))
+    assert c_names == {
+        "AZ_ICON_SLEEP":    "azzio-sleep",
+        "AZ_ICON_LOCK":     "azzio-lock",
+        "AZ_ICON_RESTART":  "azzio-restart",
+        "AZ_ICON_SHUTDOWN": "azzio-shutdown",
+        "AZ_ICON_SEARCH":   "azzio-search",
+    }, c_names
+    # Every Python-shipped glyph name is referenced by a C define, and vice versa.
+    py_names = {icon["name"] for icon in am.MENU_GLYPH_ICONS}
+    assert set(c_names.values()) == py_names
+    # The power table uses the SLEEP/LOCK/RESTART/SHUTDOWN defines (order pinned elsewhere);
+    # the search box uses the SEARCH define.
+    table = re.search(r"PowerItem\s+items\[4\]\s*=\s*\{(.*?)\};", src, re.S).group(1)
+    assert re.findall(r"AZ_ICON_\w+", table) == [
+        "AZ_ICON_SLEEP", "AZ_ICON_LOCK", "AZ_ICON_RESTART", "AZ_ICON_SHUTDOWN"]
+    assert "az_icons_load(m->small_icons, AZ_ICON_SEARCH)" in src
+
+
+def test_glyph_icon_assets_exist_and_are_svg():
+    # Each MENU_GLYPH_ICONS asset is a real SVG in the repo, in the Azzio brand gradient
+    # (#06B8FD, the logo cyan mid-stop) so the glyphs share the house identity. A missing or
+    # off-brand asset would ship a wrong/placeholder icon.
+    assets_dir = Path(am.paths.ASSETSDIR)
+    for icon in am.MENU_GLYPH_ICONS:
+        p = assets_dir / icon["asset"]
+        assert p.is_file(), f"missing icon asset {icon['asset']}"
+        text = p.read_text(encoding="utf-8")
+        assert "<svg" in text and "</svg>" in text, f"{icon['asset']} is not SVG"
+        assert "#06B8FD" in text, f"{icon['asset']} missing the Azzio brand cyan"
+
+
+def test_glyph_icons_plan_ships_scalable_master_and_pngs_root_owned():
+    # icons_plan() must ship, for each glyph icon: the scalable SVG master (asset-copied to
+    # the hicolor scalable apps dir under the azzio-* name) PLUS a PNG rasterization at each
+    # standard size -- all root-owned (a NEW hicolor name, nothing package-owned). This is the
+    # same shape packages/xviewer uses, which compiler._emit_desktop emits declaratively.
+    plan = am.icons_plan()
+    by_dest = {e["dest"]: e for e in plan}
+    for icon in am.MENU_GLYPH_ICONS:
+        svg_dest = f"{am.MENU_ICON_SCALABLE_DIR}/{icon['name']}.svg"
+        assert svg_dest in by_dest, f"scalable master not shipped for {icon['name']}"
+        svg_entry = by_dest[svg_dest]
+        assert svg_entry["asset"] == icon["asset"]
+        assert svg_entry["owner"] == "root" and svg_entry["mode"] == 0o644
+        for size in am.MENU_ICON_PNG_SIZES:
+            png_dest = f"{am.MENU_ICON_PNG_DIR.format(size=size)}/{icon['name']}.png"
+            assert png_dest in by_dest, f"missing {size}px PNG for {icon['name']}"
+            r = by_dest[png_dest]
+            assert r["render"] == {"asset": icon["asset"], "size": size}
+            assert r["owner"] == "root"
+    # Every glyph icon appears in the full emit_plan() too (icons_plan() is folded in).
+    all_dests = {e["dest"] for e in am.emit_plan()}
+    for icon in am.MENU_GLYPH_ICONS:
+        assert f"{am.MENU_ICON_SCALABLE_DIR}/{icon['name']}.svg" in all_dests
 
 
 def test_desktop_entry_launches_the_installed_launcher():

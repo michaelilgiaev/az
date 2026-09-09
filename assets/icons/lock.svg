@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Azzio "Lock" (lock session) icon. A padlock in the Azzio blue gradient on a
+       TRANSPARENT background (an inline glyph for the menu's dark power row, not an app
+       tile). REPLACES the KDE/breeze-like system-lock-screen. Shipped as azzio-lock so it
+       wins icon resolution. Rasterized by packages/application_menu. -->
+  <defs>
+    <linearGradient id="azGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+    <!-- Mask that carves the keyhole out of the body: white = keep, black = punch through
+         to transparent. A circle + a tapering slot, the classic keyhole. -->
+    <mask id="keyhole">
+      <rect x="0" y="0" width="256" height="256" fill="#ffffff"/>
+      <circle cx="128" cy="150" r="13" fill="#000000"/>
+      <rect x="122" y="150" width="12" height="30" rx="6" fill="#000000"/>
+    </mask>
+  </defs>
+  <!-- Shackle: an inverted-U arc (open at the bottom) as a thick round stroke on top of the
+       body. r=44 centred at x=128; the legs drop to the body's top edge. -->
+  <path fill="none" stroke="url(#azGrad)" stroke-width="22" stroke-linecap="round"
+        d="M84 118 V96 a44 44 0 0 1 88 0 V118"/>
+  <!-- Body: a rounded rectangle, with the keyhole masked out. -->
+  <rect x="64" y="112" width="128" height="104" rx="18" ry="18"
+        fill="url(#azGrad)" mask="url(#keyhole)"/>
+</svg>

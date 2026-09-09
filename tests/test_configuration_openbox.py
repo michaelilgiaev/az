@@ -838,33 +838,39 @@ def test_rc_xml_uses_the_azzio_dark_theme_by_default():
 
 
 def test_rc_xml_sets_the_titlebar_font():
-    # The dominant half of the bar height is the title font (OpenBox sizes the buttons to
-    # the label). The bar was cut 25% from its earlier ~1.5x size, so the font came down
-    # from 12pt to 9pt (12 * 0.75), set for both the active and inactive window title.
+    # The dominant half of the bar height is the title font (OpenBox sizes the buttons AND
+    # their glyphs to the label). The bar was cut 25% (to 9pt) then grown back +10% (the
+    # "+10% topbar" ask) to 10pt via TOPBAR_GROWTH, set for both the active and inactive
+    # window title. This one font is the single lever for the +10% topbar and the "slightly
+    # bigger buttons/icons" ask, since the buttons track the label height.
     out = desktop.openbox_rc_xml()
-    assert desktop.TITLE_FONT_SIZE == 9
+    assert desktop.TITLE_FONT_SIZE == 10
+    # The +10% is an explicit factor on the scale-derived base (round(pt(7)=9 * 1.10) == 10),
+    # not a corruption of the global scale; pin the factor and the arithmetic.
+    assert desktop.TOPBAR_GROWTH == 1.10
+    assert desktop.TITLE_FONT_SIZE == round(desktop._scale.pt(
+        desktop._scale.OPENBOX_TITLE_FONT_STOCK) * desktop.TOPBAR_GROWTH)
+    assert desktop.TITLE_FONT_SIZE > 9   # strictly larger than the pre-growth 9pt bar
     assert f"<size>{desktop.TITLE_FONT_SIZE}</size>" in out
     assert '<font place="ActiveWindow">' in out
     assert '<font place="InactiveWindow">' in out
 
 
-def test_theme_rc_shrinks_the_titlebar_padding_by_a_quarter():
-    # The user found the ~1.5x bar too big and asked to cut it 25%. The size-driving padding
-    # fields were trimmed by 0.75: padding.height 7 -> 5, padding.width 6 -> 4. A drift here
-    # shrinks or regrows the bar.
+def test_theme_rc_titlebar_padding():
+    # The size-driving padding fields. padding.height stays 5 (the +10% topbar rides on the
+    # title font, not the padding, so height stays ~10% not more). padding.width was bumped
+    # 4 -> 5 to widen the gap between the min/max/close buttons ("increase the distance
+    # between each icon ever so slightly") -- OpenBox has no separate button-gap field, so
+    # padding.width is the spacing between adjacent title elements.
     out = desktop.openbox_theme_rc()
     assert desktop.OPENBOX_THEME_PADDING_HEIGHT == 5
-    assert desktop.OPENBOX_THEME_PADDING_WIDTH == 4
+    assert desktop.OPENBOX_THEME_PADDING_WIDTH == 5
     assert f"padding.height: {desktop.OPENBOX_THEME_PADDING_HEIGHT}" in out
     assert f"padding.width: {desktop.OPENBOX_THEME_PADDING_WIDTH}" in out
-    # Still strictly larger than the stock Clearlooks originals (2 / 3), so the bar keeps
-    # some breathing room above stock.
+    # Both strictly larger than the stock Clearlooks originals (2 / 3), so the bar keeps
+    # breathing room above stock; the width is wider than the previous 4 (the button-gap bump).
     assert desktop.OPENBOX_THEME_PADDING_HEIGHT > 2
-    assert desktop.OPENBOX_THEME_PADDING_WIDTH > 3
-    # ...but strictly smaller than the earlier ~1.5x values (7 / 6): this round shrank the bar.
-    # If these creep back up the 25% cut was lost.
-    assert desktop.OPENBOX_THEME_PADDING_HEIGHT < 7
-    assert desktop.OPENBOX_THEME_PADDING_WIDTH < 6
+    assert desktop.OPENBOX_THEME_PADDING_WIDTH > 4
 
 
 def test_theme_rc_removes_the_bottom_handle_bar():
@@ -910,7 +916,7 @@ def test_light_theme_keeps_the_clearlooks_cyan_titlebar_colour():
     assert "#7AA1D1" not in dark
     # The dark theme uses the Azzio near-black surface palette (matching the application menu).
     assert "*.title.bg.color: #0a0f14" in dark
-    # Both keep the shared geometry (25%-smaller padding + no bottom handle).
+    # Both keep the shared geometry (padding.height 5 + no bottom handle).
     for out in (light, dark):
         assert "padding.height: 5" in out
         assert "window.handle.width: 0" in out
@@ -936,6 +942,20 @@ def test_theme_rc_titlebar_and_buttons_are_one_flat_colour():
         assert "*.title.bg.color.splitTo" not in out
         assert "window.active.button.*.bg.colorTo" not in out
         assert "window.inactive.title.bg.colorTo" not in out
+
+
+def test_theme_rc_buttons_have_a_white_border():
+    # The user asked the min/max/close buttons to have a WHITE outline. The button border is
+    # window.active.button.*.bg.border.color; both the resting AND hover border must be white
+    # so the outline stays white on hover (only the button FILL changes on hover). Assert it
+    # in the DARK (default) and LIGHT themes; the inactive buttons keep their dim palette.
+    for dark in (True, False):
+        out = desktop.openbox_theme_rc(dark=dark)
+        assert "window.active.button.*.bg.border.color: #ffffff" in out
+        assert "window.active.button.hover.bg.border.color: #ffffff" in out
+    # The old dark resting border (#05080a, invisible on the near-black bar) must be gone.
+    dark_out = desktop.openbox_theme_rc(dark=True)
+    assert "window.active.button.*.bg.border.color: #05080a" not in dark_out
 
 
 def test_theme_rc_dests_are_user_theme_search_paths():

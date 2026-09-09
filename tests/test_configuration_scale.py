@@ -76,10 +76,14 @@ def test_kitty_and_gedit_font_derive_from_scale():
 
 
 def test_openbox_titlebar_font_derives_from_scale():
-    # The DPI-blind OpenBox titlebar is explicitly scaled: pt(stock) == 9 at the default
-    # (the 25%-smaller bar; stock 7 -> 9).
-    assert openbox.TITLE_FONT_SIZE == scale.pt(scale.OPENBOX_TITLE_FONT_STOCK)
-    assert openbox.TITLE_FONT_SIZE == 9   # the 25%-smaller titlebar at the 1.35 default
+    # The DPI-blind OpenBox titlebar is explicitly scaled from the shared scale (pt(stock)
+    # == 9 at the 1.35 default; stock 7 -> 9), THEN grown +10% for the "+10% topbar" ask via
+    # openbox.TOPBAR_GROWTH. The +10% lives in openbox (a topbar-only cosmetic bump), NOT in
+    # scale.py, so the GLOBAL scale every other app rides is untouched -- pt(7) stays 9.
+    assert scale.pt(scale.OPENBOX_TITLE_FONT_STOCK) == 9   # the scale-derived base is unchanged
+    assert openbox.TITLE_FONT_SIZE == round(
+        scale.pt(scale.OPENBOX_TITLE_FONT_STOCK) * openbox.TOPBAR_GROWTH)
+    assert openbox.TITLE_FONT_SIZE == 10  # 9 * 1.10 -> 10 (the +10% topbar at the 1.35 default)
     # and it is emitted into rc.xml.
     assert f"<size>{openbox.TITLE_FONT_SIZE}</size>" in openbox.openbox_rc_xml()
 
