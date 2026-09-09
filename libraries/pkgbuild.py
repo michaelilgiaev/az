@@ -456,7 +456,15 @@ build() {{
   # VERSION is satisfied by xfce4-dev-tools in makedepends.
   NOCONFIGURE=1 ./autogen.sh
   # Match a stock Thunar build. gtk-doc/apidocs off (extra deps, pointless on the ISO).
+  # --enable-maintainer-mode is REQUIRED for a git checkout: the rules that generate the
+  # built sources (thunar-marshal.c/.h via glib-genmarshal, the gdbus-codegen stubs, the
+  # gresource bundle) live inside `if MAINTAINER_MODE` in thunar/Makefile.am, and this
+  # tree's configure.ac uses the bare AM_MAINTAINER_MODE() which DEFAULTS OFF. A release
+  # tarball ships those files pre-generated so it does not matter, but a checkout does not,
+  # so without this flag `make` dies with "No rule to make target 'thunar-marshal.c'".
+  # xdt-autogen would normally pass this itself, but NOCONFIGURE=1 skips its configure run.
   ./configure \\
+    --enable-maintainer-mode \\
     --prefix=/usr \\
     --sysconfdir=/etc \\
     --libexecdir=/usr/lib \\
