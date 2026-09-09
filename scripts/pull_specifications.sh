@@ -2,7 +2,7 @@
 #
 # pull_specifications.sh -- generate the Azzio DISTRIBUTION specification.
 #
-# This produces three artifacts:
+# This produces two artifacts:
 #   documentations/SPECIFICATIONS_GENERAL.md  the general / developer view:
 #                                     at-a-glance facts, what Azzio changes on
 #                                     top of Arch, and the subsystem breakdown.
@@ -13,12 +13,7 @@
 #                                     coloured by category and marked by edition;
 #                                     open it in a browser and click any component
 #                                     to inspect it and highlight its dependencies.
-#   documentations/SPECIFICATIONS_COMPONENTS_FULL.txt  the exhaustive listing:
-#                                     EVERY component, nothing collapsed, each with
-#                                     a plain-language purpose (the official Arch
-#                                     package description), its layer, and its full
-#                                     requires / required-by edges.
-# All are computed from the real package set, with real versions.
+# Both are computed from the real package set, with real versions.
 #
 # The dependency data is resolved from the official Arch Linux core/extra/multilib
 # package databases (the repos the ISO is actually built against), NOT from the
@@ -37,7 +32,6 @@
 # Options (forwarded to the Python orchestrator):
 #   -o, --output FILE   write the general Markdown here (default: documentations/SPECIFICATIONS_GENERAL.md)
 #       --html FILE     write the interactive HTML map here (default: documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
-#       --fulltext FILE write the full component listing here (default: documentations/SPECIFICATIONS_COMPONENTS_FULL.txt)
 #   -m, --manifest FILE package manifest (default: libraries/packages/packages.x86_64)
 #       --db-cache DIR  where to cache the Arch .db files (default: cache/specification-db)
 #       --mirror URL    Arch mirror base URL to fetch databases from
@@ -52,7 +46,7 @@ PY_ENTRY="$SELF_DIR/libraries/pull_specifications.py"
 
 case "${1:-}" in
     -h|--help)
-        sed -n '3,46p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+        sed -n '3,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
         exit 0
         ;;
 esac
