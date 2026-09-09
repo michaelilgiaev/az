@@ -316,10 +316,6 @@ thunar_window_action_open_bookmark (GFile *g_file);
 static gboolean
 thunar_window_action_open_location (ThunarWindow *window);
 static gboolean
-thunar_window_action_contents (ThunarWindow *window);
-static gboolean
-thunar_window_action_about (ThunarWindow *window);
-static gboolean
 thunar_window_action_show_hidden (ThunarWindow *window);
 static gboolean
 thunar_window_action_show_highlight (ThunarWindow *window);
@@ -393,9 +389,6 @@ thunar_window_update_go_menu (ThunarWindow *window,
 static void
 thunar_window_update_bookmarks_menu (ThunarWindow *window,
                                      GtkWidget    *menu);
-static void
-thunar_window_update_help_menu (ThunarWindow *window,
-                                GtkWidget    *menu);
 static void
 thunar_window_binding_create (ThunarWindow *window,
                               gpointer      src_object,
@@ -706,9 +699,6 @@ static XfceGtkActionEntry thunar_window_action_entries[] =
 
     { THUNAR_WINDOW_ACTION_BOOKMARKS_MENU,                 "<Actions>/ThunarWindow/bookmarks-menu",                  "",                     XFCE_GTK_MENU_ITEM,       N_ ("_Bookmarks"),             NULL,                                                                                NULL,                      NULL                                                  },
 
-    { THUNAR_WINDOW_ACTION_HELP_MENU,                      "<Actions>/ThunarWindow/contents/help-menu",              "",                     XFCE_GTK_MENU_ITEM      , N_ ("_Help"),                  NULL, NULL, NULL},
-    { THUNAR_WINDOW_ACTION_CONTENTS,                       "<Actions>/ThunarWindow/contents",                        "F1",                   XFCE_GTK_IMAGE_MENU_ITEM, N_ ("_Contents"),              N_ ("Display Thunar user manual"),                                                   "help-browser",            G_CALLBACK (thunar_window_action_contents),            },
-    { THUNAR_WINDOW_ACTION_ABOUT,                          "<Actions>/ThunarWindow/about",                           "",                     XFCE_GTK_IMAGE_MENU_ITEM, N_ ("_About"),                 N_ ("Display information about Thunar"),                                             "help-about",              G_CALLBACK (thunar_window_action_about),               },
 
     { THUNAR_WINDOW_ACTION_BACK,                           "<Actions>/ThunarStandardView/back",                      "<Alt>Left",            XFCE_GTK_IMAGE_MENU_ITEM, N_ ("_Back"),                  N_ ("Go to the previous visited folder"),                                            "go-previous",             G_CALLBACK (thunar_window_action_back),                },
     { THUNAR_WINDOW_ACTION_BACK_ALT_1,                     "<Actions>/ThunarStandardView/back-alt1",                 "BackSpace",            XFCE_GTK_IMAGE_MENU_ITEM, NULL,                          NULL,                                                                                NULL,                      G_CALLBACK (thunar_window_action_back),                },
@@ -1031,7 +1021,7 @@ thunar_window_init (ThunarWindow *window)
   thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_VIEW_MENU, G_CALLBACK (thunar_window_update_view_menu), window->menubar);
   thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_GO_MENU, G_CALLBACK (thunar_window_update_go_menu), window->menubar);
   thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_BOOKMARKS_MENU, G_CALLBACK (thunar_window_update_bookmarks_menu), window->menubar);
-  thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_HELP_MENU, G_CALLBACK (thunar_window_update_help_menu), window->menubar);
+  /* Azzio: the Help menu (Contents + About) is intentionally removed. */
   gtk_widget_show_all (window->menubar);
 
   window->menubar_visible = last_menubar_visible;
@@ -1759,21 +1749,6 @@ thunar_window_update_bookmarks_menu (ThunarWindow *window,
   thunar_window_redirect_menu_tooltips_to_statusbar (window, GTK_MENU (menu));
 }
 
-
-
-static void
-thunar_window_update_help_menu (ThunarWindow *window,
-                                GtkWidget    *menu)
-{
-  _thunar_return_if_fail (THUNAR_IS_WINDOW (window));
-
-  thunar_gtk_menu_clean (GTK_MENU (menu));
-  xfce_gtk_menu_item_new_from_action_entry (get_action_entry (THUNAR_WINDOW_ACTION_CONTENTS), G_OBJECT (window), GTK_MENU_SHELL (menu));
-  xfce_gtk_menu_item_new_from_action_entry (get_action_entry (THUNAR_WINDOW_ACTION_ABOUT), G_OBJECT (window), GTK_MENU_SHELL (menu));
-  gtk_widget_show_all (GTK_WIDGET (menu));
-
-  thunar_window_redirect_menu_tooltips_to_statusbar (window, GTK_MENU (menu));
-}
 
 
 
@@ -5016,32 +4991,6 @@ thunar_window_action_open_location (ThunarWindow *window)
 
 
 static gboolean
-thunar_window_action_contents (ThunarWindow *window)
-{
-  /* display the documentation index */
-  xfce_dialog_show_help (GTK_WINDOW (window), "thunar", NULL, NULL);
-
-  /* required in case of shortcut activation, in order to signal that the accel key got handled */
-  return TRUE;
-}
-
-
-
-static gboolean
-thunar_window_action_about (ThunarWindow *window)
-{
-  /* just popup the about dialog */
-  thunar_dialogs_show_about (GTK_WINDOW (window), PACKAGE_NAME,
-                             _("Thunar is a fast and easy to use file manager\n"
-                               "for the Xfce Desktop Environment."));
-
-  /* required in case of shortcut activation, in order to signal that the accel key got handled */
-  return TRUE;
-}
-
-
-
-static gboolean
 thunar_window_action_show_hidden (ThunarWindow *window)
 {
   _thunar_return_val_if_fail (THUNAR_IS_WINDOW (window), FALSE);
@@ -5139,7 +5088,7 @@ thunar_window_action_menu (ThunarWindow *window)
   thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_VIEW_MENU, G_CALLBACK (thunar_window_update_view_menu), menu);
   thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_GO_MENU, G_CALLBACK (thunar_window_update_go_menu), menu);
   thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_BOOKMARKS_MENU, G_CALLBACK (thunar_window_update_bookmarks_menu), menu);
-  thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_HELP_MENU, G_CALLBACK (thunar_window_update_help_menu), menu);
+  /* Azzio: the Help menu (Contents + About) is intentionally removed. */
   gtk_widget_show_all (menu);
 
   g_signal_connect_swapped (G_OBJECT (menu), "deactivate", G_CALLBACK (thunar_window_action_menu_deactivate), window);
@@ -5182,28 +5131,12 @@ thunar_window_action_open_file_menu (ThunarWindow *window)
 static void
 thunar_window_update_title (ThunarWindow *window)
 {
-  ThunarWindowTitleStyle window_title_style;
-  gchar                 *title;
-  gchar                 *parse_name = NULL;
-  const gchar           *name;
-
   _thunar_return_if_fail (THUNAR_IS_WINDOW (window));
 
-  /* get name of directory or full path */
-  g_object_get (G_OBJECT (window->preferences), "misc-window-title-style", &window_title_style, NULL);
-  if (G_UNLIKELY (window_title_style == THUNAR_WINDOW_TITLE_STYLE_FULL_PATH_WITH_THUNAR_SUFFIX || window_title_style == THUNAR_WINDOW_TITLE_STYLE_FULL_PATH_WITHOUT_THUNAR_SUFFIX))
-    name = parse_name = g_file_get_parse_name (thunar_file_get_file (window->current_directory));
-  else
-    name = thunar_file_get_display_name (window->current_directory);
-
-  /* set window title */
-  if (G_UNLIKELY (window_title_style == THUNAR_WINDOW_TITLE_STYLE_FOLDER_NAME_WITHOUT_THUNAR_SUFFIX || window_title_style == THUNAR_WINDOW_TITLE_STYLE_FULL_PATH_WITHOUT_THUNAR_SUFFIX))
-    title = g_strdup_printf ("%s", name);
-  else
-    title = g_strdup_printf ("%s - %s", name, "Azzio File Manager");
-  gtk_window_set_title (GTK_WINDOW (window), title);
-  g_free (title);
-  g_free (parse_name);
+  /* Azzio shows a fixed "File Manager" in the Openbox title bar, independent of
+   * the current folder, the full-path/suffix style preference, or the product
+   * name. The upstream folder-name/suffix logic is intentionally dropped. */
+  gtk_window_set_title (GTK_WINDOW (window), "File Manager");
 }
 
 

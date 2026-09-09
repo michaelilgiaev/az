@@ -72,6 +72,30 @@ def test_csrc_dir_is_flattened_up():
         assert (CSRC_DIR / name).is_file(), name
 
 
+def test_app_rows_show_category_as_header_and_name_as_description():
+    # PROMPT: each application row must display its CATEGORY as the (big) header and the project
+    # NAME as the (small) description -- the reverse of upstream, which put the Name on top. The
+    # row painter (application_list.c on_draw) sets the header line in font_name and the sub line
+    # in font_sub; the swap is: font_name renders entry->type_label (the humanised category) and
+    # font_sub renders entry->name.
+    c = (CSRC_DIR / "application_list.c").read_text(encoding="utf-8")
+    header = 'pango_layout_set_font_description(lay, l->font_name);'
+    sub = 'pango_layout_set_font_description(lay, l->font_sub);'
+    header_idx = c.index(header)
+    sub_idx = c.index(sub)
+    assert header_idx < sub_idx, "header (font_name) line is painted before the description (font_sub)"
+    # The text set right after selecting each font is the swapped field. Look at the window of
+    # source between each font selection and the next, and assert which entry field it draws.
+    header_block = c[header_idx:sub_idx]
+    sub_block = c[sub_idx:sub_idx + 400]
+    assert "pango_layout_set_text(lay, r->entry->type_label, -1);" in header_block, \
+        "the header must render the category (type_label)"
+    assert "pango_layout_set_text(lay, r->entry->name, -1);" in sub_block, \
+        "the description must render the project name"
+    # And the old wiring (Name on the header line) must be gone from the header block.
+    assert "pango_layout_set_text(lay, r->entry->name, -1);" not in header_block
+
+
 # --- The menu follows the system theme (dark by default) --------------------
 
 def test_menu_theme_is_runtime_selected_not_hardcoded():
