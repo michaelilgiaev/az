@@ -1537,10 +1537,11 @@ def test_overrides_delivered_to_profile_path_not_opt():
 
 def test_recipe_dirs_default_tier():
     # DEFAULT tier: calamares first (Arch dropped extra/calamares, so it must be
-    # built here now), then thunar (rebuilt from source with the symlink-resolve
-    # patch), then librewolf. calamares carries its PKGBUILD + the five source patches
-    # (installer UI defaults, region keyboard, finish-page buttons, the Network page, and
-    # the networkcfg static-profile job); thunar carries its PKGBUILD + the resolve patch;
+    # built here now), then thunar (rebuilt from the vendored source, which already
+    # carries the symlink-resolve change), then librewolf. calamares carries its PKGBUILD
+    # + the five source patches (installer UI defaults, region keyboard, finish-page
+    # buttons, the Network page, and the networkcfg static-profile job); thunar carries
+    # ONLY its PKGBUILD (the source tree is copied in separately, no patch companion);
     # the librewolf dir carries PKGBUILD + the .desktop, its PKGBUILD the repackage
     # recipe (no bsys6 make targets).
     dirs = pkgbuild.recipe_dirs(False)

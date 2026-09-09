@@ -15,7 +15,8 @@ runtime. These lock the load-bearing details:
     folder actions carry <range> (required to appear on the folder background).
   * the sidebar bookmarks come from home_directory (resolved paths), Desktop is not duplicated
     with the built-in, and the built-in Computer/Network/Recent/Trash are hidden.
-  * the launcher is renamed to "Thunar" with the custom icon; the icon uses a private name.
+  * the launcher is renamed to "Azzio File Manager" with the custom icon; the icon uses a
+    private name (the .desktop id and the binary stay `thunar`).
 """
 
 from __future__ import annotations
@@ -329,14 +330,14 @@ def test_sidebar_covers_the_full_layout_set_minus_desktop():
 # --- launcher (launcher.py) -------------------------------------------------
 
 def test_thunar_desktop_renamed_and_custom_icon():
-    # PROMPT task 4: Name="Thunar" (not "Thunar File Manager") + custom icon.
+    # The launcher is renamed to the product name "Azzio File Manager" + custom icon.
     d = launcher.thunar_desktop()
-    assert "Name=Thunar\n" in d
-    # the visible Name line is exactly "Thunar", not "Thunar File Manager"
+    assert "Name=Azzio File Manager\n" in d
+    # the visible Name line is the product name, not the stock "Thunar File Manager"
     assert "Name=Thunar File Manager" not in d
     assert f"Icon={launcher.THUNAR_ICON_NAME}\n" in d
     assert launcher.THUNAR_ICON_NAME == "azzio-thunar"  # private name (upgrade-proof)
-    # stock Exec + actions preserved
+    # stock Exec + actions preserved (binary + .desktop id stay `thunar`)
     assert "Exec=thunar %U" in d
     assert "Actions=open-home;open-computer;open-trash;" in d
 
