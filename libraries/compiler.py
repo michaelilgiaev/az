@@ -457,6 +457,15 @@ def run(bar: ProgressBar, offline: bool, reclaim_after_mkarchiso,
     bar._arm(); bar.draw()
     _refold_own_packages_into_repo(W, full_compile)
 
+    # The build pacman.conf was resolved at step 11, BEFORE the cache + our own packages
+    # existed. Now that the local repo is complete (every pinned Arch package including
+    # the lib32-* multilib set, plus our calamares/librewolf/thunar, all indexed),
+    # RE-resolve it to install purely from that file:// repo -- otherwise a cold build
+    # (empty cache + foreign-host mirrors the step-11 probe cannot reach) would pacstrap
+    # against a conf with no local repo and abort on "target not found: calamares" and
+    # the lib32-* targets. Idempotent for the already-offline complete-cache path.
+    _finalize_build_pacman_conf(W)
+
     # 14/15 -- Assemble the selected ISO variant (one GIANT mkarchiso pass, weight 270).
     # Exactly ONE variant is selected per run: the base ISO WITHOUT --ssh, or the ssh ISO
     # (INDIVIDUALLY) WHEN --ssh opted in (_variants_for). Every step above is variant-
@@ -1445,6 +1454,34 @@ def _write_build_pacman_conf(W: Path, offline: bool, bar: ProgressBar) -> None:
         _switch_offline(W, conf, localrepo)
     else:
         _probe_and_maybe_switch(W, conf, localrepo, bar)
+
+
+def _finalize_build_pacman_conf(W: Path) -> None:
+    """RE-resolve the mkarchiso build pacman.conf now that the local repo is complete.
+
+    _write_build_pacman_conf runs at step 11 -- BEFORE the cache warm (step 12) and the
+    makepkg fold-in of our OWN packages (step 13). On a COLD build the local repo index
+    does not exist yet at step 11, so _probe_and_maybe_switch cannot take its offline
+    (file://-only) arm; and when the host is a foreign distro whose mirrorlist the probe
+    Includes, the probe itself fails, leaving a conf with NO local repo and multilib
+    commented. mkarchiso's pacstrap then aborts with "target not found: calamares" (it
+    lives ONLY in the local repo) and the four lib32-* multilib targets.
+
+    By this point (after _refold_own_packages_into_repo) cache/pkgs/repo/ holds every
+    pinned Arch package -- INCLUDING the lib32-* multilib set the download step fetched --
+    plus our built calamares/librewolf/thunar, and the reconciled index exists. Switching
+    the conf to that all-file:// SigLevel=Never repo makes pacstrap resolve the ENTIRE
+    manifest locally, with no network Include to stall on. Idempotent: an already-offline
+    conf (the complete-cache path) just gets re-written to the same local repo.
+    """
+    if not paths.LOCALREPO_INDEX.exists():
+        # No local repo to switch to (e.g. a cold build where mkarchiso will pacstrap
+        # straight from the network repos the step-11 online arm kept). Leave the conf
+        # _write_build_pacman_conf already wrote untouched.
+        return
+    localrepo = paths.PKG_REPO
+    conf = pacman.build_profile_conf(cachedir=str(paths.PACSTRAP_CACHE) + "/")
+    _switch_offline(W, conf, localrepo)
 
 
 def _probe_and_maybe_switch(W: Path, conf: str, localrepo: Path, bar: ProgressBar) -> None:
