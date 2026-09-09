@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Azzio "Sleep" (suspend) icon. A crescent moon, the universal sleep glyph, in the
+       Azzio blue gradient (#07AFE8 -> #06B8FD -> #0064F9) on a TRANSPARENT background so it
+       reads as a small inline glyph on the application-menu's dark surface (NOT an app-tile
+       badge like azzio.svg; the power/search row icons are flat glyphs, not tiles). This
+       REPLACES the KDE/breeze-like suspend icon the loader used to resolve. Shipped
+       under the Azzio-specific name azzio-sleep so it wins resolution over the stock theme.
+       Rasterized to hicolor PNGs + a scalable master by packages/application_menu. -->
+  <defs>
+    <linearGradient id="azGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+  </defs>
+  <!-- Crescent: one big disc, then a second, SLIGHTLY LARGER disc as a separate subpath.
+       With fill-rule="evenodd" the region the two discs share is punched OUT, leaving a
+       moon. Outer disc r=88 centred (118,132). The cut-out disc is a bit larger (r=98) and
+       offset well to the right (to 196,104): a larger, further-offset cutter carves away the
+       whole right half and most of the middle, leaving a SLIM crescent hugging the left/
+       bottom rim (equal radii + a small offset only leave a fat ring; this is what makes it
+       read as a moon, not an "O"). The bite opens up-and-right (a waxing crescent). -->
+  <path fill="url(#azGrad)" fill-rule="evenodd"
+        d="M118 44 a88 88 0 1 0 0 176 a88 88 0 1 0 0 -176 Z
+           M196 6 a98 98 0 1 0 0 196 a98 98 0 1 0 0 -196 Z"/>
+</svg>

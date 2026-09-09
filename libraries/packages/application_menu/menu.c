@@ -53,6 +53,20 @@ typedef enum { FOCUS_APPS, FOCUS_POWER } FocusZone;
  * TAB + Enter away. Left/Right then walk off it and the position is preserved. */
 #define AZ_POWER_SHUTDOWN_INDEX 3
 
+/* The Azzio-OWN icon names for the power row + search box. These are OUR icons
+ * (assets/icons/{sleep,lock,restart,shutdown,search}.svg, the brand blue gradient on a
+ * transparent background), shipped by packages/application_menu under these exact hicolor
+ * names. We use OUR names -- NOT the generic freedesktop ones the menu used before -- so the
+ * resolver (icons.c, first-match over the theme chain) returns Azzio's glyphs instead of the
+ * installed Adwaita theme's generic (KDE/breeze-ish) ones the user asked to replace. Kept as
+ * named constants (single source of truth) so a test can pin them equal to the Python
+ * MENU_GLYPH_ICONS list and neither side can drift. */
+#define AZ_ICON_SLEEP    "azzio-sleep"
+#define AZ_ICON_LOCK     "azzio-lock"
+#define AZ_ICON_RESTART  "azzio-restart"
+#define AZ_ICON_SHUTDOWN "azzio-shutdown"
+#define AZ_ICON_SEARCH   "azzio-search"
+
 typedef struct {
     const char *icon_name;
     const char *label;
@@ -501,7 +515,7 @@ static void build_window(AzMenu *m) {
     gtk_box_pack_start(GTK_BOX(search_row), box, TRUE, TRUE, 0);
 
     GtkWidget *mag = gtk_image_new_from_pixbuf(
-        az_icons_load(m->small_icons, "edit-find"));
+        az_icons_load(m->small_icons, AZ_ICON_SEARCH));
     gtk_widget_set_margin_start(mag, 8);
     gtk_widget_set_margin_end(mag, 4);
     gtk_box_pack_start(GTK_BOX(box), mag, FALSE, FALSE, 0);
@@ -561,10 +575,10 @@ static void build_window(AzMenu *m) {
     gtk_box_pack_start(GTK_BOX(root), power_row, FALSE, FALSE, 0);
 
     static const PowerItem items[4] = {
-        { "system-suspend",     "Sleep",     az_suspend },
-        { "system-lock-screen", "Lock",      az_lock_session },
-        { "system-reboot",      "Restart",   az_reboot },
-        { "system-shutdown",    "Shut Down", az_poweroff },
+        { AZ_ICON_SLEEP,    "Sleep",     az_suspend },
+        { AZ_ICON_LOCK,     "Lock",      az_lock_session },
+        { AZ_ICON_RESTART,  "Restart",   az_reboot },
+        { AZ_ICON_SHUTDOWN, "Shut Down", az_poweroff },
     };
     for (int i = 0; i < 4; i++) {
         GtkWidget *btn = az_power_button_new(m->small_icons, items[i].icon_name,

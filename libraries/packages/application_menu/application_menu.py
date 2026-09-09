@@ -98,6 +98,36 @@ MENU_USAGE_SEED: dict[str, int] = {
 # .desktop entry and any launcher show a recognizable menu icon. Single source of truth.
 MENU_ICON_NAME = "application-menu"
 
+# --- The menu's OWN glyph icons (power row + search) -------------------------
+# The power row (Sleep/Lock/Restart/Shut Down) and the search box used to resolve the
+# STOCK freedesktop names (system-suspend / system-lock-screen / system-reboot /
+# system-shutdown / edit-find), which land on the installed Adwaita theme's glyphs -- and
+# those read as the generic KDE/breeze-ish icons the user asked to replace. Azzio now ships
+# its OWN glyphs (assets/icons/{sleep,lock,restart,shutdown,search}.svg): the brand blue
+# gradient on a transparent background, drawn to sit as small inline glyphs on the menu's
+# dark surface (NOT app-tile badges). They are shipped under Azzio-SPECIFIC names
+# (azzio-sleep, ...) that no stock theme defines, so the menu's icon resolver (icons.c,
+# which walks the theme chain and returns the FIRST match) picks OURS -- exactly the
+# new-name reasoning packages/xviewer + packages/thunar use so a theme/package update cannot
+# revert them. menu.c references these AZ_ICON_* names; a test pins the two lists equal.
+#
+# Each: the source-of-truth SVG asset -> our icon name. Shipped to the hicolor SCALABLE apps
+# dir (the vector master) + rasterized to the standard PNG sizes there, all root-owned (a
+# NEW name, so nothing is package-owned; goes straight in the airootfs overlay).
+MENU_GLYPH_ICONS = [
+    {"asset": "icons/sleep.svg",    "name": "azzio-sleep"},
+    {"asset": "icons/lock.svg",     "name": "azzio-lock"},
+    {"asset": "icons/restart.svg",  "name": "azzio-restart"},
+    {"asset": "icons/shutdown.svg", "name": "azzio-shutdown"},
+    {"asset": "icons/search.svg",   "name": "azzio-search"},
+]
+# The hicolor apps-dir templates (same layout kitty/xviewer/thunar use) and the PNG sizes
+# rasterized alongside the scalable master, so the resolver finds a size-appropriate raster
+# whatever it asks for (it prefers >= target, else nearest -- see icons.c).
+MENU_ICON_SCALABLE_DIR = "/usr/share/icons/hicolor/scalable/apps"
+MENU_ICON_PNG_DIR = "/usr/share/icons/hicolor/{size}x{size}/apps"
+MENU_ICON_PNG_SIZES = (16, 22, 24, 32, 48, 64, 128, 256)
+
 
 # --- Source files (in the repo) ---------------------------------------------
 # The menu is a C / GTK3 program: menu.c holds main() (the resident daemon) and pulls in
@@ -245,8 +275,38 @@ PLAN = [
 ]
 
 
+def icons_plan() -> list[dict]:
+    """The emit entries for the menu's own glyph icons (power row + search): for each
+    MENU_GLYPH_ICONS entry, the scalable SVG master (copied verbatim from the repo asset)
+    plus a PNG rasterization at each MENU_ICON_PNG_SIZES size, all under the icon's
+    Azzio-specific hicolor name and all root-owned. Same builder/dest/mode/owner + asset/
+    render shape packages/xviewer uses, so compiler._emit_desktop emits them declaratively.
+    Returns FRESH dicts so a caller cannot mutate module state."""
+    plan: list[dict] = []
+    for icon in MENU_GLYPH_ICONS:
+        plan.append({   # the scalable SVG master (our asset, our icon name).
+            "builder": None,
+            "asset": icon["asset"],
+            "dest": f"{MENU_ICON_SCALABLE_DIR}/{icon['name']}.svg",
+            "mode": _CONF,
+            "owner": "root",
+        })
+        for size in MENU_ICON_PNG_SIZES:
+            png_dir = MENU_ICON_PNG_DIR.format(size=size)
+            plan.append({   # PNG rasterization at a standard size.
+                "builder": None,
+                "render": {"asset": icon["asset"], "size": size},
+                "dest": f"{png_dir}/{icon['name']}.png",
+                "mode": _CONF,
+                "owner": "root",
+            })
+    return plan
+
+
 def emit_plan() -> list[dict]:
     """Return the PLAN list (builder/dest/mode) for compiler.py to emit into the
-    airootfs. Kept as a function to mirror packages/openbox.emit_plan(). The compiled
-    daemon binary is installed separately by build_daemon()."""
-    return PLAN
+    airootfs, PLUS the glyph-icon entries (icons_plan()). Kept as a function to mirror
+    packages/openbox.emit_plan(). The compiled daemon binary is installed separately by
+    build_daemon(); compiler._emit_desktop handles the asset/render icon entries the same
+    declarative way _emit_apps handles kitty/xviewer icons."""
+    return PLAN + icons_plan()

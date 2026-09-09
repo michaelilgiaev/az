@@ -605,11 +605,19 @@ def _emit_desktop(airootfs: Path, home: Path) -> None:
         airootfs / application_menu.MENU_DAEMON_BIN_SYSTEM_PATH.lstrip("/")
     )
     for entry in application_menu.emit_plan():
-        emit.write_text(
-            airootfs / entry["dest"].lstrip("/"),
-            entry["builder"](),
-            mode=entry["mode"],
-        )
+        target = airootfs / entry["dest"].lstrip("/")
+        # The menu's own glyph icons (power row + search) ride in emit_plan() as asset/render
+        # entries (icons_plan()), the same shape _emit_apps handles for kitty/xviewer: copy the
+        # scalable SVG master verbatim, rasterize the PNG sizes. All are root-owned system icons
+        # (a NEW hicolor name, so nothing is package-owned) -- no /etc/skel mirror needed.
+        if entry.get("asset"):
+            emit.copy_asset(entry["asset"], target, mode=entry["mode"])
+            continue
+        if entry.get("render"):
+            r = entry["render"]
+            emit.render_svg_png(r["asset"], target, r["size"], mode=entry["mode"])
+            continue
+        emit.write_text(target, entry["builder"](), mode=entry["mode"])
     # The Azzio window switcher (alt-tab): a SECOND compiled C/GTK3 daemon, OUR
     # replacement for OpenBox's built-in NextWindow list (a horizontal, Windows-like
     # overlay of LIVE window thumbnails). build_daemon() stages this package AND

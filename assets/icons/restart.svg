@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Azzio "Restart" (reboot) icon. A circular refresh arrow in the Azzio blue gradient on
+       a TRANSPARENT background (inline power-row glyph, not an app tile). REPLACES the
+       KDE/breeze-like system-reboot. Shipped as azzio-restart so it wins icon resolution.
+       Rasterized by packages/application_menu. -->
+  <defs>
+    <linearGradient id="azGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+  </defs>
+  <!-- The ring: a ~300deg arc (a gap at the top-right where the arrowhead sits) as a thick
+       round stroke. r=72 centred (128,128). Starts near the top, sweeps clockwise all the
+       way round to the arrowhead. -->
+  <path fill="none" stroke="url(#azGrad)" stroke-width="22" stroke-linecap="round"
+        d="M170 66
+           A72 72 0 1 1 128 56"/>
+  <!-- Arrowhead: a filled triangle at the arc's start (top), pointing clockwise (to the
+       right), so the loop reads as a rotation/refresh. -->
+  <path fill="url(#azGrad)"
+        d="M126 34 L178 60 L138 92 Z"/>
+</svg>
