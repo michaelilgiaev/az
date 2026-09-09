@@ -1,8 +1,8 @@
-"""Thunar sidebar shortcuts -- ~/.config/gtk-3.0/bookmarks, built from home_directory.
+"""File manager sidebar shortcuts -- ~/.config/gtk-3.0/bookmarks, built from home_directory.
 
-Thunar's shortcuts pane reads the GTK bookmarks file (~/.config/gtk-3.0/bookmarks, the
-freedesktop GTK bookmarks format Nautilus/Thunar/PCManFM all share -- verified: Thunar 4.20
-references `.gtk-bookmarks` / the gtk-3.0 bookmarks path). Each line is:
+The file manager's shortcuts pane reads the GTK bookmarks file (~/.config/gtk-3.0/bookmarks, the
+freedesktop GTK bookmarks format Nautilus/the file manager/PCManFM all share -- verified: the
+file manager 4.20 references `.gtk-bookmarks` / the gtk-3.0 bookmarks path). Each line is:
 
     file:///absolute/path   Optional Label
 
@@ -15,8 +15,8 @@ Add a folder there and it appears both on disk and here.
 RESOLVED TARGETS (PROMPT task 2). Each bookmark points at the RESOLVED path, not a symlink:
 home_directory.sidebar_entries() already resolves the convenience symlinks (Config ->
 /home/main/.config, Trash -> /home/main/.local/share/Trash/files, ...). So clicking a
-shortcut enters the real directory and Thunar's (text-entry) location bar shows the ACTUAL
-path, not the /home/main/Config symlink path. The label is forced to the Azzio name (e.g.
+shortcut enters the real directory and the file manager's (text-entry) location bar shows the
+ACTUAL path, not the /home/main/Config symlink path. The label is forced to the Azzio name (e.g.
 "Config"), so the sidebar reads "Config" even though it points at .config.
 
 The built-in Places/Devices/Network clutter is hidden separately (settings.HIDDEN_BOOKMARKS /
@@ -33,15 +33,15 @@ from . import home_directory
 # The live user's home (matches openbox.HOME / the airootfs /home/main tree).
 HOME = "/home/main"
 
-# Where GTK (and thus Thunar's shortcuts pane) reads the bookmarks. XDG_CONFIG_HOME defaults
-# to ~/.config, which the OpenBox session exports.
+# Where GTK (and thus the file manager's shortcuts pane) reads the bookmarks. XDG_CONFIG_HOME
+# defaults to ~/.config, which the OpenBox session exports.
 GTK_BOOKMARKS_PATH = f"{HOME}/.config/gtk-3.0/bookmarks"
 
 
-# Labels Thunar ALREADY provides as a built-in "Places" shortcut at the SAME resolved path,
-# so adding our own bookmark for them would DUPLICATE the entry in the side pane (verified: a
-# GTK bookmark for file:///home/main/Desktop shows a second "Desktop" next to the built-in
-# one). We therefore SKIP these here and let Thunar's built-in shortcut serve them:
+# Labels the file manager ALREADY provides as a built-in "Places" shortcut at the SAME resolved
+# path, so adding our own bookmark for them would DUPLICATE the entry in the side pane (verified:
+# a GTK bookmark for file:///home/main/Desktop shows a second "Desktop" next to the built-in
+# one). We therefore SKIP these here and let the file manager's built-in shortcut serve them:
 #   * Desktop -- the built-in "Desktop" place points at ~/Desktop (our exact resolved target),
 #     and its URI (file://$HOME/Desktop) is identical to what our bookmark would use, so it
 #     cannot be hidden without also hiding our bookmark. Keep the built-in, skip our duplicate.
@@ -55,21 +55,22 @@ _BUILTIN_PROVIDED = frozenset({"Desktop"})
 # So we neither ship a "Home Directory" bookmark nor keep the built-in username Home: the
 # built-in Home shortcut (file:///home/main) is still hidden via settings.HIDDEN_BOOKMARKS, and
 # no replacement bookmark is added here. The sidebar therefore starts straight at the layout
-# folders (Downloads, Vault, ...). Thunar's own Home toolbar button covers navigating home.
+# folders (Downloads, Vault, ...). The file manager's own Home toolbar button covers navigating
+# home.
 
 
 def _file_uri(abs_path: str) -> str:
     """Return the file:// URI for an absolute path. The paths here are plain home paths
     (ASCII, no spaces), so a simple prefix is correct and readable; kept explicit so a
-    reviewer sees the exact bookmark form Thunar parses."""
+    reviewer sees the exact bookmark form the file manager parses."""
     return f"file://{abs_path}"
 
 
 def gtk_bookmarks() -> str:
     """Return ~/.config/gtk-3.0/bookmarks -- one `file:///... Label` line per
-    home_directory sidebar entry (EXCEPT the few Thunar already provides as built-in places,
-    see _BUILTIN_PROVIDED), in display order, each pointing at the RESOLVED target with the
-    Azzio label. Together with the built-in Home/Desktop (kept) and the hidden built-in
+    home_directory sidebar entry (EXCEPT the few the file manager already provides as built-in
+    places, see _BUILTIN_PROVIDED), in display order, each pointing at the RESOLVED target with
+    the Azzio label. Together with the built-in Home/Desktop (kept) and the hidden built-in
     clutter (settings.HIDDEN_*), this makes the side pane show exactly the Azzio layout set.
 
     NOTE: the GTK bookmarks format has NO comment syntax (every non-blank line is parsed as a
@@ -80,6 +81,6 @@ def gtk_bookmarks() -> str:
     lines: list[str] = []
     for label, target in home_directory.sidebar_entries():
         if label in _BUILTIN_PROVIDED:
-            continue  # Thunar's built-in place already covers this at the same path.
+            continue  # the file manager's built-in place already covers this at the same path.
         lines.append(f"{_file_uri(target)} {label}")
     return "\n".join(lines) + "\n"

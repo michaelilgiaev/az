@@ -1,5 +1,5 @@
 /* Azzio window switcher -- fixed leading order + alphabetical tail. See ordering.h.
- * 1 librewolf, 2 kitty, 3 hypervisor (remote-viewer), 4 thunar, 5 rest (alpha).
+ * 1 librewolf, 2 kitty, 3 hypervisor (remote-viewer), 4 the file manager, 5 rest (alpha).
  * Pure: no GTK/X, so it is unit-tested headless. */
 #include "ordering.h"
 #include <string.h>

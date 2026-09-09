@@ -164,30 +164,32 @@ ISO_APP_OVERRIDES = [
     (None, "/usr/share/icons/hicolor/256x256/apps/kitty.png", True),
     (None, "/usr/share/pixmaps/kitty.png", True),
     ("org.gnome.gedit.desktop", "/usr/share/applications/org.gnome.gedit.desktop", False),
-    # Thunar + xviewer .desktop overrides (packages/file_manager, packages/xviewer): the
-    # thunar.desktop rename+icon and the xviewer.desktop icon override are package-owned
-    # (thunar / xviewer), so like gedit's .desktop they are NoExtract'd and the bodies (staged
-    # by compiler._emit_apps from the module emit_plans) are planted post-pacstrap.
+    # file_manager + xviewer .desktop overrides (packages/file_manager, packages/xviewer): the
+    # file manager's launcher rename+icon (its on-disk name stays thunar.desktop -- the built
+    # binary owns that path) and the xviewer.desktop icon override are package-owned
+    # (file_manager / xviewer), so like gedit's .desktop they are NoExtract'd and the bodies
+    # (staged by compiler._emit_apps from the module emit_plans) are planted post-pacstrap.
     ("thunar.desktop", "/usr/share/applications/thunar.desktop", False),
     ("xviewer.desktop", "/usr/share/applications/xviewer.desktop", False),
     # Application-menu cleanup (packages/file_manager/menu_cleanup): NoDisplay=true overrides that
-    # hide the extra Thunar/Xfce launchers. Each is package-owned (thunar / thunar-volman /
-    # libxfce4ui), so same NoExtract + post-pacstrap install. The staged basename is the
-    # launcher's own .desktop name (matching the emit_plan dest via _override_basename).
+    # hide the extra file-manager/Xfce launchers. Each is package-owned (file_manager /
+    # thunar-volman / libxfce4ui), so same NoExtract + post-pacstrap install. The staged basename
+    # is the launcher's own .desktop name (matching the emit_plan dest via _override_basename).
     ("thunar-bulk-rename.desktop", "/usr/share/applications/thunar-bulk-rename.desktop", False),
     ("thunar-settings.desktop", "/usr/share/applications/thunar-settings.desktop", False),
     ("thunar-volman-settings.desktop",
      "/usr/share/applications/thunar-volman-settings.desktop", False),
     ("xfce4-about.desktop", "/usr/share/applications/xfce4-about.desktop", False),
-    # Thunar gettext .mo override catalog (packages/file_manager/locale): relabels the
+    # File-manager gettext .mo override catalog (packages/file_manager/locale): relabels the
     # hardcoded menu strings ("Places" -> "Home", the built-in default-opener, the Create
-    # Folder/Document wording). The `thunar` package OWNS /usr/share/locale/en_GB/LC_MESSAGES/
-    # thunar.mo (one of 67 shipped locale catalogs), so pre-placing our catalog in the overlay
-    # hit the file-conflict wall ("thunar.mo exists in filesystem" -> pacstrap abort). Same cure
-    # as the .desktop overrides: NoExtract the path and plant our catalog post-pacstrap. en_US
-    # and en_IL carry no package catalog (Thunar's msgids are American English), so they never
-    # conflict, but we route them through the SAME machinery for symmetry -- a NoExtract of an
-    # unowned path is a harmless no-op and app_override_cp_sh installs them just like en_GB.
+    # Folder/Document wording). Our `file_manager` package OWNS /usr/share/locale/en_GB/
+    # LC_MESSAGES/thunar.mo (the textdomain stays `thunar` -- it is the built binary's -- one of
+    # 67 shipped locale catalogs), so pre-placing our catalog in the overlay hit the file-conflict
+    # wall ("thunar.mo exists in filesystem" -> pacstrap abort). Same cure as the .desktop
+    # overrides: NoExtract the path and plant our catalog post-pacstrap. en_US and en_IL carry no
+    # package catalog (the binary's msgids are American English), so they never conflict, but we
+    # route them through the SAME machinery for symmetry -- a NoExtract of an unowned path is a
+    # harmless no-op and app_override_cp_sh installs them just like en_GB.
     # en_IL is the DEFAULT installed display locale (calamares seeds Asia/Jerusalem -> LANG=en_IL),
     # so its catalog is the one that makes the relabels apply out of the box; en_US covers a
     # US-region install and en_GB is the LC_TIME date locale. Staged basenames are per-locale
@@ -195,18 +197,19 @@ ISO_APP_OVERRIDES = [
     ("thunar.en_US.mo", "/usr/share/locale/en_US/LC_MESSAGES/thunar.mo", False),
     ("thunar.en_GB.mo", "/usr/share/locale/en_GB/LC_MESSAGES/thunar.mo", False),
     ("thunar.en_IL.mo", "/usr/share/locale/en_IL/LC_MESSAGES/thunar.mo", False),
-    # NUKE the "Devices" section from Thunar's shortcuts pane (the user: "no Devices, delete it,
-    # nuke it, I dont need it there"). Thunar's DEVICES rows come from the GVfs GVolumeMonitor,
-    # and `misc-volume-management=false` only stops AUTO-MOUNT -- it does NOT hide drives/volumes
-    # already reported by the monitor (verified on the VM: a VirtIO drive + a 9p "shared" mount
-    # still listed under Devices). There is no Thunar config to hide the whole section. The
-    # decisive, machine-agnostic lever is GVfs itself: the udisks2 volume monitor is registered
-    # by /usr/share/gvfs/remote-volume-monitors/udisks2.monitor. The base `gvfs` package ships
-    # ONLY that one monitor file; GVfs's other volume monitors (afc/goa/gphoto2/mtp) live in the
-    # separate gvfs-afc/gvfs-goa/gvfs-gphoto2/gvfs-mtp subpackages, and NONE of those are in the
-    # ISO manifest (packages.x86_64). So on the built image udisks2.monitor is the only volume
-    # monitor present, and removing it leaves GVfs with ZERO volume monitors -- Thunar's
-    # GVolumeMonitor is empty and NO Devices section renders at all, on a VM or bare metal alike.
+    # NUKE the "Devices" section from the file manager's shortcuts pane (the user: "no Devices,
+    # delete it, nuke it, I dont need it there"). The file manager's DEVICES rows come from the
+    # GVfs GVolumeMonitor, and `misc-volume-management=false` only stops AUTO-MOUNT -- it does NOT
+    # hide drives/volumes already reported by the monitor (verified on the VM: a VirtIO drive + a
+    # 9p "shared" mount still listed under Devices). There is no file-manager config to hide the
+    # whole section. The decisive, machine-agnostic lever is GVfs itself: the udisks2 volume
+    # monitor is registered by /usr/share/gvfs/remote-volume-monitors/udisks2.monitor. The base
+    # `gvfs` package ships ONLY that one monitor file; GVfs's other volume monitors
+    # (afc/goa/gphoto2/mtp) live in the separate gvfs-afc/gvfs-goa/gvfs-gphoto2/gvfs-mtp
+    # subpackages, and NONE of those are in the ISO manifest (packages.x86_64). So on the built
+    # image udisks2.monitor is the only volume monitor present, and removing it leaves GVfs with
+    # ZERO volume monitors -- the file manager's GVolumeMonitor is empty and NO Devices section
+    # renders at all, on a VM or bare metal alike.
     # (If a gvfs-* backend subpackage is ever added to the manifest, its monitor must be removed
     # here too, or its devices would reappear.) Owned by `gvfs`, so it takes the same NoExtract +
     # post-pacstrap `rm -f` route as the suppress-only kitty PNGs (basename None, remove True).
@@ -275,11 +278,14 @@ def app_override_cp_sh(prefix: str = "", src_dir: str = "/root/azzio/apps") -> s
 # (file_manager, azzio, window_switcher, application_menu, hypervisor), but only ONE of them
 # is actually a pacman package:
 #
-#   file_manager  -> pkgname `thunar` (Azzio's Thunar fork, PKGBUILD-built -- pkgbuild.py).
-#                    This is the ONLY one exposed to the upgrade trap: extra/thunar exists and
-#                    is 4.20.9-1 today, so the day it ships 4.20.9-3 / 4.20.10 a bare -Syu WOULD
-#                    replace our -2 fork. Frozen here. (Our repo being ordered first only wins
-#                    the initial fresh install; IgnorePkg is what protects it forever after.)
+#   file_manager  -> pkgname `file_manager` (Azzio's own file manager, PKGBUILD-built --
+#                    pkgbuild.py). It provides+conflicts+replaces the stock `thunar` package, so it
+#                    is exposed to the upgrade trap: extra/thunar exists (4.20.9-1 today), and a
+#                    bare -Syu could try to `replaces`-swap our file_manager back to stock thunar
+#                    (or, if a same-name package ever appeared, replace it outright). Freezing
+#                    `file_manager` by name pins OUR package: IgnorePkg skips it on -Syu so nothing
+#                    upstream can supersede it. (Our repo being ordered first only wins the initial
+#                    fresh install; IgnorePkg is what protects it forever after.)
 #
 #   azzio / window_switcher / application_menu / hypervisor  -> NOT pacman packages. They are
 #                    C daemons / Python bundles the compiler writes straight into the airootfs
@@ -295,7 +301,7 @@ def app_override_cp_sh(prefix: str = "", src_dir: str = "/root/azzio/apps") -> s
 # calamares and librewolf ARE also Azzio-built pacman packages (makepkg.PRODUCED), but the user
 # did not name them for the freeze, so they are intentionally NOT frozen -- do not conflate this
 # set with PRODUCED. Adding a future Azzio pacman package to the freeze is a one-line edit here.
-FROZEN_PKGS = ("thunar",)
+FROZEN_PKGS = ("file_manager",)
 
 
 def _options_block(
@@ -411,16 +417,20 @@ def append_local_repo(conf: str, localrepo_path: str) -> str:
     ORDERING IS LOAD-BEARING, and the earlier "listed last" design was WRONG: pacman
     resolving `-S <pkg>` picks the package from the FIRST repo (in config order) that
     carries the name -- it does NOT choose the globally-highest version across repos.
-    Our repo overrides `thunar` (ours 4.20.9-2 vs extra's -1, same pkgver + higher
-    pkgrel) and ships our own `librewolf`/`calamares`. With the local repo listed AFTER
-    [extra], extra's stock thunar-1 SHADOWED our -2, so mkarchiso pacstrapped the
-    unfixed binary into airootfs and the live ISO booted stock thunar (the higher
-    pkgrel did NOT save us -- that only decides UPGRADES, not fresh-install selection).
-    Placing our repo FIRST makes pacman prefer our packages for every name we carry.
-    That is safe here: the local repo was populated from the SAME pinned ALA snapshot,
-    so every non-overridden name is byte-identical, and the only version differences are
-    packages we deliberately ship (thunar, librewolf). Verified with `pacman -Sddp
-    thunar`: repo-last -> 4.20.9-1, repo-first -> 4.20.9-2."""
+    Our repo ships our own `librewolf`/`calamares` and our `file_manager` package (which
+    REPLACES stock `thunar`: pkgname=file_manager, provides+conflicts+replaces=thunar).
+    The manifest explicitly names `file_manager`, so pacstrap requests it by name and
+    installs it from our repo; the two consumers that `depend=('thunar')` (thunar-volman,
+    thunar-archive-plugin) bind to our provide. For librewolf/calamares -- names that ALSO
+    exist (or once existed) upstream -- placing our repo FIRST makes pacman prefer our build
+    for every name we carry. That is safe here: the local repo was populated from the SAME
+    pinned ALA snapshot, so every non-shipped name is byte-identical, and the only
+    differences are packages we deliberately ship. file_manager additionally carries
+    conflicts+replaces=('thunar'), so even if stock thunar were present pacman would not
+    co-install it. (Historically, when our package was itself named `thunar`, repo-last let
+    extra's stock thunar shadow ours and the live ISO booted the unfixed binary; repo-first
+    fixed that. The conflicts/replaces on the renamed package makes the guarantee explicit
+    rather than order-dependent.)"""
     if "[pacstrap-azzio-repo]" in conf:
         return conf
     section = (

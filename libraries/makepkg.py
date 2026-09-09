@@ -59,13 +59,15 @@ BUILDER_USER = "azziobuilder"
 # This set is used to (a) exclude own packages from the Arch `pacman -Sw` download
 # and (b) know which built packages to re-add/refresh in the offline repo + cache.
 #
-# `thunar` is DIFFERENT from calamares/librewolf: it IS a real Arch package (in extra/ and in
-# the manifest packages.x86_64), which Azzio REBUILDS from source with a symlink-resolve patch
-# (pkgbuild.pkgbuild_file_manager, pkgrel 2 so ours outranks extra/'s -1). Listing it here
-# excludes it from the Arch `pacman -Sw` download -- so ONLY our patched thunar lands in the
-# offline repo (no redundant fetch of extra/'s, and no ambiguity about which is installed). The
-# manifest still lists `thunar` (it must be pacstrapped); it is simply satisfied from our repo.
-PRODUCED = ("calamares", "librewolf", "thunar")
+# `file_manager` is Azzio's OWN file manager (pkgbuild.pkgbuild_file_manager), built from the
+# vendored source. It is NOT an Arch package -- it REPLACES stock `thunar`: pkgname=file_manager
+# with provides/conflicts/replaces=('thunar'). The manifest lists `file_manager` (not `thunar`),
+# and this name is what the staleness gate globs for (file_manager-*.pkg.tar.zst) and what
+# _emit_recipes builds. Listed here so the offline-repo bookkeeping re-adds/refreshes it; there is
+# no Arch `thunar` fetch to exclude anymore because the manifest no longer names `thunar` (the two
+# consumers that depend on `thunar` -- thunar-volman/thunar-archive-plugin -- are satisfied by our
+# provide, and conflicts/replaces keep stock thunar out).
+PRODUCED = ("calamares", "librewolf", "file_manager")
 
 
 def produced_names(full_compile: bool) -> tuple[str, ...]:

@@ -94,11 +94,12 @@ def test_app_override_cp_sh_plants_replacements_and_removes_suppressed():
     assert len(staged) == len(set(staged)), staged
 
 
-def test_thunar_and_xviewer_desktop_overrides_are_planted():
-    # The Thunar rename/icon .desktop, the xviewer icon .desktop, and the four NoDisplay
-    # suppressions (Bulk Rename, Thunar Preferences, Removable Drives, About Xfce) are all
-    # package-owned, so they must be planted post-pacstrap from the staging dir. (Their bodies
-    # are staged by compiler._emit_apps from the module emit_plans.)
+def test_file_manager_and_xviewer_desktop_overrides_are_planted():
+    # The file-manager rename/icon .desktop (its on-disk name stays thunar.desktop), the xviewer
+    # icon .desktop, and the four NoDisplay suppressions (Bulk Rename, file-manager Preferences,
+    # Removable Drives, About Xfce) are all package-owned, so they must be planted post-pacstrap
+    # from the staging dir. (Their bodies are staged by compiler._emit_apps from the module
+    # emit_plans.)
     live = pacman.app_override_cp_sh()
     for name in (
         "thunar.desktop",
@@ -110,7 +111,7 @@ def test_thunar_and_xviewer_desktop_overrides_are_planted():
     ):
         assert (f"install -Dm644 /root/azzio/apps/{name} "
                 f"/usr/share/applications/{name}") in live, name
-    # Thunar gettext .mo override catalogs: the en_GB path is package-owned, so every locale
+    # File-manager gettext .mo override catalogs: the en_GB path is package-owned, so every locale
     # catalog is planted post-pacstrap from the staging dir (per-locale staged basenames).
     # en_IL is the DEFAULT installed locale (calamares seeds Asia/Jerusalem -> LANG=en_IL), so
     # its catalog is what makes the overrides actually apply out of the box.
@@ -122,14 +123,17 @@ def test_thunar_and_xviewer_desktop_overrides_are_planted():
         assert (f"install -Dm644 /root/azzio/apps/{basename} {target}") in live, basename
 
 
-def test_dolphin_is_gone_from_manifest_and_thunar_present():
-    # PROMPT: Dolphin dropped, Thunar added (+ companions), xviewer added.
+def test_dolphin_is_gone_from_manifest_and_file_manager_present():
+    # PROMPT: Dolphin dropped, our file_manager added (+ companions), xviewer added. The manifest
+    # lists our OWN package name `file_manager` (which provides/replaces stock thunar), NOT
+    # `thunar` -- so stock thunar must NOT appear as a bare manifest token.
     import paths
     toks = [line.split("#", 1)[0].strip()
             for line in paths.PACKAGES_FILE.read_text().splitlines()]
     toks = [t for t in toks if t]
     assert "dolphin" not in toks
-    assert "thunar" in toks
+    assert "file_manager" in toks
+    assert "thunar" not in toks          # our package replaces it; the bare name is not listed
     assert "thunar-volman" in toks
     assert "tumbler" in toks
     assert "zenity" in toks
@@ -180,11 +184,12 @@ def test_installer_base_conf_ignorepkg_is_single_sourced_from_frozen_pkgs():
     assert _ignorepkg_directive(conf) == f"IgnorePkg   = {' '.join(pacman.FROZEN_PKGS)}"
 
 
-def test_installer_base_conf_freezes_thunar_specifically():
-    # thunar (Azzio's Thunar fork, file_manager) is the one named package that is a real pacman
-    # package and shares a name with extra/thunar, so it is the one exposed to the upgrade trap.
-    assert "thunar" in pacman.FROZEN_PKGS
-    assert "thunar" in _ignorepkg_directive(pacman.installer_base_conf())
+def test_installer_base_conf_freezes_file_manager_specifically():
+    # file_manager (Azzio's own file manager) is the one named package that is a real pacman
+    # package exposed to the upgrade trap -- it provides/replaces stock thunar, so a bare -Syu
+    # could otherwise swap it back to stock. Frozen by OUR package name.
+    assert "file_manager" in pacman.FROZEN_PKGS
+    assert "file_manager" in _ignorepkg_directive(pacman.installer_base_conf())
 
 
 def test_non_pacman_azzio_apps_are_not_in_ignorepkg():
@@ -227,13 +232,12 @@ def test_append_local_repo_is_idempotent():
 
 
 def test_append_local_repo_ordered_before_network_repos():
-    # THE BUG: our local repo carries packages we OVERRIDE (thunar-4.20.9-2 vs
-    # extra's -1). pacman picks a package from the FIRST repo in config order that
-    # has it -- it does NOT pick the globally-highest version across repos. So if
-    # our repo is listed AFTER [extra], extra's stock thunar-1 shadows our -2 and the
-    # ISO ships the unfixed binary. Our repo MUST precede [core]/[extra] so our
-    # override wins. (Verified empirically with `pacman -Sddp thunar` against both
-    # DBs: repo-last -> 4.20.9-1, repo-first -> 4.20.9-2.)
+    # Our local repo carries packages that ALSO exist upstream (librewolf, calamares). pacman
+    # picks a package from the FIRST repo in config order that has the name -- it does NOT pick
+    # the globally-highest version across repos. So our repo MUST precede [core]/[extra] for our
+    # builds of those names to win. (Our file_manager package additionally provides/conflicts/
+    # replaces stock thunar, so its selection does not depend on ordering; ordering still matters
+    # for the same-named librewolf/calamares.)
     conf = pacman.build_profile_conf()
     out = pacman.append_local_repo(conf, "/mnt/repo")
     local = out.index("[pacstrap-azzio-repo]")
@@ -326,8 +330,8 @@ def test_options_block_ignorepkg_generalizes_to_multiple_packages():
     # The freeze is single-sourced from one constant, so adding a future Azzio package must be
     # a one-line edit. Prove the rendering handles MORE than one name (space-separated, the
     # pacman-native IgnorePkg format) -- e.g. the day librewolf/calamares are added to the set.
-    ob = pacman._options_block(cachedir=None, ignorepkg=("thunar", "librewolf"))
-    assert "IgnorePkg   = thunar librewolf" in ob
+    ob = pacman._options_block(cachedir=None, ignorepkg=("file_manager", "librewolf"))
+    assert "IgnorePkg   = file_manager librewolf" in ob
 
 
 # --- _net_repos: multilib active vs commented -------------------------------

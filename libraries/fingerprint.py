@@ -9,15 +9,15 @@ THE BUG THIS GUARDS: the offline default tier SKIPS makepkg when the own package
 already in the repo (the fast rerun). That skip used to be content-BLIND -- it only checked
 that a file named `calamares-*.pkg.tar.zst` existed, never whether it was built from the
 CURRENT recipe. So editing a recipe (adding the networkq source patch to calamares, or
-editing thunar's vendored C) did NOT invalidate the cached package: the stale binary was
+editing the file manager's vendored C) did NOT invalidate the cached package: the stale binary was
 reused and the ISO/box shipped it. The fix: fingerprint the recipe and re-check on reuse; a
 missing package, a missing/old sidecar, or a changed recipe all force a rebuild.
 
 WHAT THE FINGERPRINT COVERS: every file in the recipe (PKGBUILD + all companion files, e.g.
 the five calamares patches) AND, for a recipe that consumes a vendored source DIRECTORY
-(pkgbuild.recipe_source_trees -- thunar), that tree's content too. So ANY change -- an edit
+(pkgbuild.recipe_source_trees -- file_manager), that tree's content too. So ANY change -- an edit
 to a single patch, OR an edit to the vendored source -- flips it. The source-tree half was a
-later fix (see _source_tree_fingerprint): without it, editing thunar's vendored source did
+later fix (see _source_tree_fingerprint): without it, editing the file manager's vendored source did
 NOT invalidate the cache -- the same content-blind-reuse bug in a different spot.
 """
 
@@ -63,9 +63,9 @@ def _source_tree_fingerprint(tree: Path) -> str:
 
     WHY THIS EXISTS: _recipe_fingerprint only sees the recipe's text {filename: content}
     dict. A recipe whose source is a DIRECTORY has that tree copied in by _emit_recipes
-    OUTSIDE that dict, so editing the vendored C (dropping thunar's Help menu, say) did
+    OUTSIDE that dict, so editing the vendored C (dropping the file manager's Help menu, say) did
     NOT flip the recipe fingerprint -- the offline cache reused the pre-edit binary and
-    the ISO shipped an unfixed thunar. Folding this tree hash into the recipe's
+    the ISO shipped an unfixed file manager. Folding this tree hash into the recipe's
     fingerprint (see _current_recipe_fingerprints) closes that hole, mirroring the
     companion-file (patch) case _recipe_fingerprint already covers.
 
@@ -108,10 +108,10 @@ def _source_tree_fingerprint(tree: Path) -> str:
 def _current_recipe_fingerprints(full_compile: bool) -> dict[str, str]:
     """Map each produced package name -> the fingerprint of the recipe that would
     build it right now. The recipe DIR name (recipe_dirs' first tuple element) is the
-    package name for our recipes (calamares/librewolf/thunar), which is the key the
+    package name for our recipes (calamares/librewolf/file_manager), which is the key the
     sidecar files and produced_names use.
 
-    For a recipe that consumes a VENDORED source TREE (recipe_source_trees -- thunar
+    For a recipe that consumes a VENDORED source TREE (recipe_source_trees -- file_manager
     today), the tree's content hash is folded into the fingerprint too, so editing the
     vendored source invalidates the cached package exactly like editing the PKGBUILD or
     a patch does. Text-only recipes (calamares/librewolf) are unaffected -- they have no

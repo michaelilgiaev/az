@@ -91,7 +91,7 @@ MENU_USAGE_SEED_SYSTEM_PATH = (
 MENU_USAGE_SEED: dict[str, int] = {
     "librewolf.desktop": 3,          # LibreWolf (browser)
     "kitty.desktop": 2,              # kitty (terminal)
-    "thunar.desktop": 1,             # Thunar (file manager)
+    "thunar.desktop": 1,             # the file manager
 }
 
 # The menu launcher's icon glyph: the standard "application-menu" hamburger, so the
@@ -121,7 +121,7 @@ MENU_GLYPH_ICONS = [
     {"asset": "icons/shutdown.svg", "name": "azzio-shutdown"},
     {"asset": "icons/search.svg",   "name": "azzio-search"},
 ]
-# The hicolor apps-dir templates (same layout kitty/xviewer/thunar use) and the PNG sizes
+# The hicolor apps-dir templates (same layout kitty/xviewer/file_manager use) and the PNG sizes
 # rasterized alongside the scalable master, so the resolver finds a size-appropriate raster
 # whatever it asks for (it prefers >= target, else nearest -- see icons.c).
 MENU_ICON_SCALABLE_DIR = "/usr/share/icons/hicolor/scalable/apps"

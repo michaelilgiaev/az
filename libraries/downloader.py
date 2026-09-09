@@ -87,9 +87,23 @@ def manifest_packages() -> list[str]:
             if (tok := line.split("#", 1)[0].strip())]
 
 
+# Dependency names our OWN packages PROVIDE but that no manifest entry names directly, so
+# `pacman -Sw` must be told to treat them as already satisfied (--assume-installed) instead of
+# downloading the stock Arch package to fill the dep. Today this is just `thunar`: our
+# `file_manager` package (pkgbuild.pkgbuild_file_manager) is `provides=('thunar')` and is BUILT BY
+# THE MAKEPKG STAGE, which runs AFTER this download step -- so at download time our provider does
+# not exist yet, and the manifest's thunar-volman / thunar-archive-plugin (both `depend=('thunar')`,
+# unversioned) would otherwise pull stock extra/thunar into the offline repo. That stock thunar
+# would be redundant (pacstrap installs our file_manager, which provides+conflicts+replaces thunar)
+# and reintroduces the very "stock thunar is available in our repo" ambiguity the design removes.
+# --assume-installed thunar makes pacman resolve the dep without fetching it (verified with
+# `pacman -Sp --assume-installed thunar thunar-volman`: the dep is satisfied, no thunar download).
+ASSUME_INSTALLED = ("thunar",)
+
+
 def downloadable_packages(full_compile: bool = False) -> list[str]:
     """manifest_packages() minus the packages the makepkg stage builds ITSELF
-    (calamares, librewolf). Those exist on no Arch mirror, so `pacman -Sw` would
+    (calamares, librewolf, file_manager). Those exist on no Arch mirror, so `pacman -Sw` would
     abort on them, and they are never expected in the DOWNLOADED set -- they are
     folded into the offline repo by the makepkg stage instead. This is the exact set
     `-Sw` is given AND the exact set the offline repo must cover to be complete."""
@@ -246,9 +260,13 @@ def _sync_and_download(sudo, dlconf, gpgdir, pkg_db, pkg_repo, progress, phase=l
         # per-package lines reach compile-full.log live (run_teed feeds stdin from /dev/null,
         # as this call did explicitly).
         _write_download_conf(dlconf, parallel_downloads=parallel)
+        # --assume-installed <dep> for every name our own (not-yet-built) packages provide, so the
+        # dep is satisfied without downloading the stock Arch package (see ASSUME_INSTALLED).
+        assume = [arg for name in ASSUME_INSTALLED for arg in ("--assume-installed", name)]
         return logstream.run_teed(
             sudo + ["pacman", "-Sw", "--config", str(dlconf), "--gpgdir", str(gpgdir),
-                    "--noconfirm", "--cachedir", str(pkg_repo), "--dbpath", str(pkg_db)] + pkgs,
+                    "--noconfirm", "--cachedir", str(pkg_repo), "--dbpath", str(pkg_db)]
+            + assume + pkgs,
         )
 
     # Retry down the parallelism ladder: archive.archlinux.org throttles aggressive

@@ -24,8 +24,8 @@ SCALABLE apps dir under our OWN icon name (FILE_MANAGER_ICON_NAME) and rasterize
 PNG sizes there too, and the .desktop's Icon= points at that name. We use a NEW icon NAME
 (azzio-file-manager) rather than overwriting org.xfce.thunar, so a thunar package upgrade that
 reships org.xfce.thunar cannot revert our icon -- our name is ours alone. (kitty had to reuse
-its own name because kitty's binary hard-codes it; Thunar reads Icon= from the .desktop we
-own, so a private name is cleaner here.)
+its own name because kitty's binary hard-codes it; the file manager reads Icon= from the
+.desktop we own, so a private name is cleaner here.)
 
 ICON FILES ARE NOT PACKAGE-OWNED (our name is new), so they go in the airootfs overlay
 directly (owner "root") -- no NoExtract needed, unlike the .desktop.

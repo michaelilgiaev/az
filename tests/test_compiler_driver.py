@@ -431,11 +431,11 @@ def test_cache_complete_true_when_all_present(monkeypatch, tmp_path):
     idx.write_text("")
     (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
     # OUR OWN built packages must be present too, else the cache is not complete
-    # (they are compiled by the makepkg stage, not downloaded). thunar is now one of
-    # them (rebuilt from source with the symlink-resolve patch).
+    # (they are compiled by the makepkg stage, not downloaded). file_manager is now one of
+    # them (built from the vendored source with the symlink-resolve change).
     (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "librewolf-1.0-1-x86_64.pkg.tar.zst").write_text("")
-    (repo / "thunar-4.20.9-2-x86_64.pkg.tar.zst").write_text("")
+    (repo / "file_manager-1-1-x86_64.pkg.tar.zst").write_text("")
     # The own packages count as present only if built from the CURRENT recipe, so a
     # genuinely complete cache also carries their matching recipe fingerprints.
     _use_fingerprint_dir(monkeypatch, repo, stamp_current=True)
@@ -471,7 +471,7 @@ def test_cache_complete_false_when_own_recipe_changed(monkeypatch, tmp_path):
     (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "librewolf-1.0-1-x86_64.pkg.tar.zst").write_text("")
-    (repo / "thunar-4.20.9-2-x86_64.pkg.tar.zst").write_text("")
+    (repo / "file_manager-1-1-x86_64.pkg.tar.zst").write_text("")
     # Stamp CURRENT fingerprints, then corrupt calamares' to simulate its recipe change.
     _use_fingerprint_dir(monkeypatch, repo, stamp_current=True)
     makepkg._write_recipe_fingerprint(repo, "calamares", "old_recipe_before_networkq")
@@ -501,7 +501,7 @@ def test_cache_complete_false_when_own_fingerprint_absent(monkeypatch, tmp_path)
     (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "librewolf-1.0-1-x86_64.pkg.tar.zst").write_text("")
-    (repo / "thunar-4.20.9-2-x86_64.pkg.tar.zst").write_text("")
+    (repo / "file_manager-1-1-x86_64.pkg.tar.zst").write_text("")
     # Point the fingerprint dir at the (sidecar-free) repo -> no stamps -> stale.
     _use_fingerprint_dir(monkeypatch, repo, stamp_current=False)
     (sync / "core.db").write_text("")
@@ -533,7 +533,7 @@ def test_cache_complete_false_when_manifest_package_missing(monkeypatch, tmp_pat
     (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "librewolf-1.0-1-x86_64.pkg.tar.zst").write_text("")
-    (repo / "thunar-4.20.9-2-x86_64.pkg.tar.zst").write_text("")
+    (repo / "file_manager-1-1-x86_64.pkg.tar.zst").write_text("")
     # Everything UPSTREAM of the manifest clause must pass so this test isolates it:
     # current own-package fingerprints present, so the run reaches the coverage check.
     _use_fingerprint_dir(monkeypatch, repo, stamp_current=True)
@@ -567,13 +567,13 @@ def test_cache_complete_ignores_own_packages_absent_from_repo_files(monkeypatch,
     (repo / "somepkg-1.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "calamares-3.0-1-x86_64.pkg.tar.zst").write_text("")
     (repo / "librewolf-1.0-1-x86_64.pkg.tar.zst").write_text("")
-    # thunar is an own-built package too (rebuilt from source): in the manifest AND present.
-    (repo / "thunar-4.20.9-2-x86_64.pkg.tar.zst").write_text("")
+    # file_manager is an own-built package too (rebuilt from source): in the manifest AND present.
+    (repo / "file_manager-1-1-x86_64.pkg.tar.zst").write_text("")
     # Up-to-date cache -> own packages carry their current recipe fingerprints.
     _use_fingerprint_dir(monkeypatch, repo, stamp_current=True)
     (sync / "core.db").write_text("")
     manifest = tmp_path / "packages.x86_64"
-    manifest.write_text("# header\nsomepkg\ncalamares\nlibrewolf\nthunar\n")
+    manifest.write_text("# header\nsomepkg\ncalamares\nlibrewolf\nfile_manager\n")
 
     monkeypatch.setattr(compiler.paths, "LOCALREPO_INDEX", idx)
     monkeypatch.setattr(compiler.paths, "PKG_REPO", repo)

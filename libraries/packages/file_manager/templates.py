@@ -1,16 +1,17 @@
-"""~/Templates -- the "Create Document" template set for Thunar (PROMPT batch item 8).
+"""~/Templates -- the "Create Document" template set for the file manager (PROMPT batch item 8).
 
 This is a SUBMODULE of the file_manager package (packages/file_manager/templates.py): the template set,
-the XDG_TEMPLATES_DIR pointer, and the Thunar config that consumes them all belong together, so
-this lives right next to the rest of the Thunar setup and file_manager.emit_plan() folds its plan in
-(it is NOT a separately-discovered top-level package anymore). It sits beside home_directory --
-which creates the ~/Templates DIRECTORY this module then fills -- for the same reason.
+the XDG_TEMPLATES_DIR pointer, and the file-manager config that consumes them all belong
+together, so this lives right next to the rest of the file-manager setup and
+file_manager.emit_plan() folds its plan in (it is NOT a separately-discovered top-level package
+anymore). It sits beside home_directory -- which creates the ~/Templates DIRECTORY this module
+then fills -- for the same reason.
 
-Thunar populates its "Create New Document..." submenu from the XDG templates dir: every FILE
-in ~/Templates (the dir named by XDG_TEMPLATES_DIR in ~/.config/user-dirs.dirs) becomes a
-"Create Document -> <that file's name>" entry that COPIES the template into the current folder.
-Out of the box Azzio shipped no templates AND user-dirs.dirs pointed XDG_TEMPLATES_DIR at the
-whole home dir ("$HOME/"), so the submenu was effectively empty (just the "About Templates"
+The file manager populates its "Create New Document..." submenu from the XDG templates dir:
+every FILE in ~/Templates (the dir named by XDG_TEMPLATES_DIR in ~/.config/user-dirs.dirs)
+becomes a "Create Document -> <that file's name>" entry that COPIES the template into the current
+folder. Out of the box Azzio shipped no templates AND user-dirs.dirs pointed XDG_TEMPLATES_DIR at
+the whole home dir ("$HOME/"), so the submenu was effectively empty (just the "About Templates"
 placeholder, now also disabled in packages/file_manager/settings). This module fixes both:
 
   1. Ships a useful TEMPLATE SET in ~/Templates:
@@ -22,9 +23,9 @@ placeholder, now also disabled in packages/file_manager/settings). This module f
      UNCOMPRESSED per the ODF spec, plus the minimal manifest + content/styles/meta parts) so
      LibreOffice opens the copy cleanly rather than complaining about a 0-byte file.
   2. Ships ~/.config/user-dirs.dirs with XDG_TEMPLATES_DIR="$HOME/Templates" (and the other
-     XDG dirs matching the Azzio home layout) so Thunar (via g_get_user_special_dir) finds
-     the templates dir. Without this, xdg-user-dirs-update would regenerate the stock file with
-     XDG_TEMPLATES_DIR="$HOME/" and Thunar would scan all of $HOME.
+     XDG dirs matching the Azzio home layout) so the file manager (via g_get_user_special_dir)
+     finds the templates dir. Without this, xdg-user-dirs-update would regenerate the stock file
+     with XDG_TEMPLATES_DIR="$HOME/" and the file manager would scan all of $HOME.
 
 CREATE LINK IN THE CREATE-NEW FLOW. The user wants "Create Link" reachable from the Create-New
 flow. A template is a file that gets COPIED, so it cannot run the interactive zenity name/target
@@ -33,10 +34,11 @@ packages/file_manager/actions), which appears on the folder background right whe
 Folder/Document are. So Create Link IS present in that same right-click flow.
 
 WHERE IT GOES. All HOME files (owner "home", skel-mirrored) -- the templates and user-dirs.dirs
-belong to the user. file_manager.emit_plan() folds this module's emit_plan() into the combined Thunar
-plan, which compiler._emit_apps writes alongside every other package's; the ODF templates ride
-the bytes_builder plan-entry kind (binary), the text ones the normal builder. The Templates
-directory itself is created by compiler._emit_homedir (home_directory.EXTRA_DIRECTORIES).
+belong to the user. file_manager.emit_plan() folds this module's emit_plan() into the combined
+file-manager plan, which compiler._emit_apps writes alongside every other package's; the ODF
+templates ride the bytes_builder plan-entry kind (binary), the text ones the normal builder. The
+Templates directory itself is created by compiler._emit_homedir
+(home_directory.EXTRA_DIRECTORIES).
 """
 
 from __future__ import annotations
@@ -53,21 +55,22 @@ TEMPLATES_DIRNAME = "Templates"
 TEMPLATES_DIR = f"{HOME}/{TEMPLATES_DIRNAME}"
 
 # ~/.config/user-dirs.dirs -- XDG user dirs. The load-bearing line is
-# XDG_TEMPLATES_DIR="$HOME/Templates" (so Thunar finds the templates); the rest mirror the
-# Azzio home layout (home_directory.DIRECTORIES) so xdg-aware apps land in the right folders.
+# XDG_TEMPLATES_DIR="$HOME/Templates" (so the file manager finds the templates); the rest mirror
+# the Azzio home layout (home_directory.DIRECTORIES) so xdg-aware apps land in the right folders.
 USER_DIRS_PATH = f"{HOME}/.config/user-dirs.dirs"
 
 
 def user_dirs_dirs() -> str:
     """Return ~/.config/user-dirs.dirs. Points XDG_TEMPLATES_DIR at ~/Templates (PROMPT batch
-    item 8) so Thunar's Create Document submenu reads our template set, and maps the other XDG
-    dirs to the Azzio home layout. The `# written by xdg-user-dirs-update` banner is kept so
-    xdg-user-dirs-update treats it as its own file and preserves these values (it only rewrites
-    missing lines)."""
+    item 8) so the file manager's Create Document submenu reads our template set, and maps the
+    other XDG dirs to the Azzio home layout. The `# written by xdg-user-dirs-update` banner is
+    kept so xdg-user-dirs-update treats it as its own file and preserves these values (it only
+    rewrites missing lines)."""
     return (
         "# This file is written by xdg-user-dirs-update\n"
         "# Azzio ships it (packages/file_manager/templates) so XDG_TEMPLATES_DIR points at ~/Templates\n"
-        "# (Thunar's Create Document submenu reads that dir). Format is XDG_xxx_DIR=\"$HOME/yyy\".\n"
+        "# (the file manager's Create Document submenu reads that dir). Format is"
+        ' XDG_xxx_DIR="$HOME/yyy".\n'
         'XDG_DESKTOP_DIR="$HOME/Desktop"\n'
         'XDG_DOWNLOAD_DIR="$HOME/Downloads"\n'
         'XDG_TEMPLATES_DIR="$HOME/Templates"\n'
@@ -84,8 +87,8 @@ TEXT_TEMPLATE_NAME = "Text Document.txt"
 
 
 def text_template() -> str:
-    """A plain empty text document template (an empty UTF-8 file). Thunar copies it as the new
-    document; the user then types into it."""
+    """A plain empty text document template (an empty UTF-8 file). The file manager copies it as
+    the new document; the user then types into it."""
     return ""
 
 
@@ -191,9 +194,9 @@ _CONF = 0o644
 def emit_plan() -> list[dict]:
     """Return the emit plan for the templates + user-dirs.dirs. All HOME files (owner "home",
     skel-mirrored): the text template + user-dirs.dirs as normal text builders, the ODF trio as
-    bytes_builder (binary) entries. file_manager.emit_plan() folds these into the combined Thunar plan
-    that compiler._emit_apps writes (the Templates DIRECTORY is created separately by
-    _emit_homedir from home_directory.EXTRA_DIRECTORIES)."""
+    bytes_builder (binary) entries. file_manager.emit_plan() folds these into the combined
+    file-manager plan that compiler._emit_apps writes (the Templates DIRECTORY is created
+    separately by _emit_homedir from home_directory.EXTRA_DIRECTORIES)."""
     plan: list[dict] = [
         {
             "builder": user_dirs_dirs,

@@ -21,7 +21,7 @@ HOW A SET APPLIES (immediately, no re-login):
     group of ~/.config/mimeapps.list -- the same file the emitter seeds and every GTK/XDG app
     reads, so the change is effective at once.
   * Terminal (no MIME of its own): rewrites the exo TerminalEmulator preferred-app
-    (~/.config/xfce4/helpers.rc), which is what Thunar's "Open Terminal Here" uses.
+    (~/.config/xfce4/helpers.rc), which is what the file manager's "Open Terminal Here" uses.
   * Calculator / Mail: Calculator has no MIME (qalculate-gtk is recorded but there is no
     xdg-mime key to flip); Mail is intentionally empty. `get` still reports them.
 
@@ -60,7 +60,7 @@ DA_CATEGORIES: tuple[tuple[str, str, str, tuple[str, ...], tuple[str, ...]], ...
     ("terminal",     "Terminal",     "System",     (),                                          ("kitty.desktop",)),
 )
 
-# The exo TerminalEmulator preferred-app selection Thunar's "Open Terminal Here" uses. Kept in
+# The exo TerminalEmulator preferred-app selection the file manager's "Open Terminal Here" uses. Kept in
 # lock-step with default_applications.HELPERS_RC_PATH / TERMINAL_BIN (a test pins them).
 DA_HELPERS_RC = "xfce4/helpers.rc"           # under ~/.config
 _DA_TERMINAL_KEY = "TerminalEmulator"

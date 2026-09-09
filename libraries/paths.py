@@ -98,7 +98,7 @@ else:
 PKG_REPO = CACHEDIR / "pkgs" / "repo"
 PKG_DB = CACHEDIR / "pkgs" / "db"
 PKG_SYNC_DB = PKG_DB / "sync"
-# Recipe fingerprints for OUR built packages (calamares/librewolf/thunar): one small
+# Recipe fingerprints for OUR built packages (calamares/librewolf/file_manager): one small
 # JSON sidecar per package recording the hash of the recipe that produced its cached
 # .pkg.tar.zst. makepkg reuses a cached own package only if this still matches the
 # current recipe (see makepkg._repo_is_current) -- that is what stops a stale

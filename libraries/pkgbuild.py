@@ -82,19 +82,16 @@ LIBREWOLF_SHA256 = "7b56e06071ece9e711a1c811e64129a3a14775c5fe00a4b777e5cbb0b087
 # `gpg --recv-keys <that keyid>` then shows the primary under `pub`.
 LIBREWOLF_PGP_KEY = "662E3CDD6FE329002D0CA5BB40339DD82B12EF16"
 
-# Azzio File Manager (thunar fork): built from the VENDORED source tree at
-# packages/file_manager/source/ (a git clone of the pinned upstream Thunar tag, committed into
-# the Azzio repo, relicensed GPL-3.0). The version MATCHES the tag so the built package is a
-# drop-in replacement of the stock `thunar` binary, no feature/behaviour drift -- the only change
-# is the Azzio symlink-resolve modification, baked DIRECTLY into the committed C source
-# (packages/file_manager owns it; see that package's __init__ docstring). No tarball URL and no
-# sha256: the source is local and version-controlled, so integrity comes from git, not a download
-# hash. No build-time patch companion either -- the tree already carries the change. FILE_MANAGER_VERSION
-# is the only pinned fact left here (the pkgver); the source dirname and pinned commit live on the
-# file_manager package (single source of truth for the source).
+# Azzio File Manager: built from the VENDORED source tree at packages/file_manager/source/ (a git
+# clone committed into the Azzio repo, relicensed GPL-3.0). It is OUR OWN file manager, not a
+# versioned upstream drop-in, so it carries NO semver -- the package is a plain monotonic pkgver=1
+# (see pkgbuild_file_manager). The only change over the vendored tree is the Azzio symlink-resolve
+# modification, baked DIRECTLY into the committed C source (packages/file_manager owns it; see that
+# package's __init__ docstring). No tarball URL and no sha256: the source is local and
+# version-controlled, so integrity comes from git, not a download hash. No build-time patch
+# companion either -- the tree already carries the change. The source dirname and pinned commit
+# live on the file_manager package (single source of truth for the source).
 from packages import file_manager as _file_manager  # noqa: E402  (source facts live on the package)
-
-FILE_MANAGER_VERSION = _file_manager.SOURCE_VERSION
 
 
 # ---------------------------------------------------------------------------
@@ -333,21 +330,20 @@ package() {{
 
 
 # ---------------------------------------------------------------------------
-# thunar -- the Azzio symlink-resolve modification (baked into the VENDORED source)
+# file_manager -- the Azzio symlink-resolve modification (baked into the VENDORED source)
 # ---------------------------------------------------------------------------
-# The user wants Thunar's location bar / window title to ALWAYS show the real filesystem path,
-# even when a directory is reached through a symlink (e.g. the convenience link
+# The user wants the file manager's location bar / window title to ALWAYS show the real
+# filesystem path, even when a directory is reached through a symlink (e.g. the convenience link
 # ~/Trash -> ~/.local/share/Trash/files created by packages/file_manager/home_directory):
-# "I WANT FULL ACTUAL PATHS, /home/main/.local/share/Trash/files/". The 4.20.x series Arch ships
-# has NO config lever for this -- the misc-resolve-links pref arrived upstream in 4.21.6 -- so the
-# behaviour has to be changed in the source. Rather than a build-time patch, the change is applied
-# DIRECTLY to the committed C source in the vendored tree (packages/file_manager/source/thunar/
-# thunar-window.c): thunar_window_set_current_directory() -- the single chokepoint every directory
-# change flows through -- realpath()s a symlinked directory and re-enters with the canonical target,
-# so the path bar, title and history all show the real path. The change lives in version control
-# (git diff shows it) -- there is no separate .patch artifact. See the packages/file_manager
-# __init__ docstring for the full story. There is therefore no thunar_resolve_symlink_patch()
-# builder and no patch companion in the recipe dir.
+# "I WANT FULL ACTUAL PATHS, /home/main/.local/share/Trash/files/". The vendored code base has NO
+# config lever for this, so the behaviour is changed in the source. Rather than a build-time patch,
+# the change is applied DIRECTLY to the committed C source in the vendored tree
+# (packages/file_manager/source/thunar/thunar-window.c): thunar_window_set_current_directory() --
+# the single chokepoint every directory change flows through -- realpath()s a symlinked directory
+# and re-enters with the canonical target, so the path bar, title and history all show the real
+# path. The change lives in version control (git diff shows it) -- there is no separate .patch
+# artifact. See the packages/file_manager __init__ docstring for the full story. There is
+# therefore no resolve_symlink_patch() builder and no patch companion in the recipe dir.
 
 
 def pkgbuild_file_manager() -> str:
@@ -356,29 +352,34 @@ def pkgbuild_file_manager() -> str:
 # Maintainer: Azzio <https://github.com/michaelilgiaev/azzio>
 #
 # =============================================================================
-# Azzio OWN PKGBUILD -- thunar  (Azzio File Manager; generated by packages.pkgbuild)
+# Azzio OWN PKGBUILD -- file_manager  (Azzio File Manager; generated by packages.pkgbuild)
 # =============================================================================
 # NOT a community/AUR recipe. Written + maintained by the Azzio project.
 #
-# Azzio File Manager is Azzio's fork of Thunar (the Xfce file manager), shipped as
-# the default file manager. It needs ONE behaviour change the stock 4.20 series
-# cannot be configured to do: always show the fully-resolved (symlink-dereferenced)
-# path in the location bar/title (the misc-resolve-links pref only exists in Thunar
-# >= 4.21.6). This recipe builds the SAME version Arch's extra/ ships ({FILE_MANAGER_VERSION})
-# -- a drop-in replacement for the `thunar` package -- from the VENDORED source, which
-# already carries that change. (pkgname stays `thunar` so it replaces extra/thunar and
-# every consumer, .desktop, xfconf channel and locale catalog keeps working.)
+# Azzio File Manager is the Azzio project's own GTK file manager, shipped as the default file
+# manager. It is OUR OWN thing -- not a versioned upstream drop-in -- so it carries NO semver: the
+# pkgver is a plain monotonic `1`. It needs ONE behaviour the vendored code base cannot be
+# configured to do: always show the fully-resolved (symlink-dereferenced) path in the location
+# bar/title. This recipe builds it from the VENDORED source, which already carries that change.
+#
+# It REPLACES the stock `thunar` package on the image: pkgname is `file_manager`, but it declares
+# provides/conflicts/replaces=('thunar') so the whole Xfce ecosystem still resolves against it --
+# the .desktop, xfconf channel and locale catalog the built binary lays down keep their on-disk
+# names (the running binary still owns ~/.config/Thunar/*, thunar.desktop, the `thunar` xfconf
+# channel and textdomain), and the two consumers that `depend=('thunar')` (thunar-volman,
+# thunar-archive-plugin -- both unversioned deps, verified from their .PKGINFO) are satisfied by
+# our provide. conflicts+replaces=('thunar') stop stock extra/thunar from ever being co-installed
+# or pulled in alongside ours.
 #
 # SOURCE (fully auditable, version-controlled):
-#   The source is a git clone of the pinned upstream Thunar tag committed straight
-#   into the Azzio repo at packages/file_manager/{src}/ (see the packages/file_manager
-#   __init__ for the pinned tag/commit), relicensed GPL-3.0. makepkg._emit_recipes
-#   copies that tree into this recipe dir as ./{src} at build time; prepare() copies it
-#   from $startdir into a writable build tree. There is NO source=() entry (makepkg's
-#   source array cannot name a directory) and no download. The Azzio symlink-resolve
-#   change is baked directly into that committed source (thunar/thunar-window.c), so
-#   there is no build-time patch step and no .patch artifact.
-#   Upstream: https://gitlab.xfce.org/xfce/thunar
+#   The source is a git clone committed straight into the Azzio repo at
+#   packages/file_manager/{src}/ (see the packages/file_manager __init__ for the pinned commit),
+#   relicensed GPL-3.0. makepkg._emit_recipes copies that tree into this recipe dir as ./{src} at
+#   build time; prepare() copies it from $startdir into a writable build tree. There is NO
+#   source=() entry (makepkg's source array cannot name a directory) and no download. The Azzio
+#   symlink-resolve change is baked directly into that committed source (thunar/thunar-window.c),
+#   so there is no build-time patch step and no .patch artifact.
+#   Upstream lineage: https://gitlab.xfce.org/xfce/thunar
 #   License : GPL-3.0-or-later
 #
 # INTEGRITY: the source is local and version-controlled, so git is the integrity
@@ -386,30 +387,34 @@ def pkgbuild_file_manager() -> str:
 #
 # FROM SOURCE IN EVERY TIER: a moderate autotools C build (a couple of minutes). A
 # git checkout ships no generated ./configure, so build() bootstraps it with
-# ./autogen.sh (xdt-autogen) first. Built and dropped into the offline repo so
-# pacstrap installs OUR thunar instead of extra/'s. The pkgver MATCHES extra/ so
-# pacman treats it as the same package (our repo is ordered first, so ours wins).
+# ./autogen.sh (xdt-autogen) first. Built and dropped into the offline repo so pacstrap installs
+# OUR file_manager instead of extra/thunar. Our repo is ordered first AND we conflicts/replaces
+# extra/thunar, so ours wins for both fresh install and any name-based pull.
 # =============================================================================
 
-pkgname=thunar
-pkgver={FILE_MANAGER_VERSION}
-# pkgrel=2 (extra/thunar is -1): a version bump documenting that this is our patched
-# rebuild, one rel above extra/'s. NOTE: the higher pkgrel is NOT what makes ours win --
-# pacman selecting `-S thunar` picks the package from the FIRST repo in config order that
-# carries the name, NOT the globally-highest version (verified: `pacman -Sddp thunar` with
-# extra ahead of our repo returns 4.20.9-1). Ours wins because pacman.append_local_repo now
-# lists [pacstrap-azzio-repo] BEFORE [core]/[extra] on an online build (and switch_to_local_repo
-# DROPS [extra] on an offline build). If extra ever ships thunar-4.20.9-2+ or a newer pkgver,
-# bump the vendored source tag (packages/file_manager.SOURCE_VERSION) and this rel in lock-step.
-pkgrel=2
-pkgdesc="Azzio File Manager (Thunar fork: resolves symlink paths)"
+pkgname=file_manager
+# NO semver: this is Azzio's own file manager, not a versioned upstream drop-in, so the pkgver is
+# a plain monotonic integer. Bump it (and/or pkgrel) whenever the vendored source or recipe
+# changes enough to warrant a rebuild on installed systems.
+pkgver=1
+pkgrel=1
+pkgdesc="Azzio File Manager (GTK; resolves symlink paths)"
 arch=('x86_64')
 url="https://github.com/michaelilgiaev/azzio"
 license=('GPL-3.0-or-later')
 groups=('xfce4')
 
-# Runtime deps mirror extra/thunar's Depends On (pacman -Si thunar), so the built
-# package needs exactly what the stock one does.
+# This package IS the file manager on the image, replacing the stock `thunar` package. `provides`
+# satisfies the two consumers that depend on `thunar` (thunar-volman, thunar-archive-plugin --
+# unversioned deps); `conflicts`+`replaces` keep stock extra/thunar from being co-installed or
+# pulled alongside. The provide is UNVERSIONED on purpose: the deps are unversioned (verified from
+# their .PKGINFO), and this package has no semver to expose.
+provides=('thunar')
+conflicts=('thunar')
+replaces=('thunar')
+
+# Runtime deps mirror what the stock file-manager binary needs (the same set extra/thunar Depends
+# On), so the built package pulls exactly what the binary requires at runtime.
 depends=(
   'desktop-file-utils' 'libexif' 'hicolor-icon-theme' 'libnotify'
   'pcre2' 'libgudev' 'exo' 'libxfce4util' 'libxfce4ui'
@@ -525,23 +530,24 @@ def recipe_dirs(full_compile: bool) -> list[tuple[str, dict[str, str]]]:
         CALAMARES_NETWORKQ_PATCH_NAME: calamares_networkq_patch(),
         CALAMARES_NETWORKCFG_STATIC_PATCH_NAME: calamares_networkcfg_static_patch(),
     })
-    # thunar: built (same version as extra/) from the VENDORED source, in EVERY tier -- the
-    # symlink-resolve behaviour is not optional and is baked into that source. PKGBUILD is the
-    # only text companion; the source TREE is copied into the recipe dir separately by
+    # file_manager: built from the VENDORED source, in EVERY tier -- the symlink-resolve
+    # behaviour is not optional and is baked into that source. PKGBUILD is the only text
+    # companion; the source TREE is copied into the recipe dir separately by
     # makepkg._emit_recipes (see recipe_source_trees), not carried here as a string.
-    # NOTE: the recipe-dir KEY stays "thunar" -- it doubles as the produced PACKAGE name
-    # (pkgname=thunar) that the staleness gate globs for (makepkg._repo_has_all/_repo_is_current
-    # key off this dir name). Only the source/config package folder and our Python identifiers
-    # were renamed to file_manager; this build-internal key must equal the package it produces.
-    thunar = ("thunar", {
+    # NOTE: the recipe-dir KEY MUST equal the produced PACKAGE name (pkgname=file_manager) that
+    # the staleness gate globs for -- makepkg._repo_has_all globs `<key>-*.pkg.tar.zst` in the
+    # repo and _current_recipe_fingerprints keys the fingerprint sidecar by this name, so a key
+    # that did not match the pkgname would make the gate permanently stale (it would look for
+    # thunar-*.pkg.tar.zst while the built file is file_manager-*).
+    file_manager = ("file_manager", {
         "PKGBUILD": pkgbuild_file_manager(),
     })
     if full_compile:
         librewolf = ("librewolf", {"PKGBUILD": pkgbuild_librewolf_src(), **lw_common})
-        return [calamares, thunar, librewolf]
+        return [calamares, file_manager, librewolf]
     librewolf = ("librewolf", {"PKGBUILD": pkgbuild_librewolf(), **lw_common})
-    # Default tier: repackage librewolf, but calamares + thunar are still built from source.
-    return [calamares, thunar, librewolf]
+    # Default tier: repackage librewolf, but calamares + file_manager are still built from source.
+    return [calamares, file_manager, librewolf]
 
 
 def recipe_source_trees() -> dict[str, Path]:
@@ -553,11 +559,12 @@ def recipe_source_trees() -> dict[str, Path]:
     writable build tree (makepkg's source=() array cannot name a directory, so the tree is NOT a
     source=() entry -- see pkgbuild_file_manager).
 
-    Only thunar uses this today: its source is the git-cloned tree vendored on the file_manager
-    package (packages/file_manager.SOURCE_DIR), copied in as ./<SOURCE_SUBDIR>. calamares and
-    librewolf fetch their source in-recipe (tarball / git+), so they are absent here. The key is
-    the recipe-dir name "thunar" (== the produced package name), matching recipe_dirs above."""
-    return {"thunar": _file_manager.SOURCE_DIR}
+    Only file_manager uses this today: its source is the git-cloned tree vendored on the
+    file_manager package (packages/file_manager.SOURCE_DIR), copied in as ./<SOURCE_SUBDIR>.
+    calamares and librewolf fetch their source in-recipe (tarball / git+), so they are absent
+    here. The key is the recipe-dir name "file_manager" (== the produced package name), matching
+    recipe_dirs above."""
+    return {"file_manager": _file_manager.SOURCE_DIR}
 
 
 # ---------------------------------------------------------------------------

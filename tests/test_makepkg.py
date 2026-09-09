@@ -57,10 +57,10 @@ def _agent_line(conf: str, proto: str) -> str:
 
 def test_produced_names_default_tier_builds_calamares_and_librewolf():
     # Arch dropped calamares from extra/, so the default tier must build it too
-    # (it can no longer be pacman-downloaded). thunar is ALSO built here: it is a real Arch
-    # package that Azzio rebuilds from source with the symlink-resolve patch, so it must be
-    # excluded from the Arch download and produced by makepkg. Both own packages + thunar build.
-    assert makepkg.produced_names(full_compile=False) == ("calamares", "librewolf", "thunar")
+    # (it can no longer be pacman-downloaded). file_manager is ALSO built here: it is Azzio's own
+    # file manager, built from the vendored source and dropped into the offline repo (it replaces
+    # stock thunar via provides/conflicts/replaces). All three are produced by makepkg.
+    assert makepkg.produced_names(full_compile=False) == ("calamares", "librewolf", "file_manager")
 
 
 def test_produced_names_is_tier_independent():
@@ -287,13 +287,15 @@ def test_current_fingerprints_fold_in_source_tree(tmp_path, monkeypatch):
     tree = tmp_path / "vendored"
     (tree / "thunar").mkdir(parents=True)
     win = tree / "thunar" / "thunar-window.c"
-    win.write_text("/* pretend thunar source */\n")
+    win.write_text("/* pretend file-manager source */\n")
+    # The recipe-dir key is "file_manager" (== the produced package name); the source-tree map
+    # must be keyed by it so _current_recipe_fingerprints folds the tree hash into that entry.
     monkeypatch.setattr(
-        makepkg.pkgbuild_cfg, "recipe_source_trees", lambda: {"thunar": tree}
+        makepkg.pkgbuild_cfg, "recipe_source_trees", lambda: {"file_manager": tree}
     )
-    before = makepkg._current_recipe_fingerprints(full_compile=False)["thunar"]
+    before = makepkg._current_recipe_fingerprints(full_compile=False)["file_manager"]
     win.write_text("/* Azzio: Help menu removed */\n")
-    after = makepkg._current_recipe_fingerprints(full_compile=False)["thunar"]
+    after = makepkg._current_recipe_fingerprints(full_compile=False)["file_manager"]
     assert before != after
 
 
@@ -478,7 +480,7 @@ def test_offline_default_stale_recipe_raises(monkeypatch, tmp_path):
     # Package files exist but with NO fingerprint sidecars -> looks like an old cache.
     (tmp_path / "calamares-1-1-x86_64.pkg.tar.zst").write_text("stale")
     (tmp_path / "librewolf-1-1-x86_64.pkg.tar.zst").write_text("stale")
-    (tmp_path / "thunar-4.20.9-2-x86_64.pkg.tar.zst").write_text("stale")
+    (tmp_path / "file_manager-1-1-x86_64.pkg.tar.zst").write_text("stale")
     monkeypatch.setattr(makepkg, "_makepkg_one",
                         lambda *a, **k: pytest.fail("must not reuse a stale-recipe package"))
     with pytest.raises(makepkg.MakepkgError):

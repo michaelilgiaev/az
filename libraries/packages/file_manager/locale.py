@@ -1,8 +1,9 @@
-"""Thunar UI-string overrides via a gettext .mo catalog (PROMPT batch items 3, 7, 8-wording).
+"""File manager UI-string overrides via a gettext .mo catalog (PROMPT batch items 3, 7,
+8-wording).
 
-A few Thunar menu labels are HARDCODED gettext strings in the binary (there is no config /
-xfconf / uca.xml lever for them -- verified against the Thunar 4.20 source). The supported,
-stable way to change them is a gettext message catalog: Thunar calls
+A few file manager menu labels are HARDCODED gettext strings in the binary (there is no config
+/ xfconf / uca.xml lever for them -- verified against the file manager 4.20 source). The
+supported, stable way to change them is a gettext message catalog: the file manager calls
 `bindtextdomain("thunar", "/usr/share/locale")` and every menu label goes through `gettext()`,
 so a `thunar.mo` under the ACTIVE locale's LC_MESSAGES dir that maps the exact msgid to our
 wording wins -- no fighting hardcoded C++ (this is GTK/gettext, the intended mechanism).
@@ -40,7 +41,8 @@ well-specified table of msgid/msgstr offsets). No external `msgfmt` dependency, 
 
 compiler._emit_apps ships the .mo as a ROOT-owned system file at each locale path (it is a
 system locale catalog, not a per-user dotfile) -- so every user on the installed system gets
-the relabelled Thunar. (Delivered via the "mo" plan-entry kind that compiler writes verbatim.)
+the relabelled file manager. (Delivered via the "mo" plan-entry kind that compiler writes
+verbatim.)
 
 IMPORTANT -- the en_GB catalog path is OWNED BY THE `thunar` PACKAGE. `thunar` ships 67 locale
 catalogs including /usr/share/locale/en_GB/LC_MESSAGES/thunar.mo. pacman's file-conflict check
@@ -48,8 +50,8 @@ runs BEFORE extraction (and is NOT suppressed by NoExtract), so pre-placing our 
 the airootfs overlay aborts pacstrap with "thunar.mo exists in filesystem". Both locale dests are
 therefore routed through pacman.ISO_APP_OVERRIDES (NoExtract + post-pacstrap install) exactly like
 the .desktop overrides -- see mo_path()/LOCALES wired into ISO_APP_OVERRIDES and the compiler's
-_override_basename redirect. (en_US carries no package catalog -- Thunar's msgids ARE American
-English -- so it never conflicts, but travels the same path for symmetry.)
+_override_basename redirect. (en_US carries no package catalog -- the file manager's msgids ARE
+American English -- so it never conflicts, but travels the same path for symmetry.)
 """
 
 from __future__ import annotations
@@ -59,24 +61,25 @@ import struct
 # The locales the Azzio ISO generates (packages/calamares/locale): en_US.UTF-8 is the
 # display language, en_GB.UTF-8 the LC_TIME date locale. Ship the override catalog under BOTH
 # so whichever LC_MESSAGES is in effect finds it. The catalog dir is the standard system path
-# Thunar's bindtextdomain uses.
+# the file manager's bindtextdomain uses.
 LOCALES: tuple[str, ...] = ("en_US", "en_GB", "en_IL")
 TEXTDOMAIN = "thunar"
 
 
 def mo_path(locale: str) -> str:
-    """Absolute system path of the Thunar override catalog for a locale (the standard
-    /usr/share/locale/<locale>/LC_MESSAGES/<domain>.mo Thunar's bindtextdomain reads)."""
+    """Absolute system path of the file manager's override catalog for a locale (the standard
+    /usr/share/locale/<locale>/LC_MESSAGES/<domain>.mo the file manager's bindtextdomain reads)."""
     return f"/usr/share/locale/{locale}/LC_MESSAGES/{TEXTDOMAIN}.mo"
 
 
-# The exact msgid -> our-wording map. Keys are the EXACT strings from the Thunar 4.20 binary
-# (mnemonics and ellipses included) -- a byte mismatch means gettext falls through to the
+# The exact msgid -> our-wording map. Keys are the EXACT strings from the file manager 4.20
+# binary (mnemonics and ellipses included) -- a byte mismatch means gettext falls through to the
 # original, so these must not be "cleaned up". VERIFIED via `strings /usr/bin/thunar`.
 OVERRIDES: dict[str, str] = {
-    # The shortcuts sidebar section header. Thunar's built-in header msgid is "Places" (verified
-    # via `strings /usr/bin/thunar`); the user wants it to read "Home". It is a hardcoded gettext
-    # string (no xfconf/config lever), so the catalog is the supported way to rename it.
+    # The shortcuts sidebar section header. The file manager's built-in header msgid is "Places"
+    # (verified via `strings /usr/bin/thunar`); the user wants it to read "Home". It is a
+    # hardcoded gettext string (no xfconf/config lever), so the catalog is the supported way to
+    # rename it.
     "Places": "Home",
     '_Open With "%s"': "_Edit with %s",
     "Create _Folder...": "Create New _Folder...",
