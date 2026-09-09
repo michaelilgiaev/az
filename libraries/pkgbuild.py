@@ -417,8 +417,13 @@ depends=(
 # themselves (autoconf/automake/libtool/pkgconf) -- REQUIRED here because a git
 # checkout (unlike a release tarball) ships NO generated ./configure, so we bootstrap
 # it with ./autogen.sh.
+#   glib2-devel is REQUIRED for the maintainer-mode codegen: the `if MAINTAINER_MODE`
+#   rules that generate thunar-marshal.c/.h and the gdbus stubs shell out to
+#   glib-genmarshal and gdbus-codegen, and those binaries live in glib2-devel (NOT the
+#   glib2 runtime that gtk3 pulls in). Without it `make` dies with
+#   "glib-genmarshal: command not found" / "gdbus-codegen: No such file or directory".
 makedepends=(
-  'gtk3' 'gettext' 'intltool' 'gobject-introspection'
+  'gtk3' 'glib2-devel' 'gettext' 'intltool' 'gobject-introspection'
   'xfce4-dev-tools' 'autoconf' 'automake' 'libtool' 'pkgconf'
 )
 optdepends=(
