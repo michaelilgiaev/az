@@ -354,19 +354,42 @@ def build_profile_conf(cachedir: str | None = None) -> str:
 
 
 def append_local_repo(conf: str, localrepo_path: str) -> str:
-    """Append the local file:// [pacstrap-azzio-repo] to a conf that KEEPS its
-    network repos. Used for ONLINE builds so mkarchiso's pacstrap pulls Arch
-    packages from the mirrors AND Azzio's own packages (calamares, librewolf,
-    which are not on any mirror) from the local repo. Listed LAST so the network
-    repos take precedence for any name they both carry (they won't overlap, but
-    ordering makes intent explicit)."""
+    """Insert the local file:// [pacstrap-azzio-repo] into a conf that KEEPS its
+    network repos, ordered BEFORE [core]/[extra]. Used for ONLINE builds so
+    mkarchiso's pacstrap pulls Arch packages from the mirrors AND Azzio's own
+    packages from the local repo -- INCLUDING the ones we OVERRIDE.
+
+    ORDERING IS LOAD-BEARING, and the earlier "listed last" design was WRONG: pacman
+    resolving `-S <pkg>` picks the package from the FIRST repo (in config order) that
+    carries the name -- it does NOT choose the globally-highest version across repos.
+    Our repo overrides `thunar` (ours 4.20.9-2 vs extra's -1, same pkgver + higher
+    pkgrel) and ships our own `librewolf`/`calamares`. With the local repo listed AFTER
+    [extra], extra's stock thunar-1 SHADOWED our -2, so mkarchiso pacstrapped the
+    unfixed binary into airootfs and the live ISO booted stock thunar (the higher
+    pkgrel did NOT save us -- that only decides UPGRADES, not fresh-install selection).
+    Placing our repo FIRST makes pacman prefer our packages for every name we carry.
+    That is safe here: the local repo was populated from the SAME pinned ALA snapshot,
+    so every non-overridden name is byte-identical, and the only version differences are
+    packages we deliberately ship (thunar, librewolf). Verified with `pacman -Sddp
+    thunar`: repo-last -> 4.20.9-1, repo-first -> 4.20.9-2."""
     if "[pacstrap-azzio-repo]" in conf:
         return conf
-    return conf.rstrip("\n") + (
-        "\n\n[pacstrap-azzio-repo]\n"
+    section = (
+        "[pacstrap-azzio-repo]\n"
         "SigLevel = Never\n"
-        f"Server = file://{localrepo_path}\n"
+        f"Server = file://{localrepo_path}\n\n"
     )
+    # Insert immediately before the first ACTIVE network repo header so our repo
+    # outranks [core]/[extra]. Match at column 0 (a real section header, anchored by
+    # the preceding newline) so the commented "#[core]" example lines are never hit.
+    for header in ("\n[core]\n", "\n[extra]\n", "\n[multilib]\n"):
+        idx = conf.find(header)
+        if idx != -1:
+            cut = idx + 1  # after the leading "\n", before the header line
+            return conf[:cut] + section + conf[cut:]
+    # No active network repo section (shouldn't happen for a profile conf) -- fall back
+    # to appending so the repo is at least present.
+    return conf.rstrip("\n") + "\n\n" + section.rstrip("\n") + "\n"
 
 
 def switch_to_local_repo(conf: str, localrepo_path: str) -> str:
