@@ -24,7 +24,7 @@ THE GLOBAL SCALE is the important, always-applicable one (a headless/single-head
 UI scale). It rewrites the SINGLE source's downstream file (~/.Xresources, whose Xft.dpi/
 Xcursor.size are derived from packages/openbox/scale) and re-runs `xrdb -merge` so the X DPI changes
 for the session; already-running apps that read the DPI at startup pick it up on their next
-launch, and Thunar (em-relative) + any DPI-aware app scale immediately. The scale VALUES and the
+launch, and the file manager (em-relative) + any DPI-aware app scale immediately. The scale VALUES and the
 DPI math live in packages/openbox/scale (mirrored here for the standalone bundle, pinned by a test).
 
 No sudo -- xrandr and the X resource DB are per-session/per-user. Standard library only (bundled

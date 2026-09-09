@@ -8,7 +8,7 @@ Why these tests matter: Thunar populates its Create Document submenu from ~/Temp
 LibreOffice templates must be VALID ODF packages (mimetype stored first + a manifest) or
 LibreOffice refuses to open the copy. These pin: the template SET, the XDG_TEMPLATES_DIR
 pointer, that the ODF files are real ZIP/ODF packages, the emit-plan wiring (HOME,
-skel-mirrored, ODF as binary), and that thunar.emit_plan() folds the templates entries in.
+skel-mirrored, ODF as binary), and that fm.emit_plan() folds the templates entries in.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from __future__ import annotations
 import io
 import zipfile
 
-from packages import file_manager as thunar
+from packages import file_manager as fm
 from packages.file_manager import home_directory
 from packages.file_manager import templates
 
@@ -97,14 +97,14 @@ def test_odf_bytes_are_deterministic():
         assert templates.odf_bytes(mime, cls, body) == templates.odf_bytes(mime, cls, body)
 
 
-def test_thunar_emit_plan_folds_in_the_templates_entries():
+def test_file_manager_emit_plan_folds_in_the_templates_entries():
     # The merge's load-bearing wiring: templates no longer has its own auto-discovered
-    # package, so thunar.emit_plan() MUST carry every templates entry (else the ~/Templates
+    # package, so fm.emit_plan() MUST carry every templates entry (else the ~/Templates
     # set + XDG pointer would silently stop shipping). Match the whole templates sub-plan by
-    # dest against the combined thunar plan.
-    thunar_dests = {e["dest"] for e in thunar.emit_plan()}
+    # dest against the combined file-manager plan.
+    fm_dests = {e["dest"] for e in fm.emit_plan()}
     for e in templates.emit_plan():
-        assert e["dest"] in thunar_dests, e["dest"]
+        assert e["dest"] in fm_dests, e["dest"]
     # spot-check the two load-bearing ones are really in there.
-    assert templates.USER_DIRS_PATH in thunar_dests
-    assert f"{templates.TEMPLATES_DIR}/Text Document.txt" in thunar_dests
+    assert templates.USER_DIRS_PATH in fm_dests
+    assert f"{templates.TEMPLATES_DIR}/Text Document.txt" in fm_dests

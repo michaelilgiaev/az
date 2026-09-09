@@ -3,7 +3,7 @@
 The desktop is OpenBox with no panel; OpenBox's built-in NextWindow switcher is a
 vertical icon-only list the user disliked. This package replaces it with a horizontal,
 Windows-like overlay: one tile per window (left to right, in a fixed order -- librewolf,
-kitty, the hypervisor display, thunar, then alphabetical), each tile a LIVE thumbnail of
+kitty, the hypervisor display, the file manager, then alphabetical), each tile a LIVE thumbnail of
 what the app is rendering (via XComposite, fed by picom), the app icon badged in the
 corner, the selected tile highlighted. Alt+Tab advances; releasing Alt commits.
 

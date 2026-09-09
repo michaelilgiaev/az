@@ -179,3 +179,42 @@ def test_zstd_squashfs_workaround_present():
     # "xz uncompress failed" build failure.
     sh = profile.profiledef_sh()
     assert "'-comp' 'zstd'" in sh
+
+
+def test_bootstrap_zstd_threads_are_capped_not_all_cores():
+    # -T0 tells zstd to use EVERY logical core, which pins the whole machine during
+    # the bootstrap-tarball compression pass of mkarchiso (the "compile took over all
+    # CPUs" bug). The thread count must be the SHARED, headroom-leaving cap instead,
+    # so at least one core stays free for the user.
+    sh = profile.profiledef_sh(threads=20)
+    assert "'-T0'" not in sh
+    assert "'-T20'" in sh
+
+
+def test_bootstrap_zstd_thread_count_defaults_to_the_shared_cap():
+    # With no explicit count the profiledef falls back to the ONE shared knob
+    # (makepkg.build_jobs), so every compile-heavy site leaves the same headroom.
+    import makepkg
+    sh = profile.profiledef_sh()
+    assert f"'-T{makepkg.build_jobs()}'" in sh
+    assert "'-T0'" not in sh
+
+
+def test_squashfs_processors_capped_in_tool_options():
+    # mkarchiso passes airootfs_image_tool_options STRAIGHT to mksquashfs (it does NOT
+    # read a MKSQUASHFS_OPTIONS env var -- that was inert). mksquashfs otherwise uses
+    # "number of processors available" (all cores), which is the biggest CPU burst of
+    # ISO assembly. The -processors cap MUST live on THIS line to take effect, and it
+    # rides ALONGSIDE the existing zstd workaround, not replacing it.
+    sh = profile.profiledef_sh(threads=20)
+    tool_line = [l for l in sh.splitlines() if "airootfs_image_tool_options=" in l][0]
+    assert "'-comp' 'zstd'" in tool_line          # zstd workaround preserved
+    assert "'-Xcompression-level' '15'" in tool_line
+    assert "'-processors' '20'" in tool_line        # the squashfs core cap
+
+
+def test_squashfs_processors_defaults_to_the_shared_cap():
+    import makepkg
+    sh = profile.profiledef_sh()
+    tool_line = [l for l in sh.splitlines() if "airootfs_image_tool_options=" in l][0]
+    assert f"'-processors' '{makepkg.build_jobs()}'" in tool_line

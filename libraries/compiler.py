@@ -893,7 +893,7 @@ def _emit_homedir(airootfs: Path, home: Path) -> None:
         for name, target in home_directory.LINKS:
             emit.link(target, root / name)
         # (No ".home-directory" symlink: the "Home Directory" sidebar bookmark it used to back
-        #  was deleted at the user's request -- see thunar/home_directory.py and thunar/sidebar.py.)
+        #  was deleted at the user's request -- see file_manager/home_directory.py and file_manager/sidebar.py.)
 
 
 def _emit_calamares(airootfs: Path) -> None:
@@ -1519,8 +1519,13 @@ def _run_mkarchiso(sudo, W: Path, bar: ProgressBar, reclaim_after, iso_name: str
     _unmount_worktree(sudo)
     subprocess.run(sudo + ["rm", "-rf", str(W / "work")], check=False)
     env = dict(os.environ)
-    # Fixes sporadic "xz uncompress failed with error code 9" (kept from old build).
-    env["MKSQUASHFS_OPTIONS"] = "-processors 4"
+    # NOTE: mkarchiso does NOT read a MKSQUASHFS_OPTIONS env var (it appears nowhere in
+    # /usr/bin/mkarchiso). The old `env["MKSQUASHFS_OPTIONS"] = "-processors 4"` here was
+    # therefore INERT -- mksquashfs fell back to its default of "all processors" and pinned
+    # every core (the "compile took over all CPUs" bug). mkarchiso only forwards the
+    # profiledef's `airootfs_image_tool_options` array straight to mksquashfs, so the real
+    # `-processors <cap>` now lives THERE (profile.profiledef_sh / mkazzioiso.profiledef_sh),
+    # scaled to the shared makepkg.build_jobs cap alongside the zstd bootstrap-tarball cap.
     # Binary pipe on purpose: _drive_mkarchiso_progress wraps it in a TextIOWrapper
     # with newline="" so it can split on BOTH \r and \n (pacman redraws with \r).
     # text=True here would hand us a pre-decoded stream that TextIOWrapper rejects.

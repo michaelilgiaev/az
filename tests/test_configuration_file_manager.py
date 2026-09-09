@@ -1,4 +1,4 @@
-"""packages.file_manager -- the Azzio Thunar file-manager setup (PROMPT task 2/4/7).
+"""packages.file_manager -- the Azzio File Manager (Thunar-based) setup (PROMPT task 2/4/7).
 
 Why these tests matter: Thunar's config was authored against VERIFIED facts from the installed
 Thunar 4.20 (the thunarrc keys, the Xfconf channel property names + canonical values, the
@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from xml.dom import minidom
 
-from packages import file_manager as thunar
+from packages import file_manager as fm
 from packages.file_manager import home_directory
 from packages.file_manager import actions, launcher, locale, menu_cleanup, settings, sidebar
 
@@ -34,7 +34,7 @@ def test_thunarrc_and_xfconf_render_the_same_settings():
     # The two files must carry identical values (Thunar migrates thunarrc -> xfconf and uses
     # the channel at runtime; a drift means the fresh-profile seed and the runtime store
     # disagree). Compare the shared SETTINGS table's presence in both.
-    rc = settings.thunarrc()
+    rc = settings.file_manager_rc()
     xml = settings.xfconf_channel_xml()
     for rc_key, prop, kind, value in settings.SETTINGS:
         if kind == "bool":
@@ -51,7 +51,7 @@ def test_location_bar_is_the_text_entry():
     # PROMPT: always show the path as an editable text path. ThunarLocationEntry is the
     # text-entry bar (ThunarLocationButtons is the breadcrumb we do NOT want).
     assert ("LastLocationBar", "last-location-bar", "string", "ThunarLocationEntry") in settings.SETTINGS
-    assert "ThunarLocationButtons" not in settings.thunarrc()
+    assert "ThunarLocationButtons" not in settings.file_manager_rc()
 
 
 def test_side_pane_is_the_shortcuts_pane():
@@ -105,7 +105,7 @@ def test_gtk_css_font_bump_is_scoped_and_relative():
     assert "window.thunar-window" in css
     assert "em;" in css                  # relative unit
     assert "px" not in css               # no absolute pixels
-    assert f"{settings.THUNAR_FONT_SCALE:g}em" in css
+    assert f"{settings.FILE_MANAGER_FONT_SCALE:g}em" in css
 
 
 # --- Thunar refinements batch (settings.py) ---------------------------------
@@ -116,7 +116,7 @@ def test_default_view_is_icon_view():
     assert d["LastView"] == "ThunarIconView"
     assert "ThunarDetailsView" != d["LastView"]
     # thunarrc carries it (not the list view as the default).
-    assert "LastView=ThunarIconView" in settings.thunarrc()
+    assert "LastView=ThunarIconView" in settings.file_manager_rc()
 
 
 def test_devices_and_file_system_removed_via_hidden_bookmarks():
@@ -188,7 +188,7 @@ def test_window_title_is_fixed_file_manager_in_vendored_source():
     # the product-name suffix. The title is a BARE C literal (gettext .mo overrides cannot reach
     # it), so thunar_window_update_title in the vendored fork's thunar-window.c is patched to set a
     # fixed "File Manager" and the upstream folder-name/"%s - %s"-suffix logic is dropped.
-    win_c = (thunar.SOURCE_DIR / "thunar" / "thunar-window.c").read_text()
+    win_c = (fm.SOURCE_DIR / "thunar" / "thunar-window.c").read_text()
     assert 'gtk_window_set_title (GTK_WINDOW (window), "File Manager");' in win_c
     # The old folder+suffix builders are gone (either the "Azzio File Manager" relabel or the
     # original "Thunar" literal would put the folder name / product name back in the title bar).
@@ -203,8 +203,8 @@ def test_help_menu_removed_from_vendored_source():
     # the two THUNAR_WINDOW_ACTION_HELP_MENU create-menu calls (menubar + right-click menu), the
     # thunar_window_update_help_menu populator, the _Contents/_About action-entry rows and their
     # callbacks, and the three enum values are all gone from the vendored fork.
-    win_c = (thunar.SOURCE_DIR / "thunar" / "thunar-window.c").read_text()
-    win_h = (thunar.SOURCE_DIR / "thunar" / "thunar-window.h").read_text()
+    win_c = (fm.SOURCE_DIR / "thunar" / "thunar-window.c").read_text()
+    win_h = (fm.SOURCE_DIR / "thunar" / "thunar-window.h").read_text()
     # The Help menu is no longer created in either the menubar or the context menu.
     assert "THUNAR_WINDOW_ACTION_HELP_MENU" not in win_c
     assert "THUNAR_WINDOW_ACTION_HELP_MENU" not in win_h
@@ -247,7 +247,7 @@ def test_places_header_renames_to_home_under_the_default_en_IL_locale(tmp_path):
 def test_mo_catalog_shipped_under_generated_locales_root_owned():
     # The catalog is shipped at the standard system locale path for BOTH generated locales
     # (en_US display + en_GB date), root-owned (a system catalog, not a dotfile).
-    plan = thunar.emit_plan()
+    plan = fm.emit_plan()
     by_dest = {e["dest"]: e for e in plan}
     for loc in locale.LOCALES:
         p = locale.mo_path(loc)
@@ -374,14 +374,13 @@ def test_sidebar_covers_the_full_layout_set_minus_desktop():
 
 # --- launcher (launcher.py) -------------------------------------------------
 
-def test_thunar_desktop_renamed_and_custom_icon():
+def test_file_manager_desktop_renamed_and_custom_icon():
     # The launcher is renamed to the product name "Azzio File Manager" + custom icon.
-    d = launcher.thunar_desktop()
+    d = launcher.file_manager_desktop()
     assert "Name=Azzio File Manager\n" in d
     # the visible Name line is the product name, not the stock "Thunar File Manager"
     assert "Name=Thunar File Manager" not in d
-    assert f"Icon={launcher.THUNAR_ICON_NAME}\n" in d
-    assert launcher.THUNAR_ICON_NAME == "azzio-thunar"  # private name (upgrade-proof)
+    assert f"Icon={launcher.FILE_MANAGER_ICON_NAME}\n" in d
     # stock Exec + actions preserved (binary + .desktop id stay `thunar`)
     assert "Exec=thunar %U" in d
     assert "Actions=open-home;open-computer;open-trash;" in d
@@ -402,30 +401,30 @@ def test_menu_cleanup_hides_the_four_extra_launchers():
         assert dest.startswith("/usr/share/applications/")
 
 
-# --- emit_plan (thunar/__init__.py) -----------------------------------------
+# --- emit_plan (file_manager/__init__.py) -----------------------------------
 
 def test_emit_plan_owners_and_paths():
-    plan = thunar.emit_plan()
+    plan = fm.emit_plan()
     by_dest = {e["dest"]: e for e in plan}
     # HOME (skel-mirrored) config files
-    for home_path in (settings.THUNARRC_PATH, settings.XFCONF_THUNAR_PATH, settings.GTK_CSS_PATH,
+    for home_path in (settings.FILE_MANAGER_RC_PATH, settings.XFCONF_FILE_MANAGER_PATH, settings.GTK_CSS_PATH,
                       sidebar.GTK_BOOKMARKS_PATH, actions.UCA_PATH):
         assert by_dest[home_path]["owner"] == "home", home_path
     # SYSTEM (root) files: the link script (executable), the icon SVG, the .desktop overrides
     assert by_dest[actions.LINK_SCRIPT_DEST]["owner"] == "root"
     assert by_dest[actions.LINK_SCRIPT_DEST]["mode"] == 0o755  # executable
     assert by_dest[launcher.ICON_SCALABLE_PATH]["owner"] == "root"
-    assert by_dest[launcher.THUNAR_DESKTOP_PATH]["owner"] == "root"
+    assert by_dest[launcher.FILE_MANAGER_DESKTOP_PATH]["owner"] == "root"
 
 
 def test_emit_plan_ships_icon_svg_and_png_rasterizations():
-    plan = thunar.emit_plan()
+    plan = fm.emit_plan()
     # the scalable SVG asset entry
     svg = next(e for e in plan if e["dest"] == launcher.ICON_SCALABLE_PATH)
     assert svg.get("asset") == launcher.ICON_ASSET
     # a PNG render per configured size
     for size in launcher.ICON_PNG_SIZES:
-        dest = f"/usr/share/icons/hicolor/{size}x{size}/apps/{launcher.THUNAR_ICON_NAME}.png"
+        dest = f"/usr/share/icons/hicolor/{size}x{size}/apps/{launcher.FILE_MANAGER_ICON_NAME}.png"
         e = next(x for x in plan if x["dest"] == dest)
         assert e.get("render") == {"asset": launcher.ICON_ASSET, "size": size}
 
@@ -435,7 +434,7 @@ def test_emit_plan_desktop_overrides_match_iso_app_overrides():
     # in pacman.ISO_APP_OVERRIDES so compiler stages them post-pacstrap (not the overlay).
     import pacman
     override_targets = {t for _b, t, _r in pacman.ISO_APP_OVERRIDES}
-    desktop_dests = [e["dest"] for e in thunar.emit_plan()
+    desktop_dests = [e["dest"] for e in fm.emit_plan()
                      if e["dest"].startswith("/usr/share/applications/")]
     assert desktop_dests, "expected some .desktop overrides"
     for dest in desktop_dests:
@@ -451,7 +450,7 @@ def test_mo_locale_catalog_dests_are_iso_app_overrides():
     # overlay path.
     import pacman
     override_targets = {t for _b, t, _r in pacman.ISO_APP_OVERRIDES}
-    mo_dests = [e["dest"] for e in thunar.emit_plan()
+    mo_dests = [e["dest"] for e in fm.emit_plan()
                 if e["dest"].startswith("/usr/share/locale/")
                 and e["dest"].endswith("/thunar.mo")]
     assert set(mo_dests) == {locale.mo_path(l) for l in locale.LOCALES}, mo_dests

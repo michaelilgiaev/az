@@ -10,7 +10,7 @@ to end:
     series has no misc-resolve-links pref for) is applied DIRECTLY to the committed C source
     (source/thunar/thunar-window.c) rather than as a build-time patch, so the modification is
     itself version-controlled and auditable with `git diff`. There is no separate .patch artifact.
-    pkgbuild.pkgbuild_thunar() builds this vendored tree from source (via ./autogen.sh, since a
+    pkgbuild.pkgbuild_file_manager() builds this vendored tree from source (via ./autogen.sh, since a
     git checkout ships no generated ./configure) and makepkg drops the package into the offline
     repo, exactly like calamares/librewolf. makepkg._emit_recipes copies SOURCE_DIR into the
     recipe dir at build time (see pkgbuild.recipe_source_trees), so the vendored tree itself is
@@ -68,7 +68,7 @@ from . import templates
 # The Azzio File Manager source tree is committed under packages/file_manager/source/ at the
 # pinned upstream tag below (a git clone, relicensed GPL-3.0 -- upstream is GPL-2.0-or-later, so
 # "or later" lets us ship it under GPL-3.0). makepkg._emit_recipes copies SOURCE_DIR into the
-# recipe dir as ./SOURCE_SUBDIR at build time, and pkgbuild.pkgbuild_thunar's prepare() copies it
+# recipe dir as ./SOURCE_SUBDIR at build time, and pkgbuild.pkgbuild_file_manager's prepare() copies it
 # from there into a writable build tree. SOURCE_SUBDIR is a stable relative string so the recipe
 # fingerprint does not depend on the absolute path (host vs container).
 #   Upstream: https://gitlab.xfce.org/xfce/thunar  (tag thunar-{SOURCE_VERSION}, commit SOURCE_COMMIT)
@@ -82,15 +82,15 @@ SOURCE_SUBDIR = "source"                       # the vendored tree dirname, and 
 SOURCE_DIR = Path(__file__).resolve().parent / SOURCE_SUBDIR
 
 # Re-export the public constants callers/tests reach for (paths + the icon name), so
-# `from packages import file_manager; file_manager.THUNARRC_PATH` works like the flat modules.
-THUNARRC_PATH = settings.THUNARRC_PATH
-XFCONF_THUNAR_PATH = settings.XFCONF_THUNAR_PATH
+# `from packages import file_manager; file_manager.FILE_MANAGER_RC_PATH` works like the flat modules.
+FILE_MANAGER_RC_PATH = settings.FILE_MANAGER_RC_PATH
+XFCONF_FILE_MANAGER_PATH = settings.XFCONF_FILE_MANAGER_PATH
 GTK_CSS_PATH = settings.GTK_CSS_PATH
 GTK_BOOKMARKS_PATH = sidebar.GTK_BOOKMARKS_PATH
 UCA_PATH = actions.UCA_PATH
 LINK_SCRIPT_DEST = actions.LINK_SCRIPT_DEST
-THUNAR_DESKTOP_PATH = launcher.THUNAR_DESKTOP_PATH
-THUNAR_ICON_NAME = launcher.THUNAR_ICON_NAME
+FILE_MANAGER_DESKTOP_PATH = launcher.FILE_MANAGER_DESKTOP_PATH
+FILE_MANAGER_ICON_NAME = launcher.FILE_MANAGER_ICON_NAME
 ICON_ASSET = launcher.ICON_ASSET
 ICON_SCALABLE_PATH = launcher.ICON_SCALABLE_PATH
 ICON_PNG_SIZES = launcher.ICON_PNG_SIZES
@@ -110,18 +110,18 @@ def emit_plan() -> list[dict]:
     post-pacstrap install hook. Returns FRESH dicts so a caller cannot mutate module state.
 
     NOTE: this plan is the CONFIG only. The Thunar BINARY is produced from the vendored source
-    (SOURCE_DIR) by the makepkg stage via pkgbuild.pkgbuild_thunar, not here."""
+    (SOURCE_DIR) by the makepkg stage via pkgbuild.pkgbuild_file_manager, not here."""
     plan: list[dict] = [
         # --- HOME config files (skel-mirrored) ---
         {   # thunarrc: the classic GKeyFile (fresh-profile seed + no-xfconfd fallback).
-            "builder": settings.thunarrc,
-            "dest": settings.THUNARRC_PATH,
+            "builder": settings.file_manager_rc,
+            "dest": settings.FILE_MANAGER_RC_PATH,
             "mode": _CONF,
             "owner": "home",
         },
         {   # the Xfconf channel XML: the runtime store Thunar 4.20 actually reads.
             "builder": settings.xfconf_channel_xml,
-            "dest": settings.XFCONF_THUNAR_PATH,
+            "dest": settings.XFCONF_FILE_MANAGER_PATH,
             "mode": _CONF,
             "owner": "home",
         },
@@ -158,8 +158,8 @@ def emit_plan() -> list[dict]:
             "owner": "root",
         },
         {   # the thunar.desktop override (package-owned dest -> staged post-pacstrap).
-            "builder": launcher.thunar_desktop,
-            "dest": launcher.THUNAR_DESKTOP_PATH,
+            "builder": launcher.file_manager_desktop,
+            "dest": launcher.FILE_MANAGER_DESKTOP_PATH,
             "mode": _CONF,
             "owner": "root",
         },
@@ -183,7 +183,7 @@ def emit_plan() -> list[dict]:
         plan.append({
             "builder": None,
             "render": {"asset": launcher.ICON_ASSET, "size": size},
-            "dest": f"{png_dir}/{launcher.THUNAR_ICON_NAME}.png",
+            "dest": f"{png_dir}/{launcher.FILE_MANAGER_ICON_NAME}.png",
             "mode": _CONF,
             "owner": "root",
         })

@@ -1543,7 +1543,8 @@ def test_recipe_dirs_default_tier():
     # buttons, the Network page, and the networkcfg static-profile job); thunar carries
     # ONLY its PKGBUILD (the source tree is copied in separately, no patch companion);
     # the librewolf dir carries PKGBUILD + the .desktop, its PKGBUILD the repackage
-    # recipe (no bsys6 make targets).
+    # recipe (no bsys6 make targets). (Recipe-dir key stays "thunar" -- it doubles as the
+    # produced package name; only our Python identifiers moved to file_manager.)
     dirs = pkgbuild.recipe_dirs(False)
     names = [name for name, _ in dirs]
     assert names == ["calamares", "thunar", "librewolf"]
@@ -1595,7 +1596,7 @@ def test_thunar_configure_enables_maintainer_mode():
     # itself), we MUST pass --enable-maintainer-mode or `make` dies with
     # "No rule to make target 'thunar-marshal.c'". Lock the flag in, and lock in that it is
     # passed to configure AFTER the autogen bootstrap (order matters: autogen writes configure).
-    s = pkgbuild.pkgbuild_thunar()
+    s = pkgbuild.pkgbuild_file_manager()
     # Anchor on the real command lines, not the prose that also mentions these tokens: the
     # autogen bootstrap runs with NOCONFIGURE=1, the configure command opens a `\`-continued
     # block, and the flag is one of that block's indented continuation lines.
