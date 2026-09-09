@@ -44,6 +44,7 @@ So if you plan to use this project in any way, please read the code first. Do no
 **Interactive Packages Graph**
 
 - [https://azzio.baselinux.net/documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html](https://azzio.baselinux.net/documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
+- [https://michaelilgiaev.github.io/azzio/documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html](https://michaelilgiaev.github.io/azzio/documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
 - [documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html](documentations/SPECIFICATIONS_COMPONENTS_NAVIGATE_FULL.html)
 
 ## Install
