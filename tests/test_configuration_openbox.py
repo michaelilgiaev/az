@@ -824,7 +824,7 @@ def test_rc_xml_keeps_alt_right_drag_resize_on_frame():
     assert '<mousebind button="A-Right" action="Drag"><action name="Resize"/></mousebind>' in frame_block
 
 
-# --- Titlebar doubled: Azzio theme + larger title font ---------------------
+# --- Titlebar: Azzio theme, 25% smaller, single flat colour ----------------
 
 def test_rc_xml_uses_the_azzio_dark_theme_by_default():
     # rc.xml must name the Azzio DARK theme by default (dark is the Azzio default), not
@@ -837,35 +837,34 @@ def test_rc_xml_uses_the_azzio_dark_theme_by_default():
     assert "<name>Clearlooks</name>" not in out
 
 
-def test_rc_xml_sets_a_larger_title_font():
-    # The dominant half of the ~1.5x bar: a bigger title font makes a taller label (and
-    # OpenBox sizes the buttons to the label). Stock OpenBox defaults to 8pt; ours is
-    # 12pt (exactly 1.5x), set for both the active and inactive window title. (An earlier
-    # round used 16pt, which doubled the bar and overshot.)
+def test_rc_xml_sets_the_titlebar_font():
+    # The dominant half of the bar height is the title font (OpenBox sizes the buttons to
+    # the label). The bar was cut 25% from its earlier ~1.5x size, so the font came down
+    # from 12pt to 9pt (12 * 0.75), set for both the active and inactive window title.
     out = desktop.openbox_rc_xml()
-    assert desktop.TITLE_FONT_SIZE == 12
+    assert desktop.TITLE_FONT_SIZE == 9
     assert f"<size>{desktop.TITLE_FONT_SIZE}</size>" in out
     assert '<font place="ActiveWindow">' in out
     assert '<font place="InactiveWindow">' in out
 
 
-def test_theme_rc_grows_the_titlebar_padding_to_one_and_a_half():
-    # The Azzio themerc grows the titlebar-height fields vs stock Clearlooks to land the
-    # bar at ~1.5x stock (padding.height 2 -> 7, padding.width 3 -> 6). These are the
-    # size-driving lines; a drift shrinks or regrows the bar. (An earlier round used 12/8,
-    # which doubled the bar and overshot.)
+def test_theme_rc_shrinks_the_titlebar_padding_by_a_quarter():
+    # The user found the ~1.5x bar too big and asked to cut it 25%. The size-driving padding
+    # fields were trimmed by 0.75: padding.height 7 -> 5, padding.width 6 -> 4. A drift here
+    # shrinks or regrows the bar.
     out = desktop.openbox_theme_rc()
-    assert desktop.OPENBOX_THEME_PADDING_HEIGHT == 7
-    assert desktop.OPENBOX_THEME_PADDING_WIDTH == 6
+    assert desktop.OPENBOX_THEME_PADDING_HEIGHT == 5
+    assert desktop.OPENBOX_THEME_PADDING_WIDTH == 4
     assert f"padding.height: {desktop.OPENBOX_THEME_PADDING_HEIGHT}" in out
     assert f"padding.width: {desktop.OPENBOX_THEME_PADDING_WIDTH}" in out
-    # Strictly larger than the stock Clearlooks originals (2 / 3), so the bar is grown.
+    # Still strictly larger than the stock Clearlooks originals (2 / 3), so the bar keeps
+    # some breathing room above stock.
     assert desktop.OPENBOX_THEME_PADDING_HEIGHT > 2
     assert desktop.OPENBOX_THEME_PADDING_WIDTH > 3
-    # ...but strictly smaller than the earlier doubled values (12 / 8): this round scaled
-    # the overshot bar back DOWN toward 1.5x. If these creep back up the bar is doubled.
-    assert desktop.OPENBOX_THEME_PADDING_HEIGHT < 12
-    assert desktop.OPENBOX_THEME_PADDING_WIDTH < 8
+    # ...but strictly smaller than the earlier ~1.5x values (7 / 6): this round shrank the bar.
+    # If these creep back up the 25% cut was lost.
+    assert desktop.OPENBOX_THEME_PADDING_HEIGHT < 7
+    assert desktop.OPENBOX_THEME_PADDING_WIDTH < 6
 
 
 def test_theme_rc_removes_the_bottom_handle_bar():
@@ -885,37 +884,58 @@ def test_theme_rc_active_separator_blends_into_the_titlebar():
     # once used the accent value, which rendered as a stray bright-CYAN bar under a focused,
     # non-maximized window (the reported visual bug).
     #
-    # The titlebar background is a splitvertical GRADIENT, so the separator must match the
-    # gradient's BOTTOM-edge value (title_bg_to_split), NOT the top colour -- matching the top
-    # would leave a faint hairline exactly where the cyan was. Dark bottom = #0a0f14,
-    # light bottom = #7AA1D1, so those are the pinned separator colours (zero contrast, no line).
+    # The titlebar is now a FLAT SOLID fill of the bottom colour (title_bg_to_split), so the
+    # separator must match THAT single colour -- dark = #0a0f14, light = #7AA1D1 -- to draw
+    # the same colour as the bar pixel above it (zero contrast, no line).
     dark = desktop.openbox_theme_rc(dark=True)
     light = desktop.openbox_theme_rc(dark=False)
     assert "window.active.title.separator.color: #0a0f14" in dark
     assert "window.active.title.separator.color: #7AA1D1" in light
-    # The separator matches the titlebar gradient's colorTo split (its bottom edge) in each.
+    # The separator matches the titlebar's flat fill colour in each.
     for rc, bottom in ((dark, "#0a0f14"), (light, "#7AA1D1")):
-        assert f"*.title.bg.colorTo.splitTo: {bottom}" in rc
+        assert f"*.title.bg.color: {bottom}" in rc
     # The accent (logo cyan) must NOT come back as the active separator.
     assert "window.active.title.separator.color: #06b8fd" not in dark
     assert "window.active.title.separator.color: #4e76a8" not in light
 
 
 def test_light_theme_keeps_the_clearlooks_cyan_titlebar_colour():
-    # The LIGHT ("Azzio") theme keeps its familiar "cyan'ish" Clearlooks look: it must
-    # carry the Clearlooks title gradient base colour (#8CB0DC). The DARK theme (default)
-    # replaces it with the near-black OSD palette -- so the Clearlooks cyan must NOT be in
-    # the dark one.
+    # The LIGHT ("Azzio") theme keeps its familiar "cyan'ish" Clearlooks look, but now as a
+    # SINGLE FLAT colour: the titlebar is the Clearlooks gradient's BOTTOM split (#7AA1D1),
+    # not the old top #8CB0DC (which is gone entirely with the gradient). The DARK theme
+    # (default) uses the near-black surface instead -- so the Clearlooks cyan must NOT be dark.
     light = desktop.openbox_theme_rc(dark=False)
     dark = desktop.openbox_theme_rc(dark=True)
-    assert "*.title.bg.color: #8CB0DC" in light
-    assert "#8CB0DC" not in dark
+    assert "*.title.bg.color: #7AA1D1" in light
+    assert "#7AA1D1" not in dark
     # The dark theme uses the Azzio near-black surface palette (matching the application menu).
-    assert "#0a0f14" in dark
-    # Both keep the shared geometry (grown padding + no bottom handle).
+    assert "*.title.bg.color: #0a0f14" in dark
+    # Both keep the shared geometry (25%-smaller padding + no bottom handle).
     for out in (light, dark):
-        assert "padding.height: 7" in out
+        assert "padding.height: 5" in out
         assert "window.handle.width: 0" in out
+
+
+def test_theme_rc_titlebar_and_buttons_are_one_flat_colour():
+    # The user asked to drop the "two color split" and use ONE colour (the bottom of the old
+    # gradient) for the whole topbar. The titlebar and its buttons must be `Flat Solid` (no
+    # splitvertical gradient), so there is no top/bottom two-tone. Assert the flat textures and
+    # that no gradient/split key survives on the titlebar or button backgrounds.
+    for dark in (True, False):
+        out = desktop.openbox_theme_rc(dark=dark)
+        # Titlebar + buttons are flat solid.
+        assert "*.title.bg: Flat Solid" in out
+        assert "window.active.button.*.bg: Flat Solid Border" in out
+        assert "window.inactive.title.bg: Flat Solid" in out
+        assert "window.inactive.button.*.bg: Flat Solid Border" in out
+        assert "window.active.button.hover.bg: Flat Solid Border" in out
+        # No gradient/split remnants on the flattened surfaces (they would reintroduce the
+        # two-tone the user asked to remove).
+        assert "*.title.bg: Raised Gradient" not in out
+        assert "*.title.bg.colorTo" not in out
+        assert "*.title.bg.color.splitTo" not in out
+        assert "window.active.button.*.bg.colorTo" not in out
+        assert "window.inactive.title.bg.colorTo" not in out
 
 
 def test_theme_rc_dests_are_user_theme_search_paths():

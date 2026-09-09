@@ -86,10 +86,16 @@ const char *az_color(AzColorRole role);
 #define AZ_SCROLL_THUMB_HOVER  az_color(AZ_C_SCROLL_THUMB_HOVER)
 #define AZ_SCROLL_GROOVE_COLOR az_color(AZ_C_SCROLL_GROOVE)
 
-/* --- Scrollbar geometry (arrow-less rounded pill) -- STOCK, AZ_SCALED --- */
-#define AZ_SCROLL_THUMB_WIDTH  AZ_SCALED(4)    /* was 6  @1.35 */
-#define AZ_SCROLL_TRACK_WIDTH  AZ_SCALED(9)    /* was 12 @1.35 */
-#define AZ_SCROLL_THUMB_MIN    AZ_SCALED(24)   /* was 32 @1.35 */
+/* --- Scrollbar geometry (arrow-less rounded pill) -- STOCK, AZ_SCALED ---
+ * The pill and its reserved column are TWICE the old size (the user asked for a
+ * bar "twice as big"). Both the visible THUMB_WIDTH and the reserved TRACK_WIDTH
+ * are doubled together, so the pill stays centered in its column (on_draw centers
+ * it via x0 = (track - thumb) / 2) and the proportions are unchanged, only larger.
+ * THUMB_MIN is the pill's minimum VERTICAL length (grab-ability), not a thickness
+ * axis, so it is left as-is -- doubling it would change scroll feel, not size. */
+#define AZ_SCROLL_THUMB_WIDTH  AZ_SCALED(8)    /* was 4 (6 @1.35); doubled -> 2x bar */
+#define AZ_SCROLL_TRACK_WIDTH  AZ_SCALED(18)   /* was 9 (12 @1.35); doubled with the pill */
+#define AZ_SCROLL_THUMB_MIN    AZ_SCALED(24)   /* min VERTICAL length (unchanged) */
 
 /* --- Fonts (POINTS) -- TWO scaling paths, because the menu draws text two different ways:
  *   * The app-row NAME/TYPE (application_list.c) and the power labels (power.c) are drawn with
