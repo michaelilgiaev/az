@@ -6,6 +6,4 @@ venv/
 .pytest_cache/
 data/
 docs/
-!libraries/packages/file_manager/thunar/docs/
-!libraries/packages/file_manager/thunar/docs/**
 tests/test_modes.conf
