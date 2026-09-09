@@ -838,19 +838,21 @@ def test_rc_xml_uses_the_azzio_dark_theme_by_default():
 
 
 def test_rc_xml_sets_the_titlebar_font():
-    # The dominant half of the bar height is the title font (OpenBox sizes the buttons AND
-    # their glyphs to the label). The bar was cut 25% (to 9pt) then grown back +10% (the
-    # "+10% topbar" ask) to 10pt via TOPBAR_GROWTH, set for both the active and inactive
-    # window title. This one font is the single lever for the +10% topbar and the "slightly
-    # bigger buttons/icons" ask, since the buttons track the label height.
+    # The dominant half of the bar height is the title font, and OpenBox sizes the min/max/
+    # close BUTTONS and their GLYPHS to the label -- so the title font is the single native
+    # lever for button-icon size. The bar was cut 25% (to 9pt), grown +10% (the "+10% topbar"
+    # ask) to 10pt, and now nudged one more point to 11pt for the "slightly increase the size
+    # of the button icons" ask (the new prompt). OpenBox has no separate button-glyph-size
+    # field, so the icons grow via this font; the tiny extra bar height is the unavoidable
+    # ride-along. Set for both the active and inactive window title.
     out = desktop.openbox_rc_xml()
-    assert desktop.TITLE_FONT_SIZE == 10
-    # The +10% is an explicit factor on the scale-derived base (round(pt(7)=9 * 1.10) == 10),
+    assert desktop.TITLE_FONT_SIZE == 11
+    # The growth is an explicit factor on the scale-derived base (round(pt(7)=9 * 1.20) == 11),
     # not a corruption of the global scale; pin the factor and the arithmetic.
-    assert desktop.TOPBAR_GROWTH == 1.10
+    assert desktop.TOPBAR_GROWTH == 1.20
     assert desktop.TITLE_FONT_SIZE == round(desktop._scale.pt(
         desktop._scale.OPENBOX_TITLE_FONT_STOCK) * desktop.TOPBAR_GROWTH)
-    assert desktop.TITLE_FONT_SIZE > 9   # strictly larger than the pre-growth 9pt bar
+    assert desktop.TITLE_FONT_SIZE > 10   # strictly larger than the previous 10pt bar
     assert f"<size>{desktop.TITLE_FONT_SIZE}</size>" in out
     assert '<font place="ActiveWindow">' in out
     assert '<font place="InactiveWindow">' in out
@@ -858,19 +860,25 @@ def test_rc_xml_sets_the_titlebar_font():
 
 def test_theme_rc_titlebar_padding():
     # The size-driving padding fields. padding.height stays 5 (the +10% topbar rides on the
-    # title font, not the padding, so height stays ~10% not more). padding.width was bumped
-    # 4 -> 5 to widen the gap between the min/max/close buttons ("increase the distance
-    # between each icon ever so slightly") -- OpenBox has no separate button-gap field, so
-    # padding.width is the spacing between adjacent title elements.
+    # title font, not the padding, so height stays ~10% not more). padding.width was DOUBLED
+    # 5 -> 10 to make the distance between the min/max/close buttons "twice as large" (the new
+    # prompt). OpenBox has no separate per-button gap field -- padding.width is the spacing
+    # between EVERY adjacent title element -- but because the stretchy label spring in the
+    # middle (titleLayout NLIMC: icon, Label, iconify, maximize, close) swallows the extra
+    # icon<->label space, the doubled padding reads almost entirely as a wider gap between the
+    # three right-hand buttons, with the close (exit) button staying rightmost and min/max
+    # sliding left of it -- exactly the requested "keep exit where it is, move the others left".
     out = desktop.openbox_theme_rc()
     assert desktop.OPENBOX_THEME_PADDING_HEIGHT == 5
-    assert desktop.OPENBOX_THEME_PADDING_WIDTH == 5
+    assert desktop.OPENBOX_THEME_PADDING_WIDTH == 10
     assert f"padding.height: {desktop.OPENBOX_THEME_PADDING_HEIGHT}" in out
     assert f"padding.width: {desktop.OPENBOX_THEME_PADDING_WIDTH}" in out
+    # The button gap is TWICE the previous value (5 -> 10): the "twice as large" ask.
+    assert desktop.OPENBOX_THEME_PADDING_WIDTH == 2 * 5
     # Both strictly larger than the stock Clearlooks originals (2 / 3), so the bar keeps
-    # breathing room above stock; the width is wider than the previous 4 (the button-gap bump).
+    # breathing room above stock; the width is wider than the previous 5 (the button-gap bump).
     assert desktop.OPENBOX_THEME_PADDING_HEIGHT > 2
-    assert desktop.OPENBOX_THEME_PADDING_WIDTH > 4
+    assert desktop.OPENBOX_THEME_PADDING_WIDTH > 5
 
 
 def test_theme_rc_removes_the_bottom_handle_bar():
@@ -956,6 +964,29 @@ def test_theme_rc_buttons_have_a_white_border():
     # The old dark resting border (#05080a, invisible on the near-black bar) must be gone.
     dark_out = desktop.openbox_theme_rc(dark=True)
     assert "window.active.button.*.bg.border.color: #05080a" not in dark_out
+
+
+def test_theme_rc_buttons_hover_the_signature_cyan():
+    # THE new prompt: "when mouse hovers over a button, highlight it with that signature
+    # cyan'ish color to help indicate what is about to be pressed." The button HOVER fill
+    # (window.active.button.hover.bg.color) must be the Azzio SIGNATURE cyan -- the logo
+    # cyan #06b8fd used for the active menu item, the focus border, and the media OSD accent
+    # -- so hovering any min/max/close button lights it up in the one signature colour. This
+    # holds in BOTH the dark (default) and light themes so the highlight is identical.
+    SIGNATURE_CYAN = "#06b8fd"
+    for dark in (True, False):
+        out = desktop.openbox_theme_rc(dark=dark)
+        assert f"window.active.button.hover.bg.color: {SIGNATURE_CYAN}" in out
+    # The previous, dimmer hover fills (dark #0499d6, light #8caede) must be gone -- they were
+    # NOT the signature cyan, so a drift back to them would fail the "signature cyan" ask.
+    dark_out = desktop.openbox_theme_rc(dark=True)
+    light_out = desktop.openbox_theme_rc(dark=False)
+    assert "window.active.button.hover.bg.color: #0499d6" not in dark_out
+    assert "window.active.button.hover.bg.color: #8caede" not in light_out
+    # The hover border stays WHITE (the earlier request); only the FILL is the signature cyan,
+    # so the white outline still frames the cyan highlight.
+    for out in (dark_out, light_out):
+        assert "window.active.button.hover.bg.border.color: #ffffff" in out
 
 
 def test_theme_rc_dests_are_user_theme_search_paths():

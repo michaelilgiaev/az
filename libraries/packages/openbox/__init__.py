@@ -387,31 +387,45 @@ fi
 # The bar had been grown to ~1.5x stock; the user then found the topbar TOO BIG and asked
 # to cut it 25%, drop the two-tone gradient for ONE flat colour, and later to grow it back
 # ~10% (the +10% topbar) with WHITE button borders and a touch more space between buttons.
-# So Azzio ships its own theme, "Azzio": the stock Clearlooks openbox-3 themerc with the
-# size-driving fields tuned and the titlebar/buttons flattened. It is a fresh theme dir (not
-# an edit of the packaged Clearlooks) so the airootfs overlay owns it and a package update
-# to openbox cannot revert it:
+# Most recently: DOUBLE the gap between the min/max/close buttons, highlight a button in the
+# signature cyan on hover, and nudge the button icons slightly bigger. So Azzio ships its own
+# theme, "Azzio": the stock Clearlooks openbox-3 themerc with the size-driving fields tuned and
+# the titlebar/buttons flattened. It is a fresh theme dir (not an edit of the packaged
+# Clearlooks) so the airootfs overlay owns it and a package update to openbox cannot revert it:
 #   * padding.height 2 -> 5     (top+bottom padding around the label)
-#   * padding.width  3 -> 5     (space between the title BUTTONS; +1 for the wider gap)
+#   * padding.width  3 -> 10    (space between the title BUTTONS; DOUBLED from 5 for the 2x gap)
 #   * window.handle.width 3->0  (REMOVE the bottom handle -- see below)
 #
 # SIZE: the dominant half of the height is the title FONT set in rc.xml's <theme>. It was cut
-# 25% (pt 12 -> 9) then grown back +10% to pt 10 (TITLE_FONT_SIZE / TOPBAR_GROWTH). Since
-# OpenBox sizes the min/max/close buttons (and the glyphs inside them) to the label height, a
-# single font bump grows the whole topbar -- bar, buttons, AND button icons -- together, which
-# is the "make the topbar 10% bigger and the buttons/icons slightly bigger" ask in one lever.
-# padding.width adds the extra horizontal gap between the buttons ("distance between icons").
+# 25% (pt 12 -> 9), grown back +10% to pt 10, then nudged to pt 11 (TITLE_FONT_SIZE /
+# TOPBAR_GROWTH == 1.20) for slightly bigger button icons. Since OpenBox sizes the min/max/close
+# buttons (and the glyphs inside them) to the label height, a single font bump grows the whole
+# topbar -- bar, buttons, AND button icons -- together, which is how "slightly bigger button
+# icons" is achieved (OpenBox has no separate button-glyph-size field). padding.width adds the
+# extra horizontal gap between the buttons ("distance between the buttons").
+#
+# BUTTON GAP (2x): padding.width is DOUBLED (5 -> 10) so the distance between the min/max/close
+# buttons is twice as large. titleLayout is NLIMC (icon, Label, iconify, maximize, close): the
+# Label is a stretchy spring in the MIDDLE, so it swallows the extra icon<->label space and the
+# doubled padding reads almost entirely as a wider gap between the three right-hand buttons. The
+# close (exit) button stays rightmost and min/max slide left of it -- "keep exit where it is,
+# move the others left".
 #
 # WHITE BUTTON BORDERS: the min/max/close buttons carry a 1px border via
 # window.*.button.*.bg.border.color; it is set to #ffffff (both resting and hover) so the
 # buttons have the white outline the user asked for, in both the dark and light themes.
 #
+# HOVER = SIGNATURE CYAN: the button HOVER fill (window.active.button.hover.bg.color) is the
+# signature cyan #06b8fd (the logo/OSD/menu accent), so hovering a min/max/close button lights
+# it up in the one signature colour to indicate what is about to be pressed. The white hover
+# border frames that cyan highlight.
+#
 # ONE FLAT COLOUR: the titlebar + its buttons were a splitvertical GRADIENT (top colour ->
 # a darker bottom split) -- the "two color split" the user saw. They are now `Flat Solid`,
 # filled with the gradient's old BOTTOM colour (title_bg_to_split), so the whole bar is a
-# single consistent colour. The buttons take their own bottom split, hover stays flat cyan,
-# pressed was already flat. Flat Solid ignores the Raised bg.highlight/shadow bevel, so the
-# bar renders as one true flat colour. Menu/OSD are NOT the topbar and keep their gradients.
+# single consistent colour. The buttons take their own bottom split, hover is flat signature
+# cyan, pressed was already flat. Flat Solid ignores the Raised bg.highlight/shadow bevel, so
+# the bar renders as one true flat colour. Menu/OSD are NOT the topbar and keep their gradients.
 #
 # THE BOTTOM "THIN WHITE BAR": OpenBox draws a HANDLE -- a full-width strip along the
 # BOTTOM edge of every decorated window -- whose height is window.handle.width and whose
@@ -424,8 +438,9 @@ fi
 # windows -- so only the cosmetic strip is removed, not the ability to drag-resize.
 # Azzio ships TWO OpenBox titlebar themes -- a LIGHT one ("Azzio", the classic
 # Clearlooks-cyan look) and a DARK one ("Azzio-Dark", the default). Both are generated
-# from openbox_theme_rc(dark) below: identical GEOMETRY (the +10% titlebar + white button
-# borders + no bottom handle + flat colour), only the colour palette differs. rc.xml's <theme><name>
+# from openbox_theme_rc(dark) below: identical GEOMETRY (the grown titlebar + 2x button gap +
+# white button borders + no bottom handle + flat colour), only the colour palette differs (the
+# signature-cyan hover is shared). rc.xml's <theme><name>
 # selects one, and `azzio theme --dark|--white` rewrites that name + `openbox
 # --reconfigure`s. Dark is the out-of-the-box default (rc.xml ships <name>Azzio-Dark</name>).
 OPENBOX_THEME_NAME = "Azzio"            # the LIGHT theme name (classic Clearlooks-cyan)
@@ -438,20 +453,21 @@ OPENBOX_THEME_THEMERC_DARK = f"{OPENBOX_THEME_DIR_DARK}/themerc"
 OPENBOX_THEME_DEFAULT = OPENBOX_THEME_NAME_DARK
 
 # The two padding fields (in px) that set the titlebar height, and the resize-handle
-# width. The bar was SHRUNK 25% from the earlier ~1.5x size, then grown back ~10% (the
-# +10% topbar) via the title FONT (see TITLE_FONT_SIZE / TOPBAR_GROWTH), which is what
-# carries the height bump; padding.height stays 5 so the growth is ~10%, not more.
-#   * padding.height 5  -- top+bottom label padding; the +10% rides on the font, not this.
-#   * padding.width  5  -- HORIZONTAL breathing room between the titlebar elements, i.e. the
-#     GAP BETWEEN THE min/max/close BUTTONS. Bumped 4 -> 5 for the "increase the distance
-#     between each icon ever so slightly" ask (OpenBox has no separate button-gap field;
-#     padding.width is the spacing between adjacent title buttons/label/icon).
+# width. The bar was SHRUNK 25% from the earlier ~1.5x size, then grown back via the title
+# FONT (see TITLE_FONT_SIZE / TOPBAR_GROWTH), which is what carries the height bump;
+# padding.height stays 5 so the height growth rides on the font, not this.
+#   * padding.height 5  -- top+bottom label padding; the growth rides on the font, not this.
+#   * padding.width  10 -- HORIZONTAL breathing room between the titlebar elements, i.e. the
+#     GAP BETWEEN THE min/max/close BUTTONS. DOUBLED 5 -> 10 for the "make the distance between
+#     the buttons twice as large" ask (OpenBox has no separate button-gap field; padding.width
+#     is the spacing between adjacent title buttons/label/icon, and the stretchy middle label
+#     means the doubling shows up as the wider gap between the three right-hand buttons).
 # The handle width is 0 to REMOVE the near-white bottom handle bar entirely (the "thin white
 # bar under a window" the user asked to drop); resizing is unaffected (the rc.xml edge/corner
 # mouse contexts do not depend on the visible handle). Shared by BOTH the light and dark
 # themes (only colours differ between them).
-OPENBOX_THEME_PADDING_HEIGHT = 5    # unchanged; the +10% topbar rides on the title font
-OPENBOX_THEME_PADDING_WIDTH = 5     # was 4; +1px widens the gap between the title buttons
+OPENBOX_THEME_PADDING_HEIGHT = 5    # unchanged; the topbar growth rides on the title font
+OPENBOX_THEME_PADDING_WIDTH = 10    # was 5; DOUBLED so the gap between the title buttons is 2x
 OPENBOX_THEME_HANDLE_WIDTH = 0      # stock Clearlooks: 3 -> 0 removes the bottom bar
 
 # The LIGHT palette: the stock Clearlooks colours (unchanged -- this is the classic cyan
@@ -484,7 +500,9 @@ _OB_LIGHT = {
     # WHITE button border in the light theme too (same "white outline on the buttons"
     # request); resting + hover both white so the outline never flips colour on hover.
     "abtn_border": "#ffffff", "abtn_image": "#F4F5F6",
-    "abtn_hover_bg_to_split": "#8caede",
+    # HOVER fill == the SIGNATURE cyan (#06b8fd), same as the dark theme, so the hover
+    # highlight is the one signature colour in both themes (the new prompt). Was #8caede.
+    "abtn_hover_bg_to_split": "#06b8fd",
     "abtn_hover_border": "#ffffff", "abtn_hover_image": "#ffffff",
     "abtn_pressed_bg": "#7aa1d2",
     "inactive_sep": "#96999d",
@@ -529,7 +547,10 @@ _OB_DARK = {
     # white when the pointer is over a button (a coloured hover border would break the
     # "white border" the user wants); only the button FILL changes on hover.
     "abtn_border": "#ffffff", "abtn_image": "#dee4ea",
-    "abtn_hover_bg_to_split": "#0499d6",
+    # HOVER fill == the SIGNATURE cyan (#06b8fd, the logo/OSD/menu accent): hovering a
+    # min/max/close button lights it up in the one signature colour so it is clear what is
+    # about to be pressed (the new prompt). Was #0499d6, a dimmer non-signature cyan.
+    "abtn_hover_bg_to_split": "#06b8fd",
     "abtn_hover_border": "#ffffff", "abtn_hover_image": "#ffffff",
     "abtn_pressed_bg": "#0499d6",
     "inactive_sep": "#05080a",
@@ -552,15 +573,16 @@ def openbox_theme_rc(dark: bool = True) -> str:
     """One Azzio OpenBox themerc -- the DARK palette (default) when dark=True, else the
     LIGHT (classic Clearlooks-cyan) palette.
 
-    Both share one GEOMETRY -- the titlebar cut 25% then grown back +10% (the +10% topbar;
-    title <font> pt 10 in rc.xml, see TITLE_FONT_SIZE/TOPBAR_GROWTH), with a touch more space
-    between the min/max/close buttons (padding.width 5) and the bottom resize handle REMOVED
-    (window.handle.width 0, so the near-white bottom bar does not draw). Because OpenBox sizes
-    the buttons (and their glyphs) to the label, the +10% font grows bar, buttons, and icons
-    together. The buttons carry a WHITE 1px border. The titlebar and its buttons are a SINGLE
-    FLAT colour (the old gradient's bottom split), no two-tone split. ONLY the colours differ
-    between dark and light (see _OB_DARK / _OB_LIGHT); the light theme keeps the Clearlooks-cyan
-    bottom colour.
+    Both share one GEOMETRY -- the titlebar cut 25% then grown (title <font> pt 11 in rc.xml,
+    see TITLE_FONT_SIZE/TOPBAR_GROWTH == 1.20: the +10% topbar plus a nudge for slightly bigger
+    button icons), with the gap between the min/max/close buttons DOUBLED (padding.width 10) and
+    the bottom resize handle REMOVED (window.handle.width 0, so the near-white bottom bar does
+    not draw). Because OpenBox sizes the buttons (and their glyphs) to the label, the font grows
+    bar, buttons, and icons together. The buttons carry a WHITE 1px border and light up in the
+    SIGNATURE cyan (#06b8fd) on hover. The titlebar and its buttons are a SINGLE FLAT colour (the
+    old gradient's bottom split), no two-tone split. ONLY the resting colours differ between dark
+    and light (see _OB_DARK / _OB_LIGHT; the signature-cyan hover is shared); the light theme
+    keeps the Clearlooks-cyan bottom colour.
 
     Shipped to ~/.themes/<name>/openbox-3/themerc (a user theme search path OpenBox scans
     alongside /usr/share/themes) and mirrored into /etc/skel so the installed user inherits
@@ -568,12 +590,13 @@ def openbox_theme_rc(dark: bool = True) -> str:
     c = _OB_DARK if dark else _OB_LIGHT
     variant = "DARK (the default)" if dark else "LIGHT (classic Clearlooks-cyan)"
     return f"""\
-# Azzio OpenBox theme -- {variant}. Flat-colour titlebar (+10% size), WHITE button borders,
-# NO bottom handle. Generated by packages.openbox (edit the Python, not this file). Geometry
-# is stock Clearlooks with padding tuned (padding.width 5 widens the button gap),
-# window.handle.width 0 (removes the bottom bar), the buttons given a white border, and the
-# titlebar + buttons one Flat Solid colour; only the colour palette differs between the dark
-# and light Azzio themes. The title FONT size (the +10% topbar lever) is set in rc.xml's <theme>.
+# Azzio OpenBox theme -- {variant}. Flat-colour titlebar, WHITE button borders, signature-cyan
+# button hover, NO bottom handle. Generated by packages.openbox (edit the Python, not this file).
+# Geometry is stock Clearlooks with padding tuned (padding.width 10 DOUBLES the button gap),
+# window.handle.width 0 (removes the bottom bar), the buttons given a white border and a
+# signature-cyan hover, and the titlebar + buttons one Flat Solid colour; only the resting colour
+# palette differs between the dark and light Azzio themes. The title FONT size (the topbar +
+# button-icon size lever) is set in rc.xml's <theme>.
 
 # Fonts (halos)
 *.font: shadow=n
@@ -582,7 +605,7 @@ window.inactive.label.text.font:shadow=y:shadowtint=00:shadowoffset=0
 menu.items.font:shadow=y:shadowtint=0:shadowoffset=1
 
 # general stuff -- padding.height/width set for the titlebar (stock was 2 / 3; padding.width
-# 5 widens the gap between the title buttons), handle width set to 0 to REMOVE the near-white
+# 10 DOUBLES the gap between the title buttons), handle width set to 0 to REMOVE the near-white
 # bottom handle bar (was 3).
 border.width: 1
 padding.width: {OPENBOX_THEME_PADDING_WIDTH}
@@ -855,23 +878,27 @@ SUPER_MENU_KEYSYM = "Menu"
 # with everything else.
 from . import scale as _scale  # noqa: E402  (single source of truth for the scale)
 
-# TOPBAR +10%: the user liked the (25%-smaller) bar but asked to grow it back "by, lets say, 10%".
-# The title FONT is the dominant half of the bar height AND the thing OpenBox sizes the min/max/
-# close buttons (and their glyphs) to, so a single +10% on the font grows the WHOLE topbar -- bar
-# height, buttons, and button icons -- together by ~10%, which is exactly the "make the topbar 10%
-# bigger, and the buttons/icons slightly bigger" ask in one lever. It is applied HERE (not folded
-# into scale.py's stock) so the GLOBAL scale that every OTHER app rides stays untouched -- this is
-# a topbar-only cosmetic bump. round(pt(7)=9 * 1.10) == 10 (was 9): a clean +11%, ~the requested
-# 10%. A named factor (not a raw 10) keeps the intent and the arithmetic explicit for a test.
-TOPBAR_GROWTH = 1.10                     # +10% topbar (font -> buttons -> icons, all together)
-TITLE_FONT_SIZE = round(_scale.pt(_scale.OPENBOX_TITLE_FONT_STOCK) * TOPBAR_GROWTH)  # 9 -> 10
+# TOPBAR GROWTH: the title FONT is the dominant half of the bar height AND the thing OpenBox sizes
+# the min/max/close buttons (and their glyphs) to, so a single factor on the font grows the WHOLE
+# topbar -- bar height, buttons, and button icons -- together. It carries TWO asks:
+#   * "grow the topbar back by ~10%" (the earlier +10% topbar), and
+#   * "slightly increase the size of the button icons" (the new prompt) -- OpenBox has no separate
+#     button-glyph-size field, so a one-point font nudge is the only native lever for bigger icons;
+#     the small extra bar height is the unavoidable ride-along.
+# It is applied HERE (not folded into scale.py's stock) so the GLOBAL scale that every OTHER app
+# rides stays untouched -- this is a topbar-only cosmetic bump. round(pt(7)=9 * 1.20) == 11 (was
+# 10 at 1.10): the +10% topbar plus the icon nudge. A named factor (not a raw 11) keeps the intent
+# and the arithmetic explicit for a test.
+TOPBAR_GROWTH = 1.20                     # topbar +10% PLUS the button-icon nudge (font -> icons)
+TITLE_FONT_SIZE = round(_scale.pt(_scale.OPENBOX_TITLE_FONT_STOCK) * TOPBAR_GROWTH)  # 9 -> 11
 
 
 def openbox_rc_xml() -> str:
     """OpenBox rc.xml: window-manager behaviour + keybinds for a panel-less session.
 
-    Uses the Azzio theme (flat-colour Clearlooks, +10% titlebar, see openbox_theme_rc)
-    plus a larger title font, and wires the Azzio bits:
+    Uses the Azzio theme (flat-colour Clearlooks, grown titlebar with a 2x button gap and
+    signature-cyan button hover, see openbox_theme_rc) plus a larger title font, and wires the
+    Azzio bits:
       * W-Menu / Menu -> run the application-menu launcher (the Super key, via xcape).
       * A small, sensible keybind set (close window, alt-tab, workspace switch, a
         terminal on W-Return) so the session is usable without a panel.
@@ -916,23 +943,27 @@ def openbox_rc_xml() -> str:
     <primaryMonitor>1</primaryMonitor>
   </placement>
   <theme>
-    <!-- The Azzio theme with a flat-colour +10% titlebar (openbox_theme_rc, shipped to
+    <!-- The Azzio theme with a flat-colour grown titlebar (openbox_theme_rc, shipped to
          ~/.themes/{OPENBOX_THEME_NAME} and ~/.themes/{OPENBOX_THEME_NAME_DARK}). DARK is
          the default; `azzio theme` (white / dark) rewrites this name element to
          "{OPENBOX_THEME_NAME}" or "{OPENBOX_THEME_NAME_DARK}". titleLayout NLIMC = icon,
-         label, iconify, maximize, close. The leading `N` (icon) is kept ONLY to show the
-         window's branding icon (e.g. the Calamares "Az'" tile, productIcon) on the left of
-         the bar; it is DELIBERATELY INERT. The Icon mouse context below binds no ShowMenu,
-         so clicking it does NOTHING (the user asked that the application-icon popup menu not
-         appear at all). Same "the icon must not open a menu" intent as the empty Root
+         Label, iconify, maximize, close. The Label is a stretchy spring in the MIDDLE, so the
+         iconify/maximize/close buttons pack together on the RIGHT with close (exit) rightmost;
+         the doubled padding.width (see openbox_theme_rc) then widens the gap between those three
+         while keeping close rightmost and min/max to its left. The leading `N` (icon) is kept
+         ONLY to show the window's branding icon (e.g. the Calamares "Az'" tile, productIcon) on
+         the left of the bar; it is DELIBERATELY INERT. The Icon mouse context below binds no
+         ShowMenu, so clicking it does NOTHING (the user asked that the application-icon popup
+         menu not appear at all). Same "the icon must not open a menu" intent as the empty Root
          context. -->
     <name>{OPENBOX_THEME_DEFAULT}</name>
     <titleLayout>NLIMC</titleLayout>
     <keepBorder>yes</keepBorder>
     <animateIconify>yes</animateIconify>
-    <!-- Larger title font (the +10% topbar lever, the dominant half of the bar height): a
-         taller label makes a taller titlebar, and OpenBox sizes the min/max/close buttons
-         (and their glyphs) to the label, so this one bump grows bar, buttons, and icons. -->
+    <!-- Larger title font (the topbar + button-icon size lever, the dominant half of the bar
+         height): a taller label makes a taller titlebar, and OpenBox sizes the min/max/close
+         buttons (and their glyphs) to the label, so this one bump grows bar, buttons, and
+         icons together, which is how the "slightly bigger button icons" ask is met. -->
     <font place="ActiveWindow">
       <name>sans</name>
       <size>{TITLE_FONT_SIZE}</size>
@@ -1790,7 +1821,7 @@ PLAN = [
         "owner": "home",
     },
     {
-        # The DARK Azzio OpenBox THEME (the default; flat-colour +10% titlebar). Ships to
+        # The DARK Azzio OpenBox THEME (the default; flat-colour grown titlebar). Ships to
         # ~/.themes/Azzio-Dark/openbox-3/themerc (a user theme search path); rc.xml's
         # <theme> names it "Azzio-Dark" out of the box. Home-owned; mirrored into
         # /etc/skel. Plain data (0o644).
