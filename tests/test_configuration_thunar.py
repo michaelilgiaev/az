@@ -1,4 +1,4 @@
-"""packages.thunar -- the Azzio Thunar file-manager setup (PROMPT task 2/4/7).
+"""packages.file_manager -- the Azzio Thunar file-manager setup (PROMPT task 2/4/7).
 
 Why these tests matter: Thunar's config was authored against VERIFIED facts from the installed
 Thunar 4.20 (the thunarrc keys, the Xfconf channel property names + canonical values, the
@@ -22,9 +22,9 @@ from __future__ import annotations
 
 from xml.dom import minidom
 
-from packages import thunar
-from packages.thunar import home_directory
-from packages.thunar import actions, launcher, locale, menu_cleanup, settings, sidebar
+from packages import file_manager as thunar
+from packages.file_manager import home_directory
+from packages.file_manager import actions, launcher, locale, menu_cleanup, settings, sidebar
 
 
 # --- thunarrc + xfconf channel (settings.py) --------------------------------

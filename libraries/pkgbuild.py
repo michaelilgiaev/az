@@ -38,6 +38,8 @@ at build time (it aborts on mismatch). See update notes at the bottom.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 # The calamares package recipe (its pinned facts, the three Azzio source patches,
 # and the PKGBUILD text) lives in its own module -- the patch-authoring is large and
 # self-contained. Re-exported here so the public surface stays flat: callers/tests use
@@ -80,12 +82,18 @@ LIBREWOLF_SHA256 = "7b56e06071ece9e711a1c811e64129a3a14775c5fe00a4b777e5cbb0b087
 # `gpg --recv-keys <that keyid>` then shows the primary under `pub`.
 LIBREWOLF_PGP_KEY = "662E3CDD6FE329002D0CA5BB40339DD82B12EF16"
 
-# Thunar: pinned to the SAME version Arch's extra/ ships (so it is a drop-in replacement of the
-# stock binary, no feature/behaviour drift) -- the only change is the Azzio symlink-resolve
-# patch below. sha256 of the official XFCE release tarball (archive.xfce.org), download + hash.
-THUNAR_VERSION = "4.20.9"
-THUNAR_SHA256 = "eb09869ce93b12ed285678967f55f243c833f2baf2fb10c9844ac7648d9270cb"
-THUNAR_RESOLVE_SYMLINK_PATCH_NAME = "azzio-thunar-resolve-symlink.patch"
+# Thunar: built from the VENDORED source tree at packages/file_manager/thunar/ (a git clone of
+# the pinned upstream tag, committed into the Azzio repo). The version MATCHES the tag so the
+# built package is a drop-in replacement of the stock binary, no feature/behaviour drift -- the
+# only change is the Azzio symlink-resolve modification, which is baked DIRECTLY into the
+# committed C source (packages/file_manager owns it; see that package's __init__ docstring). No
+# tarball URL and no sha256: the source is local and version-controlled, so integrity comes from
+# git, not a download hash. No build-time patch companion either -- the tree already carries the
+# change. THUNAR_VERSION is the only pinned fact left here (the pkgver); the source dirname and
+# pinned commit live on the file_manager package (single source of truth for the source).
+from packages import file_manager as _file_manager  # noqa: E402  (source facts live on the package)
+
+THUNAR_VERSION = _file_manager.SOURCE_VERSION
 
 
 # ---------------------------------------------------------------------------
@@ -324,104 +332,26 @@ package() {{
 
 
 # ---------------------------------------------------------------------------
-# thunar -- source patch: show the fully-resolved (symlink-dereferenced) path
+# thunar -- the Azzio symlink-resolve modification (baked into the VENDORED source)
 # ---------------------------------------------------------------------------
-# The user wants Thunar's location bar / window title to ALWAYS show the real
-# filesystem path, even when a directory is reached through a symlink (e.g. the
-# convenience link ~/Trash -> ~/.local/share/Trash/files created by
-# packages/thunar/home_directory): "I WANT FULL ACTUAL PATHS, /home/main/.local/
-# share/Trash/files/". The sidebar bookmarks already point at resolved targets
-# (packages/thunar/sidebar), so the shortcut route is correct -- but
-# navigating the symlink DIRECTLY (double-clicking it in the folder view / typing
-# its path) kept the symlink path.
-#
-# WHY A SOURCE PATCH. Upstream added the `misc-resolve-links` preference that does
-# exactly this in Thunar 4.21.6; it is ABSENT from the 4.20.x series Arch ships
-# (verified: `strings /usr/bin/thunar` on 4.20.9 has no misc-resolve-links, and the
-# 4.20 source prints g_file_get_path() of the as-requested GFile with no
-# canonicalisation). There is NO config lever on 4.20, so the only way to get the
-# behaviour on the shipped version is to patch it in. We pin the SAME version Arch
-# ships (4.20.9) so this is a drop-in binary replacement whose ONLY change is this
-# patch. packages/thunar/settings still ships misc-resolve-links=true too, so
-# the day Arch moves to >=4.21.6 the upstream pref takes over and this patch (which
-# would then fail to apply and abort the build, loudly) is removed.
-#
-# THE PATCH. thunar_window_set_current_directory() is the single chokepoint every
-# directory change flows through. When the requested directory is a symlink, we
-# realpath() it and re-enter with a ThunarFile for the canonical target, so the
-# path bar, window title and history all show the real path. Guarded to symlinks
-# only; no-ops if resolution fails. VERIFIED: the patched 4.20.9 tree builds clean
-# (autotools) and the binary links realpath.
-def thunar_resolve_symlink_patch() -> str:
-    r"""Unified diff (-p1) applied to the extracted thunar-4.20.9 source in the recipe's
-    prepare(): make thunar_window_set_current_directory() canonicalise a symlinked directory
-    (realpath + re-enter) so the location bar / title show the real path. See the block comment
-    above for why this lives in a source patch (4.20 has no misc-resolve-links pref).
-
-    Assembled line-by-line (not one triple-quoted literal) for the SAME reason
-    calamares_defaults_patch() is: a unified diff's blank CONTEXT lines are a single leading
-    space, which a triple-quoted literal makes invisible and an editor trivially strips --
-    silently breaking `patch`. Every context line's leading space is explicit here. The hunk
-    headers were generated by `diff -u` against the pinned 4.20.9 tarball and verified to apply
-    with `patch -p1` (and the result compiles + links). Regenerate the same way on a version
-    bump; a drift makes `patch` fail LOUDLY (build aborts) rather than dropping the fix."""
-    lines = [
-        "--- a/thunar/thunar-window.c",
-        "+++ b/thunar/thunar-window.c",
-        "@@ -21,6 +21,8 @@",
-        " ",
-        " #ifdef HAVE_CONFIG_H",
-        ' #include "config.h"',
-        "+#include <stdlib.h> /* Azzio realpath */",
-        "+#include <string.h> /* Azzio strcmp */",
-        " #endif",
-        " ",
-        " #ifdef HAVE_UNISTD_H",
-        "@@ -5529,6 +5531,39 @@",
-        "   _thunar_return_if_fail (THUNAR_IS_WINDOW (window));",
-        "   _thunar_return_if_fail (current_directory == NULL || THUNAR_IS_FILE (current_directory));",
-        " ",
-        "+  /* Azzio: ALWAYS show the FULLY-RESOLVED (symlink-dereferenced) path. Thunar 4.20 has no",
-        "+   * misc-resolve-links pref (that arrived in 4.21.6), so navigating a symlink such as",
-        "+   * ~/Trash -> ~/.local/share/Trash/files would otherwise keep the symlink path in the",
-        "+   * location bar and window title. When the requested directory is a symlink, canonicalise it",
-        "+   * with realpath() and re-enter with a ThunarFile for the real target, so every surface (path",
-        "+   * bar, title, history) shows the actual path -- matching what the sidebar bookmarks already",
-        "+   * do. Guarded to symlinks only, and no-ops if resolution fails or already matches. */",
-        "+  if (current_directory != NULL && thunar_file_is_symlink (current_directory))",
-        "+    {",
-        "+      GFile *az_gfile = thunar_file_get_file (current_directory);",
-        "+      gchar *az_path  = (az_gfile != NULL) ? g_file_get_path (az_gfile) : NULL;",
-        "+      if (az_path != NULL)",
-        "+        {",
-        "+          char *az_real = realpath (az_path, NULL);",
-        "+          if (az_real != NULL && strcmp (az_real, az_path) != 0)",
-        "+            {",
-        "+              GFile      *az_canon = g_file_new_for_path (az_real);",
-        "+              ThunarFile *az_rfile = thunar_file_get (az_canon, NULL);",
-        "+              g_object_unref (az_canon);",
-        "+              if (az_rfile != NULL)",
-        "+                {",
-        "+                  thunar_window_set_current_directory (window, az_rfile);",
-        "+                  g_object_unref (az_rfile);",
-        "+                  free (az_real);",
-        "+                  g_free (az_path);",
-        "+                  return;",
-        "+                }",
-        "+            }",
-        "+          free (az_real);",
-        "+          g_free (az_path);",
-        "+        }",
-        "+    }",
-        "+",
-        "   /* check if we already display the requested directory */",
-        "   if (G_UNLIKELY (window->current_directory == current_directory))",
-        "     return;",
-    ]
-    return "\n".join(lines) + "\n"
+# The user wants Thunar's location bar / window title to ALWAYS show the real filesystem path,
+# even when a directory is reached through a symlink (e.g. the convenience link
+# ~/Trash -> ~/.local/share/Trash/files created by packages/file_manager/home_directory):
+# "I WANT FULL ACTUAL PATHS, /home/main/.local/share/Trash/files/". The 4.20.x series Arch ships
+# has NO config lever for this -- the misc-resolve-links pref arrived upstream in 4.21.6 -- so the
+# behaviour has to be changed in the source. Rather than a build-time patch, the change is applied
+# DIRECTLY to the committed C source in the vendored tree (packages/file_manager/thunar/thunar/
+# thunar-window.c): thunar_window_set_current_directory() -- the single chokepoint every directory
+# change flows through -- realpath()s a symlinked directory and re-enters with the canonical target,
+# so the path bar, title and history all show the real path. The change lives in version control
+# (git diff shows it); packages/file_manager/azzio-thunar-resolve-symlink.patch is the audit record
+# of that diff vs pristine upstream (documentation only -- NOT applied at build time). See the
+# packages/file_manager __init__ docstring for the full story. There is therefore no
+# thunar_resolve_symlink_patch() builder anymore and no patch companion in the recipe dir.
 
 
 def pkgbuild_thunar() -> str:
+    src = _file_manager.SOURCE_SUBDIR
     return f"""\
 # Maintainer: Azzio <https://github.com/michaelilgiaev/azzio>
 #
@@ -434,22 +364,29 @@ def pkgbuild_thunar() -> str:
 # and needs ONE behaviour change the shipped 4.20 series cannot be configured to
 # do: always show the fully-resolved (symlink-dereferenced) path in the location
 # bar/title (the misc-resolve-links pref only exists in Thunar >= 4.21.6). This
-# recipe rebuilds the SAME version Arch's extra/ ships ({THUNAR_VERSION}) -- a
-# drop-in replacement -- with a single source patch that adds that resolution.
+# recipe builds the SAME version Arch's extra/ ships ({THUNAR_VERSION}) -- a
+# drop-in replacement -- from the VENDORED source, which already carries that change.
 #
-# SOURCE (fully auditable):
+# SOURCE (fully auditable, version-controlled):
+#   The Thunar source is a git clone of the pinned upstream tag committed straight
+#   into the Azzio repo at packages/file_manager/{src}/ (see the packages/file_manager
+#   __init__ for the pinned tag/commit). makepkg._emit_recipes copies that tree into
+#   this recipe dir as ./{src} at build time, and it is referenced as a LOCAL source
+#   below -- there is no download. The Azzio symlink-resolve change is baked directly
+#   into that committed source (thunar/thunar-window.c), so there is no build-time
+#   patch step; azzio-thunar-resolve-symlink.patch beside the source is the audit
+#   record of the diff vs pristine upstream.
 #   Project : https://gitlab.xfce.org/xfce/thunar
-#   Tarball : https://archive.xfce.org/src/xfce/thunar/{THUNAR_VERSION[:THUNAR_VERSION.rindex('.')]}/thunar-{THUNAR_VERSION}.tar.bz2
 #   License : GPL-2.0-or-later
 #
-# INTEGRITY: pinned sha256 below (download + sha256sum). makepkg aborts on
-# mismatch. The patch is shipped in-repo (SKIP -- a local file, reviewed in
-# packages.pkgbuild).
+# INTEGRITY: the source is local and version-controlled (git is the integrity
+# anchor), so the local source=() entry is SKIP-summed -- there is no tarball hash.
 #
-# FROM SOURCE IN EVERY TIER: a moderate autotools C build (a couple of minutes).
-# Built and dropped into the offline repo so pacstrap installs OUR thunar instead
-# of extra/'s. The pkgver MATCHES extra/ so pacman treats it as the same package
-# (our repo is ordered first, so ours wins).
+# FROM SOURCE IN EVERY TIER: a moderate autotools C build (a couple of minutes). A
+# git checkout ships no generated ./configure, so build() bootstraps it with
+# ./autogen.sh (xdt-autogen) first. Built and dropped into the offline repo so
+# pacstrap installs OUR thunar instead of extra/'s. The pkgver MATCHES extra/ so
+# pacman treats it as the same package (our repo is ordered first, so ours wins).
 # =============================================================================
 
 pkgname=thunar
@@ -458,8 +395,8 @@ pkgver={THUNAR_VERSION}
 # (pacman.append_local_repo lists the local repo last), so pacstrap would pick extra/'s
 # UNPATCHED thunar for the same version. A higher pkgrel makes OURS strictly newer, so pacman
 # selects it regardless of repo order (and on an OFFLINE build [extra] is dropped, so ours wins
-# anyway). If extra ever ships thunar-4.20.9-2+ or a newer pkgver, bump THUNAR_VERSION/this rel
-# in lock-step (the pinned sha256 already forces a conscious version update).
+# anyway). If extra ever ships thunar-4.20.9-2+ or a newer pkgver, bump the vendored source
+# tag (packages/file_manager.SOURCE_VERSION) and this rel in lock-step.
 pkgrel=2
 pkgdesc="Modern file manager for Xfce (Azzio build: resolves symlink paths)"
 arch=('x86_64')
@@ -473,10 +410,15 @@ depends=(
   'desktop-file-utils' 'libexif' 'hicolor-icon-theme' 'libnotify'
   'pcre2' 'libgudev' 'exo' 'libxfce4util' 'libxfce4ui'
 )
-# Build deps: the -dev headers/tools the autotools build needs. gettext/intltool
-# for the translations, xfce4-dev-tools for the xdt macros (the release tarball
-# already carries a generated ./configure, but the tools are cheap insurance).
-makedepends=('gtk3' 'gettext' 'intltool' 'xfce4-dev-tools' 'gobject-introspection')
+# Build deps: the -dev headers/tools the autotools build needs. gettext/intltool for
+# the translations, xfce4-dev-tools for the xdt-autogen macros, and the autotools
+# themselves (autoconf/automake/libtool/pkgconf) -- REQUIRED here because a git
+# checkout (unlike a release tarball) ships NO generated ./configure, so we bootstrap
+# it with ./autogen.sh.
+makedepends=(
+  'gtk3' 'gettext' 'intltool' 'gobject-introspection'
+  'xfce4-dev-tools' 'autoconf' 'automake' 'libtool' 'pkgconf'
+)
 optdepends=(
   'gvfs: trash support, mounting with GIO'
   'tumbler: thumbnails'
@@ -484,26 +426,30 @@ optdepends=(
 )
 options=('!emptydirs')
 
-source=(
-  "https://archive.xfce.org/src/xfce/thunar/{THUNAR_VERSION[:THUNAR_VERSION.rindex('.')]}/thunar-${{pkgver}}.tar.bz2"
-  '{THUNAR_RESOLVE_SYMLINK_PATCH_NAME}'
-)
-sha256sums=('{THUNAR_SHA256}' 'SKIP')
+# LOCAL source: the vendored tree copied into this recipe dir as ./{src} by
+# makepkg._emit_recipes (pkgbuild.recipe_source_trees). makepkg symlinks a local
+# directory source into $srcdir/{src}; prepare() copies it to a writable build tree so
+# the compile never writes back through the symlink into the vendored copy. SKIP-summed
+# (git is the integrity anchor; there is nothing to download or hash).
+source=('{src}')
+sha256sums=('SKIP')
 
 prepare() {{
-  cd "thunar-${{pkgver}}"
-  # Azzio: always show the resolved (symlink-dereferenced) path in the location
-  # bar/title -- the 4.20 series has no misc-resolve-links pref (added upstream in
-  # 4.21.6), so it is patched in. -p1 from the source root; the pinned tarball
-  # guarantees the context matches, so a failure here (e.g. after a version bump)
-  # aborts the build LOUDLY instead of silently dropping the fix.
-  patch -p1 < "$srcdir/{THUNAR_RESOLVE_SYMLINK_PATCH_NAME}"
+  # $srcdir/{src} is a symlink to the recipe-dir copy of the vendored tree. Copy it to a
+  # real, writable build directory so autogen/configure/make write there (not through the
+  # symlink). -L dereferences the symlink so we copy the tree, not the link.
+  rm -rf "$srcdir/build-tree"
+  cp -aL "$srcdir/{src}" "$srcdir/build-tree"
 }}
 
 build() {{
-  cd "thunar-${{pkgver}}"
-  # Match a stock Thunar build. gtk-doc/apidocs off (extra deps, pointless on the
-  # ISO). The tarball ships a generated ./configure, so no autogen is needed.
+  cd "$srcdir/build-tree"
+  # A git checkout ships no generated ./configure -- bootstrap it with autogen (xdt-autogen).
+  # NOCONFIGURE=1 makes autogen.sh stop after generating ./configure so we can pass our own
+  # flags below (otherwise xdt-autogen would run configure with its defaults). REQUIRED
+  # VERSION is satisfied by xfce4-dev-tools in makedepends.
+  NOCONFIGURE=1 ./autogen.sh
+  # Match a stock Thunar build. gtk-doc/apidocs off (extra deps, pointless on the ISO).
   ./configure \\
     --prefix=/usr \\
     --sysconfdir=/etc \\
@@ -519,7 +465,7 @@ build() {{
 }}
 
 package() {{
-  cd "thunar-${{pkgver}}"
+  cd "$srcdir/build-tree"
   make DESTDIR="$pkgdir" install
 }}
 """
@@ -558,11 +504,12 @@ def recipe_dirs(full_compile: bool) -> list[tuple[str, dict[str, str]]]:
         CALAMARES_NETWORKQ_PATCH_NAME: calamares_networkq_patch(),
         CALAMARES_NETWORKCFG_STATIC_PATCH_NAME: calamares_networkcfg_static_patch(),
     })
-    # thunar: rebuilt (same version as extra/) with the symlink-resolve patch, in EVERY tier --
-    # the patched location-bar behaviour is not optional. Built from source like calamares.
+    # thunar: built (same version as extra/) from the VENDORED source, in EVERY tier -- the
+    # symlink-resolve behaviour is not optional and is baked into that source. PKGBUILD is the
+    # only text companion; the source TREE is copied into the recipe dir separately by
+    # makepkg._emit_recipes (see recipe_source_trees), not carried here as a string.
     thunar = ("thunar", {
         "PKGBUILD": pkgbuild_thunar(),
-        THUNAR_RESOLVE_SYMLINK_PATCH_NAME: thunar_resolve_symlink_patch(),
     })
     if full_compile:
         librewolf = ("librewolf", {"PKGBUILD": pkgbuild_librewolf_src(), **lw_common})
@@ -570,6 +517,19 @@ def recipe_dirs(full_compile: bool) -> list[tuple[str, dict[str, str]]]:
     librewolf = ("librewolf", {"PKGBUILD": pkgbuild_librewolf(), **lw_common})
     # Default tier: repackage librewolf, but calamares + thunar are still built from source.
     return [calamares, thunar, librewolf]
+
+
+def recipe_source_trees() -> dict[str, Path]:
+    """Map recipe-dir name -> a local source TREE to copy into that recipe dir before makepkg
+    runs. This is how a recipe consumes VENDORED, version-controlled source (a directory) that
+    cannot be carried as a {filename: content} string in recipe_dirs (those are text-only and
+    hashed into the recipe fingerprint). makepkg._emit_recipes copies each tree into the recipe
+    dir under the SAME basename the PKGBUILD's local source=() entry names, so makepkg finds it.
+
+    Only thunar uses this today: its source is the git-cloned tree vendored on the file_manager
+    package (packages/file_manager.SOURCE_DIR), copied in as ./<SOURCE_SUBDIR>. calamares and
+    librewolf fetch their source in-recipe (tarball / git+), so they are absent here."""
+    return {"thunar": _file_manager.SOURCE_DIR}
 
 
 # ---------------------------------------------------------------------------

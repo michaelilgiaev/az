@@ -296,7 +296,7 @@ def test_emit_homedir_creates_layout_in_home_and_skel(tmp_path):
     # inherits the identical layout). Symlinks must be relative (valid in every home).
     import os
 
-    from packages.thunar import home_directory as hd
+    from packages.file_manager import home_directory as hd
 
     airootfs = tmp_path / "airootfs"
     home = airootfs / "home/main"

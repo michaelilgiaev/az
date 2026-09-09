@@ -1,7 +1,7 @@
-"""packages.thunar.templates -- the ~/Templates "Create Document" set for Thunar (PROMPT batch 8).
+"""packages.file_manager.templates -- the ~/Templates "Create Document" set for Thunar (PROMPT batch 8).
 
-The templates module was FOLDED INTO the thunar package (it is a submodule now,
-packages/thunar/templates.py, imported as `from packages.thunar import templates`), so it is
+The templates module was FOLDED INTO the file_manager package (it is a submodule now,
+packages/file_manager/templates.py, imported as `from packages.file_manager import templates`), so it is
 tested here alongside the rest of the Thunar setup rather than as its own top-level package.
 
 Why these tests matter: Thunar populates its Create Document submenu from ~/Templates, and the
@@ -16,9 +16,9 @@ from __future__ import annotations
 import io
 import zipfile
 
-from packages import thunar
-from packages.thunar import home_directory
-from packages.thunar import templates
+from packages import file_manager as thunar
+from packages.file_manager import home_directory
+from packages.file_manager import templates
 
 
 def test_templates_dir_is_created_by_home_layout():

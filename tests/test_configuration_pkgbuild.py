@@ -1554,10 +1554,10 @@ def test_recipe_dirs_default_tier():
         pkgbuild.CALAMARES_NETWORKQ_PATCH_NAME,
         pkgbuild.CALAMARES_NETWORKCFG_STATIC_PATCH_NAME,
     }
-    assert set(dict(dirs)["thunar"]) == {
-        "PKGBUILD",
-        pkgbuild.THUNAR_RESOLVE_SYMLINK_PATCH_NAME,
-    }
+    # thunar now builds from the VENDORED source tree (packages/file_manager), copied into the
+    # recipe dir by makepkg._emit_recipes (recipe_source_trees), so PKGBUILD is the ONLY text
+    # companion -- the symlink-resolve change is baked into that source, not a patch file.
+    assert set(dict(dirs)["thunar"]) == {"PKGBUILD"}
     files = dict(dirs)["librewolf"]
     # PKGBUILD + the .desktop only. The AutoConfig override is NO LONGER a companion
     # (it ships as a home file at the profile path -- /opt was never read).
@@ -1580,10 +1580,8 @@ def test_recipe_dirs_full_tier():
         pkgbuild.CALAMARES_NETWORKQ_PATCH_NAME,
         pkgbuild.CALAMARES_NETWORKCFG_STATIC_PATCH_NAME,
     }
-    assert set(dict(dirs)["thunar"]) == {
-        "PKGBUILD",
-        pkgbuild.THUNAR_RESOLVE_SYMLINK_PATCH_NAME,
-    }
+    # thunar: PKGBUILD-only text companion in BOTH tiers (built from the vendored source tree).
+    assert set(dict(dirs)["thunar"]) == {"PKGBUILD"}
     assert "make fetch" in dict(dirs)["librewolf"]["PKGBUILD"]
 
 

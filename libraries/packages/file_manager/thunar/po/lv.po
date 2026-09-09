@@ -1,0 +1,5137 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR Xfce
+# This file is distributed under the same license as the thunar.xfce-4-20 package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# 
+# Translators:
+# Xfce Bot <transifex@xfce.org>, 2025
+# 
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: thunar.xfce-4-20\n"
+"Report-Msgid-Bugs-To: https://gitlab.xfce.org/\n"
+"POT-Creation-Date: 2025-09-25 00:52+0200\n"
+"PO-Revision-Date: 2024-12-30 16:00+0000\n"
+"Last-Translator: Xfce Bot <transifex@xfce.org>, 2025\n"
+"Language-Team: Latvian (https://app.transifex.com/xfce/teams/16840/lv/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: lv\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n != 0 ? 1 : 2);\n"
+
+#. setup application name
+#: thunar/main.c:57 org.xfce.thunar.appdata.xml.in:9
+msgid "Thunar"
+msgstr "Thunar"
+
+#. change the accept button label text
+#: thunar/thunar-action-manager.c:322 thunar/thunar-chooser-dialog.c:907
+#: thunar/thunar-chooser-dialog.c:1318 thunar/thunar-dialogs.c:1285
+#: thunar/thunar-renamer-dialog.c:1109
+#: plugins/thunar-uca/thunar-uca-editor.c:203
+msgid "_Open"
+msgstr "_Atvērt"
+
+#: thunar/thunar-action-manager.c:323 thunar/thunar-dialogs.c:1279
+msgid "_Execute"
+msgstr "Iz_pildīt"
+
+#: thunar/thunar-action-manager.c:324
+msgid "Edit _Launcher"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:324
+msgid "Edit the selected launcher"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:325 thunar/thunar-action-manager.c:1671
+#, c-format
+msgid "Open in new _Tab"
+msgid_plural "Open in %d New _Tabs"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: thunar/thunar-action-manager.c:326 thunar/thunar-action-manager.c:1682
+#, c-format
+msgid "Open in new _Window"
+msgid_plural "Open in %d New _Windows"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: thunar/thunar-action-manager.c:327
+msgid "Open Item _Location"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:327
+msgid "Navigate to the folder in which the selected file is located"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:328
+msgid "Ope_n With Other Application..."
+msgstr ""
+
+#: thunar/thunar-action-manager.c:328 thunar/thunar-action-manager.c:3443
+msgid "Choose another application with which to open the selected file"
+msgstr "Izvēlēties citu lietotni, ar kuru atvērt atlasīto failu"
+
+#: thunar/thunar-action-manager.c:329
+msgid "Set Defa_ult Application..."
+msgstr ""
+
+#: thunar/thunar-action-manager.c:329
+msgid ""
+"Choose an application which should be used by default to open the selected "
+"file"
+msgstr ""
+
+#. For backward compatibility the old accel paths are re-used. Currently not
+#. possible to automatically migrate to new accel paths.
+#. Waiting for https://gitlab.gnome.org/GNOME/gtk/issues/2375 to be able to
+#. fix that
+#: thunar/thunar-action-manager.c:333
+msgid "_Send To"
+msgstr "_Sūtīt uz"
+
+#: thunar/thunar-action-manager.c:334
+msgid "_Add Bookmark"
+msgstr "_Pievienot Grāmatzīmi"
+
+#: thunar/thunar-action-manager.c:334
+msgid ""
+"Create bookmarks for all selected folders. If nothing is selected, the "
+"current folder is bookmarked."
+msgstr ""
+
+#: thunar/thunar-action-manager.c:335
+msgid "Send to _Desktop"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:336
+msgid "_Properties..."
+msgstr "_Rekvizīti"
+
+#: thunar/thunar-action-manager.c:336
+msgid "View the properties of the selected file"
+msgstr "Apskatīt atlasītā faila rekvizītus"
+
+#: thunar/thunar-action-manager.c:337 thunar/thunar-action-manager.c:1720
+msgid "Ma_ke Link"
+msgid_plural "Ma_ke Links"
+msgstr[0] "Veid_ot saiti"
+msgstr[1] "Veid_ot saites"
+msgstr[2] "Veid_ot saites"
+
+#: thunar/thunar-action-manager.c:338
+msgid "Dup_licate"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:339
+msgid "_Rename..."
+msgstr "Pā_rdēvēt"
+
+#. prepare the menu item
+#: thunar/thunar-action-manager.c:340 thunar/thunar-application.c:2784
+#: plugins/thunar-tpa/thunar-tpa.c:191
+msgid "_Empty Trash"
+msgstr "_Iztukšot miskasti"
+
+#: thunar/thunar-action-manager.c:340
+msgid "Delete all files and folders in the Trash"
+msgstr "Dzēst visus failus un mapes no miskastes"
+
+#: thunar/thunar-action-manager.c:341
+msgid "_Remove from Recent"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:341
+msgid "Remove the selected files from Recent"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:342
+msgid "Create _Folder..."
+msgstr "Veidot _mapi"
+
+#: thunar/thunar-action-manager.c:342
+msgid "Create an empty folder within the current folder"
+msgstr "Izveidot tukšu mapi pašreizējā mapē"
+
+#: thunar/thunar-action-manager.c:343
+msgid "Create _Document"
+msgstr "Izveidot _dokumentu"
+
+#: thunar/thunar-action-manager.c:343
+msgid "Create a new document from a template"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:345
+msgid "_Restore"
+msgstr "_Atjaunot"
+
+#: thunar/thunar-action-manager.c:346
+msgid "Restore and S_how"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:347
+msgid "Mo_ve to Trash"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:350 thunar/thunar-application.c:2530
+#: plugins/thunar-uca/thunar-uca-chooser.c:383
+msgid "_Delete"
+msgstr "_Dzēst"
+
+#: thunar/thunar-action-manager.c:353
+msgid "_Paste"
+msgstr "_Ielīmēt"
+
+#: thunar/thunar-action-manager.c:353
+msgid "Move or copy files previously selected by a Cut or Copy command"
+msgstr ""
+"Pārvietot vai kopēt iepriekš atlasītos failus ar Izgriezt vai Kopēt komandām"
+
+#: thunar/thunar-action-manager.c:355
+msgid "_Paste Into Folder"
+msgstr "_Ielīmēt mapē"
+
+#: thunar/thunar-action-manager.c:355
+msgid ""
+"Move or copy files previously selected by a Cut or Copy command into the "
+"selected folder"
+msgstr ""
+"Pārvietot vai kopēt, iepriekš atlasītos failus ar Izgriezt vai Kopēt "
+"komandām, pašreizējā mapē"
+
+#: thunar/thunar-action-manager.c:356
+msgid "_Copy"
+msgstr "_Kopēt"
+
+#: thunar/thunar-action-manager.c:358
+msgid "Cu_t"
+msgstr "Iz_griezt"
+
+#: thunar/thunar-action-manager.c:361
+msgid "_Mount"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:361
+msgid "Mount the selected device"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:362
+msgid "_Unmount"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:362
+msgid "Unmount the selected device"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:363 thunar/thunar-device.c:551
+msgid "_Eject"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:363
+msgid "Eject the selected device"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:854 thunar/thunar-dnd.c:270
+#, c-format
+msgid "Failed to execute file \"%s\" (%s)"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:856 thunar/thunar-dnd.c:272
+#, c-format
+msgid "Failed to execute file \"%s\""
+msgstr "Neizdevās izpildīt failu \"%s\""
+
+#: thunar/thunar-action-manager.c:998
+#, c-format
+msgid "Failed to open file \"%s\""
+msgstr "Neizdevās atvērt failu \"%s\""
+
+#. we can just tell that n files failed to open
+#: thunar/thunar-action-manager.c:1004
+#, c-format
+msgid "Failed to open %d file"
+msgid_plural "Failed to open %d files"
+msgstr[0] "Neizdevās atvērt %d failu"
+msgstr[1] "Neizdevās atvērt %d failus"
+msgstr[2] "Neizdevās atvērt %d failu"
+
+#: thunar/thunar-action-manager.c:1056
+msgid "Are you sure you want to open all folders?"
+msgstr "Esat drošs, ka vēlaties atvērt visas mapes?"
+
+#: thunar/thunar-action-manager.c:1057
+msgid "Open folders"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:1059
+#, c-format
+msgid "This will open %d separate file manager window."
+msgid_plural "This will open %d separate file manager windows."
+msgstr[0] "Tiks atvērts %d atsevišķs failu pārvaldnieka logs."
+msgstr[1] "Tiks atvērts %d atsevišķi faila pārvaldnieka logi."
+msgstr[2] "Tiks atvērts %d atsevišķu faila pārvaldnieka logi."
+
+#: thunar/thunar-action-manager.c:1063
+#, c-format
+msgid "Open %d New Window"
+msgid_plural "Open %d New Windows"
+msgstr[0] "Atvērt %d jaunu logu"
+msgstr[1] "Atvērt %d jaunus logus"
+msgstr[2] "Atvērt %d jaunu logu"
+
+#. add the "Cancel" button
+#. configure the dialog properties
+#: thunar/thunar-action-manager.c:1064 thunar/thunar-application.c:2529
+#: thunar/thunar-application.c:2595 thunar/thunar-application.c:2783
+#: thunar/thunar-chooser-dialog.c:315 thunar/thunar-chooser-dialog.c:781
+#: thunar/thunar-chooser-dialog.c:856 thunar/thunar-chooser-dialog.c:906
+#: thunar/thunar-dialogs.c:114 thunar/thunar-dialogs.c:263
+#: thunar/thunar-dialogs.c:698 thunar/thunar-dialogs.c:808
+#: thunar/thunar-dialogs.c:1099 thunar/thunar-dialogs.c:1193
+#: thunar/thunar-dnd.c:172 thunar/thunar-permissions-chooser.c:580
+#: thunar/thunar-permissions-chooser.c:1194
+#: thunar/thunar-properties-dialog.c:1220 thunar/thunar-renamer-dialog.c:1108
+#: thunar/thunar-renamer-progress.c:188 thunar/thunar-renamer-progress.c:198
+#: plugins/thunar-sendto-email/main.c:220
+#: plugins/thunar-sendto-email/main.c:240
+#: plugins/thunar-sendto-email/main.c:304
+#: plugins/thunar-uca/thunar-uca-chooser.c:383
+#: plugins/thunar-uca/thunar-uca-editor.c:157
+#: plugins/thunar-uca/thunar-uca-editor.c:202
+#: plugins/thunar-uca/thunar-uca-editor.c:455
+msgid "_Cancel"
+msgstr "A_tcelt"
+
+#: thunar/thunar-action-manager.c:1152 thunar/thunar-action-manager.c:2057
+#, c-format
+msgid "Failed to mount \"%s\""
+msgstr "Neizdevās nomontēt \"%s\""
+
+#. tell the user that we were unable to launch the file specified
+#: thunar/thunar-action-manager.c:1203 thunar/thunar-application.c:1704
+#: thunar/thunar-application.c:1866 thunar/thunar-location-entry.c:354
+#: thunar/thunar-location-entry.c:387
+#, c-format
+msgid "Failed to open \"%s\""
+msgstr "Neizdevās atvērt \"%s\""
+
+#: thunar/thunar-action-manager.c:1534
+msgid "File does not exist anymore"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:1535
+#, c-format
+msgid "Failed to open location for \"%s\""
+msgstr ""
+
+#. aka "activate"
+#: thunar/thunar-action-manager.c:1659
+msgid "Open the selected file"
+msgid_plural "Open the selected files"
+msgstr[0] "Atvērt atlasīto failu"
+msgstr[1] "Atvērt atlasītos failus"
+msgstr[2] "Atvērt atlasītos failus"
+
+#: thunar/thunar-action-manager.c:1663
+msgid "Execute the selected file"
+msgid_plural "Execute the selected files"
+msgstr[0] "Izpildīt atlasīto failu"
+msgstr[1] "Izpildīt atlasītos failus"
+msgstr[2] "Izpildīt atlasītos failus"
+
+#: thunar/thunar-action-manager.c:1672
+#, c-format
+msgid "Open the selected directory in new tab"
+msgid_plural "Open the selected directories in %d new tabs"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: thunar/thunar-action-manager.c:1683
+#, c-format
+msgid "Open the selected directory in new window"
+msgid_plural "Open the selected directories in %d new windows"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: thunar/thunar-action-manager.c:1721
+msgid "Create a symbolic link for the selected file"
+msgid_plural "Create a symbolic link for each selected file"
+msgstr[0] "Izveidot simbolisko saiti atlasītajam failam"
+msgstr[1] "Izveidot simboliskās saites atlasītajiem failiem"
+msgstr[2] "Izveidot simboliskās saites atlasītajiem failiem"
+
+#: thunar/thunar-action-manager.c:1747
+msgid "Rename the selected file"
+msgid_plural "Rename the selected files"
+msgstr[0] "Pārdēvēt atlasīto failu"
+msgstr[1] "Pārdēvēt atlasītos failus"
+msgstr[2] "Pārdēvēt atlasītos failus"
+
+#: thunar/thunar-action-manager.c:1752
+msgid "Bulk _Rename..."
+msgstr ""
+
+#: thunar/thunar-action-manager.c:1762
+msgid "Restore the selected file to its original location"
+msgid_plural "Restore the selected files to its original location"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: thunar/thunar-action-manager.c:1774
+msgid ""
+"Restore the selected file to its original location and open the location in "
+"a new window/tab"
+msgid_plural ""
+"Restore the selected files to their original locations and open the "
+"locations in a new window/tab"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: thunar/thunar-action-manager.c:1791
+msgid "Move the selected file to the Trash"
+msgid_plural "Move the selected files to the Trash"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: thunar/thunar-action-manager.c:1808
+msgid "Permanently delete the selected file"
+msgid_plural "Permanently delete the selected files"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: thunar/thunar-action-manager.c:1867
+msgid "Cut the selection"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:1877
+msgid "Prepare the selected file to be moved with a Paste command"
+msgid_plural "Prepare the selected files to be moved with a Paste command"
+msgstr[0] "Sagatavot atlasīto failu pārvietošanai ar ielīmēšanas komandu"
+msgstr[1] "Sagatavot atlasītos failus pārvietošanai ar ielīmēšanas komandu"
+msgstr[2] "Sagatavot atlasītos failus pārvietošanai ar ielīmēšanas komandu"
+
+#: thunar/thunar-action-manager.c:1891
+msgid "Copy the selection"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:1901
+msgid "Prepare the selected file to be copied with a Paste command"
+msgid_plural "Prepare the selected files to be copied with a Paste command"
+msgstr[0] "Sagatavot atlasīto failu kopēšanai ar ielīmēšanas komandu"
+msgstr[1] "Sagatavot atlasītos failus kopēšanai ar ielīmēšanas komandu"
+msgstr[2] "Sagatavot atlasītos failus kopēšanai ar ielīmēšanas komandu"
+
+#: thunar/thunar-action-manager.c:1924
+msgid "Paste the clipboard"
+msgstr ""
+
+#: thunar/thunar-action-manager.c:2168
+msgid "Side Pane (Add Bookmark)"
+msgid_plural "Side Pane (Add Bookmarks)"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: thunar/thunar-action-manager.c:2169
+msgid "Add the selected folder to the shortcuts side pane"
+msgid_plural "Add the selected folders to the shortcuts side pane"
+msgstr[0] "Pievienot atlasīto mapi īsinājumikonas sānu rūtij"
+msgstr[1] "Pievienot atlasītās mapes īsinājumikonas sānu rūtij"
+msgstr[2] "Pievienot atlasītās mapes īsinājumikonas sānu rūtij"
+
+#: thunar/thunar-action-manager.c:2188
+msgid "Desktop (Create Link)"
+msgid_plural "Desktop (Create Links)"
+msgstr[0] "Darbvirsma (Veidot Saiti)"
+msgstr[1] "Darbvirsma (Veidot Saites)"
+msgstr[2] "Darbvirsma (Veidot Saites)"
+
+#: thunar/thunar-action-manager.c:2189
+msgid "Create a link to the selected file on the desktop"
+msgid_plural "Create links to the selected files on the desktop"
+msgstr[0] "Veidot saiti uz darbvirsmas no atlasītā faila"
+msgstr[1] "Veidot saites uz darbvirsmas no atlasītajiem failiem"
+msgstr[2] "Veidot saites uz darbvirsmas no atlasītajiem failiem"
+
+#: thunar/thunar-action-manager.c:2210 thunar/thunar-action-manager.c:2249
+#, c-format
+msgid "Send the selected file to \"%s\""
+msgid_plural "Send the selected files to \"%s\""
+msgstr[0] "Sūtīt atlasīto failu uz \"%s\""
+msgstr[1] "Sūtīt atlasītos failus uz \"%s\""
+msgstr[2] "Sūtīt atlasītos failus uz \"%s\""
+
+#. ask the user to enter a name for the new folder
+#: thunar/thunar-action-manager.c:2747 thunar/thunar-application.c:2058
+msgid "New Folder"
+msgstr "Jauna mape"
+
+#: thunar/thunar-action-manager.c:2751 thunar/thunar-application.c:2059
+msgid "Create New Folder"
+msgstr "Izveidot jaunu mapi"
+
+#. generate a title for the create dialog
+#: thunar/thunar-action-manager.c:2803 thunar/thunar-application.c:2123
+#, c-format
+msgid "Create Document from template \"%s\""
+msgstr "Izveidot dokumentu no sagataves \"%s\""
+
+#. ask the user to enter a name for the new empty file
+#: thunar/thunar-action-manager.c:2819
+msgid "New Empty File"
+msgstr "Jauns tukšs fails"
+
+#: thunar/thunar-action-manager.c:2823
+msgid "New Empty File..."
+msgstr "Jauns tukšs fails..."
+
+#: thunar/thunar-action-manager.c:3044
+#, c-format
+msgid ""
+"No templates installed in\n"
+"\"%s\""
+msgstr ""
+
+#: thunar/thunar-action-manager.c:3057
+msgid "_Empty File"
+msgstr "_Tukšs fails"
+
+#: thunar/thunar-action-manager.c:3198
+#, c-format
+msgid "Failed to eject \"%s\""
+msgstr "Neizdevās izgrūst \"%s\""
+
+#: thunar/thunar-action-manager.c:3260
+#, c-format
+msgid "Failed to unmount \"%s\""
+msgstr "Neizdevās nomontēt \"%s\""
+
+#: thunar/thunar-action-manager.c:3323 thunar/thunar-action-manager.c:3405
+#, c-format
+msgid "Use \"%s\" to open the selected file"
+msgid_plural "Use \"%s\" to open the selected files"
+msgstr[0] "Izmantot \"%s\", lai atvērtu atlasīto failu"
+msgstr[1] "Izmantot \"%s\", lai atvērtu atlasītos failus"
+msgstr[2] "Izmantot \"%s\", lai atvērtu atlasītos failus"
+
+#: thunar/thunar-action-manager.c:3404
+#, c-format
+msgid "_Open With \"%s\""
+msgstr "_Atvērt ar \"%s\""
+
+#. we can only show a generic "Open" action
+#: thunar/thunar-action-manager.c:3425
+msgid "_Open With Default Applications"
+msgstr "_Atvērt ar noklusētām lietotnēm"
+
+#: thunar/thunar-action-manager.c:3426
+msgid "Open the selected files with the default applications"
+msgstr "Atvērt atlasītos failus ar noklusētām lietotnēm"
+
+#: thunar/thunar-action-manager.c:3442
+msgid "Ope_n With"
+msgstr ""
+
+#: thunar/thunar-application.c:84
+msgid "Open the bulk rename dialog"
+msgstr "Atvērt masu pārdēvēšanas dialogu"
+
+#: thunar/thunar-application.c:85
+msgid "Force open in a new window"
+msgstr ""
+
+#: thunar/thunar-application.c:86
+msgid "Run in daemon mode"
+msgstr "Palaist dēmona režīmā"
+
+#: thunar/thunar-application.c:88
+msgid "Quit a running Thunar instance"
+msgstr "Iziet no skrejošas Thunar instances"
+
+#: thunar/thunar-application.c:89
+msgid "Print version information and exit"
+msgstr "Izdrukāt versijas informāciju un iziet"
+
+#: thunar/thunar-application.c:337
+#, c-format
+msgid "Acquired the session message bus '%s'\n"
+msgstr ""
+
+#: thunar/thunar-application.c:347
+#, c-format
+msgid "Acquired the name '%s' on the session message bus\n"
+msgstr ""
+
+#: thunar/thunar-application.c:357
+#, c-format
+msgid "Name '%s' lost on the message dbus."
+msgstr ""
+
+#: thunar/thunar-application.c:505
+msgid "The Thunar development team. All rights reserved."
+msgstr "Thunar izstrādātāju komanda. Visas tiesības paturētas."
+
+#: thunar/thunar-application.c:506
+msgid "Written by Benedikt Meurer <benny@xfce.org>."
+msgstr "Autors Benedikt Meurer <benny@xfce.org>."
+
+#: thunar/thunar-application.c:507
+#, c-format
+msgid "Please report bugs to <%s>."
+msgstr "Lūdzu, ziņot par kļūdām uz <%s>"
+
+#. display an error message to the user
+#: thunar/thunar-application.c:907
+msgid "Failed to launch operation"
+msgstr "Neizdevās palaist operāciju"
+
+#: thunar/thunar-application.c:1700
+#, c-format
+msgid "Failed to open \"%s\" (%s)"
+msgstr ""
+
+#: thunar/thunar-application.c:1870
+#, c-format
+msgid "Failed to open \"%s\": %s"
+msgstr "Neizdevās atvērt \"%s\": %s"
+
+#: thunar/thunar-application.c:1929 thunar/thunar-properties-dialog.c:1120
+#, c-format
+msgid "Failed to rename \"%s\" (%s)"
+msgstr ""
+
+#: thunar/thunar-application.c:1933 thunar/thunar-properties-dialog.c:1124
+#, c-format
+msgid "Failed to rename \"%s\""
+msgstr "Neizdevās pārdēvēt \"%s\""
+
+#: thunar/thunar-application.c:1982
+msgid "Rename Launcher Options"
+msgstr ""
+
+#: thunar/thunar-application.c:1985
+msgid "Do you want to rename the launcher, or the file itself?"
+msgstr ""
+
+#: thunar/thunar-application.c:1986
+msgid "Rename _Launcher"
+msgstr ""
+
+#: thunar/thunar-application.c:1987
+msgid "Rename _File"
+msgstr ""
+
+#: thunar/thunar-application.c:2063
+msgid "New File"
+msgstr ""
+
+#: thunar/thunar-application.c:2064
+msgid "Create New File"
+msgstr "Izveidot jaunu failu"
+
+#: thunar/thunar-application.c:2189
+msgid "Copying files..."
+msgstr "Failu kopēšana..."
+
+#: thunar/thunar-application.c:2249
+#, c-format
+msgid "Copying files to \"%s\"..."
+msgstr "Failu kopēšana uz \"%s\"..."
+
+#: thunar/thunar-application.c:2305
+#, c-format
+msgid "Creating symbolic links in \"%s\"..."
+msgstr "Simbolisko saišu veidošana uz \"%s\"..."
+
+#: thunar/thunar-application.c:2374
+#, c-format
+msgid "Moving files into \"%s\"..."
+msgstr "Failu pārvietošana uz \"%s\"..."
+
+#: thunar/thunar-application.c:2419
+msgid "Moving files ..."
+msgstr ""
+
+#: thunar/thunar-application.c:2504
+#, c-format
+msgid ""
+"Are you sure that you want to\n"
+"permanently delete \"%s\" (%s)?"
+msgstr ""
+
+#: thunar/thunar-application.c:2508
+#, c-format
+msgid ""
+"Are you sure that you want to\n"
+"permanently delete \"%s\"?"
+msgstr ""
+"Esat drošs, ka vēlaties\n"
+"dzēst neatgriezeniski \"%s\"?"
+
+#: thunar/thunar-application.c:2513
+#, c-format
+msgid ""
+"Are you sure that you want to permanently\n"
+"delete the selected file?"
+msgid_plural ""
+"Are you sure that you want to permanently\n"
+"delete the %u selected files?"
+msgstr[0] ""
+"Esat drošs ka vēlaties neatgriezeniski\n"
+"dzēst %u atlasīto failu?"
+msgstr[1] ""
+"Esat drošs, ka vēlaties dzēst\n"
+"neatgriezeniski %u atlasītos failus?"
+msgstr[2] ""
+"Esat drošs, ka vēlaties dzēst\n"
+"neatgriezeniski %u atlasītos failus?"
+
+#: thunar/thunar-application.c:2527 thunar/thunar-application.c:2593
+#: thunar/thunar-dialogs.c:616 thunar/thunar-dialogs.c:1095
+msgid "Attention"
+msgstr ""
+
+#: thunar/thunar-application.c:2534
+msgid "If you delete a file, it is permanently lost."
+msgstr "Ja fails tiks dzēsts, tas būs zudis neatgriezeniski."
+
+#: thunar/thunar-application.c:2555
+msgid "Deleting files..."
+msgstr "Failu dzēšana..."
+
+#: thunar/thunar-application.c:2570
+#, c-format
+msgid ""
+"Are you sure that you want to\n"
+"move \"%s\" (%s) to trash ?"
+msgstr ""
+
+#: thunar/thunar-application.c:2574
+#, c-format
+msgid ""
+"Are you sure that you want to\n"
+"move \"%s\" to trash ?"
+msgstr ""
+
+#: thunar/thunar-application.c:2579
+#, c-format
+msgid ""
+"Are you sure that you want to\n"
+"move the selected file to trash?"
+msgid_plural ""
+"Are you sure that you want to\n"
+"move the %u selected files to trash?"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: thunar/thunar-application.c:2596
+msgid "Move to Trash"
+msgstr ""
+
+#: thunar/thunar-application.c:2649
+msgid "Moving files into the trash..."
+msgstr "Failu pārvietošana uz miskasti..."
+
+#: thunar/thunar-application.c:2697
+msgid "Creating files..."
+msgstr "Failu veidošana..."
+
+#: thunar/thunar-application.c:2738
+msgid "Creating directories..."
+msgstr "Direktoriju veidošana..."
+
+#: thunar/thunar-application.c:2777
+msgid "Remove all files and folders from the Trash?"
+msgstr "Dzēst visus failus un mapes no miskastes?"
+
+#: thunar/thunar-application.c:2781 thunar/thunar-window.c:1260
+msgid "Empty Trash"
+msgstr ""
+
+#: thunar/thunar-application.c:2788
+msgid ""
+"If you choose to empty the Trash, all items in it will be permanently lost. "
+"Please note that you can also delete them separately."
+msgstr ""
+"Ja izvēlēsieties iztukšot miskasti, visi vienumi būs neatgriezeniski zuduši."
+" Atceraties, ka varat dzēst vienums arī atsevišķi."
+
+#: thunar/thunar-application.c:2805
+msgid "Emptying the Trash..."
+msgstr "Miskastes tukšošana..."
+
+#: thunar/thunar-application.c:2852
+#, c-format
+msgid "Failed to determine the original path for \"%s\" (%s)"
+msgstr ""
+
+#: thunar/thunar-application.c:2857
+#, c-format
+msgid "Failed to determine the original path for \"%s\""
+msgstr "Neizdevās noteikt \"%s\" sākotnējo ceļu"
+
+#: thunar/thunar-application.c:2875
+#, c-format
+msgid "Could not restore \"%s\" (%s)"
+msgstr ""
+
+#: thunar/thunar-application.c:2879
+#, c-format
+msgid "Could not restore \"%s\""
+msgstr "Nevarēja atjaunot \"%s\""
+
+#: thunar/thunar-application.c:2887
+msgid "Restoring files..."
+msgstr "Failu atjaunošana..."
+
+#: thunar/thunar-chooser-button.c:320 thunar/thunar-chooser-dialog.c:503
+#, c-format
+msgid "Failed to set default application for \"%s\" (%s)"
+msgstr ""
+
+#: thunar/thunar-chooser-button.c:325 thunar/thunar-chooser-dialog.c:509
+#, c-format
+msgid "Failed to set default application for \"%s\""
+msgstr "Neizdevās uzstādīt noklusēto lietotni \"%s\""
+
+#: thunar/thunar-chooser-button.c:458
+#, c-format
+msgid ""
+"The selected application is used to open this and other files of type "
+"\"%s\"."
+msgstr ""
+"Norādītā lietotne tiek izmantota, lai atvērtu šo un citus faila tipus "
+"\"%s\"."
+
+#: thunar/thunar-chooser-button.c:513
+msgid "No application selected"
+msgstr "Nav norādīta neviena lietotne"
+
+#: thunar/thunar-chooser-button.c:526
+msgid "Other Application..."
+msgstr "Cita lietotne..."
+
+#: thunar/thunar-chooser-dialog.c:209
+msgid "Open With"
+msgstr "Atvērt ar"
+
+#. create the "Custom command" expand
+#: thunar/thunar-chooser-dialog.c:278
+msgid "Use a _custom command:"
+msgstr "Izmantot _pielāgotu komandu:"
+
+#: thunar/thunar-chooser-dialog.c:279
+msgid ""
+"Use a custom command for an application that is not available from the above"
+" application list."
+msgstr ""
+"Izmantot pielāgotu komandu lietotnei, kura nav pieejama lietotņu sarakstā."
+
+#. create the "Custom command" button
+#: thunar/thunar-chooser-dialog.c:300
+msgid "_Browse..."
+msgstr "Pā_rlūkot..."
+
+#. create the "Use as default for this kind of file" button
+#: thunar/thunar-chooser-dialog.c:306
+msgid "Use as _default for this kind of file"
+msgstr "Izmantot kā _noklusēto, šim faila tipam"
+
+#. add the "Ok"/"Open" button
+#: thunar/thunar-chooser-dialog.c:318 thunar/thunar-chooser-dialog.c:1318
+#: thunar/thunar-properties-dialog.c:1221 thunar/thunar-window.c:4701
+#: plugins/thunar-uca/thunar-uca-editor.c:158
+#: plugins/thunar-uca/thunar-uca-editor.c:456
+msgid "_OK"
+msgstr "_Labi"
+
+#. display an error to the user
+#: thunar/thunar-chooser-dialog.c:460
+#, c-format
+msgid "Failed to add new application \"%s\""
+msgstr "Neizdevās pievienot jaunu lietotni \"%s\""
+
+#: thunar/thunar-chooser-dialog.c:551
+#, c-format
+msgid "Failed to execute application \"%s\""
+msgstr "Neizdevās izpildīt lietotni \"%s\""
+
+#. append the "Remove Launcher" item
+#: thunar/thunar-chooser-dialog.c:625
+msgid "_Remove Launcher"
+msgstr "Noņem_t palaidēju"
+
+#. append the "Forget Association" item
+#: thunar/thunar-chooser-dialog.c:632
+msgid "_Forget Association"
+msgstr ""
+
+#: thunar/thunar-chooser-dialog.c:713
+#, c-format
+msgid "Open <i>%s (%s)</i> and other files of type \"%s\" with:"
+msgstr ""
+
+#: thunar/thunar-chooser-dialog.c:718
+#, c-format
+msgid "Open <i>%s</i> and other files of type \"%s\" with:"
+msgstr "Atvērt <i>%s</i> un citus failus ar tipu\"%s\":"
+
+#: thunar/thunar-chooser-dialog.c:726
+#, c-format
+msgid ""
+"Browse the file system to select an application to open files of type "
+"\"%s\"."
+msgstr ""
+"Pārlūkot failu sistēmu, lai norādītu lietotni, \"%s\" faila tipa atvēršanai."
+
+#: thunar/thunar-chooser-dialog.c:732
+#, c-format
+msgid ""
+"Change the default application for files of type \"%s\" to the selected "
+"application."
+msgstr "Nomainīt noklusēto lietotni \"%s\" failu tipam uz atlasīto lietotni."
+
+#: thunar/thunar-chooser-dialog.c:778
+#, c-format
+msgid "Are you sure that you want to remove \"%s\"?"
+msgstr "Esat drošs, ka vēlaties noņemt \"%s\"?"
+
+#: thunar/thunar-chooser-dialog.c:779
+msgid "Remove application launcher"
+msgstr ""
+
+#: thunar/thunar-chooser-dialog.c:782
+msgid "_Remove"
+msgstr "_Noņemt"
+
+#: thunar/thunar-chooser-dialog.c:785
+msgid ""
+"This will remove the application launcher that appears in the file context menu, but will not uninstall the application itself.\n"
+"\n"
+"You can only remove application launchers that were created using the custom command box in the \"Open With\" dialog of the file manager."
+msgstr ""
+"Šī darbība izņems lietotnes palaidēju no konteksta izvēlnes, bet nenoņems lietotni no jūsu sistēmas.\n"
+"\n"
+"Jūs varat noņemt lietotņu palaidējus, kuri tika izveidoti, izmantojot pielāgoto komandu lodziņu, logā \"Atvērt ar\"."
+
+#. display an error to the user
+#: thunar/thunar-chooser-dialog.c:800
+#, c-format
+msgid "Failed to remove \"%s\""
+msgstr "Neizdevās noņemt \"%s\""
+
+#: thunar/thunar-chooser-dialog.c:853
+#, c-format
+msgid "Are you sure that you want to forget \"%s\"?"
+msgstr ""
+
+#: thunar/thunar-chooser-dialog.c:854
+msgid "Forget application launcher"
+msgstr ""
+
+#: thunar/thunar-chooser-dialog.c:857
+msgid "_Forget"
+msgstr ""
+
+#: thunar/thunar-chooser-dialog.c:860
+msgid ""
+"This will dissociate the application launcher for this file type, but will "
+"not uninstall or remove the application launcher itself."
+msgstr ""
+
+#. display an error to the user
+#: thunar/thunar-chooser-dialog.c:876
+#, c-format
+msgid "Failed to forget \"%s\""
+msgstr ""
+
+#: thunar/thunar-chooser-dialog.c:903
+#: plugins/thunar-uca/thunar-uca-editor.c:199
+msgid "Select an Application"
+msgstr "Norādiet lietotni"
+
+#: thunar/thunar-chooser-dialog.c:913 thunar/thunar-renamer-dialog.c:1116
+#: plugins/thunar-uca/thunar-uca-editor.c:210
+msgid "All Files"
+msgstr "Visi faili"
+
+#: thunar/thunar-chooser-dialog.c:918
+#: plugins/thunar-uca/thunar-uca-editor.c:215
+msgid "Executable Files"
+msgstr "Izpildāmie faili"
+
+#: thunar/thunar-chooser-dialog.c:933
+#: plugins/thunar-uca/thunar-uca-editor.c:230
+msgid "Perl Scripts"
+msgstr "Perl skripti"
+
+#: thunar/thunar-chooser-dialog.c:939
+#: plugins/thunar-uca/thunar-uca-editor.c:236
+msgid "Python Scripts"
+msgstr "Python skripti"
+
+#: thunar/thunar-chooser-dialog.c:945
+#: plugins/thunar-uca/thunar-uca-editor.c:242
+msgid "Ruby Scripts"
+msgstr "Ruby skripti"
+
+#: thunar/thunar-chooser-dialog.c:951
+#: plugins/thunar-uca/thunar-uca-editor.c:248
+msgid "Shell Scripts"
+msgstr "Čaulas skripti"
+
+#: thunar/thunar-chooser-dialog.c:1386
+msgid "Set Default Application"
+msgstr ""
+
+#: thunar/thunar-chooser-model.c:253
+msgid "None available"
+msgstr "Neviens nav pieejams"
+
+#: thunar/thunar-chooser-model.c:302
+msgid "Default Application"
+msgstr ""
+
+#: thunar/thunar-chooser-model.c:313
+msgid "Recommended Applications"
+msgstr "Ieteicamās lietotnes"
+
+#: thunar/thunar-chooser-model.c:332
+msgid "Other Applications"
+msgstr "Citas lietotnes"
+
+#: thunar/thunar-chooser-model.c:427
+#, c-format
+msgid "Failed to remove \"%s\"."
+msgstr "Neizdevās noņemt \"%s\"."
+
+#. tell the user that we cannot paste
+#: thunar/thunar-clipboard-manager.c:365
+msgid "There is nothing on the clipboard to paste"
+msgstr "Starpliktuvē nav nekā, ko ielīmēt"
+
+#. setup the dialog
+#. add the "Close" button
+#. action id
+#. visibility
+#. checkbox visible
+#. icon
+#. label
+#. tooltip
+#. setup the dialog
+#. add a regular close button, the header bar already provides one
+#: thunar/thunar-column-editor.c:130 thunar/thunar-preferences-dialog.c:279
+#: thunar/thunar-properties-dialog.c:348 thunar/thunar-renamer-dialog.c:415
+#: thunar/thunar-renamer-progress.c:205 thunar/thunar-toolbar-editor.c:148
+#: plugins/thunar-uca/thunar-uca-chooser.c:141
+msgid "_Close"
+msgstr "_Aizvērt"
+
+#: thunar/thunar-column-editor.c:133
+msgid "Configure Columns in the Detailed List View"
+msgstr "Konfigurēt kolonnas detalizētā saraksta skatā"
+
+#. add the "Help" button
+#: thunar/thunar-column-editor.c:136 thunar/thunar-preferences-dialog.c:287
+#: thunar/thunar-properties-dialog.c:347 thunar/thunar-toolbar-editor.c:155
+#: thunar/thunar-window.c:707
+msgid "_Help"
+msgstr "_Palīdzība"
+
+#: thunar/thunar-column-editor.c:151
+msgid "Visible Columns"
+msgstr "Redzamās kolonnas"
+
+#. create the top label for the column editor dialog
+#: thunar/thunar-column-editor.c:164
+msgid ""
+"Choose the order of information to appear in the\n"
+"detailed list view."
+msgstr ""
+"Izvēlaties secību, kādā attēlot informāciju\n"
+"detalizētā saraksta skatā."
+
+#. create the "Move Up" button
+#: thunar/thunar-column-editor.c:211 thunar/thunar-toolbar-editor.c:233
+msgid "Move _Up"
+msgstr "Pārvietot uz _augšu"
+
+#. create the "Move Down" button
+#: thunar/thunar-column-editor.c:225 thunar/thunar-toolbar-editor.c:244
+msgid "Move Dow_n"
+msgstr "Pārvietot uz _leju"
+
+#. create the "Show" button
+#: thunar/thunar-column-editor.c:239
+msgid "_Show"
+msgstr "_Rādīt"
+
+#. create the "Hide" button
+#: thunar/thunar-column-editor.c:248
+msgid "Hi_de"
+msgstr "Slē_pt"
+
+#. create the "Use Default" button
+#: thunar/thunar-column-editor.c:265
+msgid "Use De_fault"
+msgstr "Iz_mantot noklusēto"
+
+#: thunar/thunar-column-editor.c:274
+msgid "Column Sizing"
+msgstr "Kolonnu izmērs"
+
+#. create the label that explains the column sizing option
+#: thunar/thunar-column-editor.c:290
+msgid ""
+"By default columns will be automatically expanded if\n"
+"needed to ensure the text is fully visible. If you dis-\n"
+"able this behavior below the file manager will always\n"
+"use the user defined column widths."
+msgstr ""
+"Pēc noklusētā kolonnas tiks automātiski izplestas, lai\n"
+"nodrošinātu pilnu teksta redzamību. Ja, Jūs, izslēgsiet\n"
+"šo uzvedību, tad failu pārvaldnieks vienmēr izmantos\n"
+"lietotāja definētos kolonnas platumus."
+
+#. create the "Automatically expand columns as needed" button
+#: thunar/thunar-column-editor.c:302
+msgid "Automatically _expand columns as needed"
+msgstr "Automātis_ki paplašināt kolonnas, pēc nepieciešamības"
+
+#: thunar/thunar-column-editor.c:316
+msgid "Size Column of Folders"
+msgstr ""
+
+#. explain what it does
+#: thunar/thunar-column-editor.c:329
+msgid "Show number of containing items"
+msgstr ""
+
+#: thunar/thunar-column-model.c:368
+msgid "This column is reserved for special locations"
+msgstr ""
+
+#. reset page title
+#. tell the user that we're unable to determine the file info
+#: thunar/thunar-column-model.c:913 thunar/thunar-list-model.c:963
+#: thunar/thunar-list-model.c:999 thunar/thunar-permissions-chooser.c:253
+#: thunar/thunar-size-label.c:392 thunar/thunar-size-label.c:473
+#: thunar/thunar-util.c:431 thunar/thunar-util.c:434
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:729
+#: plugins/thunar-apr/thunar-apr-image-page.c:305
+#: plugins/thunar-apr/thunar-apr-image-page.c:306
+#: plugins/thunar-uca/thunar-uca-editor.c:450
+msgid "Unknown"
+msgstr "Nezināms"
+
+#: thunar/thunar-compact-view.c:118
+msgid "Compact directory listing"
+msgstr "Kompakts direktoriju saraksts"
+
+#: thunar/thunar-compact-view.c:119
+msgid "Compact view"
+msgstr "Kompakts skats"
+
+#: thunar/thunar-dbus-service.c:560
+#, c-format
+msgid "Invalid filename \"%s\""
+msgstr "Nederīgs faila nosaukums \"%s\""
+
+#. LaunchFiles() invoked without a valid working directory
+#: thunar/thunar-dbus-service.c:1011
+msgid "The working directory must be an absolute path"
+msgstr "Darba direktorijai jābūt ar absolūtu ceļu"
+
+#. LaunchFiles() invoked with an empty filename list
+#: thunar/thunar-dbus-service.c:1019 thunar/thunar-dbus-service.c:1459
+msgid "At least one filename must be specified"
+msgstr "Vismaz vienam faila nosaukumam jābūt norādītam"
+
+#: thunar/thunar-dbus-service.c:1195
+msgid "At least one source filename must be specified"
+msgstr ""
+
+#: thunar/thunar-dbus-service.c:1205
+msgid "The number of source and target filenames must be the same"
+msgstr ""
+
+#: thunar/thunar-dbus-service.c:1214
+msgid "A destination directory must be specified"
+msgstr ""
+
+#: thunar/thunar-details-view.c:207
+msgid "Configure _Columns..."
+msgstr "Konfigurēt _kolonnas"
+
+#: thunar/thunar-details-view.c:207
+msgid "Configure the columns in the detailed list view"
+msgstr "Konfigurēt kolonnas detalizētā saraksta skatā"
+
+#: thunar/thunar-details-view.c:208
+msgid "E_xpandable Folders"
+msgstr ""
+
+#: thunar/thunar-details-view.c:208
+msgid "Allow tree like expansion of folders"
+msgstr ""
+
+#: thunar/thunar-details-view.c:539
+msgid "Detailed directory listing"
+msgstr "Detalizēts direktorijas saraksts"
+
+#: thunar/thunar-details-view.c:540
+msgid "Details view"
+msgstr "Detalizēts skats"
+
+#: thunar/thunar-device.c:542
+msgid "Safely _Remove"
+msgstr ""
+
+#: thunar/thunar-device.c:544
+msgid "_Disconnect"
+msgstr ""
+
+#: thunar/thunar-device.c:546
+msgid "Stop the _Multi-Disk Drive"
+msgstr ""
+
+#: thunar/thunar-device.c:548
+msgid "_Lock"
+msgstr ""
+
+#: thunar/thunar-dialogs.c:115
+msgid "C_reate"
+msgstr "Iz_veidot"
+
+#: thunar/thunar-dialogs.c:144
+msgid "Enter the name:"
+msgstr ""
+
+#. display an error message
+#: thunar/thunar-dialogs.c:193
+#, c-format
+msgid "Cannot convert filename \"%s\" to the local encoding"
+msgstr "Nevar pārveidot faila nosaukumu \"%s\" uz lokālo kodējumu"
+
+#. create a new dialog window
+#: thunar/thunar-dialogs.c:258
+#, c-format
+msgid "Rename \"%s\""
+msgstr "Pārdēvēt \"%s\""
+
+#. add the "Rename" button
+#: thunar/thunar-dialogs.c:264 thunar/thunar-renamer-dialog.c:419
+msgid "_Rename"
+msgstr "Pā_rdēvēt"
+
+#: thunar/thunar-dialogs.c:302
+msgid "Enter the new name:"
+msgstr "Ievadiet jauno nosaukumu:"
+
+#: thunar/thunar-dialogs.c:455
+msgid "translator-credits"
+msgstr "Tulkotāji:"
+
+#: thunar/thunar-dialogs.c:517 thunar/thunar-renamer-progress.c:175
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:844
+#: plugins/thunar-sendto-email/main.c:141
+#: plugins/thunar-uca/thunar-uca-chooser.c:329
+#: plugins/thunar-uca/thunar-uca-provider.c:568
+msgid "Error"
+msgstr "Kļūda"
+
+#: thunar/thunar-dialogs.c:631 thunar/thunar-permissions-chooser.c:582
+msgid "_Yes"
+msgstr "_Jā"
+
+#: thunar/thunar-dialogs.c:635
+msgid "Yes to _all"
+msgstr "Jā, vis_am"
+
+#: thunar/thunar-dialogs.c:639 thunar/thunar-dialogs.c:811
+msgid "_Replace"
+msgstr "Ai_zvietot"
+
+#: thunar/thunar-dialogs.c:643
+msgid "Replace _All"
+msgstr "Aizvietot vis_u"
+
+#: thunar/thunar-dialogs.c:647 thunar/thunar-dialogs.c:809
+msgid "_Skip"
+msgstr "_Izlaist"
+
+#: thunar/thunar-dialogs.c:651
+msgid "S_kip All"
+msgstr ""
+
+#: thunar/thunar-dialogs.c:655 thunar/thunar-dialogs.c:810
+msgid "Re_name"
+msgstr ""
+
+#: thunar/thunar-dialogs.c:659
+msgid "Rena_me All"
+msgstr ""
+
+#: thunar/thunar-dialogs.c:663 thunar/thunar-permissions-chooser.c:581
+msgid "_No"
+msgstr "_Nē"
+
+#: thunar/thunar-dialogs.c:667
+msgid "N_o to all"
+msgstr "Nē, visa_m"
+
+#: thunar/thunar-dialogs.c:671
+msgid "_Retry"
+msgstr "_Atkārtot"
+
+#: thunar/thunar-dialogs.c:675
+msgid "Copy _Anyway"
+msgstr ""
+
+#. setup the confirmation dialog
+#: thunar/thunar-dialogs.c:805
+msgid "Confirm to replace files"
+msgstr "Apstiprināt failu aizvietošanu"
+
+#: thunar/thunar-dialogs.c:852
+#, c-format
+msgid "This folder already contains a symbolic link \"%s\"."
+msgstr "Šī mape jau satur simbolisko saiti \"%s\"."
+
+#: thunar/thunar-dialogs.c:857
+#, c-format
+msgid "This folder already contains a folder \"%s\"."
+msgstr "Šī mape jau satur mapi \"%s\"."
+
+#: thunar/thunar-dialogs.c:863
+#, c-format
+msgid "This folder already contains a file \"%s\" (%s)."
+msgstr ""
+
+#: thunar/thunar-dialogs.c:867
+#, c-format
+msgid "This folder already contains a file \"%s\"."
+msgstr "Šī mape jau satur failu \"%s\""
+
+#. TRANSLATORS: First part of replace dialog sentence
+#: thunar/thunar-dialogs.c:889
+#, c-format
+msgid "Replace the link in \"%s\""
+msgstr ""
+
+#. TRANSLATORS: First part of replace dialog sentence
+#: thunar/thunar-dialogs.c:892
+#, c-format
+msgid "Replace the existing folder in \"%s\""
+msgstr ""
+
+#. TRANSLATORS: First part of replace dialog sentence
+#: thunar/thunar-dialogs.c:895
+#, c-format
+msgid "Replace the existing file in \"%s\""
+msgstr ""
+
+#. Fourth box (size)
+#: thunar/thunar-dialogs.c:931 thunar/thunar-dialogs.c:981
+#: thunar/thunar-properties-dialog.c:665
+msgid "Size:"
+msgstr "Izmērs:"
+
+#: thunar/thunar-dialogs.c:931 thunar/thunar-dialogs.c:981
+#: thunar/thunar-properties-dialog.c:618
+msgid "Modified:"
+msgstr "Modificēts:"
+
+#. TRANSLATORS: Second part of replace dialog sentence
+#: thunar/thunar-dialogs.c:943
+msgid "with the following link?"
+msgstr ""
+
+#. TRANSLATORS: Second part of replace dialog sentence
+#: thunar/thunar-dialogs.c:946
+msgid "with the following folder?"
+msgstr ""
+
+#. TRANSLATORS: Second part of replace dialog sentence
+#: thunar/thunar-dialogs.c:949
+msgid "with the following file?"
+msgstr ""
+
+#: thunar/thunar-dialogs.c:997
+msgid "_Apply the action to all files and folders"
+msgstr ""
+
+#. TRANSLATORS: This string will be inserted in the following sentence in the
+#. second appearance of %s:
+#. * "The desktop file %s is in an insecure location and not marked as
+#. secure%s."
+#: thunar/thunar-dialogs.c:1070
+msgid "/executable"
+msgstr ""
+
+#: thunar/thunar-dialogs.c:1076
+#, c-format
+msgid ""
+"The desktop file %s is in an insecure location and not marked as secure%s. If you do not trust this program, click Cancel.\n"
+"\n"
+msgstr ""
+
+#: thunar/thunar-dialogs.c:1096
+msgid "_Launch Anyway"
+msgstr ""
+
+#: thunar/thunar-dialogs.c:1098
+msgid "Mark As _Secure And Launch"
+msgstr ""
+
+#: thunar/thunar-dialogs.c:1182
+msgid "Close split pane with multiple tabs?"
+msgstr ""
+
+#: thunar/thunar-dialogs.c:1183
+msgid ""
+"The other split pane has multiple open tabs. Closing it will close all these"
+" tabs."
+msgstr ""
+
+#: thunar/thunar-dialogs.c:1189
+msgid "Warning"
+msgstr "Uzmanību"
+
+#: thunar/thunar-dialogs.c:1194
+msgid "Close Pane"
+msgstr ""
+
+#: thunar/thunar-dialogs.c:1197 thunar/thunar-permissions-chooser.c:612
+msgid "Do _not ask me again"
+msgstr "Vairs man _nejautāt"
+
+#: thunar/thunar-dialogs.c:1257
+#, c-format
+msgid "The file \"%s\" seems to be executable. What do you want to do with it?"
+msgstr ""
+
+#: thunar/thunar-dialogs.c:1262
+msgid ""
+"The selected files seem to be executable. What do you want to do with them?"
+msgstr ""
+
+#: thunar/thunar-dialogs.c:1271
+msgid "Open Shell Script"
+msgstr ""
+
+#: thunar/thunar-dialogs.c:1275
+msgid "Run In _Terminal"
+msgstr ""
+
+#: thunar/thunar-dialogs.c:1336
+#, c-format
+msgid "Failed to edit launcher via command \"%s\""
+msgstr ""
+
+#: thunar/thunar-dnd.c:71
+msgid "Copy _Here"
+msgstr ""
+
+#: thunar/thunar-dnd.c:71
+msgid "_Move Here"
+msgstr ""
+
+#: thunar/thunar-dnd.c:71
+msgid "_Link Here"
+msgstr ""
+
+#: thunar/thunar-emblem-chooser.c:367
+#, c-format
+msgid "A maximum of %u emblems is supported per file."
+msgstr ""
+
+#: thunar/thunar-emblem-chooser.c:368
+msgid "Too many emblems selected"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:91
+msgid "Name only"
+msgstr "Tikai nosaukumu"
+
+#: thunar/thunar-enum-types.c:92
+msgid "Extension only"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:93
+msgid "Name and Extension"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:148
+msgid "Date Created"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:149
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:138
+msgid "Date Accessed"
+msgstr "Piekļuves datums"
+
+#: thunar/thunar-enum-types.c:150
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:139
+msgid "Date Modified"
+msgstr "Modificēšanas datums"
+
+#: thunar/thunar-enum-types.c:151
+msgid "Date Deleted"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:152
+msgid "Recency"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:153
+msgid "Location"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:154
+msgid "Group"
+msgstr "Grupa"
+
+#: thunar/thunar-enum-types.c:155
+msgid "MIME Type"
+msgstr "MIME tips"
+
+#: thunar/thunar-enum-types.c:156 thunar/thunar-renamer-dialog.c:476
+#: thunarx/thunarx-renamer.c:173
+msgid "Name"
+msgstr "Nosaukums"
+
+#: thunar/thunar-enum-types.c:157
+msgid "Owner"
+msgstr "Īpašnieks"
+
+#. Permissions chooser
+#: thunar/thunar-enum-types.c:158 thunar/thunar-properties-dialog.c:937
+msgid "Permissions"
+msgstr "Atļaujas"
+
+#: thunar/thunar-enum-types.c:159 thunar/thunar-statusbar.c:95
+msgid "Size"
+msgstr "Izmērs"
+
+#: thunar/thunar-enum-types.c:160
+msgid "Size in Bytes"
+msgstr "Izmērs baitos"
+
+#: thunar/thunar-enum-types.c:161
+msgid "Type"
+msgstr "Tips"
+
+#: thunar/thunar-enum-types.c:162
+msgid "File"
+msgstr "Fails"
+
+#: thunar/thunar-enum-types.c:163
+msgid "File Name"
+msgstr "Faila nosaukums"
+
+#: thunar/thunar-enum-types.c:700 thunar/thunar-enum-types.c:725
+#: thunar/thunar-enum-types.c:860 thunar/thunar-preferences-dialog.c:467
+#: thunar/thunar-preferences-dialog.c:1123
+#: thunar/thunar-preferences-dialog.c:1231
+#: thunar/thunar-preferences-dialog.c:1319
+msgid "Never"
+msgstr "Nekad"
+
+#: thunar/thunar-enum-types.c:701 thunar/thunar-enum-types.c:726
+msgid "Only For Remote Location"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:702 thunar/thunar-enum-types.c:727
+#: thunar/thunar-enum-types.c:862 thunar/thunar-preferences-dialog.c:469
+#: thunar/thunar-preferences-dialog.c:1119
+#: thunar/thunar-preferences-dialog.c:1229
+#: thunar/thunar-preferences-dialog.c:1320
+msgid "Always"
+msgstr "Vienmēr"
+
+#: thunar/thunar-enum-types.c:785
+msgid "Copy"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:786
+msgid "Move"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:787
+msgid "Rename"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:788
+msgid "Create File"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:789
+msgid "Create Folder"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:790
+msgid "Delete (opposite of create)"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:791 thunar/thunar-file.c:1087
+#: thunar/thunar-gio-extensions.c:510 thunar/thunar-shortcuts-model.c:1157
+#: thunar.desktop.in.in:25
+msgid "Trash"
+msgstr "Miskaste"
+
+#: thunar/thunar-enum-types.c:792
+msgid "Restore (opposite of trash)"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:793
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:552
+msgid "Link"
+msgstr "Saite"
+
+#: thunar/thunar-enum-types.c:794
+msgid "Unlink"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:815
+msgid "Log operations"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:816
+msgid "Log no operations"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:817
+msgid "Log only timestamps"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:838
+msgid "Standalone"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:839
+msgid "Embedded"
+msgstr ""
+
+#: thunar/thunar-enum-types.c:861
+msgid "Only for local files"
+msgstr ""
+
+#: thunar/thunar-file.c:1094 thunar/thunar-gio-extensions.c:508
+#: thunar/thunar-shortcuts-model.c:1039
+msgid "File System"
+msgstr "Failu sistēma"
+
+#: thunar/thunar-file.c:1568
+msgid "The root folder has no parent"
+msgstr "Saknes mapei nav vecāka"
+
+#: thunar/thunar-file.c:1666
+#, c-format
+msgid "Failed to parse the desktop file: %s"
+msgstr "Neizdevās parsēt darbvirsmas failu: %s"
+
+#. if the .desktop file is not secure, ask user what to do
+#: thunar/thunar-file.c:1679
+msgid "Untrusted application launcher"
+msgstr ""
+
+#: thunar/thunar-file.c:1710
+msgid "No Exec field specified"
+msgstr "Nav norādīts Exec lauks"
+
+#. if the .desktop file is not secure, ask user what to do
+#: thunar/thunar-file.c:1719
+msgid "Untrusted link launcher"
+msgstr ""
+
+#: thunar/thunar-file.c:1735
+msgid "No URL field specified"
+msgstr "Nav norādīts URL lauks"
+
+#: thunar/thunar-file.c:1740
+msgid "Invalid desktop file"
+msgstr "Nederīgs darbvirsmas fails"
+
+#: thunar/thunar-file.c:2545 thunar/thunar-util.c:1451
+msgid "broken link"
+msgstr "lauzta saite"
+
+#: thunar/thunar-file.c:2551
+#, c-format
+msgid "%s (link to %s)"
+msgstr ""
+
+#: thunar/thunar-file.c:2560
+#, c-format
+msgid "%s (mount point)"
+msgstr ""
+
+#. Implementation specific
+#: thunar/thunar-gio-extensions.c:89
+msgid "iPod touch"
+msgstr ""
+
+#: thunar/thunar-gio-extensions.c:90
+msgid "iPad"
+msgstr ""
+
+#: thunar/thunar-gio-extensions.c:91
+msgid "iPhone"
+msgstr ""
+
+#: thunar/thunar-gio-extensions.c:92
+msgid "Solid State Drive"
+msgstr ""
+
+#: thunar/thunar-gio-extensions.c:93
+msgid "System Drive"
+msgstr ""
+
+#: thunar/thunar-gio-extensions.c:94 thunar/thunar-gio-extensions.c:95
+msgid "USB Drive"
+msgstr ""
+
+#. Freedesktop icon-naming-spec
+#: thunar/thunar-gio-extensions.c:98
+msgid "Camera"
+msgstr ""
+
+#: thunar/thunar-gio-extensions.c:99
+msgid "Harddisk"
+msgstr ""
+
+#: thunar/thunar-gio-extensions.c:100
+msgid "Optical Drive"
+msgstr ""
+
+#: thunar/thunar-gio-extensions.c:101
+msgid "Removable Drive"
+msgstr ""
+
+#: thunar/thunar-gio-extensions.c:102
+msgid "Flash Drive"
+msgstr ""
+
+#: thunar/thunar-gio-extensions.c:103
+msgid "Floppy"
+msgstr ""
+
+#: thunar/thunar-gio-extensions.c:104
+msgid "Optical Media"
+msgstr ""
+
+#: thunar/thunar-gio-extensions.c:105
+msgid "Tape"
+msgstr ""
+
+#: thunar/thunar-gio-extensions.c:106
+msgid "Multimedia Player"
+msgstr ""
+
+#: thunar/thunar-gio-extensions.c:107
+msgid "PDA"
+msgstr ""
+
+#: thunar/thunar-gio-extensions.c:108
+msgid "Phone"
+msgstr ""
+
+#. TRANSLATORS: this will result in "<path> on <hostname>"
+#: thunar/thunar-gio-extensions.c:590
+#, c-format
+msgid "%s on %s"
+msgstr ""
+
+#: thunar/thunar-gio-extensions.c:701
+#, c-format
+msgid "%s used (%.0f%%)  |  %s free (%.0f%%)"
+msgstr ""
+
+#: thunar/thunar-history.c:309
+msgid "The item will be removed from the history"
+msgstr ""
+
+#: thunar/thunar-history.c:320
+#, c-format
+msgid "Could not find \"%s\""
+msgstr ""
+
+#: thunar/thunar-icon-view.c:180
+msgid "Icon based directory listing"
+msgstr "Ikonu balstīts direktoriju saraksts"
+
+#: thunar/thunar-icon-view.c:181
+msgid "Icon view"
+msgstr "Ikonu skats"
+
+#: thunar/thunar-io-jobs.c:114
+#, c-format
+msgid "Error removing file: %s"
+msgstr ""
+
+#: thunar/thunar-io-jobs.c:224 thunar/thunar-io-jobs.c:402
+#, c-format
+msgid "The file \"%s\" already exists"
+msgstr "Fails \"%s\" jau eksistē"
+
+#: thunar/thunar-io-jobs.c:247
+#, c-format
+msgid "Failed to create empty file \"%s\": %s"
+msgstr "Neizdevās izveidot tukšu failu \"%s\": %s"
+
+#: thunar/thunar-io-jobs.c:425
+#, c-format
+msgid "Failed to create directory \"%s\": %s"
+msgstr "Neizdevās izveidot direktoriju \"%s\": %s"
+
+#. tell the user that we're preparing to unlink the files
+#: thunar/thunar-io-jobs.c:509
+msgid "Preparing..."
+msgstr "Gatavošanās..."
+
+#: thunar/thunar-io-jobs.c:587
+#, c-format
+msgid "Could not delete file \"%s\": %s"
+msgstr "Neizdevās dzēst failu \"%s\": %s"
+
+#. generate a useful error message
+#: thunar/thunar-io-jobs.c:1062
+#, c-format
+msgid "Failed to change the owner of \"%s\": %s"
+msgstr "Neizdevās nomainīt īpašnieku \"%s\": %s"
+
+#: thunar/thunar-io-jobs.c:1063
+#, c-format
+msgid "Failed to change the group of \"%s\": %s"
+msgstr "Neizdevās nomainīt grupu \"%s\": %s"
+
+#: thunar/thunar-io-jobs.c:1216
+#, c-format
+msgid "Failed to change the permissions of \"%s\": %s"
+msgstr "Neizdevās nomainīt atļaujas \"%s\": %s"
+
+#: thunar/thunar-io-jobs.c:1980
+#, c-format
+msgid "Selection: %s"
+msgstr ""
+
+#: thunar/thunar-io-jobs.c:1993
+#, c-format
+msgid "Free space: %s"
+msgstr ""
+
+#. I18N: put " (copy #)" between basename and extension
+#: thunar/thunar-io-jobs-util.c:177
+#, c-format
+msgid "%s (copy %u)%s"
+msgstr ""
+
+#. I18N: put " (copy #)" after filename (for files without extension)
+#: thunar/thunar-io-jobs-util.c:183
+#, c-format
+msgid "%s (copy %u)"
+msgstr ""
+
+#: thunar/thunar-job.c:293
+#, c-format
+msgid ""
+"The file \"%s\" (%s) already exists. Would you like to replace it?\n"
+"\n"
+"If you replace an existing file, its contents will be overwritten."
+msgstr ""
+
+#: thunar/thunar-job.c:298
+#, c-format
+msgid ""
+"The file \"%s\" already exists. Would you like to replace it?\n"
+"\n"
+"If you replace an existing file, its contents will be overwritten."
+msgstr ""
+"Fails \"%s\" jau eksistē. Vai vēlētos to aizvietot?\n"
+"\n"
+"Ja aizvietosiet eksistējošu failu, tā saturs tiks pārrakstīts."
+
+#: thunar/thunar-job.c:380
+msgid "Do you want to overwrite it?"
+msgstr "Vai vēlaties pārrakstīt?"
+
+#: thunar/thunar-job.c:437
+msgid "Do you want to permanently delete it?"
+msgstr ""
+
+#: thunar/thunar-job.c:491
+msgid "Do you want to create it?"
+msgstr "Vai vēlaties izveidot to?"
+
+#: thunar/thunar-job.c:599
+msgid "Do you want to skip it?"
+msgstr "Vai vēlaties izlaist?"
+
+#: thunar/thunar-job.c:648
+msgid ""
+"There is not enough space on the destination. Try to remove files to make "
+"space."
+msgstr ""
+
+#: thunar/thunar-job-operation.c:789 thunar/thunar-size-label.c:482
+#: thunar/thunar-util.c:1328
+#, c-format
+msgid "%d file"
+msgid_plural "%d files"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: thunar/thunar-job-operation-history.c:323
+msgid ""
+"No operation which can be undone has been performed yet.\n"
+"(For some operations undo is not supported)"
+msgstr ""
+
+#: thunar/thunar-job-operation-history.c:325
+msgid "There is no operation to undo"
+msgstr ""
+
+#: thunar/thunar-job-operation-history.c:341
+msgid ""
+"The operation you are trying to undo does not have any files associated with"
+" it, and thus cannot be undone."
+msgstr ""
+
+#: thunar/thunar-job-operation-history.c:343
+#, c-format
+msgid "%s operation cannot be undone"
+msgstr ""
+
+#. one indexed for the dialog
+#: thunar/thunar-job-operation-history.c:355
+msgid ""
+"The following files were overwritten in the operation you are trying to undo"
+" and cannot be restored:\n"
+msgstr ""
+
+#: thunar/thunar-job-operation-history.c:367
+#, c-format
+msgid "%s operation can only be partially undone"
+msgstr ""
+
+#: thunar/thunar-job-operation-history.c:384
+#, c-format
+msgid "Failed to undo operation '%s'"
+msgstr ""
+
+#: thunar/thunar-job-operation-history.c:420
+msgid "No operation which can be redone available.\n"
+msgstr ""
+
+#: thunar/thunar-job-operation-history.c:421
+msgid "There is no operation to redo"
+msgstr ""
+
+#: thunar/thunar-job-operation-history.c:437
+msgid ""
+"The operation you are trying to redo does not have any files associated with"
+" it, and thus cannot be redone."
+msgstr ""
+
+#: thunar/thunar-job-operation-history.c:439
+#, c-format
+msgid "%s operation cannot be redone"
+msgstr ""
+
+#. one indexed for the dialog
+#: thunar/thunar-job-operation-history.c:451
+msgid ""
+"The following files were overwritten in the operation you are trying to redo"
+" and cannot be restored:\n"
+msgstr ""
+
+#: thunar/thunar-job-operation-history.c:463
+#, c-format
+msgid "%s operation can only be partially redone"
+msgstr ""
+
+#: thunar/thunar-job-operation-history.c:478
+#, c-format
+msgid "Failed to redo operation '%s'"
+msgstr ""
+
+#. TRANSLATORS: An example: 'Undo the latest 'copy' operation (2 files)
+#: thunar/thunar-job-operation-history.c:565
+#, c-format
+msgid "Undo the latest '%s' operation (%s)"
+msgstr ""
+
+#: thunar/thunar-job-operation-history.c:570 thunar/thunar-window.c:657
+msgid "Undo the latest operation"
+msgstr ""
+
+#. TRANSLATORS: An example: 'Redo the latest 'copy' operation (2 files)
+#: thunar/thunar-job-operation-history.c:590
+#, c-format
+msgid "Redo the latest '%s' operation (%s)"
+msgstr ""
+
+#: thunar/thunar-job-operation-history.c:595 thunar/thunar-window.c:658
+msgid "Redo the latest operation"
+msgstr ""
+
+#: thunar/thunar-list-model.c:1027 thunar/thunar-list-model.c:1040
+#: thunar/thunar-properties-dialog.c:1415 thunar/thunar-tree-view-model.c:1352
+#: thunar/thunar-tree-view-model.c:1365
+msgid "unknown"
+msgstr ""
+
+#: thunar/thunar-list-model.c:1029 thunar/thunar-list-model.c:1042
+#: thunar/thunar-tree-view-model.c:1354 thunar/thunar-tree-view-model.c:1367
+#, c-format
+msgid "%u item"
+msgid_plural "%u items"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: thunar/thunar-location-entry.c:347
+msgid "File does not exist"
+msgstr "Fails neeksistē"
+
+#: thunar/thunar-notify.c:193
+msgid "Undo performed"
+msgstr ""
+
+#: thunar/thunar-notify.c:194
+#, c-format
+msgid "%s operation was undone"
+msgstr ""
+
+#: thunar/thunar-notify.c:199
+msgid "Redo performed"
+msgstr ""
+
+#: thunar/thunar-notify.c:200
+#, c-format
+msgid "%s operation was redone"
+msgstr ""
+
+#: thunar/thunar-notify.c:284
+msgid "Unmounting device"
+msgstr ""
+
+#: thunar/thunar-notify.c:285
+#, c-format
+msgid ""
+"The device \"%s\" is being unmounted by the system. Please do not remove the"
+" media or disconnect the drive"
+msgstr ""
+
+#: thunar/thunar-notify.c:292 thunar/thunar-notify.c:332
+msgid "Writing data to device"
+msgstr ""
+
+#: thunar/thunar-notify.c:293 thunar/thunar-notify.c:333
+#, c-format
+msgid ""
+"There is data that needs to be written to the device \"%s\" before it can be"
+" removed. Please do not remove the media or disconnect the drive"
+msgstr ""
+
+#: thunar/thunar-notify.c:325
+msgid "Ejecting device"
+msgstr ""
+
+#: thunar/thunar-notify.c:326
+#, c-format
+msgid "The device \"%s\" is being ejected. This may take some time"
+msgstr ""
+
+#: thunar/thunar-path-entry.c:232
+msgid "Icon size"
+msgstr "Ikonas izmērs"
+
+#: thunar/thunar-path-entry.c:233
+msgid "The icon size for the path entry"
+msgstr "Ceļa ieraksta ikonas izmērs"
+
+#: thunar/thunar-permissions-chooser.c:242
+msgid "Owner:"
+msgstr "Īpašnieks:"
+
+#: thunar/thunar-permissions-chooser.c:261
+msgid "_Access:"
+msgstr ""
+
+#: thunar/thunar-permissions-chooser.c:289
+msgid "Gro_up:"
+msgstr ""
+
+#: thunar/thunar-permissions-chooser.c:311
+msgid "Acc_ess:"
+msgstr ""
+
+#: thunar/thunar-permissions-chooser.c:339
+msgid "Others"
+msgstr ""
+
+#: thunar/thunar-permissions-chooser.c:347
+msgid "Acce_ss:"
+msgstr ""
+
+#: thunar/thunar-permissions-chooser.c:375
+msgid "Program:"
+msgstr "Programma:"
+
+#: thunar/thunar-permissions-chooser.c:381
+msgid "Allow this file to _run as a program"
+msgstr "Atļaut izpildīt šo failu, kā p_rogrammu"
+
+#: thunar/thunar-permissions-chooser.c:409
+#: thunar/thunar-preferences-dialog.c:1334
+msgid ""
+"Allowing untrusted programs to run presents a security risk to your system."
+msgstr ""
+
+#: thunar/thunar-permissions-chooser.c:427
+msgid ""
+"The folder permissions are inconsistent, you may not be able to work with "
+"files in this folder."
+msgstr ""
+
+#: thunar/thunar-permissions-chooser.c:443
+msgid "Correct _folder permissions..."
+msgstr ""
+
+#: thunar/thunar-permissions-chooser.c:444
+msgid "Click here to automatically fix the folder permissions."
+msgstr "Uzklikšķiniet šeit, lai automātiski izlabotu mapes atļaujas."
+
+#: thunar/thunar-permissions-chooser.c:457
+msgid "Please wait..."
+msgstr "Lūdzu uzgaidiet..."
+
+#: thunar/thunar-permissions-chooser.c:464
+msgid "Stop applying permissions recursively."
+msgstr "Pārtraukt pielietot atļaujas rekursīvi."
+
+#. allocate the question dialog
+#: thunar/thunar-permissions-chooser.c:577
+msgid "Question"
+msgstr "Jautājums"
+
+#: thunar/thunar-permissions-chooser.c:601
+msgid "Apply recursively?"
+msgstr "Pielietot rekursīvi?"
+
+#: thunar/thunar-permissions-chooser.c:607
+msgid ""
+"Do you want to apply your changes recursively to\n"
+"all files and subfolders below the selected folder?"
+msgstr ""
+"Vai vēlaties pielietot izmaiņas rekursīvi visiem\n"
+"failiem un apakšmapēm zem atlasītās mapes?"
+
+#: thunar/thunar-permissions-chooser.c:613
+msgid ""
+"If you select this option your choice will be remembered and you won't be "
+"asked again. You can use the preferences dialog to alter your choice "
+"afterwards."
+msgstr ""
+"Atzīmējiet šo opciju, ja vēlaties, lai atbildi atceras un vairāk nejautā. "
+"Varat izmantot uzstādījuma dialogu, lai izmainītu izvēli."
+
+#: thunar/thunar-permissions-chooser.c:980
+msgid "Mixed file owners"
+msgstr ""
+
+#: thunar/thunar-permissions-chooser.c:980
+msgid "Unknown file owner"
+msgstr "Nezināms faila īpašnieks"
+
+#: thunar/thunar-permissions-chooser.c:1060
+#: plugins/thunar-uca/thunar-uca-editor.c:432
+#: plugins/thunar-uca/thunar-uca-editor.c:644
+msgid "None"
+msgstr "Nav"
+
+#. 0000
+#: thunar/thunar-permissions-chooser.c:1061
+msgid "Write only"
+msgstr "Tikai rakstīt"
+
+#. 0002
+#: thunar/thunar-permissions-chooser.c:1062
+msgid "Read only"
+msgstr "Tikai lasīt"
+
+#. 0004
+#: thunar/thunar-permissions-chooser.c:1063
+msgid "Read & Write"
+msgstr "Lasīt un rakstīt"
+
+#: thunar/thunar-permissions-chooser.c:1065
+msgid "Varying (no change)"
+msgstr ""
+
+#: thunar/thunar-permissions-chooser.c:1192
+msgid "Correct folder permissions automatically?"
+msgstr "Labot mapes atļaujas automātiski?"
+
+#: thunar/thunar-permissions-chooser.c:1193
+msgid "Folder permissions"
+msgstr ""
+
+#: thunar/thunar-permissions-chooser.c:1195
+msgid "Correct _folder permissions"
+msgstr ""
+
+#: thunar/thunar-permissions-chooser.c:1197
+msgid ""
+"The folder permissions will be reset to a consistent state. Only users "
+"allowed to read the contents of this folder will be allowed to enter the "
+"folder afterwards."
+msgstr ""
+"Mapes atļaujas tiks atjaunotas uz atbilstošu stāvokli. Tikai lietotāji ar "
+"atļauju lasīt varēs piekļūt mapes saturam."
+
+#. popup the error message dialog
+#: thunar/thunar-permissions-chooser.c:1312
+msgid "Error while changing file permissions"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:272 thunar/thunar-settings.desktop.in:4
+msgid "Thunar Preferences"
+msgstr ""
+
+#. Display
+#: thunar/thunar-preferences-dialog.c:302
+msgid "Display"
+msgstr "Displejs"
+
+#: thunar/thunar-preferences-dialog.c:312
+msgid "Window Settings"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:331
+msgid "Use custom window decorations (only applied to new windows)"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:338
+msgid ""
+"Use custom, client-side window decorations instead of global, server-side "
+"ones. - Only applied to new Thunar windows"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:346
+msgid "Use current folder icon as window icon"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:352
+msgid "Select this option to use the current folder icon as window icon"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:357
+msgid "View Settings"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:370
+msgid "View _new folders using:"
+msgstr "Skats, kuru izmantot _jaunajās mapēs:"
+
+#: thunar/thunar-preferences-dialog.c:376
+#: thunar/thunar-preferences-dialog.c:532
+msgid "Icon View"
+msgstr "Ikonu skats"
+
+#: thunar/thunar-preferences-dialog.c:377
+msgid "List View"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:378
+msgid "Compact View"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:379
+msgid "Last Active View"
+msgstr "Pēdējais aktīvais skats"
+
+#: thunar/thunar-preferences-dialog.c:395
+msgid "_Remember view settings for each folder"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:402
+msgid ""
+"Select this option to remember view type, zoom level, sort column, and sort "
+"order individually for each folder"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:410
+msgid "gvfs metadata support is required"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:416
+msgid "Sort _folders before files"
+msgstr "Kārtot _mapes pirms failiem"
+
+#: thunar/thunar-preferences-dialog.c:422
+msgid ""
+"Select this option to list folders before files when you sort a folder."
+msgstr "Atlasiet šo opciju, lai kārtojot, mapes sarakstā būtu pirms failiem."
+
+#: thunar/thunar-preferences-dialog.c:430
+msgid "Show file size in binary format"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:436
+msgid ""
+"Select this option to show file size in binary format instead of decimal."
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:445
+msgid "Thumbnails"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:461
+msgid "Show thumbnails:"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:468
+#: thunar/thunar-preferences-dialog.c:1120
+#: thunar/thunar-preferences-dialog.c:1230
+msgid "Local Files Only"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:487
+msgid "Only show thumbnails for files smaller than:"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:493
+msgid "512KiB"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:494
+msgid "1MiB"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:495
+msgid "10MiB"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:496
+msgid "100MiB"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:497
+msgid "1GiB"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:498
+msgid "10GiB"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:499
+msgid "Unlimited"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:517
+msgid "Draw frames around thumbnails"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:523
+msgid "Select this option to draw black frames around thumbnails."
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:548
+msgid "_Text beside icons"
+msgstr "_Teksts blakus ikonai"
+
+#: thunar/thunar-preferences-dialog.c:554
+msgid ""
+"Select this option to place the icon captions for items beside the icon "
+"rather than below the icon."
+msgstr ""
+"Atlasiet šo opciju, lai novietotu ikonas virsrakstu blakus vienuma ikonai, "
+"nevis zem ikonas."
+
+#: thunar/thunar-preferences-dialog.c:564
+msgid "Date"
+msgstr "Datums"
+
+#: thunar/thunar-preferences-dialog.c:577
+#: plugins/thunar-sbr/thunar-sbr-date-renamer.c:223
+msgid "_Format:"
+msgstr "_Formāts:"
+
+#. TRANSLATORS: custom date format
+#: thunar/thunar-preferences-dialog.c:590
+msgid "Custom"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:591
+msgid "Today / Custom"
+msgstr ""
+
+#. TRANSLATORS: Please do not translate the first column (specifiers),
+#. 'strftime' and of course '\n'
+#: thunar/thunar-preferences-dialog.c:608
+msgid ""
+"Custom date format to apply.\n"
+"\n"
+"The most common specifiers are:\n"
+"%d day of month\n"
+"%m month\n"
+"%Y year including century\n"
+"%H hour\n"
+"%M minute\n"
+"%S second\n"
+"\n"
+"For a complete list, search 'Glib.DateTime.format'."
+msgstr ""
+
+#. Side Pane
+#: thunar/thunar-preferences-dialog.c:630
+msgid "Side Pane"
+msgstr "Sāna rūts"
+
+#: thunar/thunar-preferences-dialog.c:640
+msgid "Shortcuts Pane"
+msgstr "Īsinājumikonu rūts"
+
+#: thunar/thunar-preferences-dialog.c:656
+msgid "_Icon Size:"
+msgstr "_Ikonas izmērs:"
+
+#: thunar/thunar-preferences-dialog.c:661
+#: thunar/thunar-preferences-dialog.c:727
+msgid "16px"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:662
+#: thunar/thunar-preferences-dialog.c:728
+msgid "24px"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:663
+#: thunar/thunar-preferences-dialog.c:729
+msgid "32px"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:664
+#: thunar/thunar-preferences-dialog.c:730
+msgid "48px"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:665
+#: thunar/thunar-preferences-dialog.c:731
+msgid "64px"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:666
+#: thunar/thunar-preferences-dialog.c:732
+msgid "96px"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:667
+#: thunar/thunar-preferences-dialog.c:733
+msgid "128px"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:668
+#: thunar/thunar-preferences-dialog.c:734
+msgid "160px"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:669
+#: thunar/thunar-preferences-dialog.c:735
+msgid "192px"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:670
+#: thunar/thunar-preferences-dialog.c:736
+msgid "256px"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:671
+#: thunar/thunar-preferences-dialog.c:737
+msgid "512px"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:672
+#: thunar/thunar-preferences-dialog.c:738
+msgid "1024px"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:690
+msgid "Show Icon _Emblems"
+msgstr "Rādīt ikonu _emblēmas"
+
+#: thunar/thunar-preferences-dialog.c:696
+msgid ""
+"Select this option to display icon emblems in the shortcuts pane for all "
+"folders for which emblems have been defined in the folders properties "
+"dialog."
+msgstr ""
+"Atlasiet šo opciju, lai rādītu ikonas emblēmas īsinājumikonu rūtī visām "
+"mapēm, kurām emblēmas ir definētas mapes rekvizītu dialogu."
+
+#: thunar/thunar-preferences-dialog.c:706
+msgid "Tree Pane"
+msgstr "Koka rūts"
+
+#: thunar/thunar-preferences-dialog.c:722
+msgid "Icon _Size:"
+msgstr "Ikonas _izmērs:"
+
+#: thunar/thunar-preferences-dialog.c:756
+msgid "Show Icon E_mblems"
+msgstr "Rādīt ikonu e_mblēmas"
+
+#: thunar/thunar-preferences-dialog.c:762
+msgid ""
+"Select this option to display icon emblems in the tree pane for all folders "
+"for which emblems have been defined in the folders properties dialog."
+msgstr ""
+"Atlasiet šo opciju, lai rādītu ikonas emblēmas koka rūtī visām mapēm, kurām "
+"emblēmas ir definētas mapes rekvizītu dialogā."
+
+#: thunar/thunar-preferences-dialog.c:772
+msgid "Icon Style"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:788
+msgid "Use symbolic folder icons"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:794
+msgid ""
+"Select this option to use symbolic folder icons instead of regular ones."
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:803
+msgid "Image Preview"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:819
+msgid "Image Preview Mode:"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:821
+msgid ""
+"- Standalone: Image Preview uses a separate pane\n"
+"- Embedded: Image Preview is embedded in the left sidepane\n"
+msgstr ""
+
+#. Behavior
+#: thunar/thunar-preferences-dialog.c:851
+msgid "Behavior"
+msgstr "Uzvedība"
+
+#: thunar/thunar-preferences-dialog.c:861
+msgid "Navigation"
+msgstr "Navigācija"
+
+#: thunar/thunar-preferences-dialog.c:877
+msgid "_Single click to activate items"
+msgstr "_Viens klikšķis, lai aktivizētu vienumus"
+
+#: thunar/thunar-preferences-dialog.c:902
+msgid ""
+"Specify the d_elay before an item gets selected\n"
+"when the mouse pointer is paused over it:"
+msgstr ""
+"Norādi_et aizturi pirms vienums tiks atlasīts,\n"
+"kad peles kursors tiek turēts virs tā:"
+
+#: thunar/thunar-preferences-dialog.c:915
+msgid ""
+"When single-click activation is enabled, pausing the mouse pointer over an "
+"item will automatically select that item after the chosen delay. You can "
+"disable this behavior by moving the slider to the left-most position. This "
+"behavior may be useful when single clicks activate items, and you want only "
+"to select the item without activating it."
+msgstr ""
+"Kad viens-klikšķis ir aktivizēts, paturot peles kursoru virs vienuma, pēc "
+"norādītā ilguma vienums tiks automātiski atlasīts. Varat izslēgt šo uzvedību"
+" pārvietojot slīdni uz pašu tālāko kreiso pusi. Šī uzvedība ir noderīga, kad"
+" viens klikšķis aktivizē vienumu, un vēlaties atlasīt vienumu bez "
+"aktivizācijas."
+
+#: thunar/thunar-preferences-dialog.c:938
+msgid "Disabled"
+msgstr "Izslēgts"
+
+#: thunar/thunar-preferences-dialog.c:944
+msgid "Medium"
+msgstr "Vidējs"
+
+#: thunar/thunar-preferences-dialog.c:949
+msgid "Long"
+msgstr "Garš"
+
+#: thunar/thunar-preferences-dialog.c:958
+msgid "_Double click to activate items"
+msgstr "_Dubultklikšķi, lai aktivizētu vienumu"
+
+#: thunar/thunar-preferences-dialog.c:973
+msgid "Tabs and Windows"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:989
+msgid "Open folders in new tabs on middle click"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:995
+msgid ""
+"Select this option to open a new tab on middle click instead of a new window"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1002
+msgid "Open new thunar instances as tabs"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1008
+msgid ""
+"Select this option to open new thunar instances as tabs in an existing "
+"thunar window"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1016
+msgid "Show full directory paths in tab titles"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1022
+msgid ""
+"Select this option to show the full directory path in the tab title instead "
+"of only the directory name"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1029
+msgid "Restore tabs on startup"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1035
+msgid ""
+"Select this option to restore your tabs as they were last time you used "
+"Thunar"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1046
+msgid "Context Menu"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1062
+msgid "Show action to permanently delete files and folders"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1068
+msgid "Select this option to show the 'Delete' action in the context menu"
+msgstr ""
+
+#. Advanced
+#: thunar/thunar-preferences-dialog.c:1078
+msgid "Advanced"
+msgstr "Paplašināti"
+
+#: thunar/thunar-preferences-dialog.c:1088
+msgid "File Transfer"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1105
+msgid "Transfer files in parallel:"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1107
+msgid ""
+"Indicates the behavior during multiple copies:\n"
+"- Always: all copies are done simultaneously\n"
+"- Local Files Only: simultaneous copies for local (not remote, not attached) files\n"
+"- Local Files Only (Same Devices): if all files are local but on different devices (disks, mount points), copies will be sequential\n"
+"- Local Files Only (Idle Devices): if all files are local but on busy devices (disks, mount points), copies will be sequential\n"
+"- Never: all copies are done sequentially"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1121
+msgid "Local Files Only (Same Devices)"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1122
+msgid "Local Files Only (Idle Devices)"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1141
+msgid "Use intermediate file on copy:"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1145
+msgid ""
+"Use intermediate file '*.partial~' to copy files. This will prevent "
+"fragmented files. The new file will only be shown after the copy was "
+"successfully finished."
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1172
+msgid "Verify file contents on copy:"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1176
+msgid ""
+"Compare contents of original file and copy in order to detect corruption. "
+"While this will attempt to compare the actual contents that are on the "
+"destination media, Thunar may be unable to bypass filesystem caches, so this"
+" comparison may not detect all instances of corruption. Enabling this option"
+" will increase copy time."
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1206
+msgid "Search"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1223
+msgid "Include subfolders:"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1247
+msgid "Folder Permissions"
+msgstr "Mapes atļaujas"
+
+#: thunar/thunar-preferences-dialog.c:1263
+msgid ""
+"When changing the permissions of a folder, you\n"
+"can also apply the changes to the contents of the\n"
+"folder. Select the default behavior below:"
+msgstr ""
+"Kad uzstādāt atļaujas mapei, varat\n"
+"pielietot izmaiņas mapes saturam.\n"
+"Norādiet noklusēto uzvedību:"
+
+#: thunar/thunar-preferences-dialog.c:1275
+#: thunar/thunar-preferences-dialog.c:1321
+msgid "Ask every time"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1276
+msgid "Apply to Folder and Contents"
+msgstr "Pielietot mapei un saturam"
+
+#: thunar/thunar-preferences-dialog.c:1277
+msgid "Apply to Folder Only"
+msgstr "Pielietot tikai mapei"
+
+#: thunar/thunar-preferences-dialog.c:1292
+msgid "Security"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1309
+msgid "Execute shell scripts:"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1344
+msgid "Volume Management"
+msgstr "Sējuma pārvaldība"
+
+#. add check button to enable/disable auto mounting
+#: thunar/thunar-preferences-dialog.c:1361
+msgid "Enable _Volume Management"
+msgstr "Iespējot _sējuma pārvaldību"
+
+#: thunar/thunar-preferences-dialog.c:1380
+msgid ""
+"<a href=\"volman-config:\">Configure</a> the management of removable drives,\n"
+"devices and media."
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1394
+#: thunar/thunar-properties-dialog.c:831
+msgid "Missing dependencies"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1402
+msgid ""
+"It looks like <a href=\"https://wiki.gnome.org/Projects/gvfs\">gvfs</a> is not available.\n"
+"Important features including trash support,\n"
+"removable media and remote location browsing\n"
+"will not work. <a href=\"https://docs.xfce.org/xfce/thunar/unix-filesystem#gnome_virtual_file_system\">[Read more]</a>"
+msgstr ""
+
+#. Shortcuts
+#: thunar/thunar-preferences-dialog.c:1417
+msgid "Shortcuts"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1432
+msgid "Window"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1433
+msgid "View"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1434
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:550
+msgid "Launcher"
+msgstr "Palaidējs"
+
+#: thunar/thunar-preferences-dialog.c:1435
+msgid "Status Bar"
+msgstr ""
+
+#: thunar/thunar-preferences-dialog.c:1443
+msgid "The Shortcuts Editor requires a Thunar window to be present."
+msgstr ""
+
+#. tell the user that we failed to come up with the thunar-volman
+#. configuration dialog
+#: thunar/thunar-preferences-dialog.c:1507
+msgid "Failed to display the volume management settings"
+msgstr "Neizdevās parādīt sējuma pārvaldības uzstādījumus"
+
+#: thunar/thunar-progress-dialog.c:99
+msgid "File Operation Progress"
+msgstr "Faila darbības progress"
+
+#: thunar/thunar-progress-view.c:404
+msgid "Paused"
+msgstr ""
+
+#: thunar/thunar-progress-view.c:426
+msgid "Starting... (User request)"
+msgstr ""
+
+#: thunar/thunar-progress-view.c:429
+msgid "Resuming..."
+msgstr ""
+
+#. update the status text
+#: thunar/thunar-progress-view.c:464
+msgid "Cancelling..."
+msgstr "Atcelšana..."
+
+#. display the error message
+#: thunar/thunar-progress-view.c:546
+msgid "Error while processing file operation"
+msgstr ""
+
+#: thunar/thunar-progress-view.c:620
+msgid "Job queued"
+msgstr ""
+
+#: thunar/thunar-progress-view.c:639
+msgid "Resuming job..."
+msgstr ""
+
+#: thunar/thunar-progress-view.c:661
+msgid "Queued"
+msgstr ""
+
+#: thunar/thunar-properties-dialog.c:358
+msgid "General"
+msgstr "Vispārēji"
+
+#: thunar/thunar-properties-dialog.c:383
+#: plugins/thunar-uca/thunar-uca-editor.ui:46
+msgid "_Name:"
+msgstr "_Nosaukums:"
+
+#: thunar/thunar-properties-dialog.c:422
+msgid "Names:"
+msgstr ""
+
+#. Second box (kind, open with, link target, original path, location, volume)
+#: thunar/thunar-properties-dialog.c:445
+msgid "Kind:"
+msgstr "Veids:"
+
+#: thunar/thunar-properties-dialog.c:469
+msgid "_Open With:"
+msgstr ""
+
+#: thunar/thunar-properties-dialog.c:486
+msgid "Link Target:"
+msgstr "Saites mērķis:"
+
+#. TRANSLATORS: Try to come up with a short translation of "Original Path"
+#. (which is the path
+#. * where the trashed file/folder was located before it was moved to the
+#. trash), otherwise the
+#. * properties dialog width will be messed up.
+#: thunar/thunar-properties-dialog.c:508 thunar/thunar-util.c:1475
+msgid "Original Path:"
+msgstr "Sākotnējais ceļš:"
+
+#: thunar/thunar-properties-dialog.c:525
+msgid "Location:"
+msgstr ""
+
+#: thunar/thunar-properties-dialog.c:542
+msgid "Volume:"
+msgstr "Sējums:"
+
+#. Third box (deleted, modified, accessed)
+#: thunar/thunar-properties-dialog.c:584
+msgid "Deleted:"
+msgstr "Dzēsts:"
+
+#: thunar/thunar-properties-dialog.c:601
+msgid "Created:"
+msgstr ""
+
+#: thunar/thunar-properties-dialog.c:635
+msgid "Accessed:"
+msgstr "Piekļūts:"
+
+#: thunar/thunar-properties-dialog.c:681
+msgid "Size on Disk:"
+msgstr ""
+
+#. Fifth box (content, capacity, free space)
+#: thunar/thunar-properties-dialog.c:708
+msgid "Content:"
+msgstr ""
+
+#: thunar/thunar-properties-dialog.c:726
+msgid "Capacity:"
+msgstr ""
+
+#: thunar/thunar-properties-dialog.c:748
+msgid "Usage:"
+msgstr ""
+
+#. Emblem chooser
+#: thunar/thunar-properties-dialog.c:785
+msgid "Emblems"
+msgstr "Emblēmas"
+
+#: thunar/thunar-properties-dialog.c:800
+msgid "Highlight"
+msgstr ""
+
+#: thunar/thunar-properties-dialog.c:839
+msgid ""
+"It looks like <a href=\"https://wiki.gnome.org/Projects/gvfs\">gvfs</a> is not available.\n"
+"This feature will not work. <a href=\"https://docs.xfce.org/xfce/thunar/unix-filesystem#gnome_virtual_file_system\">[Read more]</a>"
+msgstr ""
+
+#: thunar/thunar-properties-dialog.c:867
+msgid "Example.txt"
+msgstr ""
+
+#: thunar/thunar-properties-dialog.c:884
+msgid "_Apply"
+msgstr ""
+
+#: thunar/thunar-properties-dialog.c:896
+msgid "_Reset"
+msgstr ""
+
+#: thunar/thunar-properties-dialog.c:907
+msgid "Set _Foreground"
+msgstr ""
+
+#: thunar/thunar-properties-dialog.c:915
+msgid "Set _Background"
+msgstr ""
+
+#: thunar/thunar-properties-dialog.c:1216
+#, c-format
+msgid "Select an Icon for \"%s\" (%s)"
+msgstr ""
+
+#. allocate the chooser dialog
+#: thunar/thunar-properties-dialog.c:1218
+#: plugins/thunar-uca/thunar-uca-editor.c:453
+#, c-format
+msgid "Select an Icon for \"%s\""
+msgstr "Norādiet ikonu priekš \"%s\""
+
+#: thunar/thunar-properties-dialog.c:1244
+#, c-format
+msgid "Failed to change icon of \"%s\" (%s)"
+msgstr ""
+
+#: thunar/thunar-properties-dialog.c:1248
+#, c-format
+msgid "Failed to change icon of \"%s\""
+msgstr "Neizdevās nomainīt ikonu priekš\"%s\""
+
+#: thunar/thunar-properties-dialog.c:1356
+#, c-format
+msgid "%s (%s) - Properties"
+msgstr ""
+
+#: thunar/thunar-properties-dialog.c:1358
+#, c-format
+msgid "%s - Properties"
+msgstr "%s - Rekvizīti"
+
+#. update the properties dialog title
+#: thunar/thunar-properties-dialog.c:1625
+msgid "Properties"
+msgstr ""
+
+#: thunar/thunar-properties-dialog.c:1652
+msgid "Link Targets:"
+msgstr ""
+
+#: thunar/thunar-properties-dialog.c:1746
+msgid "mixed"
+msgstr ""
+
+#: thunar/thunar-renamer-dialog.c:233
+msgid "_Add Files..."
+msgstr "Pievienot f_ailus..."
+
+#: thunar/thunar-renamer-dialog.c:233
+msgid "Include additional files in the list of files to be renamed"
+msgstr "Iekļaut papildus failus pārdēvēšanas sarakstā"
+
+#: thunar/thunar-renamer-dialog.c:235
+msgid "Clear"
+msgstr "Notīrīt"
+
+#: thunar/thunar-renamer-dialog.c:235
+msgid "Clear the file list below"
+msgstr "Notīrīt failu sarakstu"
+
+#: thunar/thunar-renamer-dialog.c:236 thunar/thunar-window.c:709
+msgid "_About"
+msgstr "_Par"
+
+#: thunar/thunar-renamer-dialog.c:236
+msgid "Display information about Thunar Bulk Rename"
+msgstr "Parādīt informāciju par Thunar Masu Pārdēvēšanu"
+
+#: thunar/thunar-renamer-dialog.c:412 thunar/thunar-renamer-dialog.c:1841
+#: thunar-bulk-rename.desktop.in.in:4
+msgid "Rename Multiple Files"
+msgstr "Pārdēvēt vairākus failus"
+
+#: thunar/thunar-renamer-dialog.c:416
+msgid "Close this window, cancel further changes."
+msgstr ""
+
+#: thunar/thunar-renamer-dialog.c:424
+msgid "Rename items listed above, keep this window open."
+msgstr ""
+
+#: thunar/thunar-renamer-dialog.c:494
+msgid "New Name"
+msgstr "Jauns nosaukums"
+
+#: thunar/thunar-renamer-dialog.c:559
+msgid ""
+"Click here to view the documentation for the selected rename operation."
+msgstr ""
+"Uzklikšķiniet šeit, lai apskatītu izvēlētās pārdēvēšanas operācijas "
+"dokumentāciju."
+
+#. TRANSLATORS: You can test this string by temporarily removing thunar-sbr.*
+#. from $libdir/thunarx-2/,
+#. *              and opening the multi rename dialog by selecting multiple
+#. files and pressing F2.
+#: thunar/thunar-renamer-dialog.c:670
+msgid ""
+"No renamer modules were found on your system. Please check your\n"
+"installation or contact your system administrator. If you install Thunar\n"
+"from source, be sure to enable the \"Simple Builtin Renamers\" plugin."
+msgstr ""
+"Sistēmā netika atrasts neviens pārdēvēšanas modulis. Lūdzu pārbaudiet savu\n"
+"instalāciju vai sazinieties ar savas sistēmas administratoru. Ja instalējat Thunar\n"
+"no pirmavota, pārliecinieties, ka esat ieslēguši \"Simple Builtin Renamers\" spraudni."
+
+#: thunar/thunar-renamer-dialog.c:907
+msgid "Remove File"
+msgid_plural "Remove Files"
+msgstr[0] "Noņemt failu"
+msgstr[1] "Noņemt failus"
+msgstr[2] "Noņemt failus"
+
+#: thunar/thunar-renamer-dialog.c:908
+msgid "Remove the selected file from the list of files to be renamed"
+msgid_plural "Remove the selected files from the list of files to be renamed"
+msgstr[0] "Noņemt atlasīto failu no pārdēvēšanas saraksta"
+msgstr[1] "Noņemt atlasītos failus no pārdēvēšanas saraksta"
+msgstr[2] "Noņemt atlasītos failus no pārdēvēšanas saraksta"
+
+#. tell the user that we failed
+#: thunar/thunar-renamer-dialog.c:1004
+msgid "Failed to open the documentation browser"
+msgstr "Neizdevās atvērt dokumentu pārlūku"
+
+#. allocate the file chooser
+#: thunar/thunar-renamer-dialog.c:1105
+msgid "Select files to rename"
+msgstr "Atlasiet failus pārdēvēšanai"
+
+#: thunar/thunar-renamer-dialog.c:1121
+msgid "Audio Files"
+msgstr "Audio faili"
+
+#: thunar/thunar-renamer-dialog.c:1126
+msgid "Image Files"
+msgstr "Attēlu faili"
+
+#: thunar/thunar-renamer-dialog.c:1131
+msgid "Video Files"
+msgstr "Video faili"
+
+#. just popup the about dialog
+#: thunar/thunar-renamer-dialog.c:1267 thunar-bulk-rename.desktop.in.in:3
+#: thunar-bulk-rename.desktop.in.in:5
+msgid "Bulk Rename"
+msgstr "Masu pārdēvēšana"
+
+#: thunar/thunar-renamer-dialog.c:1267
+msgid ""
+"Thunar Bulk Rename is a powerful and extensible\n"
+"tool to rename multiple files at once."
+msgstr ""
+"Thunar masu pārdēvēšana ir spēcīgs un paplašināms\n"
+"rīks, daudzu failu vienlaicīgai pārdēvēšanai."
+
+#. change title to reflect the standalone status
+#: thunar/thunar-renamer-dialog.c:1841
+msgid "Bulk Rename - Rename Multiple Files"
+msgstr "Masu pārdēvēšana - Pārdēvē daudzus failus"
+
+#: thunar/thunar-renamer-progress.c:172
+#, c-format
+msgid "Failed to rename \"%s\" to \"%s\"."
+msgstr "Neizdevās pārdēvēt \"%s\" uz \"%s\"."
+
+#: thunar/thunar-renamer-progress.c:184
+msgid ""
+"You can either choose to skip this file and continue to rename the remaining"
+" files, or revert the previously renamed files to their previous names, or "
+"cancel the operation without reverting previous changes."
+msgstr ""
+"Varat izvēlēties izlaist failu un turpināt pārdēvēt atlikušos failus, vai "
+"atgriezt visus pārdēvētos failus uz iepriekšējiem nosaukumiem, vai atcelt "
+"operāciju neatgriežot pārdēvēto failu nosaukums."
+
+#: thunar/thunar-renamer-progress.c:189
+msgid "_Revert Changes"
+msgstr "_Atgriezt izmaiņas"
+
+#: thunar/thunar-renamer-progress.c:190 thunar/thunar-renamer-progress.c:199
+msgid "_Skip This File"
+msgstr "_Izlaist šo failu"
+
+#: thunar/thunar-renamer-progress.c:196
+msgid ""
+"Do you want to skip this file and continue to rename the remaining files?"
+msgstr "Vai vēlaties izlaist šo failu un turpināt pārdēvēt atlikušos failus?"
+
+#: thunar/thunar-shortcuts-model.c:675 thunar/thunar-shortcuts-model.c:1040
+#: thunar/thunar-window.c:693
+msgid "Browse the file system"
+msgstr "Pārlūkot failu sistēmu"
+
+#: thunar/thunar-shortcuts-model.c:709
+#, c-format
+msgid "Mount and open %s (%s)"
+msgstr ""
+
+#: thunar/thunar-shortcuts-model.c:722 plugins/thunar-tpa/thunar-tpa.c:312
+msgid "Trash is empty"
+msgstr "Miskaste ir tukša"
+
+#: thunar/thunar-shortcuts-model.c:726
+#, c-format
+msgid "Trash contains %d file"
+msgid_plural "Trash contains %d files"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: thunar/thunar-shortcuts-model.c:1033
+msgid "Devices"
+msgstr ""
+
+#: thunar/thunar-shortcuts-model.c:1076
+msgid "Network"
+msgstr "Tīkls"
+
+#: thunar/thunar-shortcuts-model.c:1084
+msgid "Browse Network"
+msgstr ""
+
+#: thunar/thunar-shortcuts-model.c:1085 thunar/thunar-window.c:703
+msgid "Browse local network connections"
+msgstr ""
+
+#: thunar/thunar-shortcuts-model.c:1107
+msgid "Places"
+msgstr ""
+
+#: thunar/thunar-shortcuts-model.c:1119
+msgid "Open the home folder"
+msgstr ""
+
+#: thunar/thunar-shortcuts-model.c:1136
+msgid "Open the desktop folder"
+msgstr ""
+
+#: thunar/thunar-shortcuts-model.c:1184 thunar.desktop.in.in:21
+msgid "Computer"
+msgstr ""
+
+#: thunar/thunar-shortcuts-model.c:1185
+msgid "Browse the computer"
+msgstr ""
+
+#: thunar/thunar-shortcuts-model.c:1197
+msgid "Recent"
+msgstr ""
+
+#: thunar/thunar-shortcuts-model.c:1198
+msgid "Browse recently used files"
+msgstr ""
+
+#: thunar/thunar-shortcuts-view.c:265
+msgid "Re_name Shortcut"
+msgstr "Pār_dēvēt īsinājumikonu"
+
+#: thunar/thunar-shortcuts-view.c:266
+msgid "_Remove Shortcut"
+msgstr "_Izņemt īsinājumikonu"
+
+#: thunar/thunar-shortcuts-view.c:1693
+#, c-format
+msgid "The path \"%s\" does not refer to a directory"
+msgstr "Ceļš \"%s\" nenorāda uz direktoriju"
+
+#. display an error message to the user
+#: thunar/thunar-shortcuts-view.c:1713
+msgid "Failed to add new shortcut"
+msgstr "Neizdevās pievienot jaunu īsinājumikonu"
+
+#: thunar/thunar-size-label.c:197
+msgid "Click here to stop calculating the total size of the folder."
+msgstr "Uzklikšķiniet, lai atceltu kalkulāciju kopējam mapes izmēram."
+
+#. add the label widget
+#. tell the user that we started calculation
+#: thunar/thunar-size-label.c:207 thunar/thunar-size-label.c:364
+msgid "Calculating..."
+msgstr "Kalkulācija..."
+
+#. tell the user that the operation was canceled
+#: thunar/thunar-size-label.c:323
+msgid "Calculation aborted"
+msgstr "Kalkulācija atcelta"
+
+#: thunar/thunar-size-label.c:481 thunar/thunar-util.c:1358
+#, c-format
+msgid "%d folder"
+msgid_plural "%d folders"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: thunar/thunar-size-label.c:483
+#, c-format
+msgid "%u item (%s, %s)"
+msgid_plural "%u items (%s, %s)"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#. TRANSLATORS: this is shows if during the deep count size
+#. * directories were not accessible
+#: thunar/thunar-size-label.c:493
+msgid "(some contents unreadable)"
+msgstr ""
+
+#. nothing was readable, so permission was denied
+#: thunar/thunar-size-label.c:504
+msgid "Permission denied"
+msgstr ""
+
+#: thunar/thunar-standard-view.c:485
+msgid "Select _all Files"
+msgstr "Atlasīt _visus failus"
+
+#: thunar/thunar-standard-view.c:485
+msgid "Select all files in this window"
+msgstr "Atlasīt visus failus pašreizējā logā"
+
+#: thunar/thunar-standard-view.c:486
+msgid "Select _by Pattern..."
+msgstr "Atlasīt _pēc shēmas..."
+
+#: thunar/thunar-standard-view.c:486
+msgid "Select all files that match a certain pattern"
+msgstr "Atlasīt visus failus, kuri atbilst noteiktai shēmai"
+
+#: thunar/thunar-standard-view.c:487
+msgid "_Invert Selection"
+msgstr ""
+
+#: thunar/thunar-standard-view.c:487
+msgid "Select all files but not those currently selected"
+msgstr ""
+
+#: thunar/thunar-standard-view.c:488
+msgid "U_nselect all Files"
+msgstr ""
+
+#: thunar/thunar-standard-view.c:488
+msgid "Unselect all files in this window"
+msgstr ""
+
+#: thunar/thunar-standard-view.c:489
+msgid "Arran_ge Items"
+msgstr "Kārt_ot vienumus"
+
+#: thunar/thunar-standard-view.c:490
+msgid "_Reversed Order"
+msgstr ""
+
+#: thunar/thunar-standard-view.c:490
+msgid "Reverse the sort order"
+msgstr ""
+
+#: thunar/thunar-standard-view.c:491
+msgid "By _Name"
+msgstr ""
+
+#: thunar/thunar-standard-view.c:491
+msgid "Keep items sorted by their name"
+msgstr "Kārtot vienumus pēc to nosaukuma"
+
+#: thunar/thunar-standard-view.c:492
+msgid "By _Size"
+msgstr ""
+
+#: thunar/thunar-standard-view.c:492
+msgid "Keep items sorted by their size"
+msgstr "Kārtot vienumus pēc to izmēra"
+
+#: thunar/thunar-standard-view.c:493
+msgid "By _Type"
+msgstr ""
+
+#: thunar/thunar-standard-view.c:493
+msgid "Keep items sorted by their type"
+msgstr "Kārtot vienumus pēc to tipa"
+
+#: thunar/thunar-standard-view.c:494
+msgid "By _Modification Date"
+msgstr ""
+
+#: thunar/thunar-standard-view.c:494
+msgid "Keep items sorted by their modification date"
+msgstr "Kārtot vienumus pēc to modificēšanas datuma"
+
+#: thunar/thunar-standard-view.c:495
+msgid "By D_eletion Date"
+msgstr ""
+
+#: thunar/thunar-standard-view.c:495
+msgid "Keep items sorted by their deletion date"
+msgstr ""
+
+#: thunar/thunar-standard-view.c:496
+msgid "_Ascending"
+msgstr "_Augoši"
+
+#: thunar/thunar-standard-view.c:496
+msgid "Sort items in ascending order"
+msgstr "Kārtot vienumus augošā secībā"
+
+#: thunar/thunar-standard-view.c:497
+msgid "_Descending"
+msgstr "_Dilstoši"
+
+#: thunar/thunar-standard-view.c:497
+msgid "Sort items in descending order"
+msgstr "Kārtot vienumus dilstošā secībā"
+
+#: thunar/thunar-standard-view.c:1847
+msgid "Loading folder contents..."
+msgstr "Ielādēju mapes saturu..."
+
+#: thunar/thunar-standard-view.c:2493
+#, c-format
+msgid "%d file found"
+msgid_plural "%d files found"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#. display an error to the user
+#: thunar/thunar-standard-view.c:2661 thunar/thunar-window.c:4514
+msgid "Failed to open the home folder"
+msgstr "Neizdevās atvērt mājas mapi"
+
+#: thunar/thunar-standard-view.c:2739
+msgctxt "Select by Pattern dialog: title"
+msgid "Select by Pattern"
+msgstr "Atlasīt pēc shēmas"
+
+#: thunar/thunar-standard-view.c:2744
+msgctxt "Select by Pattern dialog: buttons"
+msgid "_Cancel"
+msgstr "A_tcelt"
+
+#: thunar/thunar-standard-view.c:2747
+msgctxt "Select by Pattern dialog: buttons"
+msgid "_Select"
+msgstr "_Atlasīt"
+
+#: thunar/thunar-standard-view.c:2761
+msgctxt "Select by Pattern dialog: labels: pattern entry textbox"
+msgid "_Pattern:"
+msgstr "_Shēma:"
+
+#: thunar/thunar-standard-view.c:2762
+msgctxt ""
+"Select by Pattern dialog: tooltips on label for pattern entry textbox"
+msgid ""
+"Files whose name matches the wildcard pattern you enter will be selected in "
+"the main window."
+msgstr ""
+
+#. TRANSLATORS: the * and ? characters are the ASCII wildcard special symbols,
+#. and they must not be localized.
+#: thunar/thunar-standard-view.c:2776
+msgctxt "Select by Pattern dialog: tooltips: pattern entry text box"
+msgid ""
+"? matches exactly one character,\n"
+"* matches any number of characters, including zero.\n"
+"\n"
+"For example: *.txt, file??.png, pict\n"
+"\n"
+"Without any * or ? wildcards, the pattern will match anywhere in a name. With wildcards, the pattern must match at both the start and the end of a name."
+msgstr ""
+
+#: thunar/thunar-standard-view.c:2780
+msgctxt "Select by Pattern dialog: labels: case sensitive checkbox"
+msgid "C_ase sensitive"
+msgstr ""
+
+#: thunar/thunar-standard-view.c:2781
+msgctxt "Select by Pattern dialog: tooltips: case sensitive checkbox"
+msgid ""
+"If enabled, letter case must match the pattern.\n"
+"Examp* would match Example.txt and not example.txt"
+msgstr ""
+
+#: thunar/thunar-standard-view.c:2786
+msgctxt "Select by Pattern dialog: labels: match diacritics checkbox"
+msgid "_Match diacritics"
+msgstr ""
+
+#: thunar/thunar-standard-view.c:2787
+msgctxt "Select by Pattern dialog: tooltips: match diacritics checkbox"
+msgid ""
+"If enabled, require accents to match the pattern.\n"
+"Rés* would match Résumé.txt and not Resume.txt"
+msgstr ""
+
+#. tell the user that the file name provided by the X Direct Save source is
+#. invalid
+#: thunar/thunar-standard-view.c:3174
+msgid "Invalid filename provided by XDS drag site"
+msgstr "XDS mešanas vietne sniegusi nederīgs faila nosaukumu"
+
+#. display an error dialog to the user
+#: thunar/thunar-standard-view.c:3368
+#, c-format
+msgid "Failed to create a link for the URL \"%s\""
+msgstr "Neizdevās izveidot saiti uz URL \"%s\""
+
+#: thunar/thunar-standard-view.c:3415
+msgid "Untitled document"
+msgstr ""
+
+#: thunar/thunar-standard-view.c:3899 thunar/thunar-window.c:4611
+#, c-format
+msgid "Failed to open directory \"%s\""
+msgstr "Neizdevās atvērt direktoriju \"%s\""
+
+#: thunar/thunar-statusbar.c:95
+msgid "Show size"
+msgstr ""
+
+#: thunar/thunar-statusbar.c:96
+msgid "Size in bytes"
+msgstr ""
+
+#: thunar/thunar-statusbar.c:96
+msgid "Show size in bytes"
+msgstr ""
+
+#: thunar/thunar-statusbar.c:97
+msgid "Filetype"
+msgstr ""
+
+#: thunar/thunar-statusbar.c:97
+msgid "Show filetype"
+msgstr ""
+
+#: thunar/thunar-statusbar.c:98
+msgid "Display Name"
+msgstr ""
+
+#: thunar/thunar-statusbar.c:98
+msgid "Show display name"
+msgstr ""
+
+#: thunar/thunar-statusbar.c:99
+msgid "Last Modified"
+msgstr ""
+
+#: thunar/thunar-statusbar.c:99
+msgid "Show last modified"
+msgstr ""
+
+#: thunar/thunar-statusbar.c:100
+msgid "Hidden Files Count"
+msgstr ""
+
+#: thunar/thunar-statusbar.c:100
+msgid "Show hidden files count"
+msgstr ""
+
+#: thunar/thunar-toolbar-editor.c:152
+msgid "Configure the Toolbar"
+msgstr ""
+
+#. create the top label for the toolbar editor dialog
+#: thunar/thunar-toolbar-editor.c:167
+msgid ""
+"Configure the order and visibility of toolbar items.\n"
+"Note that toolbar items are always executed for the current directory."
+msgstr ""
+
+#. create the "Use Default" button
+#: thunar/thunar-toolbar-editor.c:260
+msgid "De_fault Order"
+msgstr ""
+
+#. create the "Symbolic Icons" checkbox
+#: thunar/thunar-toolbar-editor.c:266
+msgid "_Symbolic Icons"
+msgstr ""
+
+#: thunar/thunar-toolbar-editor.c:272
+msgid "Use symbolic icons instead of regular ones (if available)."
+msgstr ""
+
+#: thunar/thunar-toolbar-editor.c:630
+msgid "Only visible when the menubar is hidden"
+msgstr ""
+
+#: thunar/thunar-transfer-job.c:552
+msgid "Verifying file contents..."
+msgstr ""
+
+#: thunar/thunar-transfer-job.c:1140
+#, c-format
+msgid ""
+"Error while copying to \"%s\": %s more space is required to copy to the "
+"destination"
+msgstr ""
+
+#. update progress information
+#: thunar/thunar-transfer-job.c:1174
+#, c-format
+msgid "Trying to restore \"%s\""
+msgstr "Notiek \"%s\" atjaunošana"
+
+#: thunar/thunar-transfer-job.c:1203
+#, c-format
+msgid ""
+"The folder \"%s\" does not exist anymore but is required to restore the file"
+" \"%s\" from the trash"
+msgstr ""
+"Mape \"%s\" vairs neeksistē, bet tā ir nepieciešama, lai atjaunotu failu "
+"\"%s\" no miskastes"
+
+#: thunar/thunar-transfer-job.c:1230
+#, c-format
+msgid "Failed to restore the folder \"%s\""
+msgstr "Neizdevās atjaunot mapi \"%s\""
+
+#. update progress information
+#: thunar/thunar-transfer-job.c:1315
+#, c-format
+msgid "Trying to move \"%s\""
+msgstr "Neizdevās pārvietot \"%s\""
+
+#. update progress information
+#: thunar/thunar-transfer-job.c:1398
+#, c-format
+msgid "Could not move \"%s\" directly. Collecting files for copying..."
+msgstr "Nevarēja pārvietot \"%s\" tieši. Failu savākšana kopēšanai..."
+
+#: thunar/thunar-transfer-job.c:1635
+msgid "Collecting files..."
+msgstr "Failu savākšana..."
+
+#: thunar/thunar-transfer-job.c:1860
+#, c-format
+msgid "%s of %s"
+msgstr ""
+
+#: thunar/thunar-transfer-job.c:1880
+#, c-format
+msgid "%lu hour remaining (%s/sec)"
+msgid_plural "%lu hours remaining (%s/sec)"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: thunar/thunar-transfer-job.c:1886
+#, c-format
+msgid "%lu minute remaining (%s/sec)"
+msgid_plural "%lu minutes remaining (%s/sec)"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: thunar/thunar-transfer-job.c:1891
+#, c-format
+msgid "%lu second remaining (%s/sec)"
+msgid_plural "%lu seconds remaining (%s/sec)"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#: thunar/thunar-tree-model.c:664 thunar/thunar-tree-view-model.c:1287
+#: thunar/thunar-tree-view-model.c:1416
+msgid "Loading..."
+msgstr "Ielāde..."
+
+#: thunar/thunar-util.c:305
+msgid "Invalid path"
+msgstr "Nederīgs ceļš"
+
+#: thunar/thunar-util.c:340
+#, c-format
+msgid "Unknown user \"%s\""
+msgstr "Nezināms lietotājs \"%s\""
+
+#. TRANSLATORS: file was modified less than one day ago
+#: thunar/thunar-util.c:452
+msgid "Today"
+msgstr "Šodien"
+
+#. TRANSLATORS: file was modified less than one day ago
+#: thunar/thunar-util.c:457
+#, c-format
+msgid "Today at %X"
+msgstr "Šodien %X"
+
+#. TRANSLATORS: file was modified less than two days ago
+#: thunar/thunar-util.c:465
+msgid "Yesterday"
+msgstr "Vakar"
+
+#. TRANSLATORS: file was modified less than two days ago
+#: thunar/thunar-util.c:470
+#, c-format
+msgid "Yesterday at %X"
+msgstr "Vakar %X"
+
+#. Days from last week
+#: thunar/thunar-util.c:488
+#, c-format
+msgid "%A at %X"
+msgstr "%A %X"
+
+#. Any other date
+#: thunar/thunar-util.c:493
+#, c-format
+msgid "%x at %X"
+msgstr "%x %X"
+
+#: thunar/thunar-util.c:804
+#, c-format
+msgid "%.*s %u%s"
+msgstr ""
+
+#: thunar/thunar-util.c:806
+#, c-format
+msgid "%.*s (copy %u)%s"
+msgstr ""
+
+#: thunar/thunar-util.c:811
+#, c-format
+msgid "link to %.*s%s"
+msgstr ""
+
+#: thunar/thunar-util.c:816
+#, c-format
+msgid "link %u to %.*s%s"
+msgstr ""
+
+#: thunar/thunar-util.c:836
+msgid "Search: "
+msgstr ""
+
+#: thunar/thunar-util.c:1332 thunar/thunar-util.c:1365
+#, c-format
+msgid "%s (%d hidden)"
+msgstr ""
+
+#: thunar/thunar-util.c:1349
+#, c-format
+msgid "%s: %s"
+msgstr ""
+
+#: thunar/thunar-util.c:1372
+msgid "0 items"
+msgstr ""
+
+#: thunar/thunar-util.c:1381 thunar/thunar-util.c:1503
+#, c-format
+msgid "Last Modified: %s"
+msgstr ""
+
+#: thunar/thunar-util.c:1430
+#, c-format
+msgid "\"%s\" (%s)"
+msgstr ""
+
+#: thunar/thunar-util.c:1432
+#, c-format
+msgid "\"%s\""
+msgstr ""
+
+#: thunar/thunar-util.c:1453
+#, c-format
+msgid "link to %s"
+msgstr "saite uz %s"
+
+#: thunar/thunar-util.c:1455
+msgid "shortcut"
+msgstr ""
+
+#: thunar/thunar-util.c:1457
+msgid "mountable"
+msgstr ""
+
+#: thunar/thunar-util.c:1459
+msgid "mount point"
+msgstr ""
+
+#. append the image dimensions to the statusbar text
+#: thunar/thunar-util.c:1493 plugins/thunar-apr/thunar-apr-image-page.c:158
+msgid "Image Size:"
+msgstr "Attēla izmērs:"
+
+#: thunar/thunar-window.c:648
+msgid "_File"
+msgstr "_Fails"
+
+#: thunar/thunar-window.c:649
+msgid "New _Tab"
+msgstr ""
+
+#: thunar/thunar-window.c:649
+msgid "Open a new tab for the displayed location"
+msgstr ""
+
+#: thunar/thunar-window.c:650
+msgid "New _Window"
+msgstr ""
+
+#: thunar/thunar-window.c:650
+msgid "Open a new Thunar window for the displayed location"
+msgstr "Atvērt jaunu Thunar logu pašreizējai vietai"
+
+#: thunar/thunar-window.c:651
+msgid "Detac_h Tab"
+msgstr ""
+
+#: thunar/thunar-window.c:651
+msgid "Open current folder in a new window"
+msgstr ""
+
+#: thunar/thunar-window.c:652
+msgid "Close Ta_b"
+msgstr ""
+
+#: thunar/thunar-window.c:652
+msgid "Close this folder"
+msgstr ""
+
+#: thunar/thunar-window.c:653
+msgid "_Close Window"
+msgstr ""
+
+#: thunar/thunar-window.c:653
+msgid "Close this window"
+msgstr "Aizvērt šo logu"
+
+#: thunar/thunar-window.c:654
+msgid "Close _All Windows"
+msgstr "Aizvērt _visus logus"
+
+#: thunar/thunar-window.c:654
+msgid "Close all Thunar windows"
+msgstr "Aizvērt visus Thunar logus"
+
+#: thunar/thunar-window.c:656
+msgid "_Edit"
+msgstr "_Rediģēt"
+
+#: thunar/thunar-window.c:657
+msgid "_Undo"
+msgstr ""
+
+#: thunar/thunar-window.c:658
+msgid "Red_o"
+msgstr ""
+
+#: thunar/thunar-window.c:659
+msgid "Pr_eferences..."
+msgstr "Uzstādī_jumi"
+
+#: thunar/thunar-window.c:659
+msgid "Edit Thunar's Preferences"
+msgstr ""
+
+#: thunar/thunar-window.c:661
+msgid "_View"
+msgstr "_Skats"
+
+#: thunar/thunar-window.c:662
+msgid "_Reload"
+msgstr "Pā_rlādēt"
+
+#: thunar/thunar-window.c:662
+msgid "Reload the current folder"
+msgstr "Pārlādēt pašreizējo mapi"
+
+#: thunar/thunar-window.c:665
+msgid "S_plit View"
+msgstr ""
+
+#: thunar/thunar-window.c:665
+msgid "Open/Close Split View"
+msgstr ""
+
+#: thunar/thunar-window.c:666
+msgid "Switch Focused Split View Pane"
+msgstr ""
+
+#: thunar/thunar-window.c:667
+msgid "Locatio_n Selector"
+msgstr ""
+
+#: thunar/thunar-window.c:668
+msgid "_Text Style"
+msgstr ""
+
+#: thunar/thunar-window.c:668
+msgid "Traditional text box showing the current path"
+msgstr ""
+
+#: thunar/thunar-window.c:669
+msgid "_Buttons Style"
+msgstr ""
+
+#: thunar/thunar-window.c:669
+msgid "Modern approach with buttons that correspond to folders"
+msgstr "Moderna pieeja, ar pogām, kuras atbilst mapēm"
+
+#: thunar/thunar-window.c:670
+msgid "_Side Pane"
+msgstr "Sā_nu rūts"
+
+#: thunar/thunar-window.c:671
+msgid "_Shortcuts"
+msgstr "Ī_sinājumikonas"
+
+#: thunar/thunar-window.c:671
+msgid "Toggles the visibility of the shortcuts pane"
+msgstr "Pārslēdz īsinājumikonas rūts redzamību"
+
+#: thunar/thunar-window.c:672
+msgid "_Tree"
+msgstr "_Koks"
+
+#: thunar/thunar-window.c:672
+msgid "Toggles the visibility of the tree pane"
+msgstr "Pārslēdz koka rūts redzamību"
+
+#: thunar/thunar-window.c:674
+msgid "_Image Preview"
+msgstr ""
+
+#: thunar/thunar-window.c:674
+msgid "Change the visibility of this window's image preview"
+msgstr ""
+
+#: thunar/thunar-window.c:675
+msgid "St_atusbar"
+msgstr "St_atusajosla"
+
+#: thunar/thunar-window.c:675
+msgid "Change the visibility of this window's statusbar"
+msgstr "Mainīt loga statusajoslas redzamību"
+
+#: thunar/thunar-window.c:676
+msgid "_Menubar"
+msgstr ""
+
+#: thunar/thunar-window.c:676
+msgid "Change the visibility of this window's menubar"
+msgstr ""
+
+#: thunar/thunar-window.c:677
+msgid "Configure _Toolbar..."
+msgstr ""
+
+#: thunar/thunar-window.c:677
+msgid "Configure the toolbar"
+msgstr ""
+
+#: thunar/thunar-window.c:678
+msgid "Cl_ear Saved Folder View Settings"
+msgstr ""
+
+#: thunar/thunar-window.c:678
+msgid "Delete saved view settings for this folder"
+msgstr ""
+
+#: thunar/thunar-window.c:679
+msgid "Show _Hidden Files"
+msgstr "Rādīt _slēptos failus"
+
+#: thunar/thunar-window.c:679
+msgid "Toggles the display of hidden files in the current window"
+msgstr "Pārslēdz slēpto failu attēlojumu pašreizējā logā"
+
+#: thunar/thunar-window.c:680
+msgid "Show _File Highlight"
+msgstr ""
+
+#: thunar/thunar-window.c:680
+msgid ""
+"Toggles the display of file highlight which can be configured in the file "
+"specific property dialog"
+msgstr ""
+
+#: thunar/thunar-window.c:681
+msgid "Zoom I_n"
+msgstr "Piet_uvināt"
+
+#: thunar/thunar-window.c:681
+msgid "Show the contents in more detail"
+msgstr "Rādīt saturu detalizētāk"
+
+#: thunar/thunar-window.c:684
+msgid "Zoom _Out"
+msgstr "A_ttālināt"
+
+#: thunar/thunar-window.c:684
+msgid "Show the contents in less detail"
+msgstr "Rādīt saturu ne tik detalizēti"
+
+#: thunar/thunar-window.c:686
+msgid "Normal Si_ze"
+msgstr "Parasts i_zmērs"
+
+#: thunar/thunar-window.c:686
+msgid "Show the contents at the normal size"
+msgstr "Rādīt saturu parastā izmērā"
+
+#: thunar/thunar-window.c:688
+msgid "_Icon View"
+msgstr ""
+
+#: thunar/thunar-window.c:688
+msgid "Display folder content in an icon view"
+msgstr "Attēlot mapes saturu ikonu skatā"
+
+#: thunar/thunar-window.c:689
+msgid "_List View"
+msgstr ""
+
+#: thunar/thunar-window.c:689
+msgid "Display folder content in a detailed list view"
+msgstr "Attēlot mapes saturu detalizētā saraksta skatā"
+
+#: thunar/thunar-window.c:690
+msgid "_Compact View"
+msgstr ""
+
+#: thunar/thunar-window.c:690
+msgid "Display folder content in a compact list view"
+msgstr "Attēlot mapes saturu kompaktā saraksta skatā"
+
+#: thunar/thunar-window.c:692
+msgid "_Go"
+msgstr "_Doties"
+
+#: thunar/thunar-window.c:693
+msgid "F_ile System"
+msgstr ""
+
+#: thunar/thunar-window.c:694
+msgid "_Home"
+msgstr "_Mājas"
+
+#: thunar/thunar-window.c:694
+msgid "Go to the home folder"
+msgstr "Doties uz mājas mapi"
+
+#: thunar/thunar-window.c:695
+msgid "_Desktop"
+msgstr ""
+
+#: thunar/thunar-window.c:695
+msgid "Go to the desktop folder"
+msgstr "Doties uz darbvirsmas mapi"
+
+#: thunar/thunar-window.c:696
+msgid "_Computer"
+msgstr ""
+
+#: thunar/thunar-window.c:696
+msgid ""
+"Browse all local and remote disks and folders accessible from this computer"
+msgstr ""
+
+#: thunar/thunar-window.c:697
+msgid "_Recent"
+msgstr ""
+
+#: thunar/thunar-window.c:697
+msgid "Display recently used files"
+msgstr ""
+
+#: thunar/thunar-window.c:698
+msgid "_Trash"
+msgstr ""
+
+#: thunar/thunar-window.c:698
+msgid "Display the contents of the trash can"
+msgstr "Attēlot miskastes saturu"
+
+#: thunar/thunar-window.c:699
+msgid "Open _Parent"
+msgstr "Atvērt _vecāku"
+
+#: thunar/thunar-window.c:699
+msgid "Open the parent folder"
+msgstr "Atvērt vecāka mapi"
+
+#: thunar/thunar-window.c:700
+msgid "_Open Location..."
+msgstr "_Atvērt vietu..."
+
+#: thunar/thunar-window.c:700
+msgid "Specify a location to open"
+msgstr "Norādiet atveramo vietu "
+
+#: thunar/thunar-window.c:702
+msgid "T_emplates"
+msgstr "Sagatav_es"
+
+#: thunar/thunar-window.c:702
+msgid "Go to the templates folder"
+msgstr "Doties uz sagatavju mapi"
+
+#: thunar/thunar-window.c:703
+msgid "Browse _Network"
+msgstr ""
+
+#: thunar/thunar-window.c:705
+msgid "_Bookmarks"
+msgstr ""
+
+#: thunar/thunar-window.c:708
+msgid "_Contents"
+msgstr "_Saturs"
+
+#: thunar/thunar-window.c:708
+msgid "Display Thunar user manual"
+msgstr "Parādīt Thunar lietošanas rokasgrāmatu"
+
+#: thunar/thunar-window.c:709
+msgid "Display information about Thunar"
+msgstr "Parādīt informāciju par Thunar"
+
+#: thunar/thunar-window.c:711
+msgid "_Back"
+msgstr ""
+
+#: thunar/thunar-window.c:711
+msgid "Go to the previous visited folder"
+msgstr "Atgriezties uz iepriekšējo apmeklēto mapi"
+
+#: thunar/thunar-window.c:714
+msgid "_Forward"
+msgstr ""
+
+#: thunar/thunar-window.c:714
+msgid "Go to the next visited folder"
+msgstr "Doties uz nākamo apmeklēto mapi"
+
+#: thunar/thunar-window.c:716
+msgid "_Previous Tab"
+msgstr ""
+
+#: thunar/thunar-window.c:716
+msgid "Switch to Previous Tab"
+msgstr ""
+
+#: thunar/thunar-window.c:718
+msgid "_Next Tab"
+msgstr ""
+
+#: thunar/thunar-window.c:718
+msgid "Switch to Next Tab"
+msgstr ""
+
+#: thunar/thunar-window.c:721
+msgid "_Search for Files..."
+msgstr ""
+
+#: thunar/thunar-window.c:721
+msgid "Search for a specific file in the current folder and Recent"
+msgstr ""
+
+#: thunar/thunar-window.c:723
+msgid "Cancel search for files"
+msgstr ""
+
+#: thunar/thunar-window.c:725
+msgid "Menu"
+msgstr "Izvēlne"
+
+#: thunar/thunar-window.c:725
+msgid "Show the menu"
+msgstr ""
+
+#. add the label with the root warning
+#: thunar/thunar-window.c:1066
+msgid "Warning: you are using the root account. You may harm your system."
+msgstr ""
+
+#: thunar/thunar-window.c:1139
+msgid "Size: "
+msgstr ""
+
+#. TRANSLATORS: `Catfish' is a software package, please don't translate it.
+#: thunar/thunar-window.c:1246
+msgid "Search with Catfish..."
+msgstr ""
+
+#: thunar/thunar-window.c:1258
+msgid "Restore Selected Items"
+msgstr ""
+
+#: thunar/thunar-window.c:2959
+msgid "Close tab"
+msgstr ""
+
+#: thunar/thunar-window.c:3418
+#, c-format
+msgid "Open the location \"%s\""
+msgstr ""
+
+#: thunar/thunar-window.c:4454
+msgid "Failed to open parent folder"
+msgstr "Neizdevās atvērt vecāka mapi"
+
+#: thunar/thunar-window.c:4585
+#, c-format
+msgid "The directory \"%s\" does not exist. Do you want to create it?"
+msgstr ""
+
+#: thunar/thunar-window.c:4587
+msgid "Create directory"
+msgstr ""
+
+#. display an error to the user
+#: thunar/thunar-window.c:4656
+msgid "Failed to browse the computer"
+msgstr ""
+
+#. display the "About Templates" dialog
+#: thunar/thunar-window.c:4699
+msgid "About Templates"
+msgstr "Par sagatavēm"
+
+#: thunar/thunar-window.c:4721
+msgid "All files in this folder will appear in the \"Create Document\" menu."
+msgstr "Visi faili šai mapē parādīsies izvēlnē \"Izveidot dokumentu\"."
+
+#: thunar/thunar-window.c:4728
+msgid ""
+"If you frequently create certain kinds  of documents, make a copy of one and put it in this folder. Thunar will add an entry for this document in the \"Create Document\" menu.\n"
+"\n"
+"You can then select the entry from the \"Create Document\" menu and a copy of the document will be created in the directory you are viewing."
+msgstr ""
+"Ja bieži veidojat noteikta veida dokumentus, izveidojiet šai mapē vienu dokumenta kopiju. Thunar izveidos šim dokumentam ierakstu izvēlnē \"Izveidot dokumentu\".\n"
+"\n"
+"Pēc tam varat izvēlēties, šo ierakstu no \"Izveidot dokumentu\" izvēlnes un tiks izveidota šī dokumenta kopija pašreizējā direktorijā."
+
+#: thunar/thunar-window.c:4740
+msgid "Do _not display this message again"
+msgstr "Vairs _nerādīt šo ziņu"
+
+#. display an error to the user
+#: thunar/thunar-window.c:4774
+msgid "Failed to open the file system root folder"
+msgstr "Neizdevās atvērt failu sistēmas saknes mapi"
+
+#. display an error to the user
+#: thunar/thunar-window.c:4810
+msgid "Failed to display `Recent`"
+msgstr ""
+
+#. display an error to the user
+#: thunar/thunar-window.c:4846
+msgid "Failed to display the contents of the trash can"
+msgstr "Neizdevās parādīt miskastes saturu"
+
+#. display an error to the user
+#: thunar/thunar-window.c:4882
+msgid "Failed to browse the network"
+msgstr "Neizdevās pārlūkot tīklu"
+
+#: thunar/thunar-window.c:5025
+msgid ""
+"Thunar is a fast and easy to use file manager\n"
+"for the Xfce Desktop Environment."
+msgstr ""
+"Thunar ir ātrs un viegli lietojams failu pārvaldnieks\n"
+"priekš Xfce vides."
+
+#: thunar/thunar-window.c:6099
+msgid "Select an image to preview"
+msgstr ""
+
+#: thunar/thunar-window.c:6246
+msgid "Failed to launch search with Catfish"
+msgstr ""
+
+#: thunar/thunar-window.c:6577
+msgid "Change the active view type"
+msgstr ""
+
+#. add a proxy menu item for the view switcher to be represent in the overflow
+#. menu
+#: thunar/thunar-window.c:6580 thunar/thunar-window.c:6605
+msgid "View Switcher"
+msgstr ""
+
+#. add a proxy menu item for the location bar to represent the bar in the
+#. overflow menu
+#: thunar/thunar-window.c:6770 thunar/thunar-window.c:6775
+msgid "Location Bar"
+msgstr ""
+
+#: thunarx/thunarx-property-page.c:114
+msgid "Label"
+msgstr "Etiķete"
+
+#: thunarx/thunarx-property-page.c:115
+msgid "Text of the page's label"
+msgstr "Lapas etiķetes teksts"
+
+#: thunarx/thunarx-property-page.c:127
+msgid "Label widget"
+msgstr "Etiķetes logdaļa"
+
+#: thunarx/thunarx-property-page.c:128
+msgid "A widget to display in place of the usual page label"
+msgstr "Logdaļa, kuru attēlot lapas etiķetes vietā"
+
+#: thunarx/thunarx-provider-plugin.c:83
+msgid "Resident"
+msgstr "Rezidents"
+
+#: thunarx/thunarx-provider-plugin.c:84
+msgid "Don't unload the plugin from memory"
+msgstr "Neizlādēt spraudni no atmiņas"
+
+#: thunarx/thunarx-renamer.c:158
+msgid "Help URL"
+msgstr "Palīdzības URL"
+
+#: thunarx/thunarx-renamer.c:159
+msgid "The URL to the documentation of the renamer"
+msgstr "URL uz pārdēvētāja dokumentāciju"
+
+#: thunarx/thunarx-renamer.c:174
+msgid "The user visible name of the renamer"
+msgstr "Pārdēvētāja redzamais vārds lietotājam"
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:258
+#: plugins/thunar-apr/thunar-apr-image-page.c:62
+msgid "Description:"
+msgstr "Apraksts:"
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:265
+msgid ""
+"The generic name of the entry, for example \"Web Browser\" in case of "
+"Firefox."
+msgstr ""
+"Vispārējs ieraksta nosaukums, piemēram, \"Tīmekļa Pārlūks\" Firefox "
+"gadījumā."
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:285
+msgid "Command:"
+msgstr "Komanda:"
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:292
+msgid "The program to execute, possibly with arguments."
+msgstr "Izpildāmā programma, iespējams ar argumentiem."
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:311
+msgid "Working Directory:"
+msgstr ""
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:318
+msgid "The working directory for the program."
+msgstr ""
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:337
+msgid "URL:"
+msgstr "URL:"
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:344
+msgid "The URL to access."
+msgstr "Piekļuves URL."
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:363
+#: plugins/thunar-apr/thunar-apr-image-page.c:63
+msgid "Comment:"
+msgstr "Komentārs:"
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:370
+msgid ""
+"Tooltip for the entry, for example \"View sites on the Internet\" in case of"
+" Firefox. Should not be redundant with the name or the description."
+msgstr ""
+"Ieraksta paskaidre, piemēram, \"Apskata Interneta lapas\" Firefox gadījumā. "
+"Nevajadzētu atbilst nosaukumam un aprakstam."
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:402
+msgid "Options:"
+msgstr "Opcijas:"
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:408
+msgid "Use _startup notification"
+msgstr "Izmantot _sāknēšanas paziņošanu"
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:409
+msgid ""
+"Select this option to enable startup notification when the command is run "
+"from the file manager or the menu. Not every application supports startup "
+"notification."
+msgstr ""
+"Atzīmējiet šo opciju, lai ieslēgt sāknēšanas paziņošanu, kad komanda tiek "
+"izsaukta no failu pārvaldnieka vai izvēlnes. Ne visas lietotnes atbalsta "
+"sāknēsanas paziņošanu."
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:429
+msgid "Run in _terminal"
+msgstr "Palaist _terminālī"
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:430
+msgid "Select this option to run the command in a terminal window."
+msgstr "Atlasiet šo opciju, lai palaistu komandu termināļa logā."
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:448
+msgid "Security:"
+msgstr ""
+
+#. same function as in thunar-permission-chooser.c
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:455
+msgid "Allow this file to _run as a .desktop file"
+msgstr ""
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:456
+msgid ""
+"Select this to enable executable permission bit(+x). Thunar will not launch "
+"the .desktop file if not set."
+msgstr ""
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:473
+msgid "Set this file as trusted"
+msgstr ""
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:474
+msgid ""
+"Select this option to trust this .desktop file. This will generate a "
+"checksum of the file and store it via gvfs. The additional check will "
+"protect from malicious launchers which e.g. pretend to be a picture, having "
+"the executable flag pre-set"
+msgstr ""
+
+#: plugins/thunar-apr/thunar-apr-desktop-page.c:843
+#, c-format
+msgid "Failed to save \"%s\"."
+msgstr "Neizdevās saglabāt \"%s\"."
+
+#: plugins/thunar-apr/thunar-apr-image-page.c:50
+msgid "Date Taken:"
+msgstr "Uzņemšanas datums:"
+
+#: plugins/thunar-apr/thunar-apr-image-page.c:51
+msgid "Camera Brand:"
+msgstr "Kameras zīmols:"
+
+#: plugins/thunar-apr/thunar-apr-image-page.c:52
+msgid "Camera Model:"
+msgstr "Kameras modelis:"
+
+#: plugins/thunar-apr/thunar-apr-image-page.c:53
+msgid "Exposure Time:"
+msgstr "Atklāšanas laiks:"
+
+#: plugins/thunar-apr/thunar-apr-image-page.c:54
+msgid "Exposure Program:"
+msgstr "Atklāšanas programma:"
+
+#: plugins/thunar-apr/thunar-apr-image-page.c:55
+msgid "Aperture Value:"
+msgstr "Atveres vērtība:"
+
+#: plugins/thunar-apr/thunar-apr-image-page.c:56
+msgid "Metering Mode:"
+msgstr "Mērīšanas režīms:"
+
+#: plugins/thunar-apr/thunar-apr-image-page.c:57
+msgid "Flash Fired:"
+msgstr "Zibspuldze: "
+
+#: plugins/thunar-apr/thunar-apr-image-page.c:58
+msgid "Focal Length:"
+msgstr "Fokusa garums:"
+
+#: plugins/thunar-apr/thunar-apr-image-page.c:59
+msgid "Shutter Speed:"
+msgstr "Aizvara ātrums:"
+
+#: plugins/thunar-apr/thunar-apr-image-page.c:60
+msgid "ISO Speed Ratings:"
+msgstr "ISO ātruma reitings:"
+
+#: plugins/thunar-apr/thunar-apr-image-page.c:61
+msgid "Software:"
+msgstr "Programmatūra:"
+
+#: plugins/thunar-apr/thunar-apr-image-page.c:121
+msgid "Image"
+msgstr "Attēls"
+
+#: plugins/thunar-apr/thunar-apr-image-page.c:136
+msgid "Image Type:"
+msgstr "Attēla tips:"
+
+#. update the "Image Size" label
+#: plugins/thunar-apr/thunar-apr-image-page.c:263
+#, c-format
+msgid "%dx%d pixel"
+msgid_plural "%dx%d pixels"
+msgstr[0] "%dx%d pikselis"
+msgstr[1] "%dx%d pikseļi"
+msgstr[2] "%dx%d pikseļu"
+
+#: plugins/thunar-sbr/thunar-sbr-case-renamer.c:119
+msgid "Con_vert to:"
+msgstr "Kon_vertēt uz:"
+
+#: plugins/thunar-sbr/thunar-sbr-case-renamer.c:269
+msgid "Uppercase / Lowercase"
+msgstr "Augšējā / apakšējā reģistrā"
+
+#: plugins/thunar-sbr/thunar-sbr-date-renamer.c:201
+msgid "Insert _time:"
+msgstr "Iespraust _laiku:"
+
+#: plugins/thunar-sbr/thunar-sbr-date-renamer.c:232
+msgid ""
+"The format describes the date and time parts to insert into the file name. "
+"For example, %Y will be substituted with the year, %m with the month and %d "
+"with the day. See the documentation of the date utility for additional "
+"information."
+msgstr ""
+"Formāts apraksta datuma un laika daļas, kuras jāievieto faila nosaukumā. "
+"Piemēram, %Y tiks aizvietots ar gadu, %m ar mēnesi un %d ar dienu. Apskatiet"
+" datuma sīklietotnes dokumentāciju papildus informācijai."
+
+#: plugins/thunar-sbr/thunar-sbr-date-renamer.c:248
+#: plugins/thunar-sbr/thunar-sbr-insert-renamer.c:202
+msgid "_At position:"
+msgstr "P_ozīcijā:"
+
+#: plugins/thunar-sbr/thunar-sbr-date-renamer.c:600
+msgid "Insert Date / Time"
+msgstr "Iespraust datumu / laiku"
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:94
+msgid "lowercase"
+msgstr "apakšējā reģistrā"
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:95
+msgid "UPPERCASE"
+msgstr "AUGŠĒJĀ REĢISTRĀ"
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:96
+msgid "Title Case"
+msgstr ""
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:97
+msgid "First character uppercase"
+msgstr ""
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:103
+msgid "Insert"
+msgstr "Iespraust"
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:104
+msgid "Overwrite"
+msgstr "Pārrakstīt"
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:110
+msgid "1, 2, 3, ..."
+msgstr "1, 2, 3, ..."
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:111
+msgid "01, 02, 03, ..."
+msgstr "01, 02, 03, ..."
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:112
+msgid "001, 002, 003, ..."
+msgstr "001, 002, 003, ..."
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:113
+msgid "0001, 0002, 0003, ..."
+msgstr "0001, 0002, 0003, ..."
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:114
+msgid "00001, 00002, 00003, ..."
+msgstr ""
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:115
+msgid "a, b, c, d, ..."
+msgstr "a, b, c, d, ..."
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:121
+msgid "From the front (left)"
+msgstr "No priekšas (kreisais)"
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:122
+msgid "From the back (right)"
+msgstr "No aizmugures (labais)"
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:128
+msgid "Old Name - Text - Number"
+msgstr "Vecais nosaukums - Teksts - Skaitlis"
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:129
+msgid "Number - Text - Old Name"
+msgstr "Skaitlis - Teksts - Vecais nosaukums"
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:130
+msgid "Text - Number"
+msgstr "Teksts - Skaitlis"
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:131
+msgid "Number - Text"
+msgstr "Skaitlis - Teksts"
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:137
+msgid "Current"
+msgstr "Pašreizējais"
+
+#: plugins/thunar-sbr/thunar-sbr-enum-types.c:141
+msgid "Date Picture Taken"
+msgstr "Attēla uzņemšanas datums"
+
+#: plugins/thunar-sbr/thunar-sbr-insert-renamer.c:182
+#: plugins/thunar-sbr/thunar-sbr-number-renamer.c:265
+msgid "_Text:"
+msgstr "_Teksts:"
+
+#: plugins/thunar-sbr/thunar-sbr-insert-renamer.c:391
+msgid "Insert / Overwrite"
+msgstr "Iespraust / Pārrakstīt"
+
+#: plugins/thunar-sbr/thunar-sbr-number-renamer.c:191
+msgid "_Number Format:"
+msgstr "_Skaitļa formāts:"
+
+#: plugins/thunar-sbr/thunar-sbr-number-renamer.c:223
+msgid "_Start With:"
+msgstr "_Sākt ar:"
+
+#: plugins/thunar-sbr/thunar-sbr-number-renamer.c:236
+msgid "Text _Format:"
+msgstr "Teksta _formāts:"
+
+#: plugins/thunar-sbr/thunar-sbr-number-renamer.c:527
+msgid "Numbering"
+msgstr "Numerācija"
+
+#: plugins/thunar-sbr/thunar-sbr-remove-renamer.c:179
+msgid "Remove _From Position:"
+msgstr "Noņemt _no pozīcijas:"
+
+#: plugins/thunar-sbr/thunar-sbr-remove-renamer.c:215
+msgid "_To Position:"
+msgstr "_Uz pozīciju:"
+
+#: plugins/thunar-sbr/thunar-sbr-remove-renamer.c:423
+msgid "Remove Characters"
+msgstr "Nodzēst rakstzīmes"
+
+#: plugins/thunar-sbr/thunar-sbr-replace-renamer.c:216
+msgid "_Search For:"
+msgstr "_Meklēt:"
+
+#. reset to default tooltip
+#: plugins/thunar-sbr/thunar-sbr-replace-renamer.c:224
+#: plugins/thunar-sbr/thunar-sbr-replace-renamer.c:581
+msgid "Enter the text to search for in the file names."
+msgstr "Ievadiet tekstu, lai meklētu faila nosaukumos."
+
+#: plugins/thunar-sbr/thunar-sbr-replace-renamer.c:238
+msgid "Regular _Expression"
+msgstr "Regulārā i_zteiksme"
+
+#: plugins/thunar-sbr/thunar-sbr-replace-renamer.c:240
+msgid ""
+"If you enable this option, the pattern will be treated as a regular "
+"expression and matched using the Perl-compatible regular expressions (PCRE)."
+" Check the documentation for details about the regular expression syntax."
+msgstr ""
+"Ja Jūs ieslēgsiet šo opciju, tad shēma tiks uztverta, kā regulāra izteiksme "
+"un meklēšanā tiks izmantotas Perl-saderīgās regulārās izteiksmes (PCRE). "
+"Pārbaudiet dokumentāciju, lai uzzinātu, ko vairāk par regulāro izteiksmju "
+"sintaksi."
+
+#: plugins/thunar-sbr/thunar-sbr-replace-renamer.c:247
+msgid "Replace _With:"
+msgstr "Aizvietot _ar:"
+
+#: plugins/thunar-sbr/thunar-sbr-replace-renamer.c:255
+msgid ""
+"Enter the text that should be used as replacement for the pattern above."
+msgstr "Ievadiet tekstu, ar kuru aizvietot augšā ievadīto shēmu."
+
+#: plugins/thunar-sbr/thunar-sbr-replace-renamer.c:269
+msgid "C_ase Sensitive Search"
+msgstr "Reģ_istra jūtīgā meklēšana"
+
+#: plugins/thunar-sbr/thunar-sbr-replace-renamer.c:271
+msgid ""
+"If you enable this option, the pattern will be searched in a case-sensitive "
+"manner. The default is to use a case-insensitive search."
+msgstr ""
+"Ja, Jūs ieslēgsiet šo opciju, shēma tiks meklēta ar reģistra jūtīgu manieri."
+" Pēc noklusēta tiek meklētas ar reģistra nejūtīgu manieri."
+
+#. setup a tooltip with the error message
+#: plugins/thunar-sbr/thunar-sbr-replace-renamer.c:558
+#, c-format
+msgid "Invalid regular expression, at character position %ld: %s"
+msgstr "Nederīga regulārā izteiksme, pie simbolu pozīcijas %ld: %s"
+
+#: plugins/thunar-sbr/thunar-sbr-replace-renamer.c:599
+msgid "Search & Replace"
+msgstr "Meklēt un aizvietot"
+
+#: plugins/thunar-sendto-email/main.c:217
+#, c-format
+msgid "Send \"%s\" as compressed archive?"
+msgstr "Sūtīt \"%s\", kā saspiestu arhīvu?"
+
+#: plugins/thunar-sendto-email/main.c:219
+#: plugins/thunar-sendto-email/main.c:239
+msgid "Send email"
+msgstr ""
+
+#: plugins/thunar-sendto-email/main.c:221
+#: plugins/thunar-sendto-email/main.c:241
+msgid "Send _directly"
+msgstr "Sūtīt _tieši"
+
+#: plugins/thunar-sendto-email/main.c:222
+msgid "Send com_pressed"
+msgstr "Sūtīt sas_piestu"
+
+#: plugins/thunar-sendto-email/main.c:224
+msgid ""
+"When sending a file via email, you can either choose to send the file "
+"directly, as is, or compress the file before attaching it to an email. It is"
+" highly recommended to compress large files before sending them."
+msgstr ""
+"Kad sūtāt failus pa e-pastu, varat izvēlēties sūtīt failu pa tiešo, vai kā, "
+"kompresētu arhīvu. Iesakām lielus failus saspiest pirms sūtīšanas."
+
+#: plugins/thunar-sendto-email/main.c:235
+#, c-format
+msgid "Send %d file as compressed archive?"
+msgid_plural "Send %d files as compressed archive?"
+msgstr[0] "Sūtīt %d failu, kā arhīvu?"
+msgstr[1] "Sūtīt %d failus, kā arhīvu?"
+msgstr[2] "Sūtīt %d failu, kā arhīvu?"
+
+#: plugins/thunar-sendto-email/main.c:242
+msgid "Send as _archive"
+msgstr "Sūtīt, kā _arhīvu"
+
+#: plugins/thunar-sendto-email/main.c:244
+msgid ""
+"When sending multiple files via email, you can either choose to send the "
+"files directly, attaching multiple files to an email, or send all files "
+"compressed into a single archive file and attach the archive. It is highly "
+"recommended to send multiple large files as archive."
+msgstr ""
+"Kad sūtāt vairākus failus pa e-pastu, varat izvēlēties sūtīt failus tieši, "
+"pievienojot vairākus failus e-pastam, vai sūtīt failus saspiestus vienā "
+"arhīva failā, kurš tiek pievienots e-pastam. Ieteicams vairākus lielus "
+"failus sūtīt, kā arhīvu."
+
+#. allocate the progress dialog
+#. setup the label
+#: plugins/thunar-sendto-email/main.c:302
+#: plugins/thunar-sendto-email/main.c:328
+msgid "Compressing files..."
+msgstr "Failu saspiešana..."
+
+#. tell the user that the command failed
+#: plugins/thunar-sendto-email/main.c:353
+#, c-format
+msgid "ZIP command terminated with error %d"
+msgstr "ZIP komanda nobeidzās ar kļūdu %d"
+
+#: plugins/thunar-sendto-email/main.c:442
+msgid "Failed to create temporary directory"
+msgstr "Neizdevās izveidot pagaidu direktoriju"
+
+#: plugins/thunar-sendto-email/main.c:504
+#: plugins/thunar-sendto-email/main.c:515
+#, c-format
+msgid "Failed to create symbolic link for \"%s\""
+msgstr "Neizdevās izveidot simbolu saiti priekš \"%s\""
+
+#. tell the user that we failed to compress the file(s)
+#: plugins/thunar-sendto-email/main.c:539
+#, c-format
+msgid "Failed to compress %d file"
+msgid_plural "Failed to compress %d files"
+msgstr[0] "Neizdevās saspiest %d failu"
+msgstr[1] "Neizdevās saspiest %d failus"
+msgstr[2] "Neizdevās saspiest %d failus"
+
+#. tell the user that we failed
+#: plugins/thunar-sendto-email/main.c:686
+msgid "Failed to compose new email"
+msgstr "Neizdevās izveidot jaunu e-pastu"
+
+#: plugins/thunar-sendto-email/thunar-sendto-email.desktop.in.in:5
+msgid "Mail Recipient"
+msgstr "Pasta saņēmējs"
+
+#. tell the user that we failed to connect to the trash
+#: plugins/thunar-tpa/thunar-tpa.c:297 plugins/thunar-tpa/thunar-tpa.c:337
+#: plugins/thunar-tpa/thunar-tpa.c:364 plugins/thunar-tpa/thunar-tpa.c:391
+msgid "Failed to connect to the Trash"
+msgstr "Neizdevās savienoties ar Miskasti"
+
+#. tell the user whether the trash is full or empty
+#: plugins/thunar-tpa/thunar-tpa.c:312
+msgid "Trash contains files"
+msgstr "Miskaste satur failus"
+
+#: plugins/thunar-tpa/thunar-tpa.desktop.in:4
+msgid "Trash Applet"
+msgstr "Miskastes sīklietotne"
+
+#: plugins/thunar-tpa/thunar-tpa.desktop.in:5
+msgid "Display the trash can"
+msgstr "Attēlot miskasti"
+
+#: plugins/thunar-uca/thunar-uca-chooser.c:279
+#: plugins/thunar-uca/thunar-uca-editor.ui:11
+msgid "Edit Action"
+msgstr "Rediģēt darbību"
+
+#: plugins/thunar-uca/thunar-uca-chooser.c:279
+msgid "Create Action"
+msgstr "Izveidot darbību"
+
+#: plugins/thunar-uca/thunar-uca-chooser.c:328
+msgid "Failed to save actions to disk."
+msgstr "Neizdevās saglabāt darbības uz diska."
+
+#: plugins/thunar-uca/thunar-uca-chooser.c:380
+#, c-format
+msgid ""
+"Are you sure that you want to delete\n"
+"action \"%s\"?"
+msgstr ""
+"Esat drošs, ka vēlaties dzēst\n"
+"darbību \"%s\"?"
+
+#: plugins/thunar-uca/thunar-uca-chooser.c:381
+msgid "Delete action"
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-chooser.c:382
+msgid "If you delete a custom action, it is permanently lost."
+msgstr "Ja dzēsīsiet pielāgoto darbību, tā zudīs neatgriezeniski."
+
+#. skip leading slash
+#: plugins/thunar-uca/thunar-uca-editor.c:374
+#, c-format
+msgid "This keyboard shortcut is currently used by: '%s'"
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.c:377
+msgid "Keyboard shortcut already in use"
+msgstr ""
+
+#. setup a label to tell that no icon was selected
+#: plugins/thunar-uca/thunar-uca-editor.c:528
+#: plugins/thunar-uca/thunar-uca-editor.ui:279
+msgid "No icon"
+msgstr "Nav ikonas"
+
+#: plugins/thunar-uca/thunar-uca-model.c:867
+msgid "End element handler called while in root context"
+msgstr "Beigu elementa apdarinātājs izsaukts atrodoties saknes kontekstā"
+
+#: plugins/thunar-uca/thunar-uca-model.c:988
+#, c-format
+msgid "Unknown closing element <%s>"
+msgstr "Nezināms aizverošais elements <%s>"
+
+#: plugins/thunar-uca/thunar-uca-model.c:1518
+msgid "Failed to determine save location for uca.xml"
+msgstr "Neizdevās noteikt saglabāšanas vietu uca.xml failam"
+
+#: plugins/thunar-uca/thunar-uca-model.c:1642
+msgid "Command not configured"
+msgstr "Komanda nav konfigurēta"
+
+#: plugins/thunar-uca/thunar-uca-provider.c:188
+msgid "Confi_gure custom actions..."
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-provider.c:188
+msgid ""
+"Setup custom actions that will appear in the file managers context menus"
+msgstr ""
+"Izveidot pielāgotas darbības, kuras būs pieejamas failu pārvaldnieka "
+"konteksta izvēlnēs"
+
+#: plugins/thunar-uca/thunar-uca-provider.c:567
+#, c-format
+msgid "Failed to launch action \"%s\"."
+msgstr "Neizdevās izpildīt darbību \"%s\"."
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:63
+msgid "The name of the action that will be displayed in the context menu."
+msgstr "Nosaukums darbībai, kurš tiks attēlots konteksta izvēlnē."
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:76
+msgid "_Description:"
+msgstr "_Apraksts:"
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:93
+msgid ""
+"The description of the action that will be displayed as tooltip in the "
+"statusbar when selecting the item from the context menu."
+msgstr ""
+"Darbības apraksts, kurš tiks attēlots, kā paskaidre statusajoslā, kad "
+"vienums tiks atlasīts konteksta izvēlnē."
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:106
+msgid "_Submenu:"
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:123
+msgid ""
+"The submenu in which the action will be displayed. Leave empty for no menu. "
+"Use '/' for nested menus."
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:136
+msgid "_Command:"
+msgstr "_Komanda:"
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:157
+msgid ""
+"The command (including the necessary parameters) to perform the action. See "
+"the command parameter legend below for a list of supported parameter "
+"variables, which will be substituted when launching the command. When upper-"
+"case letters (e.g. %F, %D, %N) are used, the action will be applicable even "
+"if more than one item is selected. Else the action will only be applicable "
+"if exactly one item is selected."
+msgstr ""
+"Komanda (ieskaitot nepieciešamos parametrus) darbības veikšanai. Apakšā dota"
+" komandas parametru eksplikācija, saraksts ar mainīgajiem parametriem, kuri "
+"tiks aizvietoti pie komandu izpildes. Kad augšējā reģistra burti (%F, %D, "
+"%N) tiek lietoti, darbība būs pieejama pat, ja tiek iekrāsots vairāk par "
+"vienu vienumu. Pie mazā burtu reģistra, darbība būs pieejama tikai vienam "
+"atlasītam vienumam."
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:172
+msgid ""
+"Browse the file system to select an application to use for this action."
+msgstr ""
+"Pārlūkot faila sistēmu, lai norādītu lietotni, kura tiks izmantota šai "
+"darbībai."
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:201
+msgid "Keyboard _Shortcut:"
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:219
+msgid "The keyboard shortcut for the action."
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:234
+msgid "Clear the keyboard shortcut for this action."
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:263
+msgid "_Icon:"
+msgstr "_Ikona:"
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:283
+msgid ""
+"Click this button to select an icon file that will be displayed in the "
+"context menu in addition to the action name chosen above."
+msgstr ""
+"Uzklikšķiniet uz šīs pogas, lai atlasītu ikonas failu, kurš tiks attēlots "
+"blakus izvēlētajam darbības nosaukumam konteksta izvēlnē."
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:294
+msgid "Use Startup Notification"
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:298
+msgid ""
+"Enable this option if you want a waiting cursor to be shown while the action"
+" is launched. This is also highly recommended if you have focus stealing "
+"prevention enabled in your window manager."
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:351
+msgid ""
+"The following command parameters will be substituted when launching the "
+"action:"
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:461
+msgid "file name of the selected file"
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:477
+msgid "file names of all selected files"
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:492
+msgid "path of the selected file's directory"
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:507
+msgid "paths of all selected files' directories"
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:522
+msgid "path of the selected file including the file name"
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:537
+msgid "paths of all selected files including the file names"
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:609
+msgid "Basic"
+msgstr "Pamata"
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:627
+msgid "_File Pattern:"
+msgstr "_Faila shēma:"
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:644
+msgid ""
+"Enter a list of patterns that will be used to determine whether this action "
+"should be displayed for a selected file. If you specify more than one "
+"pattern here, the list items must be separated with semicolons (e.g. "
+"*.txt;*.doc)."
+msgstr ""
+"Ievadiet shēmu sarakstu, kuru izmantos, lai noteiktu vai šī darbība tiks "
+"attēlota atlasītajam failam. Ja Jūs vēlaties norādīt vairāk par vienu shēmu,"
+" tad atdalīšanai izmantojiet semikolu (*.txt;*.doc)."
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:647
+#: plugins/thunar-uca/thunar-uca-editor.ui:678
+msgid "*"
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:658
+msgid "_Range (min-max):"
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:675
+msgid ""
+"If the command should operate on say two or three files, enter the numerical"
+" range 2-3. If there are no limits, this string should be empty."
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:689
+msgid "Appears if selection contains:"
+msgstr "Parādās, ja atlase satur:"
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:709
+msgid "_Directories **"
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:724
+msgid "_Audio Files"
+msgstr "_Audio failus"
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:738
+msgid "_Image Files"
+msgstr "_Attēlu failus"
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:753
+msgid "_Text Files"
+msgstr "_Teksta failus"
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:767
+msgid "_Video Files"
+msgstr "_Video failus"
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:781
+msgid "_Other Files"
+msgstr "_Citus failus"
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:834
+msgid ""
+"This page lists the conditions under which the action will appear in the file managers context menus. The file patterns are specified as a list of simple file patterns separated by semicolons (e.g. *.txt;*.doc). For an action to appear in the context menu of a file or folder, at least one of these patterns must match the name of the file or folder. Additionally, you can specify that the action should only appear for certain kinds of files.\n"
+"\n"
+"** The custom action will be eligible to appear in the toolbar."
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-editor.ui:899
+msgid "Appearance Conditions"
+msgstr "Izskata nosacījumi"
+
+#: plugins/thunar-uca/thunar-uca-chooser.ui:12
+msgid "Custom Actions"
+msgstr "Pielāgotās darbības"
+
+#: plugins/thunar-uca/thunar-uca-chooser.ui:32
+msgid ""
+"Configure custom actions that will appear in the file manager's context menus and/or toolbar.\n"
+"These actions are applicable to folders or certain kinds of files.\n"
+"\n"
+"Check the <a href=\"https://docs.xfce.org/xfce/thunar/custom-actions\">documentation</a> for a collection of custom action examples."
+msgstr ""
+
+#: plugins/thunar-uca/thunar-uca-chooser.ui:88
+msgid "Add a new custom action."
+msgstr "Pievienot jaunu pielāgotu darbību."
+
+#: plugins/thunar-uca/thunar-uca-chooser.ui:97
+msgid "Edit the currently selected action."
+msgstr "Rediģēt atlasīto darbību."
+
+#: plugins/thunar-uca/thunar-uca-chooser.ui:106
+msgid "Delete the currently selected action."
+msgstr "Dzēst atlasīto darbību."
+
+#: plugins/thunar-uca/thunar-uca-chooser.ui:115
+msgid "Move the currently selected action up by one row."
+msgstr "Pārvietot, atlasīto darbību, pa vienu rindu augstāk."
+
+#: plugins/thunar-uca/thunar-uca-chooser.ui:124
+msgid "Move the currently selected action down by one row."
+msgstr "Pārvietot, atlasīto darbību, pa vienu rindu zemāk."
+
+#: plugins/thunar-wallpaper/twp-provider.c:154
+msgid "Set as wallpaper"
+msgstr "Uzstādīt kā ekrāna tapeti"
+
+#: thunar.desktop.in.in:3
+msgid "Thunar File Manager"
+msgstr "Thunar failu pārvaldnieks"
+
+#: thunar.desktop.in.in:4
+msgid "Browse the filesystem with the file manager"
+msgstr "Pārlūko failu sistēmu ar failu pārvaldnieku"
+
+#: thunar.desktop.in.in:5
+msgid "File Manager"
+msgstr "Failu pārvaldnieks"
+
+#: thunar.desktop.in.in:6
+msgid ""
+"file "
+"manager;explorer;finder;browser;folders;directory;directories;partitions;drives;network;devices;rename;move;copy;delete;permissions;home;trash;"
+msgstr ""
+
+#: thunar.desktop.in.in:17
+msgid "Home"
+msgstr "Mājas"
+
+#: thunar-bulk-rename.desktop.in.in:6
+msgid "bulk;renamer;renaming;thunar;files;folders;directory;directories;"
+msgstr ""
+
+#: thunar/thunar-settings.desktop.in:5
+msgid "Configure the Thunar file manager"
+msgstr "Konfigurēt Thunar failu pārvaldnieku"
+
+#: thunar/thunar-settings.desktop.in:6
+msgid ""
+"thunar;settings;preferences;configure;thumbnails;file size;date "
+"format;shortcuts pane;tree view;tabs;"
+msgstr ""
+
+#: org.xfce.thunar.appdata.xml.in:10
+msgid "File Browser"
+msgstr ""
+
+#: org.xfce.thunar.appdata.xml.in:12
+msgid ""
+"Thunar is a file browser specifically designed for the Xfce Desktop, but "
+"also can serve as an alternate file browser for other Desktop environments. "
+"It has a simple, clean two-pane design for browsing all your files."
+msgstr ""
+
+#: org.xfce.thunar.appdata.xml.in:26
+msgid "Screenshot of the XFCE Thunar File Browser User Interface"
+msgstr ""
+
+#. SECURITY:
+#. - A normal active user can run thunar without elevated rights. They
+#. may wish to modify files they normally do not have read/write access
+#. to. This isn't a good idea, but is common on single user systems.
+#: org.xfce.thunar.policy.in.in:26
+msgid "Run Thunar as root"
+msgstr ""
+
+#: org.xfce.thunar.policy.in.in:27
+msgid "Authentication is required to run Thunar as root."
+msgstr ""

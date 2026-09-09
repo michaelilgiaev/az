@@ -2,7 +2,7 @@
 
 ``packages`` is a NAMESPACE package (PEP 420): it is just the directory
 ``libraries/packages/`` with NO ``__init__.py`` of its own. Each Azzio package is its
-OWN sub-directory with an ``__init__.py`` (kitty/, openbox/, gedit/, thunar/, librewolf/,
+OWN sub-directory with an ``__init__.py`` (kitty/, openbox/, gedit/, file_manager/, librewolf/,
 calamares/, application_menu/, ...), and it is those sub-packages that are importable as
 ``from packages import kitty`` etc. A directory WITHOUT an ``__init__.py`` is not a package,
 so it is simply skipped -- which is exactly the "add or remove a package by creating/deleting

@@ -11,7 +11,7 @@ to the hicolor SCALABLE apps dir under OUR OWN icon name (XVIEWER_ICON_NAME = az
 and rasterize it to the standard PNG sizes there, then OVERRIDE xviewer.desktop's Icon= to
 that name. Using a NEW icon name (not overwriting the package's `xviewer` icon files) means an
 xviewer package upgrade that reships its own icons cannot revert ours -- our name is ours
-alone (the same reasoning packages/thunar uses for azzio-thunar).
+alone (the same reasoning packages/file_manager uses for azzio-thunar).
 
 WHAT LANDS WHERE:
   * the custom icon (scalable SVG + PNG rasterizations) under /usr/share/icons/hicolor/... --

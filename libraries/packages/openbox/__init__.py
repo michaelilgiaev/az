@@ -214,7 +214,7 @@ WALLPAPER_POINTER_FILE = f"{HOME}/.config/azzio/wallpaper"
 
 # The live Thunar sidebar sync helper, launched (with --watch) from the OpenBox autostart so
 # additions to the home directory show up in Thunar's shortcuts pane at runtime (PROMPT). Kept
-# in lock-step with packages/thunar/live_sidebar.SYNC_SCRIPT_DEST (a test pins them equal);
+# in lock-step with packages/file_manager/live_sidebar.SYNC_SCRIPT_DEST (a test pins them equal);
 # this constant is the single name the autostart refers to it by, held here to avoid importing
 # the thunar package into openbox (mirrors how AZZIO_OSD_SYSTEM_PATH is handled).
 THUNAR_SIDEBAR_SYNC = "/usr/local/lib/azzio/azzio-sidebar-sync"
