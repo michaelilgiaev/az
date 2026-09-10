@@ -1020,7 +1020,10 @@ thunar_window_init (ThunarWindow *window)
   thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_EDIT_MENU, G_CALLBACK (thunar_window_update_edit_menu), window->menubar);
   thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_VIEW_MENU, G_CALLBACK (thunar_window_update_view_menu), window->menubar);
   thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_GO_MENU, G_CALLBACK (thunar_window_update_go_menu), window->menubar);
-  thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_BOOKMARKS_MENU, G_CALLBACK (thunar_window_update_bookmarks_menu), window->menubar);
+  /* Azzio: the "Bookmarks" menu (and its "Add Bookmark" item) is intentionally removed --
+   * the side pane is driven solely by the Azzio-generated ~/.config/gtk-3.0/bookmarks (the
+   * hardcoded home scan), so there is no user-facing way to add/see bookmarks. The internal
+   * bookmark load still feeds the side pane; only this menu entry is dropped. */
   /* Azzio: the Help menu (Contents + About) is intentionally removed. */
   gtk_widget_show_all (window->menubar);
 
@@ -5087,7 +5090,9 @@ thunar_window_action_menu (ThunarWindow *window)
   thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_EDIT_MENU, G_CALLBACK (thunar_window_update_edit_menu), menu);
   thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_VIEW_MENU, G_CALLBACK (thunar_window_update_view_menu), menu);
   thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_GO_MENU, G_CALLBACK (thunar_window_update_go_menu), menu);
-  thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_BOOKMARKS_MENU, G_CALLBACK (thunar_window_update_bookmarks_menu), menu);
+  /* Azzio: the "Bookmarks" menu (and its "Add Bookmark" item) is intentionally removed from the
+   * toolbar menu too -- same reason as the menubar above (the side pane is driven solely by the
+   * Azzio-generated bookmarks file, no user path to add bookmarks). */
   /* Azzio: the Help menu (Contents + About) is intentionally removed. */
   gtk_widget_show_all (menu);
 

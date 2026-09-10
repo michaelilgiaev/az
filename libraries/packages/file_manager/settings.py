@@ -167,12 +167,13 @@ HIDDEN_BOOKMARKS: tuple[str, ...] = (
     # HEADER whose child count is 0, so with the File System row hidden and no removable volumes
     # (MiscVolumeManagement=false), the whole "Devices" heading disappears too.
     "file:///",
-    # REMOVE the built-in Home shortcut entirely. The user deleted the sidebar's Home entry
-    # ("just delete it, we dont actually need it there is a home button"), so we hide the
-    # built-in Home (its URI is exactly "file:///home/main") and ship NO replacement bookmark
-    # (see file_manager/sidebar.py). The Places sidebar therefore has no Home row at all; the
-    # file manager's Home toolbar button covers navigating home.
-    f"file://{HOME}",
+    # KEEP the built-in Home shortcut VISIBLE -- it IS the "main" row the PROMPT wants at the top
+    # of the sidebar ("add the user to the top of the sidebar ... simply name it 'main'"). The
+    # built-in Home place (group PLACES_DEFAULT, sort_id 0) is displayed as the home basename, i.e.
+    # "main" for /home/main, and already sits above the GTK-bookmark group, so simply NOT hiding it
+    # (its URI is exactly "file:///home/main") puts "main" at the very top. It is deliberately the
+    # built-in place, not a GTK bookmark (a bookmark would land below the built-in Desktop and
+    # duplicate Home). So "file:///home/main" is intentionally ABSENT from this list.
 )
 HIDDEN_DEVICES: tuple[str, ...] = (
     "computer:///",   # "Computer" under Devices

@@ -129,17 +129,63 @@ def test_devices_and_file_system_removed_via_hidden_bookmarks():
     assert '<value type="string" value="file:///"/>' in xml
 
 
-def test_home_row_hidden_and_not_replaced():
-    # The user deleted the sidebar's Home entry entirely ("just delete it ... there is a home
-    # button"). So the built-in Home shortcut (URI file:///home/main) stays HIDDEN, and there is
-    # NO "Home Directory" replacement bookmark and no ".home-directory" URI anywhere.
-    assert f"file://{settings.HOME}" in settings.HIDDEN_BOOKMARKS
+def test_main_user_home_row_is_shown_at_the_top_not_hidden():
+    # PROMPT: "add the user to the top of the sidebar ... simply name it 'main'." The user row is
+    # the file manager's BUILT-IN Home place (group PLACES_DEFAULT, sort_id 0, displayed as the
+    # home basename "main"), which already sits at the very top of Places. So its URI
+    # (file:///home/main) must NOT be hidden -- un-hiding it IS how "main" appears at the top.
+    assert f"file://{settings.HOME}" not in settings.HIDDEN_BOOKMARKS
+    assert settings.HOME.rsplit("/", 1)[-1] == "main"     # the built-in Home displays as "main"
+    # It is the built-in place, NOT a GTK bookmark: no "main"/"Home Directory" bookmark line, and
+    # no leftover ".home-directory" URI anywhere.
     bm = sidebar.gtk_bookmarks()
+    assert not any(ln.endswith(" main") for ln in bm.splitlines())
     assert not any(ln.endswith(" Home Directory") for ln in bm.splitlines())
     assert ".home-directory" not in bm
-    # the replacement-bookmark constants/label are gone from the sidebar module.
+    # the old replacement-bookmark constants/label are gone from the sidebar module.
     assert not hasattr(sidebar, "HOME_BOOKMARK_LABEL")
     assert not hasattr(sidebar, "HOME_BOOKMARK_URI")
+
+
+def test_bookmarks_menu_and_ctrl_d_removed_from_vendored_source():
+    # PROMPT: remove "Bookmarks" (also "CTRL+D"). The side pane is driven SOLELY by the Azzio-
+    # generated ~/.config/gtk-3.0/bookmarks (the hardcoded home scan), so the user-facing Bookmarks
+    # feature is excised from the vendored fork:
+    #   * the "_Bookmarks" top-level menu is no longer created (neither in the menubar nor the
+    #     toolbar "hamburger" menu) -- both create_menu(... BOOKMARKS_MENU ...) calls are gone,
+    #   * CTRL+D ("<Primary>D") is unbound from the "Add Bookmark" (sendto-shortcuts) action,
+    #   * the "Send To -> Side Pane (Add Bookmark)" entry is dropped from the Send To submenu.
+    win_c = (fm.SOURCE_DIR / "thunar" / "thunar-window.c").read_text()
+    am_c = (fm.SOURCE_DIR / "thunar" / "thunar-action-manager.c").read_text()
+    # The _Bookmarks menu is never built (the only two create-menu call sites are removed; the
+    # bare action-entry row and internal loader may remain, but nothing surfaces them).
+    assert "G_CALLBACK (thunar_window_update_bookmarks_menu), window->menubar)" not in win_c
+    assert "G_CALLBACK (thunar_window_update_bookmarks_menu), menu)" not in win_c
+    # CTRL+D is unbound from Add Bookmark: the sendto-shortcuts row no longer carries "<Primary>D".
+    add_bookmark_line = next(
+        ln for ln in am_c.splitlines() if "ThunarShortcutsPane/sendto-shortcuts" in ln
+    )
+    assert "<Primary>D" not in add_bookmark_line
+    # The "Send To -> Side Pane (Add Bookmark)" menu item is gone from the Send To submenu.
+    assert "Side Pane (Add Bookmark)" not in am_c
+
+
+def test_drag_drop_cannot_add_a_persisted_sidebar_shortcut():
+    # PROMPT: the home scan (~/.config/gtk-3.0/bookmarks, regenerated from /home/main) must be the
+    # ONLY way a row appears on the side pane. Dropping a folder BETWEEN shortcut rows used to add
+    # AND persist a user bookmark: thunar_shortcuts_view_drag_data_received (the DROP_BEFORE/AFTER
+    # branch) called thunar_shortcuts_view_drop_uri_list(view, drop_file_list, path) -> ...model_add
+    # -> ...save_bookmarks, writing to gtk-3.0/bookmarks. That external-add branch is neutralized in
+    # the vendored fork so no drop can create a sidebar row.
+    view_c = (fm.SOURCE_DIR / "thunar" / "thunar-shortcuts-view.c").read_text()
+    # The add-a-shortcut CALL SITE is gone (the drop_uri_list() function may remain defined/dead;
+    # what must not exist is the invocation that feeds it the dropped file list).
+    assert "thunar_shortcuts_view_drop_uri_list (view, view->drop_file_list, path)" not in view_c
+    # And nothing else invokes model_add from the view (the only persisting add-to-sidebar path).
+    assert "thunar_shortcuts_model_add (" not in view_c
+    # The drop-INTO-an-existing-folder path (copy/move/link -> thunar_dnd_perform) is UNTOUCHED --
+    # that is normal file management, not adding a sidebar row.
+    assert "thunar_dnd_perform (widget, file, view->drop_file_list" in view_c
 
 
 def test_templates_prefs_hide_about_and_cap():

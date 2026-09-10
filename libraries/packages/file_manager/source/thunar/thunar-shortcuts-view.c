@@ -173,10 +173,10 @@ static GtkTreePath *
 thunar_shortcuts_view_compute_drop_position (ThunarShortcutsView *view,
                                              gint                 x,
                                              gint                 y);
-static void
-thunar_shortcuts_view_drop_uri_list (ThunarShortcutsView *view,
-                                     GList               *path_list,
-                                     GtkTreePath         *dst_path);
+/* Azzio: thunar_shortcuts_view_drop_uri_list removed -- it was the only view-side path that
+ * persisted a dropped folder as a sidebar bookmark (via thunar_shortcuts_model_add), which the
+ * home-scan-only side pane must never do. Its sole caller (the drop BEFORE/AFTER branch in
+ * thunar_shortcuts_view_drag_data_received) is gone, so the function is deleted with it. */
 static void
 thunar_shortcuts_view_open (ThunarShortcutsView                *view,
                             ThunarActionManagerFolderOpenAction open_in);
@@ -801,19 +801,17 @@ thunar_shortcuts_view_drag_data_received (GtkWidget        *widget,
           actions = thunar_shortcuts_view_compute_drop_actions (view, context, x, y, &path, &action, &position);
           if (G_LIKELY (actions != 0))
             {
-              /* check if we should add a shortcut */
-              if (position == GTK_TREE_VIEW_DROP_BEFORE || position == GTK_TREE_VIEW_DROP_AFTER)
-                {
-                  /* if position is "after", we need to advance the path,
-                   * as the drop_uri_list() will insert "at" the path.
-                   */
-                  if (position == GTK_TREE_VIEW_DROP_AFTER)
-                    gtk_tree_path_next (path);
-
-                  /* just add the required shortcuts then */
-                  thunar_shortcuts_view_drop_uri_list (view, view->drop_file_list, path);
-                }
-              else if (G_LIKELY ((actions & (GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK)) != 0))
+              /* Azzio: the "add a shortcut" branch (drop BETWEEN rows -> DROP_BEFORE/AFTER ->
+               * thunar_shortcuts_view_drop_uri_list -> thunar_shortcuts_model_add ->
+               * ...save_bookmarks) is removed. The side pane is driven SOLELY by the Azzio
+               * home scan (~/.config/gtk-3.0/bookmarks, regenerated from /home/main), so a
+               * drag-and-drop must never create or persist a user bookmark. The drop INTO an
+               * existing shortcut folder (copy/move/link) is normal file management and stays --
+               * gated on an "INTO" position so a between-rows drop is a genuine no-op rather than
+               * silently dropping into whichever neighbouring folder the path happens to hit.
+               */
+              if ((position == GTK_TREE_VIEW_DROP_INTO_OR_BEFORE || position == GTK_TREE_VIEW_DROP_INTO_OR_AFTER)
+                  && G_LIKELY ((actions & (GDK_ACTION_COPY | GDK_ACTION_MOVE | GDK_ACTION_LINK)) != 0))
                 {
                   /* get the shortcuts model */
                   model = gtk_tree_view_get_model (GTK_TREE_VIEW (view));
@@ -1664,61 +1662,10 @@ thunar_shortcuts_view_compute_drop_position (ThunarShortcutsView *view,
 
 
 
-static void
-thunar_shortcuts_view_drop_uri_list (ThunarShortcutsView *view,
-                                     GList               *path_list,
-                                     GtkTreePath         *dst_path)
-{
-  GtkTreeModel *model;
-  GtkTreePath  *path;
-  ThunarFile   *file;
-  GError       *error = NULL;
-  GList        *lp;
-  GtkTreeModel *child_model;
-  GtkTreePath  *child_path;
-
-  /* take a copy of the destination path */
-  path = gtk_tree_path_copy (dst_path);
-
-  /* process the URIs one-by-one and stop on error */
-  model = gtk_tree_view_get_model (GTK_TREE_VIEW (view));
-  child_model = gtk_tree_model_filter_get_model (GTK_TREE_MODEL_FILTER (model));
-  for (lp = path_list; lp != NULL; lp = lp->next)
-    {
-      file = thunar_file_get (lp->data, &error);
-      if (G_UNLIKELY (file == NULL))
-        break;
-
-      /* make sure, that only directories gets added to the shortcuts list */
-      if (G_UNLIKELY (!thunar_file_is_directory (file)))
-        {
-          g_set_error (&error, G_FILE_ERROR, G_FILE_ERROR_NOTDIR,
-                       _("The path \"%s\" does not refer to a directory"),
-                       thunar_file_get_display_name (file));
-          g_object_unref (file);
-          break;
-        }
-
-      child_path = gtk_tree_model_filter_convert_path_to_child_path (GTK_TREE_MODEL_FILTER (model), path);
-      thunar_shortcuts_model_add (THUNAR_SHORTCUTS_MODEL (child_model), child_path, file);
-      gtk_tree_path_free (child_path);
-
-      g_object_unref (file);
-      gtk_tree_path_next (path);
-    }
-
-  /* release the tree path copy */
-  gtk_tree_path_free (path);
-
-  if (G_UNLIKELY (error != NULL))
-    {
-      /* display an error message to the user */
-      thunar_dialogs_show_error (GTK_WIDGET (view), error, _("Failed to add new shortcut"));
-
-      /* release the error */
-      g_error_free (error);
-    }
-}
+/* Azzio: thunar_shortcuts_view_drop_uri_list was here. It walked the dropped URI list and called
+ * thunar_shortcuts_model_add for each directory, which persists a new row to
+ * ~/.config/gtk-3.0/bookmarks. The side pane is driven SOLELY by the Azzio home scan, so this
+ * external-add path is removed along with its (now sole, also removed) drop BEFORE/AFTER caller. */
 
 
 
