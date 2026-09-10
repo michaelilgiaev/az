@@ -86,12 +86,29 @@ LINKS: tuple[tuple[str, str], ...] = (
 # the runtime live-sidebar sync special-case it.
 TRASH_LINK_NAME = "Trash"
 
+# --- Sidebar pin + skip --------------------------------------------------------
+# The user's home sits at the TOP of the sidebar, shown as "main" (PROMPT: "add the user to the
+# top of the sidebar ... simply name it 'main'"). This is the file manager's BUILT-IN Home place
+# (group PLACES_DEFAULT, sort_id 0), whose display name is the home basename -- "main" for
+# /home/main. It already renders above the GTK-bookmark group, so we get "main at the top" simply
+# by NOT hiding it: file_manager/settings.HIDDEN_BOOKMARKS no longer lists file:///home/main.
+# (It is deliberately NOT a GTK bookmark -- a bookmark would land below the built-in Desktop and
+# duplicate the built-in Home.) The label is asserted against the home basename in the tests.
+SIDEBAR_USER_LABEL = "main"
+
+# Top-level names that are created on disk but kept OUT of the sidebar. "Ignore" is a real folder
+# the layout still creates (so it stays in DIRECTORIES, the on-disk source of truth), but the
+# PROMPT says the sidebar must "ignore the directory 'Ignore/'", so sidebar_entries() (and the
+# runtime scan in live_sidebar) drop it. Kept as data so the on-disk layout and the sidebar filter
+# never drift.
+SIDEBAR_SKIP: frozenset[str] = frozenset({"Ignore"})
+
 # NOTE: there is NO ".home-directory" symlink or "Home Directory" sidebar bookmark anymore. The
 # user deleted the "Home Directory" entry from the file manager's Places sidebar ("just delete
 # it, we dont actually need it there is a home button"), so the previous distinct-URI symlink
-# trick that backed that bookmark is gone. The built-in username Home shortcut stays hidden via
-# file_manager/settings.HIDDEN_BOOKMARKS[file:///home/main]; navigating home uses the file
-# manager's Home button.
+# trick that backed that bookmark is gone. The built-in username Home shortcut is now SHOWN (it is
+# the "main" pin above) -- file_manager/settings.HIDDEN_BOOKMARKS no longer hides file:///home/main
+# (see SIDEBAR_USER_LABEL above); the file manager's Home button still navigates home as well.
 
 # --- The XDG trash chain -------------------------------------------------------
 # The trash spec's two required dirs, created (relative to the home dir) BEFORE the
@@ -147,13 +164,22 @@ def sidebar_entries() -> list[tuple[str, str]]:
     /home/main/.config, Trash -> /home/main/.local/share/Trash/files), so opening the
     shortcut shows the real path rather than the /home/main/Config symlink path."""
     entries: list[tuple[str, str]] = []
-    # 1. Real directories (the dirs group).
+    # NOTE: the "main" (user home) pin at the TOP of the sidebar is NOT a GTK bookmark -- it is the
+    # file manager's built-in Home place (group PLACES_DEFAULT, sort_id 0, displayed as the home
+    # basename "main"), which already sits above the GTK-bookmark group. We surface it by NOT
+    # hiding it (file_manager/settings.HIDDEN_BOOKMARKS no longer lists file:///home/main). Adding
+    # a "main" bookmark here instead would land it BELOW the built-in Desktop (wrong position) and
+    # duplicate the built-in Home. See SIDEBAR_USER_LABEL.
+    # 1. Real directories (the dirs group), EXCEPT any in SIDEBAR_SKIP (e.g. "Ignore", which is
+    #    created on disk but kept off the sidebar per the PROMPT).
     for name in DIRECTORIES:
+        if name in SIDEBAR_SKIP:
+            continue
         entries.append((name, resolved_home_path(name)))
     # 2. Files: the curated set has none. (The live sync inserts real files here at runtime.)
-    # 3. Symlinks (the LINKS), EXCEPT "Trash", which is pinned last.
+    # 3. Symlinks (the LINKS), EXCEPT "Trash" (pinned last) and any SIDEBAR_SKIP name.
     for name, target in LINKS:
-        if name == TRASH_LINK_NAME:
+        if name == TRASH_LINK_NAME or name in SIDEBAR_SKIP:
             continue
         entries.append((name, resolved_home_path(target)))
     # 4. "Trash" LAST (it is itself a symlink, forced to the very end per the spec).

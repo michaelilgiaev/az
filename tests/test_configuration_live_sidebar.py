@@ -45,9 +45,11 @@ def test_static_sidebar_order_is_dirs_then_symlinks_then_trash_last():
     # PROMPT: directories -> files -> symbolic links -> "Trash" LAST. The curated set has real
     # dirs (DIRECTORIES) then symlinks (LINKS), with Trash pinned to the very end.
     labels = [label for label, _ in home_directory.sidebar_entries()]
-    # every real directory comes before every symlink.
-    last_dir_idx = max(labels.index(d) for d in home_directory.DIRECTORIES)
-    link_names = [n for n, _ in home_directory.LINKS]
+    # every real directory comes before every symlink (skipping SIDEBAR_SKIP names like "Ignore",
+    # which are kept off the sidebar entirely).
+    shown_dirs = [d for d in home_directory.DIRECTORIES if d not in home_directory.SIDEBAR_SKIP]
+    last_dir_idx = max(labels.index(d) for d in shown_dirs)
+    link_names = [n for n, _ in home_directory.LINKS if n not in home_directory.SIDEBAR_SKIP]
     first_link_idx = min(labels.index(n) for n in link_names)
     assert last_dir_idx < first_link_idx, labels
     # Trash is dead last.
@@ -169,6 +171,30 @@ def test_functional_ordering_dirs_files_symlinks_trash_last(tmp_path):
     assert cache_line.startswith(f"file://{tmp_path}/.cache ")
     mylink_line = next(ln for ln in lines if ln.endswith(" MyLink"))
     assert mylink_line.startswith(f"file://{tmp_path}/Downloads ")
+
+
+def test_functional_ignore_directory_is_not_bookmarked(tmp_path):
+    # PROMPT: the sidebar must "ignore the directory 'Ignore/'". A top-level "Ignore" folder in
+    # the home dir must NOT produce a sidebar bookmark (while its siblings still do).
+    for d in ("Downloads", "Ignore", "Documents"):
+        (tmp_path / d).mkdir()
+    lines = _run_sync(tmp_path)
+    labels = [ln.split(" ", 1)[1] for ln in lines]
+    assert "Ignore" not in labels                          # the Ignore dir is skipped
+    assert "Downloads" in labels and "Documents" in labels  # siblings still present
+
+
+def test_functional_dangling_symlink_is_not_bookmarked(tmp_path):
+    # PROMPT: the sidebar lists "Symbolic Links(of directories, files, or .html files)" -- i.e. a
+    # symlink is only shown if it resolves to a real directory or file. A DANGLING symlink (target
+    # missing) resolves to nothing, so it must NOT appear (a broken sidebar entry otherwise).
+    (tmp_path / "Downloads").mkdir()
+    os.symlink("Downloads", tmp_path / "GoodLink")          # -> real dir, shown
+    os.symlink("nonexistent-target", tmp_path / "DeadLink")  # dangling, skipped
+    lines = _run_sync(tmp_path)
+    labels = [ln.split(" ", 1)[1] for ln in lines]
+    assert "GoodLink" in labels                              # resolves to a dir -> shown
+    assert "DeadLink" not in labels                          # dangling -> not on the sidebar
 
 
 def test_functional_bookmarks_have_no_comment_lines(tmp_path):

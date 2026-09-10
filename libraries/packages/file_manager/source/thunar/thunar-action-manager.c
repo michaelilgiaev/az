@@ -331,7 +331,10 @@ static XfceGtkActionEntry thunar_action_manager_action_entries[] =
     /* For backward compatibility the old accel paths are re-used. Currently not possible to automatically migrate to new accel paths. */
     /* Waiting for https://gitlab.gnome.org/GNOME/gtk/issues/2375 to be able to fix that */
     {THUNAR_ACTION_MANAGER_ACTION_SENDTO_MENU,        "<Actions>/ThunarWindow/sendto-menu",             "",                  XFCE_GTK_MENU_ITEM,       N_ ("_Send To"),            NULL,                                             NULL,                                                                                         NULL,                                                          },
-    {THUNAR_ACTION_MANAGER_ACTION_SENDTO_SHORTCUTS,   "<Actions>/ThunarShortcutsPane/sendto-shortcuts", "<Primary>D",        XFCE_GTK_IMAGE_MENU_ITEM, N_ ("_Add Bookmark"),       N_ ("Create bookmarks for all selected folders. If nothing is selected, the current folder is bookmarked."), "bookmark-new", G_CALLBACK (thunar_action_manager_action_add_shortcuts),       },
+    /* Azzio: CTRL+D ("<Primary>D") is UNBOUND and the "Add Bookmark" action is no longer surfaced
+     * (the Bookmarks menu that hosted it is removed in thunar-window.c). The side pane is driven
+     * solely by the Azzio-generated bookmarks file, so there is no user path to add bookmarks. */
+    {THUNAR_ACTION_MANAGER_ACTION_SENDTO_SHORTCUTS,   "<Actions>/ThunarShortcutsPane/sendto-shortcuts", "",                  XFCE_GTK_IMAGE_MENU_ITEM, N_ ("_Add Bookmark"),       N_ ("Create bookmarks for all selected folders. If nothing is selected, the current folder is bookmarked."), "bookmark-new", G_CALLBACK (thunar_action_manager_action_add_shortcuts),       },
     {THUNAR_ACTION_MANAGER_ACTION_SENDTO_DESKTOP,     "<Actions>/ThunarActionManager/sendto-desktop",   "",                  XFCE_GTK_MENU_ITEM,       N_ ("Send to _Desktop"),    NULL,                                                                                            "user-desktop",                                G_CALLBACK (thunar_action_manager_action_sendto_desktop),      },
     {THUNAR_ACTION_MANAGER_ACTION_PROPERTIES,         "<Actions>/ThunarStandardView/properties",        "<Alt>Return",       XFCE_GTK_IMAGE_MENU_ITEM, N_ ("_Properties..."),      N_ ("View the properties of the selected file"),                                                 "document-properties",                         G_CALLBACK (thunar_action_manager_action_properties),          },
     {THUNAR_ACTION_MANAGER_ACTION_MAKE_LINK,          "<Actions>/ThunarStandardView/make-link",         "",                  XFCE_GTK_MENU_ITEM,       N_ ("Ma_ke Link"),          NULL,                                             NULL,                                                                                         G_CALLBACK (thunar_action_manager_action_make_link),           },
@@ -2143,7 +2146,6 @@ thunar_action_manager_build_sendto_submenu (ThunarActionManager *action_mgr)
   GtkWidget                *image;
   GtkWidget                *item;
   GtkWidget                *submenu;
-  GtkWidget                *window;
   GList                    *devices;
   GList                    *appinfo_list;
   GIcon                    *icon;
@@ -2155,24 +2157,11 @@ thunar_action_manager_build_sendto_submenu (ThunarActionManager *action_mgr)
 
   submenu = gtk_menu_new ();
 
-  /* show "sent to shortcut" if only directories are selected */
-  if (action_mgr->n_directories_to_process > 0 && action_mgr->n_directories_to_process == action_mgr->n_files_to_process)
-    {
-      /* determine the toplevel window we belong to */
-      window = gtk_widget_get_toplevel (action_mgr->widget);
-      if (THUNAR_IS_WINDOW (window) && thunar_window_has_shortcut_sidepane (THUNAR_WINDOW (window)))
-        {
-          action_entry = get_action_entry (THUNAR_ACTION_MANAGER_ACTION_SENDTO_SHORTCUTS);
-          if (action_entry != NULL)
-            {
-              label_text = ngettext ("Side Pane (Add Bookmark)", "Side Pane (Add Bookmarks)", action_mgr->n_files_to_process);
-              tooltip_text = ngettext ("Add the selected folder to the shortcuts side pane",
-                                       "Add the selected folders to the shortcuts side pane", action_mgr->n_files_to_process);
-              item = xfce_gtk_image_menu_item_new_from_icon_name (label_text, tooltip_text, action_entry->accel_path, action_entry->callback,
-                                                                  G_OBJECT (action_mgr), action_entry->menu_item_icon_name, GTK_MENU_SHELL (submenu));
-            }
-        }
-    }
+  /* Azzio: the Send To submenu's shortcut-pane entry is intentionally removed along with the rest
+   * of the Bookmarks feature (the Bookmarks menu and CTRL+D). The side pane is driven solely by
+   * the Azzio-generated ~/.config/gtk-3.0/bookmarks (the hardcoded home scan), so no user path may
+   * add a shortcut. Only that one item is dropped here; the rest of the Send To submenu (Desktop,
+   * removable devices, applications) is untouched. */
 
   /* Check whether at least one files is located in the trash (to en-/disable the "sendto-desktop" action). */
   for (lp = action_mgr->files_to_process; lp != NULL; lp = lp->next)

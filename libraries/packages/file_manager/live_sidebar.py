@@ -45,14 +45,17 @@ own $HOME, so it needs no privilege.
 ORDERING (matches home_directory.sidebar_entries + the static seed):
   1. real DIRECTORIES  (alphabetical), EXCEPT Desktop (the file manager's built-in place already
      provides it at the same path -- adding ours would duplicate it, same reason sidebar.py skips
-     it).
+     it) and EXCEPT home_directory.SIDEBAR_SKIP ("Ignore", which the PROMPT keeps off the sidebar).
   2. regular FILES     (alphabetical).
-  3. SYMLINKS          (alphabetical), each bookmarked at its RESOLVED target, EXCEPT "Trash".
+  3. SYMLINKS          (alphabetical), each bookmarked at its RESOLVED target, EXCEPT "Trash", and
+     ONLY if the link resolves to a real dir/file (a dangling link is skipped -- the PROMPT lists
+     "Symbolic Links(of directories, files, or .html files)", i.e. links to a real target).
   4. "Trash" LAST      (it is a symlink but the spec pins it to the very end).
-There is NO "Home Directory" bookmark: the user deleted it from the sidebar (there is a Home
-toolbar button), so the list starts straight at the directories. Hidden entries (dotfiles) are
-skipped -- the curated convenience symlinks (Cache/Config/...) are NON-hidden names, so the
-surfaced set matches the intent without dumping every dotfile.
+The "main" user row at the TOP of the sidebar is NOT emitted here: it is the file manager's
+built-in Home place (settings.HIDDEN_BOOKMARKS keeps it visible, displayed as the home basename
+"main"), which sits above this GTK-bookmark group. This scan only walks the CHILDREN of $HOME.
+Hidden entries (dotfiles) are skipped -- the curated convenience symlinks (Cache/Config/...) are
+NON-hidden names, so the surfaced set matches the intent without dumping every dotfile.
 """
 
 from __future__ import annotations
@@ -70,13 +73,20 @@ SYNC_SCRIPT_DEST = "/usr/local/lib/azzio/azzio-sidebar-sync"
 # The bookmarks file it regenerates (the same path the static seed writes).
 GTK_BOOKMARKS_PATH = f"{HOME}/.config/gtk-3.0/bookmarks"
 
-# No "Home Directory" bookmark -- the user deleted it from the sidebar (see the module docstring);
-# the regenerated file starts straight at the directories. The built-in username Home stays
-# hidden via settings.HIDDEN_BOOKMARKS[file:///home/main].
+# No "main"/Home bookmark is emitted -- the "main" user row at the top is the built-in Home place
+# (settings.HIDDEN_BOOKMARKS keeps it VISIBLE now, displayed as the home basename "main"), which
+# renders above this GTK-bookmark group. The regenerated file starts straight at the directories.
 
-# The Desktop entry is skipped (the file manager's built-in place already provides it -- see
-# sidebar.py).
-SKIP_NAMES = ("Desktop",)
+# Top-level names the runtime scan skips, so they never reach the sidebar:
+#   * "Desktop"        -- the file manager's built-in place already provides it (see sidebar.py);
+#                         adding our own would duplicate it.
+#   * home_directory.SIDEBAR_SKIP ("Ignore", ...) -- names the PROMPT keeps off the sidebar
+#                         ("ignore the directory 'Ignore/'"). Sourced from home_directory so the
+#                         runtime scan and the build-time seed apply the SAME skip set (no drift).
+# "main" is NOT here and needs no handling: the user row at the top is the built-in Home place
+# (settings.HIDDEN_BOOKMARKS keeps it visible), not a scanned bookmark -- the scan only walks the
+# CHILDREN of $HOME, never $HOME itself.
+SKIP_NAMES = ("Desktop", *sorted(home_directory.SIDEBAR_SKIP))
 
 # The Trash shortcut name, pinned to the very end of the ordering (home_directory.TRASH_LINK_NAME).
 TRASH_NAME = home_directory.TRASH_LINK_NAME
@@ -145,7 +155,12 @@ regen() {{
             {skip_case}) continue ;;
         esac
         if [ -L "$path" ]; then
-            # A symlink -> bookmark its RESOLVED target so the location bar shows the real path.
+            # A symlink. The sidebar lists only symlinks "of directories, files, or .html files"
+            # (PROMPT) -- i.e. links that resolve to a real dir/file. A DANGLING link (target
+            # missing) would be a broken sidebar row, so skip it. `[ -e ]` follows the link, so it
+            # is TRUE for a dir/file target and FALSE for a dangling one.
+            [ -e "$path" ] || continue
+            # Bookmark its RESOLVED target so the location bar shows the real path.
             target=$(realpath -m -- "$path" 2>/dev/null || printf '%s' "$path")
             line="$(uri "$target") $name"
             if [ "$name" = "{trash}" ]; then
@@ -163,7 +178,7 @@ regen() {{
         fi
     done
     # Sort each group alphabetically by label (field 2). Emit: dirs, files, links, then Trash
-    # last (NO "Home Directory" -- the user deleted it from the sidebar). `sort` on empty input
+    # last ("main"/Home is the built-in place, not emitted here). `sort` on empty input
     # is a no-op. Assemble into a TEMP file first (so a `sort` hiccup never leaves a half-built
     # bookmarks file), then install it -- see the in-place write below.
     tmp="$BM.azzio.$$"

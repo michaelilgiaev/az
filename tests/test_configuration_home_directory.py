@@ -79,11 +79,12 @@ def test_resolved_home_path_joins_and_normalizes():
 def test_sidebar_entries_are_directories_then_links_resolved():
     entries = hd.sidebar_entries()
     labels = [label for label, _ in entries]
-    # PROMPT ordering: directories first (in order), then the symlinks (in order), with "Trash"
-    # forced to the very END (it is a symlink but pinned last). No plain files in the curated
-    # set, so the order is DIRECTORIES, then non-Trash LINKS, then Trash.
+    # PROMPT ordering: directories first (in order, EXCEPT "Ignore" which is kept off the
+    # sidebar), then the symlinks (in order), with "Trash" forced to the very END (it is a symlink
+    # but pinned last). No plain files in the curated set. ("main" is the built-in Home place, not
+    # a bookmark entry -- see test_main_user_label_is_the_home_basename.)
     assert labels == [
-        "Desktop", "Downloads", "Vault", "Documents", "Ignore",
+        "Desktop", "Downloads", "Vault", "Documents",
         "Music", "Pictures", "Projects", "Videos",
         "Cache", "Config", "Bashrc", "Local", "SSH",
         "Trash",
@@ -101,6 +102,33 @@ def test_sidebar_entries_are_directories_then_links_resolved():
     assert targets["Bashrc"] == "/home/main/.bashrc"
     # SSH points at the resolved .ssh dir (a symlink shortcut, after Local, before Trash).
     assert targets["SSH"] == "/home/main/.ssh"
+
+
+def test_ignore_directory_is_created_on_disk_but_kept_out_of_sidebar():
+    # PROMPT: the sidebar must "ignore the directory 'Ignore/'". But Ignore is still a real
+    # top-level folder the layout creates on disk -- so it MUST stay in DIRECTORIES (the on-disk
+    # source of truth) while being filtered OUT of the sidebar entries.
+    assert "Ignore" in hd.DIRECTORIES                      # still created on disk
+    labels = [label for label, _ in hd.sidebar_entries()]
+    assert "Ignore" not in labels                          # but never on the sidebar
+    assert "Ignore" in hd.SIDEBAR_SKIP                     # via the explicit skip set
+
+
+def test_main_user_label_is_the_home_basename():
+    # PROMPT: "add the user to the top of the sidebar ... simply name it 'main'." The user row is
+    # the file manager's BUILT-IN Home place (shown as the home basename), which already sits at
+    # the very top of Places -- NOT a GTK bookmark. So the label the file manager displays is the
+    # basename of HOME, and that must be "main".
+    assert hd.SIDEBAR_USER_LABEL == "main"
+    assert hd.HOME.rsplit("/", 1)[-1] == hd.SIDEBAR_USER_LABEL
+
+
+def test_main_is_not_injected_as_a_bookmark_entry():
+    # The "main" row is the built-in Home place, surfaced by un-hiding it (see settings.
+    # HIDDEN_BOOKMARKS), NOT by a GTK bookmark. A "main" bookmark would land below the built-in
+    # Desktop and duplicate the built-in Home, so sidebar_entries() must NOT contain one.
+    labels = [label for label, _ in hd.sidebar_entries()]
+    assert "main" not in labels
 
 
 def test_no_home_directory_bookmark_machinery():
