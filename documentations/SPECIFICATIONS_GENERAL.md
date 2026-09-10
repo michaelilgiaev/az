@@ -17,15 +17,15 @@ Technical, developer-facing specification of the Azzio Linux distribution. It is
 
 | Metric | Value |
 |---|---:|
-| Explicit manifest entries | 261 (276 non-comment lines; 15 duplicate lines de-duped) |
-| Explicit entries incl. group members (e.g. `xorg`) | 259 |
-| **Full package set (transitive closure)** | **1245** |
-| &nbsp;&nbsp;from `core` / `extra` / `multilib` | 227 / 929 / 89 |
-| Edition: Azzio Component / Stock Arch | 749 / 496 |
+| Explicit manifest entries | 259 (274 non-comment lines; 15 duplicate lines de-duped) |
+| Explicit entries incl. group members (e.g. `xorg`) | 256 |
+| **Full package set (transitive closure)** | **1242** |
+| &nbsp;&nbsp;from `core` / `extra` / `multilib` | 227 / 926 / 89 |
+| Edition: Azzio Component / Stock Arch | 746 / 496 |
 | Top / leaf packages (nothing depends on them) | 177 |
 | Base / sink packages (depend on nothing else in the set) | 78 |
 | Deepest dependency chain (leaf -> base) | 38 hops |
-| Total installed size of the package set | 22.59 GiB |
+| Total installed size of the package set | 22.58 GiB |
 
 **Edition tags** (used throughout, and marked on the component graph):
 
@@ -100,8 +100,8 @@ What the medium can do, grouped by the role each component plays. Counts and siz
 | Boot & init | 14 | 123.2 MiB | boot loaders for both firmware types, the initramfs generator, and the systemd init/service manager |
 | Core system | 13 | 71.5 MiB | the base userland -- C library, coreutils, package manager, PAM/polkit, and privilege escalation |
 | Shell & CLI tools | 31 | 76.1 MiB | interactive shells, terminal editors, pagers, multiplexers, and everyday command-line utilities |
-| Desktop app | 10 | 464.6 MiB | graphical end-user applications shipped on the medium |
-| GUI toolkit/framework | 29 | 560.5 MiB | the widget toolkits and UI frameworks graphical apps are built on |
+| Desktop app | 7 | 454.2 MiB | graphical end-user applications shipped on the medium |
+| GUI toolkit/framework | 29 | 560.6 MiB | the widget toolkits and UI frameworks graphical apps are built on |
 | Graphics & display | 112 | 876.6 MiB | the X11 display server, Mesa/Vulkan drivers, and display configuration |
 | Audio | 44 | 47.9 MiB | the audio server and mixer/control tooling |
 | Networking | 37 | 131.7 MiB | connection management, wireless, VPN, SSH, DNS, and network diagnostics |
