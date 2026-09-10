@@ -1609,7 +1609,7 @@ def test_file_manager_configure_enables_maintainer_mode():
 
 def test_file_manager_pkgname_is_file_manager_not_thunar():
     # The package is Azzio's OWN file manager: its pkgname is `file_manager`, NOT `thunar`.
-    # (It replaces stock thunar via provides/conflicts/replaces below, but its own name is ours.)
+    # (It carries no provides/conflicts/replaces shim -- see the dedicated test below.)
     s = pkgbuild.pkgbuild_file_manager()
     assert "pkgname=file_manager\n" in s
     assert "pkgname=thunar\n" not in s
@@ -1627,15 +1627,15 @@ def test_file_manager_has_no_semver_pkgver():
     assert not hasattr(fm, "SOURCE_VERSION")
 
 
-def test_file_manager_replaces_stock_thunar():
-    # It must provides+conflicts+replaces the stock `thunar` package so (a) the two consumers
-    # that depend on `thunar` (thunar-volman, thunar-archive-plugin) resolve against it and
-    # (b) stock extra/thunar is never co-installed. The provide is UNVERSIONED (the deps are
-    # unversioned and this package has no semver to expose).
+def test_file_manager_has_no_thunar_shim():
+    # The provides/conflicts/replaces=('thunar') shim is GONE. It existed only to satisfy the two
+    # Xfce plugins that `depend=('thunar')` (thunar-volman, thunar-archive-plugin) and to fence off
+    # stock extra/thunar; both plugins were dropped from the manifest, so nothing depends on, names,
+    # or pulls `thunar` anymore and the shim serves no one. The package name is simply `file_manager`.
     s = pkgbuild.pkgbuild_file_manager()
-    assert "provides=('thunar')" in s
-    assert "conflicts=('thunar')" in s
-    assert "replaces=('thunar')" in s
+    assert "provides=('thunar')" not in s
+    assert "conflicts=('thunar')" not in s
+    assert "replaces=('thunar')" not in s
 
 
 def test_recipe_dirs_companion_files_shared_across_tiers():

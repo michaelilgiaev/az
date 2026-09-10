@@ -362,14 +362,13 @@ def pkgbuild_file_manager() -> str:
 # configured to do: always show the fully-resolved (symlink-dereferenced) path in the location
 # bar/title. This recipe builds it from the VENDORED source, which already carries that change.
 #
-# It REPLACES the stock `thunar` package on the image: pkgname is `file_manager`, but it declares
-# provides/conflicts/replaces=('thunar') so the whole Xfce ecosystem still resolves against it --
-# the .desktop, xfconf channel and locale catalog the built binary lays down keep their on-disk
-# names (the running binary still owns ~/.config/Thunar/*, thunar.desktop, the `thunar` xfconf
-# channel and textdomain), and the two consumers that `depend=('thunar')` (thunar-volman,
-# thunar-archive-plugin -- both unversioned deps, verified from their .PKGINFO) are satisfied by
-# our provide. conflicts+replaces=('thunar') stop stock extra/thunar from ever being co-installed
-# or pulled in alongside ours.
+# It is the ONLY file manager on the image: pkgname is `file_manager` and the manifest names it
+# directly, so pacstrap installs it and stock extra/thunar is never referenced (no manifest package
+# depends on, names, or pulls `thunar`, so no provides/conflicts/replaces shim is needed). The
+# on-disk names the built binary lays down are UNCHANGED -- it is compiled from the vendored source,
+# which still calls itself thunar internally, so the running binary owns ~/.config/Thunar/*,
+# thunar.desktop, the `thunar` xfconf channel and textdomain. Renaming those is a separate,
+# build-breaking effort (forking the vendored source), not part of dropping the shim.
 #
 # SOURCE (fully auditable, version-controlled):
 #   The source is a git clone committed straight into the Azzio repo at
@@ -388,8 +387,8 @@ def pkgbuild_file_manager() -> str:
 # FROM SOURCE IN EVERY TIER: a moderate autotools C build (a couple of minutes). A
 # git checkout ships no generated ./configure, so build() bootstraps it with
 # ./autogen.sh (xdt-autogen) first. Built and dropped into the offline repo so pacstrap installs
-# OUR file_manager instead of extra/thunar. Our repo is ordered first AND we conflicts/replaces
-# extra/thunar, so ours wins for both fresh install and any name-based pull.
+# OUR file_manager. Our repo is ordered first and the manifest names `file_manager` directly, so
+# ours is what gets installed; stock extra/thunar is never named or pulled.
 # =============================================================================
 
 pkgname=file_manager
@@ -404,14 +403,11 @@ url="https://github.com/michaelilgiaev/azzio"
 license=('GPL-3.0-or-later')
 groups=('xfce4')
 
-# This package IS the file manager on the image, replacing the stock `thunar` package. `provides`
-# satisfies the two consumers that depend on `thunar` (thunar-volman, thunar-archive-plugin --
-# unversioned deps); `conflicts`+`replaces` keep stock extra/thunar from being co-installed or
-# pulled alongside. The provide is UNVERSIONED on purpose: the deps are unversioned (verified from
-# their .PKGINFO), and this package has no semver to expose.
-provides=('thunar')
-conflicts=('thunar')
-replaces=('thunar')
+# This package IS the file manager on the image. It carries NO provides/conflicts/replaces: nothing
+# in the manifest depends on, names, or pulls the stock `thunar` package anymore (the two consumers
+# that did -- thunar-volman, thunar-archive-plugin -- were dropped), so there is no stock thunar to
+# shim for or to fence off. Our repo is ordered first and the manifest names `file_manager`
+# directly, so pacstrap installs this and stock extra/thunar is never referenced.
 
 # Runtime deps mirror what the stock file-manager binary needs (the same set extra/thunar Depends
 # On), so the built package pulls exactly what the binary requires at runtime.
@@ -436,7 +432,6 @@ makedepends=(
 optdepends=(
   'gvfs: trash support, mounting with GIO'
   'tumbler: thumbnails'
-  'thunar-volman: automanagement of removable devices'
 )
 options=('!emptydirs')
 

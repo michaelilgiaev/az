@@ -96,8 +96,8 @@ def test_app_override_cp_sh_plants_replacements_and_removes_suppressed():
 
 def test_file_manager_and_xviewer_desktop_overrides_are_planted():
     # The file-manager rename/icon .desktop (its on-disk name stays thunar.desktop), the xviewer
-    # icon .desktop, and the four NoDisplay suppressions (Bulk Rename, file-manager Preferences,
-    # Removable Drives, About Xfce) are all package-owned, so they must be planted post-pacstrap
+    # icon .desktop, and the three NoDisplay suppressions (Bulk Rename, file-manager Preferences,
+    # About Xfce) are all package-owned, so they must be planted post-pacstrap
     # from the staging dir. (Their bodies are staged by compiler._emit_apps from the module
     # emit_plans.)
     live = pacman.app_override_cp_sh()
@@ -106,7 +106,6 @@ def test_file_manager_and_xviewer_desktop_overrides_are_planted():
         "xviewer.desktop",
         "thunar-bulk-rename.desktop",
         "thunar-settings.desktop",
-        "thunar-volman-settings.desktop",
         "xfce4-about.desktop",
     ):
         assert (f"install -Dm644 /root/azzio/apps/{name} "
@@ -125,16 +124,18 @@ def test_file_manager_and_xviewer_desktop_overrides_are_planted():
 
 def test_dolphin_is_gone_from_manifest_and_file_manager_present():
     # PROMPT: Dolphin dropped, our file_manager added (+ companions), xviewer added. The manifest
-    # lists our OWN package name `file_manager` (which provides/replaces stock thunar), NOT
-    # `thunar` -- so stock thunar must NOT appear as a bare manifest token.
+    # lists our OWN package name `file_manager`, NOT `thunar` -- so stock thunar must NOT appear as
+    # a bare manifest token. The two Xfce plugins that used to bind to it (thunar-volman,
+    # thunar-archive-plugin) were dropped, so no `thunar`-prefixed package name appears at all.
     import paths
     toks = [line.split("#", 1)[0].strip()
             for line in paths.PACKAGES_FILE.read_text().splitlines()]
     toks = [t for t in toks if t]
     assert "dolphin" not in toks
     assert "file_manager" in toks
-    assert "thunar" not in toks          # our package replaces it; the bare name is not listed
-    assert "thunar-volman" in toks
+    assert "thunar" not in toks          # our package is named file_manager; the bare name is not listed
+    assert "thunar-volman" not in toks           # plugin dropped
+    assert "thunar-archive-plugin" not in toks   # plugin dropped
     assert "tumbler" in toks
     assert "zenity" in toks
     assert "exo" in toks
@@ -185,9 +186,10 @@ def test_installer_base_conf_ignorepkg_is_single_sourced_from_frozen_pkgs():
 
 
 def test_installer_base_conf_freezes_file_manager_specifically():
-    # file_manager (Azzio's own file manager) is the one named package that is a real pacman
-    # package exposed to the upgrade trap -- it provides/replaces stock thunar, so a bare -Syu
-    # could otherwise swap it back to stock. Frozen by OUR package name.
+    # file_manager (Azzio's own file manager) is the one named source dir that is a real pacman
+    # package. It carries no provides/replaces, so nothing on a mirror is linked to it by name;
+    # the freeze is retained as belt-and-braces so a same-name repo package could never supersede
+    # it on a bare -Syu. Frozen by OUR package name.
     assert "file_manager" in pacman.FROZEN_PKGS
     assert "file_manager" in _ignorepkg_directive(pacman.installer_base_conf())
 
@@ -235,9 +237,8 @@ def test_append_local_repo_ordered_before_network_repos():
     # Our local repo carries packages that ALSO exist upstream (librewolf, calamares). pacman
     # picks a package from the FIRST repo in config order that has the name -- it does NOT pick
     # the globally-highest version across repos. So our repo MUST precede [core]/[extra] for our
-    # builds of those names to win. (Our file_manager package additionally provides/conflicts/
-    # replaces stock thunar, so its selection does not depend on ordering; ordering still matters
-    # for the same-named librewolf/calamares.)
+    # builds of those names to win. (file_manager is our own name that exists on no mirror, so it
+    # cannot clash; ordering matters for the same-named librewolf/calamares.)
     conf = pacman.build_profile_conf()
     out = pacman.append_local_repo(conf, "/mnt/repo")
     local = out.index("[pacstrap-azzio-repo]")
