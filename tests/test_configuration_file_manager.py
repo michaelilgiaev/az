@@ -388,14 +388,15 @@ def test_file_manager_desktop_renamed_and_custom_icon():
 
 # --- menu cleanup (menu_cleanup.py) -----------------------------------------
 
-def test_menu_cleanup_hides_the_four_extra_launchers():
-    # PROMPT task 3: Bulk Rename, File Manager Preferences, About Xfce (+ Removable Drives) hidden
-    # via NoDisplay=true.
+def test_menu_cleanup_hides_the_extra_launchers():
+    # Bulk Rename, File Manager Preferences, About Xfce hidden via NoDisplay=true. The Removable
+    # Drives (thunar-volman-settings) launcher is NOT hidden here: the thunar-volman plugin that
+    # owned it was dropped from the manifest, so the launcher is never installed to begin with.
     basenames = {b for b, _n, _e, _i in menu_cleanup.SUPPRESSED}
     assert "thunar-bulk-rename.desktop" in basenames
     assert "thunar-settings.desktop" in basenames
     assert "xfce4-about.desktop" in basenames
-    assert "thunar-volman-settings.desktop" in basenames
+    assert "thunar-volman-settings.desktop" not in basenames
     for dest, body in menu_cleanup.builders():
         assert "NoDisplay=true" in body, dest
         assert dest.startswith("/usr/share/applications/")

@@ -5,7 +5,6 @@ launchers into the application menu that Azzio does NOT want cluttering it:
 
   * thunar-bulk-rename.desktop      "Bulk Rename"              (owned by thunar)
   * thunar-settings.desktop         "Thunar Preferences"      (owned by thunar)
-  * thunar-volman-settings.desktop  "Removable Drives and Media" (owned by thunar-volman)
   * xfce4-about.desktop             "About Xfce"              (owned by libxfce4ui)
 
 (Ownership VERIFIED on the installed system via `pacman -Qo`.) These are hidden by shipping an
@@ -26,14 +25,13 @@ from __future__ import annotations
 
 # The package-owned launchers Azzio hides, keyed by their .desktop basename. Each value is
 # (original Name, original Exec, original Icon) -- kept verbatim in the override so only
-# NoDisplay changes. VERIFIED against the installed .desktop files (thunar 4.20 / thunar-volman
-# / libxfce4ui). The system path is /usr/share/applications/<basename>.
+# NoDisplay changes. VERIFIED against the installed .desktop files (thunar 4.20 / libxfce4ui).
+# The system path is /usr/share/applications/<basename>.
 _APPLICATIONS_DIR = "/usr/share/applications"
 SUPPRESSED: tuple[tuple[str, str, str, str], ...] = (
     # basename,                         Name,                          Exec,                       Icon
     ("thunar-bulk-rename.desktop",      "Bulk Rename",                 "thunar --bulk-rename %F",  "org.xfce.thunar"),
     ("thunar-settings.desktop",         "Thunar Preferences",          "thunar-settings",          "org.xfce.thunar"),
-    ("thunar-volman-settings.desktop",  "Removable Drives and Media",  "thunar-volman-settings",   "org.xfce.volman"),
     ("xfce4-about.desktop",             "About Xfce",                  "xfce4-about",              "org.xfce.xfce4-about"),
 )
 

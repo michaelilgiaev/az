@@ -89,16 +89,13 @@ def manifest_packages() -> list[str]:
 
 # Dependency names our OWN packages PROVIDE but that no manifest entry names directly, so
 # `pacman -Sw` must be told to treat them as already satisfied (--assume-installed) instead of
-# downloading the stock Arch package to fill the dep. Today this is just `thunar`: our
-# `file_manager` package (pkgbuild.pkgbuild_file_manager) is `provides=('thunar')` and is BUILT BY
-# THE MAKEPKG STAGE, which runs AFTER this download step -- so at download time our provider does
-# not exist yet, and the manifest's thunar-volman / thunar-archive-plugin (both `depend=('thunar')`,
-# unversioned) would otherwise pull stock extra/thunar into the offline repo. That stock thunar
-# would be redundant (pacstrap installs our file_manager, which provides+conflicts+replaces thunar)
-# and reintroduces the very "stock thunar is available in our repo" ambiguity the design removes.
-# --assume-installed thunar makes pacman resolve the dep without fetching it (verified with
-# `pacman -Sp --assume-installed thunar thunar-volman`: the dep is satisfied, no thunar download).
-ASSUME_INSTALLED = ("thunar",)
+# downloading the stock Arch package to fill the dep. This is EMPTY now: the only entry was
+# `thunar`, which existed because the manifest's thunar-volman / thunar-archive-plugin both
+# `depend=('thunar')` and our `file_manager` provider is not built until the makepkg stage (after
+# this download step), so `-Sw` would have pulled stock extra/thunar to satisfy them. Those two
+# plugins were dropped from the manifest, so nothing depends on `thunar` at download time and there
+# is nothing left to assume-installed.
+ASSUME_INSTALLED = ()
 
 
 def downloadable_packages(full_compile: bool = False) -> list[str]:

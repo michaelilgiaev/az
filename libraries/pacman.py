@@ -173,12 +173,10 @@ ISO_APP_OVERRIDES = [
     ("xviewer.desktop", "/usr/share/applications/xviewer.desktop", False),
     # Application-menu cleanup (packages/file_manager/menu_cleanup): NoDisplay=true overrides that
     # hide the extra file-manager/Xfce launchers. Each is package-owned (file_manager /
-    # thunar-volman / libxfce4ui), so same NoExtract + post-pacstrap install. The staged basename
+    # libxfce4ui), so same NoExtract + post-pacstrap install. The staged basename
     # is the launcher's own .desktop name (matching the emit_plan dest via _override_basename).
     ("thunar-bulk-rename.desktop", "/usr/share/applications/thunar-bulk-rename.desktop", False),
     ("thunar-settings.desktop", "/usr/share/applications/thunar-settings.desktop", False),
-    ("thunar-volman-settings.desktop",
-     "/usr/share/applications/thunar-volman-settings.desktop", False),
     ("xfce4-about.desktop", "/usr/share/applications/xfce4-about.desktop", False),
     # File-manager gettext .mo override catalog (packages/file_manager/locale): relabels the
     # hardcoded menu strings ("Places" -> "Home", the built-in default-opener, the Create
@@ -279,13 +277,12 @@ def app_override_cp_sh(prefix: str = "", src_dir: str = "/root/azzio/apps") -> s
 # is actually a pacman package:
 #
 #   file_manager  -> pkgname `file_manager` (Azzio's own file manager, PKGBUILD-built --
-#                    pkgbuild.py). It provides+conflicts+replaces the stock `thunar` package, so it
-#                    is exposed to the upgrade trap: extra/thunar exists (4.20.9-1 today), and a
-#                    bare -Syu could try to `replaces`-swap our file_manager back to stock thunar
-#                    (or, if a same-name package ever appeared, replace it outright). Freezing
-#                    `file_manager` by name pins OUR package: IgnorePkg skips it on -Syu so nothing
-#                    upstream can supersede it. (Our repo being ordered first only wins the initial
-#                    fresh install; IgnorePkg is what protects it forever after.)
+#                    pkgbuild.py). It carries no provides/conflicts/replaces, so nothing on a mirror
+#                    is linked to it by name and the old `replaces`-swap-back-to-stock-thunar trap no
+#                    longer applies. Freezing `file_manager` by name is retained as belt-and-braces:
+#                    IgnorePkg pins OUR package so that if a same-name repo package ever appeared, a
+#                    bare -Syu could not supersede it. (Our repo being ordered first only wins the
+#                    initial fresh install; IgnorePkg is what protects it forever after.)
 #
 #   azzio / window_switcher / application_menu / hypervisor  -> NOT pacman packages. They are
 #                    C daemons / Python bundles the compiler writes straight into the airootfs
@@ -417,20 +414,18 @@ def append_local_repo(conf: str, localrepo_path: str) -> str:
     ORDERING IS LOAD-BEARING, and the earlier "listed last" design was WRONG: pacman
     resolving `-S <pkg>` picks the package from the FIRST repo (in config order) that
     carries the name -- it does NOT choose the globally-highest version across repos.
-    Our repo ships our own `librewolf`/`calamares` and our `file_manager` package (which
-    REPLACES stock `thunar`: pkgname=file_manager, provides+conflicts+replaces=thunar).
+    Our repo ships our own `librewolf`/`calamares` and our `file_manager` package (pkgname
+    `file_manager`, Azzio's own file manager; it carries no provides/conflicts/replaces).
     The manifest explicitly names `file_manager`, so pacstrap requests it by name and
-    installs it from our repo; the two consumers that `depend=('thunar')` (thunar-volman,
-    thunar-archive-plugin) bind to our provide. For librewolf/calamares -- names that ALSO
+    installs it from our repo; nothing else depends on, names, or pulls stock `thunar`, so
+    stock extra/thunar is never referenced. For librewolf/calamares -- names that ALSO
     exist (or once existed) upstream -- placing our repo FIRST makes pacman prefer our build
     for every name we carry. That is safe here: the local repo was populated from the SAME
     pinned ALA snapshot, so every non-shipped name is byte-identical, and the only
-    differences are packages we deliberately ship. file_manager additionally carries
-    conflicts+replaces=('thunar'), so even if stock thunar were present pacman would not
-    co-install it. (Historically, when our package was itself named `thunar`, repo-last let
-    extra's stock thunar shadow ours and the live ISO booted the unfixed binary; repo-first
-    fixed that. The conflicts/replaces on the renamed package makes the guarantee explicit
-    rather than order-dependent.)"""
+    differences are packages we deliberately ship. (Historically, when our package was itself
+    named `thunar`, repo-last let extra's stock thunar shadow ours and the live ISO booted the
+    unfixed binary; repo-first fixed that. Naming the package `file_manager` removes the name
+    clash entirely, so repo-first is now the whole guarantee.)"""
     if "[pacstrap-azzio-repo]" in conf:
         return conf
     section = (
