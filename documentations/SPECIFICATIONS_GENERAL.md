@@ -9,7 +9,7 @@ Technical, developer-facing specification of the Azzio Linux distribution. It is
 - **Base distribution:** Arch Linux (rolling), x86_64
 - **Live session:** Openbox live session; getty autologin -> startx -> openbox-session, auto-launches Calamares
 - **Kernel:** `linux` 7.2.4.arch1-2
-- **Init:** `systemd` 261.2-1
+- **Init:** `systemd` 261.3-1
 - **Display manager / session:** None -- getty autologin to startx (no display manager)
 - **ISO versioning:** date-based, YYYY.MM.DD (no semver)
 - **Live-session writable RAM (`cow_spacesize`):** 4G writable overlay held in RAM
@@ -19,9 +19,9 @@ Technical, developer-facing specification of the Azzio Linux distribution. It is
 |---|---:|
 | Explicit manifest entries | 259 (274 non-comment lines; 15 duplicate lines de-duped) |
 | Explicit entries incl. group members (e.g. `xorg`) | 256 |
-| **Full package set (transitive closure)** | **1242** |
-| &nbsp;&nbsp;from `core` / `extra` / `multilib` | 227 / 926 / 89 |
-| Edition: Azzio Component / Stock Arch | 746 / 496 |
+| **Full package set (transitive closure)** | **1241** |
+| &nbsp;&nbsp;from `core` / `extra` / `multilib` | 227 / 925 / 89 |
+| Edition: Azzio Component / Stock Arch | 745 / 496 |
 | Top / leaf packages (nothing depends on them) | 177 |
 | Base / sink packages (depend on nothing else in the set) | 78 |
 | Deepest dependency chain (leaf -> base) | 38 hops |
@@ -38,7 +38,7 @@ Technical, developer-facing specification of the Azzio Linux distribution. It is
 
 ## 2. Base and identity
 
-Azzio is [Arch Linux](https://archlinux.org) -- rolling release, `x86_64` -- with a curated package set and Azzio branding/configuration on top. Every package comes unmodified from the official Arch repositories; Arch's own documentation, the [ArchWiki](https://wiki.archlinux.org), applies directly. The kernel is `linux` 7.2.4.arch1-2 and the init system is `systemd` 261.2-1. The medium is versioned date-based, YYYY.MM.DD (no semver).
+Azzio is [Arch Linux](https://archlinux.org) -- rolling release, `x86_64` -- with a curated package set and Azzio branding/configuration on top. Every package comes unmodified from the official Arch repositories; Arch's own documentation, the [ArchWiki](https://wiki.archlinux.org), applies directly. The kernel is `linux` 7.2.4.arch1-2 and the init system is `systemd` 261.3-1. The medium is versioned date-based, YYYY.MM.DD (no semver).
 
 Identity is set through `/usr/lib/os-release`: `NAME="Azzio Linux"` with `ID=arch` and `ID_LIKE=arch` kept deliberately -- so tooling that keys off `ID` still treats the system as Arch -- `BUILD_ID=rolling`, and `HOME_URL` pointing at the project repository. The branding is presentational; the system remains Arch underneath.
 
@@ -97,7 +97,7 @@ What the medium can do, grouped by the role each component plays. Counts and siz
 | Category | Components | Installed size | Provides |
 |---|---:|---:|---|
 | Kernel & firmware | 32 | 1.34 GiB | the Linux kernel, CPU microcode, and device firmware blobs |
-| Boot & init | 14 | 123.2 MiB | boot loaders for both firmware types, the initramfs generator, and the systemd init/service manager |
+| Boot & init | 14 | 123.3 MiB | boot loaders for both firmware types, the initramfs generator, and the systemd init/service manager |
 | Core system | 13 | 71.5 MiB | the base userland -- C library, coreutils, package manager, PAM/polkit, and privilege escalation |
 | Shell & CLI tools | 31 | 76.1 MiB | interactive shells, terminal editors, pagers, multiplexers, and everyday command-line utilities |
 | Desktop app | 7 | 454.2 MiB | graphical end-user applications shipped on the medium |
@@ -105,7 +105,7 @@ What the medium can do, grouped by the role each component plays. Counts and siz
 | Graphics & display | 112 | 876.6 MiB | the X11 display server, Mesa/Vulkan drivers, and display configuration |
 | Audio | 44 | 47.9 MiB | the audio server and mixer/control tooling |
 | Networking | 37 | 131.7 MiB | connection management, wireless, VPN, SSH, DNS, and network diagnostics |
-| Storage & filesystems | 46 | 80.7 MiB | partitioning, RAID/LVM, encryption setup, and filesystem/imaging tooling |
+| Storage & filesystems | 46 | 84.7 MiB | partitioning, RAID/LVM, encryption setup, and filesystem/imaging tooling |
 | Security & crypto | 18 | 76.0 MiB | the host firewall, full-disk encryption, TPM/FIDO/smartcard, and OpenPGP |
 | Developer tools | 111 | 1.21 GiB | compilers, build tooling, version control, and developer editors |
 | Language runtime | 29 | 949.6 MiB | language interpreters and runtimes available out of the box |
@@ -115,7 +115,7 @@ What the medium can do, grouped by the role each component plays. Counts and siz
 | Bluetooth & devices | 12 | 16.8 MiB | Bluetooth, USB, accessibility, and other peripheral device support |
 | Virtualization guest | 6 | 9.2 MiB | guest integration agents for the major hypervisors |
 | Shared library | 365 | 6.49 GiB | shared libraries other components link against |
-| System | 238 | 9.73 GiB | supporting system components that back the above |
+| System | 237 | 9.73 GiB | supporting system components that back the above |
 
 ---
 
