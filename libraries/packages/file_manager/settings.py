@@ -49,9 +49,10 @@ without patching. We do
 NOT fake the rest. The SIDEBAR half (the firm requirement) IS fully satisfied -- the bookmarks
 order is entirely ours (dirs -> files -> symlinks -> Trash last), applied to the curated seed
 (sidebar.py / home_directory) AND to the live contents at runtime (live_sidebar.py).
-  * misc-show-about-templates = false + misc-max-number-of-templates = 100 (PROMPT batch
-    item 8) -- hide the modal "About Templates" dialog and cap the Create Document submenu;
-    the real templates come from ~/Templates (home_directory).
+  * misc-show-about-templates = false + misc-max-number-of-templates = 100 -- hide the modal
+    "About Templates" dialog and cap the Create Document submenu. There is no ~/Templates dir any
+    more (the user asked for it to be deleted), so the submenu is empty; false just hides the
+    leftover "About Templates" placeholder modal.
   * misc-resolve-links = true (PROMPT batch item 5) -- always show the fully-resolved
     (symlink-dereferenced) path in the location bar. HONEST CAVEAT: this pref was added
     UPSTREAM in the file manager 4.21.6 and is IGNORED by 4.20.x, so on the current 4.20 build entering
@@ -121,11 +122,11 @@ SETTINGS: tuple[tuple[str, str, str, object], ...] = (
     ("MiscSingleClick", "misc-single-click", "bool", _FALSE),
     ("MiscVolumeManagement", "misc-volume-management", "bool", _FALSE),
     ("MiscFoldersFirst", "misc-folders-first", "bool", _TRUE),
-    # Templates submenu (PROMPT batch item 8). misc-show-about-templates=false hides the
-    # modal "About Templates" dialog (the "weird templates label"); with real templates
-    # shipped in ~/Templates (home_directory), the Create Document submenu lists them. The
-    # cap defaults to 100 (verified in the 4.20 binary: uint, default 100) -- pinned so the
-    # value is explicit and a test can prove it is not an absolute-pixel-style magic number.
+    # Templates submenu. misc-show-about-templates=false hides the modal "About Templates" dialog
+    # (the "weird templates label"). There is no ~/Templates dir any more (the user asked for it to
+    # be deleted), so the Create Document submenu is empty -- false just hides the leftover
+    # placeholder modal. The cap defaults to 100 (verified in the 4.20 binary: uint, default 100) --
+    # pinned so the value is explicit and a test can prove it is not an absolute-pixel-style magic number.
     ("MiscShowAboutTemplates", "misc-show-about-templates", "bool", _FALSE),
     ("MiscMaxNumberOfTemplates", "misc-max-number-of-templates", "uint", 100),
     # ALWAYS show the fully-resolved (symlink-dereferenced) path in the location bar (PROMPT

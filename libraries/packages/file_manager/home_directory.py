@@ -87,6 +87,20 @@ LINKS: tuple[tuple[str, str], ...] = (
     ("SSH", ".ssh"),
 )
 
+# --- Absolute-target symlinks (system runtime locations) -----------------------
+# A SEPARATE class of symlink whose target is an ABSOLUTE system path, NOT a relative
+# home-relative one like LINKS above. "Mounts -> /run/media/main" surfaces the udisks
+# removable-media mount root (where the desktop auto-mounts USB sticks, SD cards, etc.
+# for the user `main`) as a plain top-level folder (PROMPT). The target is absolute on
+# purpose: /run/media/main is the SAME path in every context (it is not under $HOME, so
+# there is no relative form), so -- unlike LINKS -- it is created in the LIVE /home/main
+# ONLY, not mirrored into /etc/skel (a different Calamares-created user gets their own
+# /run/media/<user>, so a skel copy pointing at main's dir would be wrong). It appears in
+# the sidebar (with its own mount icon) among the symlink group, before the pinned Trash.
+ABSOLUTE_LINKS: tuple[tuple[str, str], ...] = (
+    ("Mounts", "/run/media/main"),
+)
+
 # The Trash shortcut's name. It is itself a symlink but the spec pins it to the very END of the
 # sidebar/view ordering (after every other symlink), so both the static sidebar_entries() and
 # the runtime live-sidebar sync special-case it.
@@ -139,14 +153,15 @@ TRASH_DIRS: tuple[str, ...] = (
 
 # --- Extra (non-sidebar) directories -------------------------------------------
 # Directories created in the home layout that are NOT part of the sidebar shortcut set (so they
-# are deliberately kept OUT of DIRECTORIES above, which drives the sidebar). ~/Templates holds
-# the file manager's "Create Document" template set (the sibling packages/file_manager/templates
-# ships the template FILES and the XDG_TEMPLATES_DIR pointer -- PROMPT batch item 8). Created in
-# both /home/main and /etc/skel by compiler._emit_homedir so the submenu works for live +
-# installed.
-EXTRA_DIRECTORIES: tuple[str, ...] = (
-    "Templates",
-)
+# are deliberately kept OUT of DIRECTORIES above, which drives the sidebar). Currently EMPTY.
+#
+# ~/Templates used to live here (it held the file manager's "Create Document" template set). The
+# user asked for it to be deleted entirely ("Delete that 'Templates/' directory, idk what it's
+# created in the first place"), so it is no longer created, the template FILE set is gone, and the
+# sibling packages/file_manager/templates now ships ONLY the XDG user-dirs pointer (with
+# XDG_TEMPLATES_DIR back at the stock $HOME/ default). The tuple is kept (empty) so
+# compiler._emit_homedir's loop over it, and the tests that reference it, stay valid.
+EXTRA_DIRECTORIES: tuple[str, ...] = ()
 
 
 def resolved_home_path(rel_or_link_target: str) -> str:
@@ -199,6 +214,12 @@ def sidebar_entries() -> list[tuple[str, str]]:
         if name == TRASH_LINK_NAME or name in SIDEBAR_SKIP:
             continue
         entries.append((name, resolved_home_path(target)))
+    # 3b. Absolute-target symlinks (e.g. "Mounts" -> /run/media/main): same symlink group, but the
+    #     target is an absolute system path, so it is used VERBATIM (not joined onto HOME).
+    for name, abs_target in ABSOLUTE_LINKS:
+        if name in SIDEBAR_SKIP:
+            continue
+        entries.append((name, abs_target))
     # 4. "Trash" LAST (it is itself a symlink, forced to the very end per the spec).
     entries.append((TRASH_LINK_NAME, resolved_home_path(dict(LINKS)[TRASH_LINK_NAME])))
     return entries

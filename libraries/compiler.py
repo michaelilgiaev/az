@@ -906,6 +906,12 @@ def _emit_homedir(airootfs: Path, home: Path) -> None:
             emit.link(target, root / name)
         # (No ".home-directory" symlink: the "Home Directory" sidebar bookmark it used to back
         #  was deleted at the user's request -- see file_manager/home_directory.py and file_manager/sidebar.py.)
+    # 4. Absolute-target symlinks (e.g. "Mounts" -> /run/media/main) -- created in the LIVE
+    #    /home/main ONLY, NOT /etc/skel: the target is main-specific (a different Calamares-created
+    #    user gets their own /run/media/<user>), so a skel copy would point at the wrong dir. The
+    #    target is an absolute system path used verbatim (not home-relative like LINKS above).
+    for name, abs_target in home_directory.ABSOLUTE_LINKS:
+        emit.link(abs_target, home / name)
 
 
 def _emit_calamares(airootfs: Path) -> None:

@@ -269,6 +269,24 @@ static struct
   { G_USER_DIRECTORY_VIDEOS, "folder-videos" }
 };
 
+/* Azzio: home dirs that have NO XDG user-directory type, mapped by BASENAME to our own icon
+ * names (shipped in the "Azzio" icon theme, which inherits Adwaita). Only a direct child of
+ * $HOME whose basename matches is given the icon (checked below only after the XDG table above
+ * misses), so an unrelated folder called e.g. "Vault" deeper in the tree keeps the plain folder
+ * icon. "Shared" and "Mounts" are mount points and share the mount-point symbol (the user
+ * removed the mount-point emblem, so the base icon carries that meaning now). */
+static const struct
+{
+  const gchar *basename;
+  const gchar *icon_name;
+} azzio_folder_dirs[] = {
+  { "Projects", "azzio-folder-projects" },
+  { "Vault", "azzio-folder-vault" },
+  { "Ignore", "azzio-folder-ignore" },
+  { "Shared", "azzio-folder-mount" },
+  { "Mounts", "azzio-folder-mount" }
+};
+
 
 
 G_DEFINE_TYPE_WITH_CODE (ThunarFile, thunar_file, G_TYPE_OBJECT,
@@ -3733,82 +3751,20 @@ thunar_file_set_file_count (ThunarFile *file,
 GList *
 thunar_file_get_emblem_names (ThunarFile *file)
 {
-  guint32 uid;
-  gchar  *emblem_names_joined;
-  gchar **emblem_names;
-  GList  *emblems = NULL;
-
   _thunar_return_val_if_fail (THUNAR_IS_FILE (file), NULL);
 
-  /* leave if there is no info */
-  if (file->info == NULL)
-    return NULL;
-
-  /* determine the custom emblems and transform them to a g_list */
-  emblem_names_joined = thunar_g_file_get_metadata_setting (file->gfile, file->info, THUNAR_GTYPE_STRINGV, "emblems");
-  if (emblem_names_joined != NULL)
-    {
-      emblem_names = g_strsplit (emblem_names_joined, THUNAR_METADATA_STRING_DELIMETER, 100);
-      g_free (emblem_names_joined);
-
-      if (G_LIKELY (emblem_names != NULL))
-        {
-          for (gchar **lp = emblem_names; *lp != NULL; ++lp)
-            emblems = g_list_append (emblems, g_strdup (*lp));
-        }
-      g_strfreev (emblem_names);
-    }
-
-  if (thunar_file_is_symlink (file))
-    emblems = g_list_prepend (emblems, g_strdup (THUNAR_FILE_EMBLEM_NAME_SYMBOLIC_LINK));
-
-  /* determine the user ID of the file owner */
-  /* TODO what are we going to do here on non-UNIX systems? */
-  uid = file->info != NULL
-        ? g_file_info_get_attribute_uint32 (file->info, G_FILE_ATTRIBUTE_UNIX_UID)
-        : 0;
-
-  /* we add "cant-read" if either (a) the file is not readable or (b) a directory, that lacks the
-   * x-bit, see https://bugzilla.xfce.org/show_bug.cgi?id=1408 for the details about this change.
-   */
-  if (!thunar_file_is_readable (file)
-      || (thunar_file_is_directory (file)
-          && thunar_file_denies_access_permission (file, THUNAR_FILE_MODE_USR_EXEC,
-                                                   THUNAR_FILE_MODE_GRP_EXEC,
-                                                   THUNAR_FILE_MODE_OTH_EXEC)))
-    {
-      emblems = g_list_prepend (emblems, g_strdup (THUNAR_FILE_EMBLEM_NAME_CANT_READ));
-    }
-  else if (G_UNLIKELY (uid == effective_user_id && !thunar_file_is_writable (file) && !thunar_file_is_trashed (file) && !thunar_file_is_in_recent (file)))
-    {
-      /* we own the file, but we cannot write to it, that's why we mark it as "cant-write", so
-       * users won't be surprised when opening the file in a text editor, but are unable to save.
-       */
-      emblems = g_list_prepend (emblems, g_strdup (THUNAR_FILE_EMBLEM_NAME_CANT_WRITE));
-    }
-
-  /* add mount icon as emblem to mount points */
-  if (thunar_file_is_mountpoint (file))
-    {
-      GMount *mount = g_file_find_enclosing_mount (file->gfile, NULL, NULL);
-      if (mount != NULL)
-        {
-          GIcon *icon = g_mount_get_icon (mount);
-          if (icon != NULL)
-            {
-              if (G_IS_THEMED_ICON (icon))
-                {
-                  const gchar *icon_name = g_themed_icon_get_names (G_THEMED_ICON (icon))[0];
-                  if (icon_name != NULL)
-                    emblems = g_list_prepend (emblems, g_strdup (icon_name));
-                }
-              g_object_unref (icon);
-            }
-          g_object_unref (mount);
-        }
-    }
-
-  return emblems;
+  /* AZZIO: no emblems anywhere (PROMPT: "Remove all Emblems, remove mount point
+   * icon"). This is the single chokepoint every view (icon/list/tree/side pane) and
+   * the path-entry drag icon query for the emblem overlay list, so returning an empty
+   * list here suppresses ALL of them at once: the user-set custom emblems, the
+   * symbolic-link / cant-read / cant-write badges, AND the mount-point icon overlay
+   * that upstream prepended for mountpoints. The emblem-drawing loop in
+   * thunar-icon-renderer.c is left intact but simply receives nothing to draw.
+   *
+   * (Upstream also derived cant-read/cant-write and the mount-point GMount icon here;
+   * all of that is intentionally dropped -- the folder/file glyph itself is enough,
+   * and mount points get their own distinct BASE icon via the theme, not an overlay.) */
+  return NULL;
 }
 
 
@@ -4133,6 +4089,28 @@ thunar_file_get_icon_name (ThunarFile         *file,
                         {
                           *special_names = thunar_file_dirs[i].icon_name;
                           break;
+                        }
+                    }
+
+                  /* Azzio: no XDG match -- try our own home-dir basename table (Projects, Vault,
+                   * Ignore, Shared, Mounts). Only a DIRECT child of $HOME qualifies, so build the
+                   * candidate "$HOME/<basename>" and compare against the full path. */
+                  if (*special_names == NULL || strcmp (*special_names, "folder") == 0)
+                    {
+                      const gchar *azzio_home = xfce_get_homedir ();
+
+                      for (i = 0; i < G_N_ELEMENTS (azzio_folder_dirs); i++)
+                        {
+                          gchar *candidate = g_build_filename (azzio_home,
+                                                               azzio_folder_dirs[i].basename,
+                                                               NULL);
+                          gboolean match = (strcmp (path, candidate) == 0);
+                          g_free (candidate);
+                          if (match)
+                            {
+                              *special_names = azzio_folder_dirs[i].icon_name;
+                              break;
+                            }
                         }
                     }
                 }

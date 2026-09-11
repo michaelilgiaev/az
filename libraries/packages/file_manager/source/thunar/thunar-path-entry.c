@@ -429,50 +429,16 @@ thunar_path_entry_icon_press_event (GtkEntry            *entry,
                                     GdkEventButton      *event,
                                     gpointer             user_data)
 {
-  ThunarPathEntry *path_entry = THUNAR_PATH_ENTRY (entry);
-  GdkDragContext  *context;
-  GtkTargetList   *target_list;
-  GdkPixbuf       *icon;
-  cairo_surface_t *surface;
-  gint             size;
-  gint             scale_factor;
-
-  if (path_entry->current_file == NULL)
-    return FALSE;
-
-  if (event->button == 1 && icon_pos == GTK_ENTRY_ICON_PRIMARY)
-    {
-      /* save the drag button state */
-      path_entry->drag_button = event->button;
-
-      /* create a drag context */
-      target_list = gtk_target_list_new (drag_targets, G_N_ELEMENTS (drag_targets));
-      context = gtk_drag_begin_with_coordinates (GTK_WIDGET (entry), target_list,
-                                                 GDK_ACTION_COPY | GDK_ACTION_LINK,
-                                                 event->button,
-
-                                                 (GdkEvent *) event, -1, -1);
-      gtk_target_list_unref (target_list);
-
-      /* setup the drag icon (atleast 24px) */
-      gtk_widget_style_get (GTK_WIDGET (entry), "icon-size", &size, NULL);
-      scale_factor = gtk_widget_get_scale_factor (GTK_WIDGET (entry));
-      icon = thunar_icon_factory_load_file_icon (path_entry->icon_factory,
-                                                 path_entry->current_file,
-                                                 THUNAR_FILE_ICON_STATE_DEFAULT,
-                                                 MAX (size, 16), scale_factor,
-                                                 FALSE, NULL);
-      if (G_LIKELY (icon != NULL))
-        {
-          surface = gdk_cairo_surface_create_from_pixbuf (icon, scale_factor, gtk_widget_get_window (GTK_WIDGET (entry)));
-          g_object_unref (G_OBJECT (icon));
-          gtk_drag_set_icon_surface (context, surface);
-          cairo_surface_destroy (surface);
-        }
-
-      return TRUE;
-    }
-
+  /* AZZIO: the location entry no longer shows a primary directory icon at all
+   * (see thunar_path_entry_update_icon), and the old click-to-drag-the-folder
+   * behaviour it enabled was weird/buggy, so it is removed entirely (PROMPT). This
+   * handler is kept connected (the "icon-press" signal is still wired in _init) but
+   * is now a no-op: no drag is ever initiated from the entry icon. The drag_targets
+   * table + drag_data_get/drag_end plumbing remain defined but are unreachable. */
+  (void) entry;
+  (void) icon_pos;
+  (void) event;
+  (void) user_data;
   return FALSE;
 }
 
@@ -756,16 +722,14 @@ static void
 thunar_path_entry_update_icon (ThunarPathEntry *path_entry)
 {
   ThunarPreferences *preferences;
-  GdkPixbuf         *icon = NULL;
-  GtkIconTheme      *icon_theme;
-  gint               icon_size;
-  gint               scale_factor;
   gboolean           use_symbolic_icons;
 
   preferences = thunar_preferences_get ();
   g_object_get (G_OBJECT (preferences), "misc-symbolic-icons-in-toolbar", &use_symbolic_icons, NULL);
   g_object_unref (G_OBJECT (preferences));
 
+  /* Search mode keeps its magnifier indicator -- that is the search affordance, not
+   * the directory icon the user asked to remove. */
   if (path_entry->search_mode == TRUE)
     {
       gtk_entry_set_icon_from_icon_name (GTK_ENTRY (path_entry), GTK_ENTRY_ICON_PRIMARY,
@@ -773,44 +737,12 @@ thunar_path_entry_update_icon (ThunarPathEntry *path_entry)
       return;
     }
 
-  if (path_entry->icon_factory == NULL)
-    {
-      icon_theme = gtk_icon_theme_get_for_screen (gtk_widget_get_screen (GTK_WIDGET (path_entry)));
-      path_entry->icon_factory = thunar_icon_factory_get_for_icon_theme (icon_theme);
-    }
-
-  gtk_widget_style_get (GTK_WIDGET (path_entry), "icon-size", &icon_size, NULL);
-  scale_factor = gtk_widget_get_scale_factor (GTK_WIDGET (path_entry));
-
-  if (G_UNLIKELY (path_entry->current_file != NULL))
-    {
-      icon = thunar_icon_factory_load_file_icon (path_entry->icon_factory,
-                                                 path_entry->current_file,
-                                                 THUNAR_FILE_ICON_STATE_DEFAULT,
-                                                 icon_size, scale_factor,
-                                                 FALSE, NULL);
-    }
-  else if (G_LIKELY (path_entry->current_folder != NULL))
-    {
-      icon = thunar_icon_factory_load_file_icon (path_entry->icon_factory,
-                                                 path_entry->current_folder,
-                                                 THUNAR_FILE_ICON_STATE_DEFAULT,
-                                                 icon_size, scale_factor,
-                                                 FALSE, NULL);
-    }
-
-  if (icon != NULL)
-    {
-      gtk_entry_set_icon_from_pixbuf (GTK_ENTRY (path_entry),
-                                      GTK_ENTRY_ICON_PRIMARY,
-                                      icon);
-      g_object_unref (icon);
-    }
-  else
-    {
-      gtk_entry_set_icon_from_icon_name (GTK_ENTRY (path_entry), GTK_ENTRY_ICON_PRIMARY,
-                                         use_symbolic_icons ? "dialog-error-symbolic" : "dialog-error");
-    }
+  /* AZZIO: no primary directory icon in the location entry (PROMPT: "the tiny
+   * directory icon on the most left side ... remove it, we don't actually need
+   * it"). Clearing it also removes the click target that used to start the
+   * weird/buggy folder drag. The current-file/current-folder icon load + the
+   * dialog-error fallback are gone with it. */
+  gtk_entry_set_icon_from_icon_name (GTK_ENTRY (path_entry), GTK_ENTRY_ICON_PRIMARY, NULL);
 }
 
 

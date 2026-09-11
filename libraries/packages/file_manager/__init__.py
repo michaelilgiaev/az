@@ -35,8 +35,9 @@ Azzio File Manager is Azzio's OWN GTK file manager. This package OWNS it end to 
       - actions.py  -- ~/.config/Thunar/uca.xml (Edit with gedit on any file, Edit with gimp on
         images, Create Link via zenity, Open Terminal Here via kitty) + the `link` helper script.
       - launcher.py -- the thunar.desktop override (Name="Azzio File Manager", custom Azzio icon) + icon files.
-      - templates.py -- the ~/Templates "Create Document" set (an empty text doc + the LibreOffice
-        ODF trio) and ~/.config/user-dirs.dirs pointing XDG_TEMPLATES_DIR at ~/Templates.
+      - templates.py -- ~/.config/user-dirs.dirs, the XDG user-dirs pointer (maps the XDG dirs to
+        the Azzio home layout; keeps XDG_TEMPLATES_DIR at the stock $HOME/ -- the ~/Templates dir
+        was deleted per the user's request, so no "Create Document" template set ships).
 
 This package is consumed by compiler._emit_apps exactly like the other app packages (emit_plan()
 in the builder/dest/mode/owner shape, plus the asset/render extras kitty uses).
@@ -60,6 +61,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from . import actions
+from . import icons
 from . import launcher
 from . import live_sidebar
 from . import locale
@@ -102,8 +104,9 @@ ICON_ASSET = launcher.ICON_ASSET
 ICON_SCALABLE_PATH = launcher.ICON_SCALABLE_PATH
 ICON_PNG_SIZES = launcher.ICON_PNG_SIZES
 LIVE_SIDEBAR_SYNC_DEST = live_sidebar.SYNC_SCRIPT_DEST
-TEMPLATES_DIR = templates.TEMPLATES_DIR
 USER_DIRS_PATH = templates.USER_DIRS_PATH
+ICON_THEME_NAME = icons.ICON_THEME_NAME
+ICON_THEME_DIR = icons.ICON_THEME_DIR
 
 _CONF = 0o644
 _EXEC = 0o755
@@ -214,10 +217,16 @@ def emit_plan() -> list[dict]:
     # at runtime, so additions show up in the sidebar -- PROMPT). Root-owned executable; wired
     # into session startup by packages/openbox's autostart.
     plan += live_sidebar.emit_plan()
-    # The ~/Templates "Create Document" set + the XDG_TEMPLATES_DIR pointer (PROMPT batch item 8).
-    # Folded in from the former standalone packages/templates: all HOME files (owner "home",
-    # skel-mirrored) -- the text template + user-dirs.dirs as text builders, the LibreOffice ODF
-    # trio as bytes_builder (binary) entries. The Templates DIRECTORY itself is created by
-    # _emit_homedir from home_directory.EXTRA_DIRECTORIES.
+    # The XDG user-dirs pointer (~/.config/user-dirs.dirs). Folded in from the templates submodule:
+    # a single HOME file (owner "home", skel-mirrored). The ~/Templates "Create Document" set is
+    # gone -- the user asked for the Templates dir to be deleted -- so only the XDG pointer ships
+    # (XDG_TEMPLATES_DIR back at the stock $HOME/, other XDG dirs mapped to the Azzio home layout).
     plan += templates.emit_plan()
+    # The Azzio icon theme -- the file manager's folder / file / toolbar / home / mount-point
+    # icons (PROMPT: new directory icons, text-file icon, toolbar arrows + search, username icon,
+    # mount-point symbol). A separate icon theme that Inherits Adwaita so OUR names (folder,
+    # folder-documents, user-home, go-*, system-search, text-x-generic, azzio-folder-*) win while
+    # everything else falls through to Adwaita. All root-owned (a new, non-package-owned theme
+    # dir). gtk-icon-theme-name is pointed at "Azzio" by packages/azzio/theme + packages/openbox.
+    plan += icons.emit_plan()
     return plan

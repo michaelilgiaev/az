@@ -58,6 +58,26 @@ def test_trash_symlink_target_is_covered_by_trash_dirs():
     assert trash_target in hd.TRASH_DIRS
 
 
+def test_mounts_is_an_absolute_link_to_the_udisks_media_root():
+    # PROMPT: add "Mounts/" -> /run/media/main. It is a SEPARATE class from LINKS: an ABSOLUTE
+    # target (/run/media/main is not under $HOME, so it has no relative form), created in the LIVE
+    # /home/main ONLY (not skel-mirrored). It carries its own mount icon.
+    assert hd.ABSOLUTE_LINKS == (("Mounts", "/run/media/main"),)
+    for name, target in hd.ABSOLUTE_LINKS:
+        assert posixpath.isabs(target), name           # absolute on purpose
+    # Mounts is NOT an ordinary directory nor a relative link.
+    assert "Mounts" not in hd.DIRECTORIES
+    assert "Mounts" not in dict(hd.LINKS)
+
+
+def test_templates_directory_is_gone():
+    # PROMPT: "Delete that 'Templates/' directory". It must not be created anywhere -- not a
+    # sidebar dir, not an extra dir.
+    assert "Templates" not in hd.DIRECTORIES
+    assert "Templates" not in hd.EXTRA_DIRECTORIES
+    assert hd.EXTRA_DIRECTORIES == ()
+
+
 def test_trash_chain_has_both_spec_dirs():
     # The XDG trash spec requires BOTH files/ and info/ (info holds the .trashinfo metadata).
     assert ".local/share/Trash/files" in hd.TRASH_DIRS
@@ -93,13 +113,15 @@ def test_sidebar_entries_are_directories_then_links_resolved():
     entries = hd.sidebar_entries()
     labels = [label for label, _ in entries]
     # PROMPT ordering: directories first (in order, EXCEPT "Ignore" which is kept off the
-    # sidebar), then the symlinks (in order), with "Trash" forced to the very END (it is a symlink
-    # but pinned last). No plain files in the curated set. ("main" is the built-in Home place, not
-    # a bookmark entry -- see test_main_user_label_is_the_home_basename.)
+    # sidebar), then the symlinks (in order) -- the relative LINKS first, then the ABSOLUTE_LINKS
+    # ("Mounts") -- with "Trash" forced to the very END (it is a symlink but pinned last). No plain
+    # files in the curated set. ("main" is the built-in Home place, not a bookmark entry -- see
+    # test_main_user_label_is_the_home_basename.)
     assert labels == [
         "Desktop", "Downloads", "Vault", "Documents",
         "Music", "Pictures", "Projects", "Shared", "Videos",
         "Cache", "Config", "Bashrc", "Local", "SSH",
+        "Mounts",
         "Trash",
     ]
     targets = dict(entries)
@@ -113,8 +135,11 @@ def test_sidebar_entries_are_directories_then_links_resolved():
     assert targets["Local"] == "/home/main/.local"
     # Bashrc is a FILE target (.bashrc); still resolved under HOME.
     assert targets["Bashrc"] == "/home/main/.bashrc"
-    # SSH points at the resolved .ssh dir (a symlink shortcut, after Local, before Trash).
+    # SSH points at the resolved .ssh dir (a symlink shortcut, after Local, before Mounts).
     assert targets["SSH"] == "/home/main/.ssh"
+    # Mounts is an ABSOLUTE-target symlink (PROMPT: "Mounts -> /run/media/main"): the sidebar entry
+    # uses the absolute target VERBATIM (not resolved under HOME), sitting just before Trash.
+    assert targets["Mounts"] == "/run/media/main"
 
 
 def test_ignore_directory_is_created_on_disk_but_kept_out_of_sidebar():

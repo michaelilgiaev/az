@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Azzio Music folder (theme name folder-music, the Music dir). Base Azzio folder + a
+       white beamed eighth-note on the front flap. -->
+  <defs>
+    <linearGradient id="azFolder" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+    <linearGradient id="azFolderBack" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0698D6"/>
+      <stop offset="1" stop-color="#0052CC"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#azFolderBack)" d="M14 40 a10 10 0 0 1 10 -10 h26 a10 10 0 0 1 8 4 l7 9 h35 a10 10 0 0 1 10 10 v51 a10 10 0 0 1 -10 10 H24 a10 10 0 0 1 -10 -10 Z"/>
+  <path fill="url(#azFolder)" d="M14 56 a10 10 0 0 1 10 -10 h80 a10 10 0 0 1 10 10 v42 a10 10 0 0 1 -10 10 H24 a10 10 0 0 1 -10 -10 Z"/>
+  <!-- White beamed two-note glyph: two vertical stems joined by a top beam, a filled note
+       head at the foot of each stem. -->
+  <rect fill="#ffffff" x="55" y="64" width="5" height="30"/>
+  <rect fill="#ffffff" x="72" y="60" width="5" height="30"/>
+  <path fill="#ffffff" d="M55 62 h22 v7 h-22 Z"/>
+  <ellipse fill="#ffffff" cx="52" cy="94" rx="8" ry="5.5"/>
+  <ellipse fill="#ffffff" cx="69" cy="90" rx="8" ry="5.5"/>
+</svg>

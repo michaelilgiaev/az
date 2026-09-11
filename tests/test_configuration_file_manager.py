@@ -29,6 +29,35 @@ from packages.file_manager import home_directory
 from packages.file_manager import actions, launcher, locale, menu_cleanup, settings, sidebar
 
 
+# --- helpers for reading the vendored C source ------------------------------
+# Several C functions in the fork carry a forward DECLARATION (ends in ";") as well as the
+# DEFINITION (its signature is followed by "\n{"). Splitting on the bare signature grabs the
+# decl first and slices the wrong region, so anchor on the definition: the signature line
+# ending in ")" immediately followed by "\n{". And because the Azzio removal markers are big
+# explanatory comments that mention words like "mount"/"emblem"/"drag", strip C comments
+# before asserting a token is ABSENT so the doc comment can never satisfy (or defeat) a check.
+
+
+def _c_definition_body(src: str, signature: str) -> str:
+    """Return the brace body of the DEFINITION whose signature is followed by '\\n{'.
+
+    `signature` is the text up to (but not including) the "\\n{"; it must end with the
+    closing ")" of the parameter list. This deliberately skips any forward declaration,
+    whose identical signature text is instead followed by ";".
+    """
+    anchor = signature + "\n{"
+    assert anchor in src, f"definition not found for: {signature!r}"
+    after = src.split(anchor, 1)[1]
+    return after.split("\n}", 1)[0]
+
+
+def _strip_c_comments(code: str) -> str:
+    """Drop /* ... */ and // ... comments so ABSENT-token asserts test CODE, not commentary."""
+    out = re.sub(r"/\*.*?\*/", "", code, flags=re.DOTALL)
+    out = re.sub(r"//[^\n]*", "", out)
+    return out
+
+
 # --- thunarrc + xfconf channel (settings.py) --------------------------------
 
 def test_thunarrc_and_xfconf_render_the_same_settings():
@@ -977,3 +1006,144 @@ def test_trash_delete_is_permanent_not_re_trash():
     assert after_guard.lstrip().startswith(")\n    return FALSE;"), (
         "the in-trash guard in show_trash must immediately return FALSE"
     )
+
+
+# --- Emblems / mount-point icon removed (thunar-file.c) ----------------------
+def test_all_emblems_removed_at_the_single_chokepoint():
+    # PROMPT: "Remove all Emblems, remove mount point icon." thunar_file_get_emblem_names is the
+    # ONE place every view + the mount-point overlay derive their emblem list, so its body must
+    # just `return NULL;` (after the type-check) -- killing custom emblems, the symlink/cant-read/
+    # cant-write badges AND the mount-point GMount overlay in one shot. Anchor on the DEFINITION
+    # body so a mention in a doc comment cannot satisfy it.
+    file_c = (fm.SOURCE_DIR / "thunar" / "thunar-file.c").read_text()
+    body = _c_definition_body(file_c, "thunar_file_get_emblem_names (ThunarFile *file)")
+    # The only statements are the type-check and `return NULL;` -- no emblem list is built.
+    assert "return NULL;" in body
+    # Strip the AZZIO explanatory comment (it mentions mount/emblem on purpose) so the ABSENT
+    # checks below test the actual CODE, then confirm nothing but the guard + return remains.
+    code = _strip_c_comments(body)
+    assert "g_list_append" not in code and "g_list_prepend" not in code, (
+        "get_emblem_names must build NO emblem list"
+    )
+    # None of the emblem-name constants are referenced in the (now empty) body's code.
+    for token in ("EMBLEM_NAME_SYMBOLIC_LINK", "EMBLEM_NAME_CANT_READ", "EMBLEM_NAME_CANT_WRITE",
+                  "emblem_names", "mount"):
+        assert token not in code, token
+
+
+# --- Devices section removed in C (thunar-shortcuts-model.c) -----------------
+def test_devices_section_removed_in_vendored_source():
+    # PROMPT batch item 1: remove the "Devices" section ENTIRELY (belt-and-suspenders with the
+    # xfconf hidden-bookmarks in test_devices_and_file_system_removed_via_hidden_bookmarks). The
+    # vendored shortcut_devices() now only takes the device-monitor ref (so finalize's unref stays
+    # valid) and adds NO header / NO "File System" row / NO device rows / connects NO add/remove
+    # signals. Anchor on its DEFINITION body.
+    sm_c = (fm.SOURCE_DIR / "thunar" / "thunar-shortcuts-model.c").read_text()
+    # Anchor on the DEFINITION (its signature is followed by "\n{"); the identical forward
+    # declaration earlier in the file ends in ";" and is skipped.
+    code = _strip_c_comments(
+        _c_definition_body(sm_c, "thunar_shortcuts_model_shortcut_devices (ThunarShortcutsModel *model)")
+    )
+    # The device monitor is still acquired (finalize unconditionally unrefs it).
+    assert "thunar_device_monitor_get ()" in code
+    # But NO File System row and NO Devices header/group are added here any more.
+    assert "file:///" not in code, "shortcut_devices must not add the File System row"
+    assert "THUNAR_SHORTCUT_GROUP_DEVICES" not in code, "shortcut_devices must add no Devices group rows"
+    # And it wires up NONE of the device add/remove/change signal handlers.
+    assert "device-added" not in code and "device-removed" not in code, (
+        "shortcut_devices must connect no device signals"
+    )
+
+
+# --- Properties dialog: Emblems + Highlight pages removed --------------------
+def test_properties_emblems_and_highlight_pages_removed():
+    # PROMPT: in Properties, delete the "Emblems" and "Highlight" pages -- both the tabs AND their
+    # functionality. Neither notebook page is appended any more, so there is no access path. The
+    # Permissions page is still appended (the dialog goes free-space row -> Permissions).
+    pd_c = (fm.SOURCE_DIR / "thunar" / "thunar-properties-dialog.c").read_text()
+    # No notebook page is built from the emblem chooser or a highlight grid: the only appended
+    # pages left are the (kept) general/permissions ones. Assert the emblem/highlight widgets are
+    # never handed to gtk_notebook_append_page.
+    appended_pages = re.findall(
+        r"gtk_notebook_append_page \(GTK_NOTEBOOK \(dialog->notebook\), ([^,]+),", pd_c
+    )
+    assert appended_pages, "expected to still find the (kept) notebook page appends"
+    for appended in appended_pages:
+        assert "emblem" not in appended.lower(), appended
+        assert "highlight" not in appended.lower(), appended
+    # The emblem chooser is never even constructed any more (belt-and-suspenders: no page CAN
+    # be built from it).
+    assert "thunar_emblem_chooser_new" not in _strip_c_comments(pd_c), (
+        "the emblem chooser must not be constructed at all"
+    )
+    # The Highlight page's example box is never created, so NOTHING on a LIVE path may call
+    # colorize_example_box (it dereferences the NULL box). In particular the single-file update
+    # must no longer colour it from show_file_highlight_tab. The colorize helper + its callers
+    # may still be DEFINED (dead code), but they must be unreachable: assert no code path guards
+    # a colorize call on show_file_highlight_tab, and the widget is never assigned.
+    update_body = _strip_c_comments(
+        _c_definition_body(pd_c, "thunar_properties_dialog_update_single (ThunarPropertiesDialog *dialog)")
+    )
+    assert "colorize_example_box" not in update_body, (
+        "the single-file update must not colour the (never-created) highlight example box"
+    )
+    assert "show_file_highlight_tab" not in update_body, (
+        "show_file_highlight_tab must no longer drive the single-file update"
+    )
+    assert "dialog->example_box =" not in _strip_c_comments(pd_c), (
+        "example_box is never created -- any colorize call would dereference NULL"
+    )
+    # The Permissions page is still there.
+    assert "dialog->permissions_chooser" in pd_c
+    # The removal is documented with the AZZIO marker (so the intent is auditable).
+    assert "AZZIO" in pd_c and "Emblems" in pd_c and "Highlight" in pd_c
+
+
+# --- Path entry: primary directory icon removed + drag disabled -------------
+def test_path_entry_primary_icon_cleared_and_drag_is_a_noop():
+    # PROMPT: the tiny draggable directory icon on the left of the location bar is "weird and
+    # buggy -- remove it". update_icon() now clears the PRIMARY icon (NULL) in the normal case but
+    # KEEPS the search-mode magnifier; the icon-press handler is gutted to a no-op return FALSE.
+    pe_c = (fm.SOURCE_DIR / "thunar" / "thunar-path-entry.c").read_text()
+    # update_icon clears the primary icon for the non-search case.
+    assert "gtk_entry_set_icon_from_icon_name (GTK_ENTRY (path_entry), GTK_ENTRY_ICON_PRIMARY, NULL);" in pe_c
+    # ...but the search magnifier is still set when in search mode.
+    assert "system-search" in pe_c, "search-mode magnifier must be kept"
+    # The icon-press handler is a no-op (no drag is ever started from it). Anchor on the
+    # DEFINITION (signature followed by "\n{"); the forward declaration ends in ";" and is
+    # skipped. The full param list disambiguates it from any other icon-press symbol.
+    press_signature = (
+        "thunar_path_entry_icon_press_event (GtkEntry            *entry,\n"
+        "                                    GtkEntryIconPosition icon_pos,\n"
+        "                                    GdkEventButton      *event,\n"
+        "                                    gpointer             user_data)"
+    )
+    press_body = _strip_c_comments(_c_definition_body(pe_c, press_signature))
+    assert "return FALSE;" in press_body
+    assert "drag_begin" not in press_body and "gtk_drag_begin" not in press_body, (
+        "icon-press must not start a drag"
+    )
+    # The AZZIO marker documents the removal.
+    assert "AZZIO" in pe_c
+
+
+# --- Azzio folder basename -> icon-name table (thunar-file.c) ----------------
+def test_azzio_folder_basename_icon_table_maps_the_unnamed_home_dirs():
+    # The home dirs with no XDG type (Projects, Vault, Ignore) and the mount points (Shared,
+    # Mounts) get our OWN icon names via a basename table in thunar_file_get_icon_name, checked
+    # ONLY after the XDG table misses and ONLY for a direct child of $HOME. Shared + Mounts share
+    # the mount-point symbol (we removed the mount emblem, so the base icon carries it).
+    file_c = (fm.SOURCE_DIR / "thunar" / "thunar-file.c").read_text()
+    assert "azzio_folder_dirs[]" in file_c, "the Azzio basename->icon table must exist"
+    # The mapping pins each unnamed dir to its icon name.
+    for basename, icon in (
+        ("Projects", "azzio-folder-projects"),
+        ("Vault", "azzio-folder-vault"),
+        ("Ignore", "azzio-folder-ignore"),
+        ("Shared", "azzio-folder-mount"),
+        ("Mounts", "azzio-folder-mount"),
+    ):
+        assert f'{{ "{basename}", "{icon}" }}' in file_c, (basename, icon)
+    # The lookup builds "$HOME/<basename>" and only fires when the XDG table left the default.
+    assert "g_build_filename (azzio_home" in file_c
+    assert 'strcmp (*special_names, "folder") == 0' in file_c or "*special_names == NULL" in file_c

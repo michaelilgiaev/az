@@ -1023,42 +1023,17 @@ update_header:
 static void
 thunar_shortcuts_model_shortcut_devices (ThunarShortcutsModel *model)
 {
-  ThunarShortcut *shortcut;
-  GList          *devices;
-  GList          *lp;
-
-  /* add the devices heading */
-  shortcut = g_slice_new0 (ThunarShortcut);
-  shortcut->group = THUNAR_SHORTCUT_GROUP_DEVICES_HEADER;
-  shortcut->name = g_strdup (_("Devices"));
-  thunar_shortcuts_model_add_shortcut (model, shortcut);
-
-  /* the filesystem entry */
-  shortcut = g_slice_new0 (ThunarShortcut);
-  shortcut->group = THUNAR_SHORTCUT_GROUP_DEVICES_FILESYSTEM;
-  shortcut->name = g_strdup (_("File System"));
-  shortcut->tooltip = g_strdup (_("Browse the file system"));
-  shortcut->file = thunar_file_get_for_uri ("file:///", NULL);
-  shortcut->gicon = g_themed_icon_new ("drive-harddisk");
-  shortcut->hidden = thunar_shortcuts_model_get_hidden (model, shortcut);
-  thunar_shortcuts_model_add_shortcut (model, shortcut);
-
-  /* connect to the device monitor */
+  /* AZZIO: the "Devices" sidebar section is removed entirely (PROMPT). We add no
+   * "Devices" header, no permanent "File System" row, and no volume/mount rows, and
+   * we do NOT subscribe to the device monitor's add/remove/change signals -- so
+   * plugging in a USB stick can never make a device row appear either.
+   *
+   * We DO still take (and hold) a reference to the shared device monitor, because
+   * thunar_shortcuts_model_finalize() unconditionally disconnects-by-data and unrefs
+   * model->device_monitor; leaving it NULL would trip a g_object_unref(NULL) /
+   * disconnect(NULL) warning at teardown. Acquiring it here (without connecting any
+   * handlers) keeps that path sound while surfacing nothing in the UI. */
   model->device_monitor = thunar_device_monitor_get ();
-
-  /* get a list of all devices available */
-  devices = thunar_device_monitor_get_devices (model->device_monitor);
-  for (lp = devices; lp != NULL; lp = lp->next)
-    {
-      thunar_shortcuts_model_device_added (NULL, lp->data, model);
-      g_object_unref (G_OBJECT (lp->data));
-    }
-  g_list_free (devices);
-
-  /* monitor for changes */
-  g_signal_connect (model->device_monitor, "device-added", G_CALLBACK (thunar_shortcuts_model_device_added), model);
-  g_signal_connect (model->device_monitor, "device-removed", G_CALLBACK (thunar_shortcuts_model_device_removed), model);
-  g_signal_connect (model->device_monitor, "device-changed", G_CALLBACK (thunar_shortcuts_model_device_changed), model);
 
   thunar_shortcuts_model_header_visibility (model);
 }

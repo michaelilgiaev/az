@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Azzio "Back" toolbar arrow (theme name go-previous, the top toolbar Left arrow). Azzio
+       cyan-to-blue gradient on a transparent background, thick round strokes, matching
+       search.svg / the power-row glyphs. -->
+  <defs>
+    <linearGradient id="azGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+  </defs>
+  <path fill="none" stroke="url(#azGrad)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"
+        d="M78 32 L46 64 L78 96"/>
+</svg>

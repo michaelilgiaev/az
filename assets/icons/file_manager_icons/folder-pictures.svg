@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Azzio Pictures folder (theme name folder-pictures, the Pictures dir). Base Azzio folder
+       + a white photo tile (mountain + sun) on the front flap. -->
+  <defs>
+    <linearGradient id="azFolder" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+    <linearGradient id="azFolderBack" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0698D6"/>
+      <stop offset="1" stop-color="#0052CC"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#azFolderBack)" d="M14 40 a10 10 0 0 1 10 -10 h26 a10 10 0 0 1 8 4 l7 9 h35 a10 10 0 0 1 10 10 v51 a10 10 0 0 1 -10 10 H24 a10 10 0 0 1 -10 -10 Z"/>
+  <path fill="url(#azFolder)" d="M14 56 a10 10 0 0 1 10 -10 h80 a10 10 0 0 1 10 10 v42 a10 10 0 0 1 -10 10 H24 a10 10 0 0 1 -10 -10 Z"/>
+  <!-- White photo tile with a sun and a mountain range. -->
+  <rect fill="#ffffff" x="47" y="64" width="34" height="30" rx="4"/>
+  <circle fill="#06B8FD" cx="57" cy="74" r="4"/>
+  <path fill="#06B8FD" d="M50 90 l9 -11 6 7 6 -8 8 12 Z"/>
+</svg>

@@ -338,8 +338,9 @@ thunar_properties_dialog_constructed (GObject *object)
   guint      row = 0;
   GtkWidget *image;
   GtkWidget *button;
-  GtkWidget *infobar;
-  GtkWidget *frame;
+  /* AZZIO: the Emblems + Highlight pages are removed, so the highlight-only locals
+   * (infobar, frame) are gone too -- the remaining locals still serve the General
+   * and Permissions pages. */
 
   G_OBJECT_CLASS (thunar_properties_dialog_parent_class)->constructed (object);
 
@@ -780,156 +781,18 @@ thunar_properties_dialog_constructed (GObject *object)
 
 
   /*
-     Emblem chooser
-   */
-  label = gtk_label_new (_("Emblems"));
-  chooser = thunar_emblem_chooser_new ();
-  g_object_bind_property (G_OBJECT (dialog), "files",
-                          G_OBJECT (chooser), "files",
-                          G_BINDING_SYNC_CREATE);
-  gtk_notebook_append_page (GTK_NOTEBOOK (dialog->notebook), chooser, label);
-  gtk_widget_show (chooser);
-  gtk_widget_show (label);
+     AZZIO: the "Emblems" and "Highlight" property pages are removed entirely
+     (PROMPT: delete both -- the tabs AND their functionality). Neither notebook page
+     is created, so there is no emblem chooser and no highlight colour chooser to
+     access, and none of their apply/reset/foreground/background actions can run.
+     The dialog now goes straight from the free-space row to the Permissions page.
 
-  /*
-     Highlight Color Chooser
-   */
-  if (dialog->show_file_highlight_tab)
-    {
-      grid = gtk_grid_new ();
-      label = gtk_label_new (_("Highlight"));
-      gtk_widget_set_halign (grid, GTK_ALIGN_CENTER);
-      gtk_grid_set_column_spacing (GTK_GRID (grid), 12);
-      gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
-      gtk_container_set_border_width (GTK_CONTAINER (grid), 12);
-      gtk_notebook_append_page (GTK_NOTEBOOK (dialog->notebook), grid, label);
-      gtk_widget_show (label);
-      gtk_widget_show (grid);
-
-      row = 0;
-
-      chooser = gtk_color_chooser_widget_new ();
-      dialog->color_chooser = chooser;
-      g_signal_connect_swapped (G_OBJECT (chooser), "notify::show-editor",
-                                G_CALLBACK (thunar_properties_dialog_color_editor_changed), dialog);
-      g_signal_connect_swapped (G_OBJECT (dialog->notebook), "switch-page",
-                                G_CALLBACK (thunar_properties_dialog_notebook_page_changed), dialog);
-      gtk_grid_attach (GTK_GRID (grid), chooser, 0, row, 1, 1);
-      gtk_widget_set_vexpand (chooser, TRUE);
-      gtk_widget_show (chooser);
-
-      row++;
-
-      /* check if gvfs metadata is supported */
-      if (G_UNLIKELY (!thunar_g_vfs_metadata_is_supported ()))
-        {
-          frame = g_object_new (GTK_TYPE_FRAME, "border-width", 0, "shadow-type", GTK_SHADOW_NONE, NULL);
-          gtk_grid_attach (GTK_GRID (grid), frame, 0, row, 1, 1);
-          gtk_widget_set_sensitive (dialog->color_chooser, FALSE);
-          gtk_widget_show (frame);
-
-          label = gtk_label_new (_("Missing dependencies"));
-          gtk_label_set_attributes (GTK_LABEL (label), thunar_pango_attr_list_bold ());
-          gtk_frame_set_label_widget (GTK_FRAME (frame), label);
-          gtk_widget_show (label);
-
-          infobar = gtk_info_bar_new ();
-          gtk_container_set_border_width (GTK_CONTAINER (infobar), 12);
-          label = gtk_label_new (NULL);
-          gtk_label_set_markup (GTK_LABEL (label), _("It looks like <a href=\"https://wiki.gnome.org/Projects/gvfs\">gvfs</a> is not available.\n"
-                                                    "This feature will not work. "
-                                                    "<a href=\"https://docs.xfce.org/xfce/thunar/unix-filesystem#gnome_virtual_file_system\">[Read more]</a>"));
-          box = gtk_info_bar_get_content_area (GTK_INFO_BAR (infobar));
-          gtk_container_add (GTK_CONTAINER (box), label);
-          gtk_info_bar_set_message_type (GTK_INFO_BAR (infobar), GTK_MESSAGE_WARNING);
-          gtk_widget_show (label);
-          gtk_widget_show (infobar);
-          gtk_container_add (GTK_CONTAINER (frame), infobar);
-
-          row++;
-        }
-      else
-        {
-          dialog->example_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-          gtk_widget_set_name (dialog->example_box, "example");
-          gtk_widget_set_hexpand (dialog->example_box, TRUE);
-          gtk_widget_set_margin_top (dialog->example_box, 10);
-          gtk_widget_set_margin_bottom (dialog->example_box, 10);
-          gtk_grid_attach (GTK_GRID (grid), dialog->example_box, 0, row, 1, 1);
-          gtk_widget_show (dialog->example_box);
-
-          image = gtk_image_new_from_icon_name ("text-x-generic", GTK_ICON_SIZE_DIALOG);
-          gtk_box_pack_start (GTK_BOX (dialog->example_box), image, FALSE, FALSE, 5);
-          gtk_widget_set_margin_top (image, 5);
-          gtk_widget_set_margin_bottom (image, 5);
-          gtk_widget_show (image);
-
-          label = gtk_label_new_with_mnemonic (_("Example.txt"));
-          gtk_box_pack_start (GTK_BOX (dialog->example_box), label, TRUE, TRUE, 0);
-          gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
-          gtk_widget_show (label);
-
-          row++;
-        }
-
-      box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-      dialog->highlight_buttons = box;
-      gtk_widget_set_hexpand (box, TRUE);
-      gtk_widget_set_vexpand (box, TRUE);
-      gtk_grid_attach (GTK_GRID (grid), box, 0, row, 1, 1);
-      if (G_UNLIKELY (!thunar_g_vfs_metadata_is_supported ()))
-        gtk_widget_set_sensitive (box, FALSE);
-      gtk_widget_show (box);
-
-      button = gtk_button_new_with_mnemonic (_("_Apply"));
-      gtk_style_context_add_class (gtk_widget_get_style_context (button), "suggested-action");
-      g_signal_connect_swapped (G_OBJECT (button), "clicked",
-                                G_CALLBACK (thunar_properties_dialog_apply_highlight), dialog);
-      gtk_box_pack_end (GTK_BOX (box), button, FALSE, FALSE, 0);
-      gtk_widget_set_vexpand (button, FALSE);
-      gtk_widget_set_valign (button, GTK_ALIGN_END);
-      gtk_widget_show (button);
-
-      dialog->highlight_apply_button = button;
-      gtk_widget_set_sensitive (dialog->highlight_apply_button, FALSE);
-
-      button = gtk_button_new_with_mnemonic (_("_Reset"));
-      g_signal_connect_swapped (G_OBJECT (button), "clicked",
-                                G_CALLBACK (thunar_properties_dialog_reset_highlight), dialog);
-      gtk_box_pack_end (GTK_BOX (box), button, FALSE, FALSE, 0);
-      gtk_widget_set_vexpand (button, FALSE);
-      gtk_widget_set_valign (button, GTK_ALIGN_END);
-      gtk_widget_show (button);
-
-      dialog->highlighting_spinner = gtk_spinner_new ();
-      gtk_box_pack_end (GTK_BOX (box), dialog->highlighting_spinner, FALSE, FALSE, 0);
-
-      button = gtk_button_new_with_mnemonic (_("Set _Foreground"));
-      g_signal_connect_swapped (G_OBJECT (button), "clicked",
-                                G_CALLBACK (thunar_properties_dialog_set_foreground), dialog);
-      gtk_box_pack_start (GTK_BOX (box), button, FALSE, FALSE, 0);
-      gtk_widget_set_vexpand (button, FALSE);
-      gtk_widget_set_valign (button, GTK_ALIGN_END);
-      gtk_widget_show (button);
-
-      button = gtk_button_new_with_mnemonic (_("Set _Background"));
-      g_signal_connect_swapped (G_OBJECT (button), "clicked",
-                                G_CALLBACK (thunar_properties_dialog_set_background), dialog);
-      gtk_box_pack_start (GTK_BOX (box), button, FALSE, FALSE, 0);
-      gtk_widget_set_vexpand (button, FALSE);
-      gtk_widget_set_valign (button, GTK_ALIGN_END);
-      gtk_widget_show (button);
-
-      box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
-      dialog->editor_button = box;
-      gtk_grid_attach (GTK_GRID (grid), box, 0, row, 1, 1);
-
-      button = gtk_button_new_from_icon_name ("go-previous", GTK_ICON_SIZE_BUTTON);
-      g_signal_connect_swapped (G_OBJECT (button), "clicked",
-                                G_CALLBACK (thunar_properties_dialog_color_editor_close), dialog);
-      gtk_box_pack_start (GTK_BOX (box), button, TRUE, TRUE, 0);
-      gtk_widget_show (button);
-    }
+     dialog->show_file_highlight_tab is left set by the caller (the property still exists)
+     but nothing acts on it any more: the highlight page is not built here, and the single-
+     file update path no longer colours the example box from it either. The highlight handler
+     functions remain defined but are never wired up, so nothing surfaces or triggers them.
+     See thunar-emblem-chooser.* / the highlight helpers below -- kept as dead code to avoid
+     churning the struct + dispose path. */
 
   /*
      Permissions chooser
@@ -1331,8 +1194,6 @@ thunar_properties_dialog_update_single (ThunarPropertiesDialog *dialog)
   guint64            fs_free;
   guint64            fs_size;
   gdouble            fs_fraction = 0.0;
-  gchar             *background;
-  gchar             *foreground;
 
   _thunar_return_if_fail (THUNAR_IS_PROPERTIES_DIALOG (dialog));
   _thunar_return_if_fail (g_list_length (dialog->files) == 1);
@@ -1579,14 +1440,12 @@ thunar_properties_dialog_update_single (ThunarPropertiesDialog *dialog)
       gtk_widget_hide (dialog->freespace_vbox);
     }
 
-  if (dialog->show_file_highlight_tab && G_LIKELY (thunar_g_vfs_metadata_is_supported ()))
-    {
-      background = thunar_file_get_metadata_setting (file, "highlight-color-background");
-      foreground = thunar_file_get_metadata_setting (file, "highlight-color-foreground");
-      thunar_properties_dialog_colorize_example_box (dialog, background, foreground);
-      g_free (foreground);
-      g_free (background);
-    }
+  /* AZZIO: the "Highlight" page is removed (PROMPT), so its example-colour box is never
+   * created (dialog->example_box stays NULL). The old highlight consumer that ran here on
+   * every single-file update -- colorize_example_box() on the file's stored highlight
+   * metadata -- is therefore dropped too; leaving it in would dereference the NULL box and
+   * spew GTK-CRITICAL warnings each time Properties opens. The colorize/apply/reset helpers
+   * remain defined but unreachable (nothing wires the removed choosers to them). */
 
   /* cleanup */
   g_object_unref (G_OBJECT (icon_factory));
