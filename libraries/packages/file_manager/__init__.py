@@ -222,11 +222,13 @@ def emit_plan() -> list[dict]:
     # gone -- the user asked for the Templates dir to be deleted -- so only the XDG pointer ships
     # (XDG_TEMPLATES_DIR back at the stock $HOME/, other XDG dirs mapped to the Azzio home layout).
     plan += templates.emit_plan()
-    # The Azzio icon theme -- the file manager's folder / file / toolbar / home / mount-point
-    # icons (PROMPT: new directory icons, text-file icon, toolbar arrows + search, username icon,
-    # mount-point symbol). A separate icon theme that Inherits Adwaita so OUR names (folder,
-    # folder-documents, user-home, go-*, system-search, text-x-generic, azzio-folder-*) win while
-    # everything else falls through to Adwaita. All root-owned (a new, non-package-owned theme
-    # dir). gtk-icon-theme-name is pointed at "Azzio" by packages/azzio/theme + packages/openbox.
+    # The Azzio icon theme -- the file manager's folder / file / toolbar / home / mount-point / and
+    # right-click CONTEXT-MENU icons (PROMPT: new directory icons, text-file icon, toolbar
+    # arrows + search + zoom, username icon, mount-point symbol, and the right-click menu icons).
+    # A separate icon theme that Inherits Adwaita so OUR names (folder, folder-documents, user-home,
+    # go-*, system-search, zoom-*, view-*, text-x-generic, folder-*, and the edit-*/document-*
+    # menu names) win while everything else falls through to Adwaita. All root-owned (a new,
+    # non-package-owned theme dir). gtk-icon-theme-name points at "Azzio" (packages/azzio/theme +
+    # packages/openbox).
     plan += icons.emit_plan()
     return plan

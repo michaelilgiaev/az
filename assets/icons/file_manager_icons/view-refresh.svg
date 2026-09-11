@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Azzio "Reload" icon (theme name view-refresh). A circular refresh arrow in the Azzio
+       cyan-to-blue gradient, thick round strokes. Overrides Adwaita's view-refresh for the
+       toolbar Reload and the menu "Reload". -->
+  <defs>
+    <linearGradient id="azGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+  </defs>
+  <!-- Almost-closed circle. -->
+  <path fill="none" stroke="url(#azGrad)" stroke-width="12" stroke-linecap="round"
+        d="M96 44 a40 40 0 1 0 8 30"/>
+  <!-- Arrowhead at the opening. -->
+  <path fill="url(#azGrad)" d="M96 20 l8 30 l-30 -6 Z"/>
+</svg>

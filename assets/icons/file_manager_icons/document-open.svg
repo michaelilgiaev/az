@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Azzio "Open" context-menu icon (theme name document-open). An open folder in the Azzio
+       cyan-to-blue gradient, matching folder.svg. Overrides Adwaita's document-open so the
+       right-click "Open" entry (thunar-action-manager.c) uses our set. -->
+  <defs>
+    <linearGradient id="azGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+    <linearGradient id="azGradBack" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0698D6"/>
+      <stop offset="1" stop-color="#0052CC"/>
+    </linearGradient>
+  </defs>
+  <!-- Back panel + tab. -->
+  <path fill="url(#azGradBack)"
+        d="M14 40 a10 10 0 0 1 10 -10 h26 a10 10 0 0 1 8 4 l7 9 h35 a10 10 0 0 1 10 10 v16 H14 Z"/>
+  <!-- Open front flap, skewed outward like an opened folder. -->
+  <path fill="url(#azGrad)"
+        d="M18 58 h92 a8 8 0 0 1 8 10 l-12 34 a12 12 0 0 1 -11 8 H24 a10 10 0 0 1 -10 -10 V64 Z"/>
+</svg>

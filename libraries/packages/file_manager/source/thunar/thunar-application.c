@@ -722,7 +722,30 @@ thunar_application_load_css (void)
                                    /* for the toorbar in headerbar looks ugly */
                                    "headerbar toolbar { background: none; }"
                                    /* for the example box in properties dialog > highlight tab */
-                                   "#example { border-radius: 10px; }",
+                                   "#example { border-radius: 10px; }"
+                                   /* Azzio: brand the check/radio menu-item indicators (the
+                                    * "Show Hidden Files" toggle and every "Arrange Items" sort
+                                    * check/radio) with the house cyan so the toggles read as OUR
+                                    * set (PROMPT: the Show Hidden Files / Arrange Items toggles
+                                    * need our icons). These indicators are drawn by the widget
+                                    * theme's CSS, not the icon theme; this provider is scoped to
+                                    * the file manager process and covers its popup menus. The
+                                    * checked state is a filled Azzio-cyan indicator; unchecked is
+                                    * a subtle cyan outline. Uses -gtk-icon shadow/color the same
+                                    * way Adwaita styles these nodes. */
+                                   "menuitem check, menuitem radio {"
+                                   " min-width: 16px; min-height: 16px;"
+                                   " border: 2px solid alpha(#06B8FD, 0.55);"
+                                   " background-image: none; background-color: transparent; }"
+                                   "menuitem check { border-radius: 4px; }"
+                                   "menuitem radio { border-radius: 50%; }"
+                                   "menuitem check:checked, menuitem radio:checked {"
+                                   " border-color: #0064F9;"
+                                   " background-image: linear-gradient(to bottom, #07AFE8, #0064F9);"
+                                   " -gtk-icon-source: none; color: #ffffff; }"
+                                   "menuitem check:hover, menuitem radio:hover,"
+                                   "menuitem check:checked:hover, menuitem radio:checked:hover {"
+                                   " border-color: #06B8FD; }",
                                    -1, NULL);
   screen = gdk_screen_get_default ();
   gtk_style_context_add_provider_for_screen (screen, GTK_STYLE_PROVIDER (css_provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);

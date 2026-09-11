@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Azzio "Create New Document" icon (theme name document-new). A blank page with a plus badge,
+       in the Azzio cyan-to-blue gradient. Overrides Adwaita's document-new for the "Create New
+       Document..." menu entry (thunar-action-manager.c). -->
+  <defs>
+    <linearGradient id="azGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+    <linearGradient id="azGradBack" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0698D6"/>
+      <stop offset="1" stop-color="#0052CC"/>
+    </linearGradient>
+  </defs>
+  <!-- Page with a folded corner. -->
+  <path fill="url(#azGradBack)"
+        d="M32 16 h40 l24 24 v64 a8 8 0 0 1 -8 8 H40 a8 8 0 0 1 -8 -8 Z"/>
+  <path fill="url(#azGrad)" d="M72 16 l24 24 h-24 Z"/>
+  <!-- Plus badge (white) marking a new document. -->
+  <path fill="#FFFFFF" d="M58 60 h12 v14 h14 v12 h-14 v14 h-12 v-14 h-14 v-12 h14 Z"/>
+</svg>

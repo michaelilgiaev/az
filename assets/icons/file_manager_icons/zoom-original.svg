@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Azzio "Normal Size" icon (theme name zoom-original). A magnifier with a centered dot (1:1),
+       in the Azzio cyan-to-blue gradient, matching system-search.svg. Overrides Adwaita's
+       zoom-original for the background right-click "Normal Size" and the toolbar. -->
+  <defs>
+    <linearGradient id="azGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+  </defs>
+  <circle cx="54" cy="54" r="30" fill="none" stroke="url(#azGrad)" stroke-width="12"/>
+  <path fill="none" stroke="url(#azGrad)" stroke-width="13" stroke-linecap="round" d="M76 76 L100 100"/>
+  <circle cx="54" cy="54" r="8" fill="url(#azGrad)"/>
+</svg>

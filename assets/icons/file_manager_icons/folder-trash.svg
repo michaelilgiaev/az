@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <!-- Azzio Trash folder (Azzio-only name azzio-folder-trash, the ~/Trash shortcut, which links to
+  <!-- Azzio Trash folder (Azzio-only name folder-trash, the ~/Trash shortcut, which links to
        .local/share/Trash/files). No XDG theme name, so the vendored file manager maps this
        basename to it. Base Azzio folder plus a white trash can on the front flap. This is the
        shortcut's OWN folder-style icon; the built-in trash:/// place keeps the system

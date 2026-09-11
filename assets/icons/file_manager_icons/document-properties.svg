@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Azzio "Properties" context-menu icon (theme name document-properties). A document with a
+       pencil, in the Azzio cyan-to-blue gradient. Overrides Adwaita's document-properties for the
+       right-click "Properties..." (thunar-action-manager.c). -->
+  <defs>
+    <linearGradient id="azGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+    <linearGradient id="azGradBack" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0698D6"/>
+      <stop offset="1" stop-color="#0052CC"/>
+    </linearGradient>
+  </defs>
+  <!-- Document with a folded corner. -->
+  <path fill="url(#azGradBack)"
+        d="M30 20 h44 l24 24 v56 a8 8 0 0 1 -8 8 H38 a8 8 0 0 1 -8 -8 Z"/>
+  <path fill="url(#azGrad)" d="M74 20 l24 24 h-24 Z"/>
+  <!-- Pencil across the lower half. -->
+  <path fill="none" stroke="url(#azGrad)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"
+        d="M56 104 L104 56 L114 66 L66 114 L52 118 Z"/>
+</svg>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Azzio "Icon View" icon (theme name view-grid). A 2x2 grid of rounded tiles in the Azzio
+       cyan-to-blue gradient. Overrides Adwaita's view-grid for the toolbar view switcher and the
+       "Display folder content in an icon view" menu entry. -->
+  <defs>
+    <linearGradient id="azGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+  </defs>
+  <rect x="22" y="22" width="38" height="38" rx="8" fill="url(#azGrad)"/>
+  <rect x="68" y="22" width="38" height="38" rx="8" fill="url(#azGrad)"/>
+  <rect x="22" y="68" width="38" height="38" rx="8" fill="url(#azGrad)"/>
+  <rect x="68" y="68" width="38" height="38" rx="8" fill="url(#azGrad)"/>
+</svg>

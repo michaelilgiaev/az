@@ -117,6 +117,14 @@ SETTINGS: tuple[tuple[str, str, str, object], ...] = (
      "THUNAR_ZOOM_LEVEL_100_PERCENT"),
     ("LastMenubarVisible", "last-menubar-visible", "bool", _TRUE),
     ("LastShowHidden", "last-show-hidden", "bool", _FALSE),
+    # Use the PLAIN (non-symbolic) icon names in the toolbar. The file manager DEFAULTS this to
+    # TRUE (verified in thunar-preferences.c), which makes the toolbar append "-symbolic" to every
+    # icon name (thunar_window_toolbar_get_icon_name) -- so it looked up go-previous-symbolic /
+    # system-search-symbolic / zoom-in-symbolic etc., which the Azzio icon theme did not ship, and
+    # they fell through to Adwaita (PROMPT: the toolbar Back/Forward/Up/Search icons "were not
+    # applied"). Setting it FALSE makes the toolbar use go-previous / system-search / zoom-in, which
+    # the Azzio theme overrides. (icons.py ALSO ships -symbolic aliases as belt-and-braces.)
+    ("MiscSymbolicIconsInToolbar", "misc-symbolic-icons-in-toolbar", "bool", _FALSE),
     ("MiscEnableExpandableFolders", "misc-enable-expandable-folders", "bool", _FALSE),
     ("MiscAlwaysEnableSplitView", "misc-always-enable-split-view", "bool", _FALSE),
     ("MiscSingleClick", "misc-single-click", "bool", _FALSE),

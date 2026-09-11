@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Azzio "Detailed List View" icon (theme name view-list). Rows each with a leading bullet, in
+       the Azzio cyan-to-blue gradient. Overrides Adwaita's view-list for the toolbar view switcher
+       and the "detailed list view" menu entry. -->
+  <defs>
+    <linearGradient id="azGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+  </defs>
+  <circle cx="30" cy="34" r="9" fill="url(#azGrad)"/>
+  <circle cx="30" cy="64" r="9" fill="url(#azGrad)"/>
+  <circle cx="30" cy="94" r="9" fill="url(#azGrad)"/>
+  <rect x="50" y="27" width="58" height="14" rx="7" fill="url(#azGrad)"/>
+  <rect x="50" y="57" width="58" height="14" rx="7" fill="url(#azGrad)"/>
+  <rect x="50" y="87" width="58" height="14" rx="7" fill="url(#azGrad)"/>
+</svg>

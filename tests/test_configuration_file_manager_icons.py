@@ -38,8 +38,9 @@ def _azzio_command_line_interface():
 
 def test_icon_name_mapping_is_the_spec():
     # The full SVG -> icon name -> context mapping. Standard freedesktop names override Adwaita;
-    # the dirs with no standard name get an azzio-* name the vendored file manager maps by
-    # basename; Shared + Mounts share the single mount-point symbol.
+    # the folder dirs with no standard name use a folder-<type> name (NO "azzio-" prefix -- the
+    # prefix was dropped for a nicer convention) the vendored file manager maps by basename;
+    # Shared + Mounts share the single mount-point symbol.
     mapping = {name: (svg, ctx) for svg, name, ctx in icons.ICONS}
     assert mapping["folder"] == ("folder.svg", "places")
     assert mapping["folder-documents"] == ("folder-documents.svg", "places")
@@ -49,26 +50,48 @@ def test_icon_name_mapping_is_the_spec():
     assert mapping["folder-videos"] == ("folder-videos.svg", "places")
     assert mapping["user-desktop"] == ("user-desktop.svg", "places")
     assert mapping["user-home"] == ("user-home.svg", "places")
-    assert mapping["azzio-folder-projects"] == ("azzio-folder-projects.svg", "places")
-    assert mapping["azzio-folder-vault"] == ("azzio-folder-vault.svg", "places")
-    assert mapping["azzio-folder-ignore"] == ("azzio-folder-ignore.svg", "places")
-    assert mapping["azzio-folder-mount"] == ("azzio-folder-mount.svg", "places")
+    assert mapping["folder-projects"] == ("folder-projects.svg", "places")
+    assert mapping["folder-vault"] == ("folder-vault.svg", "places")
+    assert mapping["folder-ignore"] == ("folder-ignore.svg", "places")
+    assert mapping["folder-mount"] == ("folder-mount.svg", "places")
     # The dot-location shortcut folders (Cache/Config/Trash/Local/SSH -> .cache/.config/...).
-    assert mapping["azzio-folder-cache"] == ("azzio-folder-cache.svg", "places")
-    assert mapping["azzio-folder-config"] == ("azzio-folder-config.svg", "places")
-    assert mapping["azzio-folder-trash"] == ("azzio-folder-trash.svg", "places")
-    assert mapping["azzio-folder-local"] == ("azzio-folder-local.svg", "places")
-    assert mapping["azzio-folder-ssh"] == ("azzio-folder-ssh.svg", "places")
+    assert mapping["folder-cache"] == ("folder-cache.svg", "places")
+    assert mapping["folder-config"] == ("folder-config.svg", "places")
+    assert mapping["folder-trash"] == ("folder-trash.svg", "places")
+    assert mapping["folder-local"] == ("folder-local.svg", "places")
+    assert mapping["folder-ssh"] == ("folder-ssh.svg", "places")
+    # The "azzio-" prefix is gone from every folder name (the PROMPT's naming-convention ask).
+    assert not any(name.startswith("azzio-") for _s, name, _c in icons.ICONS)
     assert mapping["text-x-generic"] == ("text-x-generic.svg", "mimetypes")
     # The symlink arrow emblem (its own "emblems" context), overlaid on symlinked folders/files.
     assert mapping["emblem-symbolic-link"] == ("emblem-symbolic-link.svg", "emblems")
+    # Toolbar navigation + search.
     assert mapping["go-previous"] == ("go-previous.svg", "actions")
     assert mapping["go-next"] == ("go-next.svg", "actions")
     assert mapping["go-up"] == ("go-up.svg", "actions")
     assert mapping["system-search"] == ("system-search.svg", "actions")
-    # No accidental extras / dupes.
-    assert len(icons.ICONS) == 23
-    assert len({name for _s, name, _c in icons.ICONS}) == 23
+    # Toolbar/menu zoom + reload + view switcher.
+    assert mapping["zoom-in"] == ("zoom-in.svg", "actions")
+    assert mapping["zoom-out"] == ("zoom-out.svg", "actions")
+    assert mapping["zoom-original"] == ("zoom-original.svg", "actions")
+    assert mapping["view-refresh"] == ("view-refresh.svg", "actions")
+    assert mapping["view-grid"] == ("view-grid.svg", "actions")
+    assert mapping["view-list"] == ("view-list.svg", "actions")
+    assert mapping["view-compact"] == ("view-compact.svg", "actions")
+    # Right-click CONTEXT-MENU action icons (PROMPT: the right-click menu icons must be ours).
+    assert mapping["document-open"] == ("document-open.svg", "actions")
+    assert mapping["edit-cut"] == ("edit-cut.svg", "actions")
+    assert mapping["edit-copy"] == ("edit-copy.svg", "actions")
+    assert mapping["edit-paste"] == ("edit-paste.svg", "actions")
+    assert mapping["edit-delete"] == ("edit-delete.svg", "actions")
+    assert mapping["user-trash"] == ("user-trash.svg", "actions")
+    assert mapping["document-properties"] == ("document-properties.svg", "actions")
+    assert mapping["folder-new"] == ("folder-new.svg", "actions")
+    assert mapping["document-new"] == ("document-new.svg", "actions")
+    assert mapping["utilities-terminal"] == ("utilities-terminal.svg", "actions")
+    # No accidental extras / dupes. 17 places + 1 mimetype + 1 emblem + 21 actions = 40.
+    assert len(icons.ICONS) == 40
+    assert len({name for _s, name, _c in icons.ICONS}) == 40
 
 
 def test_every_icon_svg_asset_exists_and_is_on_brand():
@@ -109,6 +132,29 @@ def test_emit_plan_ships_scalable_and_pngs_under_the_azzio_theme_root_owned():
     # Every icon dest lives under the Azzio theme dir (never hicolor -- Adwaita would win there).
     icon_dests = [d for d in by_dest if d.endswith((".svg", ".png"))]
     assert icon_dests and all(d.startswith(icons.ICON_THEME_DIR + "/") for d in icon_dests)
+
+
+def test_actions_icons_also_ship_a_symbolic_alias():
+    # The toolbar looks up the "-symbolic" variant when misc-symbolic-icons-in-toolbar is on (it
+    # defaults TRUE upstream). Every ACTIONS icon must therefore ALSO ship as "<name>-symbolic"
+    # (same SVG) so the toolbar/menu resolves to our icon rather than Adwaita's. Non-actions icons
+    # (folders/mimetypes/emblems) get NO symbolic alias (never requested that way).
+    plan = icons.emit_plan()
+    by_dest = {e["dest"]: e for e in plan}
+    for svg, name, ctx in icons.ICONS:
+        asset = f"{icons.ASSET_DIR}/{svg}"
+        sym_svg = f"{icons.ICON_THEME_DIR}/scalable/{ctx}/{name}-symbolic.svg"
+        if ctx in icons.SYMBOLIC_ALIAS_CONTEXTS:
+            assert sym_svg in by_dest, f"missing -symbolic alias for {name}"
+            assert by_dest[sym_svg]["asset"] == asset
+            for size in icons.ICON_PNG_SIZES:
+                png = f"{icons.ICON_THEME_DIR}/{size}x{size}/{ctx}/{name}-symbolic.png"
+                assert png in by_dest, f"missing {size}px -symbolic PNG for {name}"
+        else:
+            assert sym_svg not in by_dest, f"{name} should NOT have a -symbolic alias"
+    # The toolbar arrows/search + zoom specifically have symbolic twins (the PROMPT's toolbar fix).
+    for name in ("go-previous", "go-next", "go-up", "system-search", "zoom-in", "zoom-out"):
+        assert f"{icons.ICON_THEME_DIR}/scalable/actions/{name}-symbolic.svg" in by_dest
 
 
 def test_index_theme_inherits_adwaita_and_declares_every_dir():
@@ -161,14 +207,16 @@ def test_gtk_icon_theme_name_points_at_azzio_everywhere():
         )
 
 
-def test_c_basename_table_names_match_the_shipped_azzio_icons():
+def test_c_basename_table_names_match_the_shipped_folder_icons():
     # The vendored file manager's basename->icon table (thunar-file.c azzio_folder_dirs) must name
     # icons this module actually ships -- otherwise a mapped folder resolves to a missing name and
-    # falls back to the generic folder. Cross-check the azzio-* names appear in both.
+    # falls back to the generic folder. Cross-check the folder-* names appear in both, and that the
+    # old azzio-folder-* names are fully gone from the C table (the naming-convention change).
     file_c = (fm.SOURCE_DIR / "thunar" / "thunar-file.c").read_text()
     shipped = {name for _s, name, _c in icons.ICONS}
-    for icon in ("azzio-folder-projects", "azzio-folder-vault", "azzio-folder-ignore",
-                 "azzio-folder-mount", "azzio-folder-cache", "azzio-folder-config",
-                 "azzio-folder-trash", "azzio-folder-local", "azzio-folder-ssh"):
+    for icon in ("folder-projects", "folder-vault", "folder-ignore",
+                 "folder-mount", "folder-cache", "folder-config",
+                 "folder-trash", "folder-local", "folder-ssh"):
         assert icon in shipped, f"{icon} referenced by C but not shipped"
         assert f'"{icon}"' in file_c, f"{icon} shipped but not referenced by the C table"
+    assert "azzio-folder-" not in file_c, "the C table still uses the old azzio-folder- names"

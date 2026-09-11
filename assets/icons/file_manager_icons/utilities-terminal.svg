@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Azzio "Open Terminal Here" icon (theme name utilities-terminal). A terminal window with a
+       prompt caret + cursor, in the Azzio cyan-to-blue gradient. The uca.xml "Open Terminal Here"
+       action's <icon> is utilities-terminal, so overriding this name themes that entry. -->
+  <defs>
+    <linearGradient id="azGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+    <linearGradient id="azGradBack" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0698D6"/>
+      <stop offset="1" stop-color="#0052CC"/>
+    </linearGradient>
+  </defs>
+  <!-- Terminal window body. -->
+  <rect x="16" y="26" width="96" height="76" rx="12" fill="url(#azGradBack)"/>
+  <rect x="26" y="42" width="76" height="50" rx="4" fill="url(#azGrad)"/>
+  <!-- Prompt caret ">" and cursor underscore, in white. -->
+  <path fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"
+        d="M40 56 L54 67 L40 78"/>
+  <path fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" d="M64 80 H86"/>
+</svg>

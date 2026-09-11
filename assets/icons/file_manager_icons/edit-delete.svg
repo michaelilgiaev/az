@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Azzio "Delete" context-menu icon (theme name edit-delete). A trash can with an X (permanent
+       delete, distinct from the plain user-trash can) in the Azzio cyan-to-blue gradient.
+       Overrides Adwaita's edit-delete for the right-click "Delete" (thunar-action-manager.c). -->
+  <defs>
+    <linearGradient id="azGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+  </defs>
+  <!-- Lid + handle. -->
+  <path fill="none" stroke="url(#azGrad)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"
+        d="M28 36 H100 M52 36 V26 a6 6 0 0 1 6 -6 h12 a6 6 0 0 1 6 6 v10"/>
+  <!-- Can body. -->
+  <path fill="none" stroke="url(#azGrad)" stroke-width="10" stroke-linejoin="round"
+        d="M38 40 L44 104 a8 8 0 0 0 8 7 h24 a8 8 0 0 0 8 -7 L90 40"/>
+  <!-- The X marking permanent removal. -->
+  <path fill="none" stroke="url(#azGrad)" stroke-width="8" stroke-linecap="round"
+        d="M54 56 L74 92 M74 56 L54 92"/>
+</svg>

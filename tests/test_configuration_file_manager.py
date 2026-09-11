@@ -101,6 +101,19 @@ def test_removable_volume_management_is_off():
     assert d["MiscVolumeManagement"] is False
 
 
+def test_toolbar_uses_plain_not_symbolic_icons():
+    # PROMPT: the toolbar Back/Forward/Up/Search icons "were not applied". The file manager
+    # defaults misc-symbolic-icons-in-toolbar to TRUE, which makes the toolbar request the
+    # "-symbolic" variant of each name -- names the Azzio theme did not ship, so they fell through
+    # to Adwaita. Setting it FALSE makes the toolbar use the plain names the Azzio theme overrides.
+    d = {rc: value for rc, _p, _k, value in settings.SETTINGS}
+    assert d["MiscSymbolicIconsInToolbar"] is False
+    # rendered false in BOTH forms.
+    assert "MiscSymbolicIconsInToolbar=FALSE" in settings.file_manager_rc()
+    assert ('<property name="misc-symbolic-icons-in-toolbar" type="bool" value="false"/>'
+            in settings.xfconf_channel_xml())
+
+
 def test_zoom_bump_is_relative_percent_not_absolute_pixels():
     # PROMPT task 7: the icon zoom bump must be a RELATIVE step (composes with the global
     # scale), never an absolute pixel size. The value is a THUNAR_ZOOM_LEVEL_*_PERCENT enum.
@@ -1058,6 +1071,53 @@ def test_devices_section_removed_in_vendored_source():
     )
 
 
+# --- "Send To" removed from the context menus (thunar-window.c / -standard-view.c) ---------
+def test_send_to_section_removed_from_context_menus():
+    # PROMPT: delete "Send To". The context menu is assembled from section flags passed to
+    # thunar_menu_add_sections; dropping THUNAR_MENU_SECTION_SENDTO from the two menu-building
+    # sites removes the "Send To" submenu from BOTH the folder/file right-click menu
+    # (thunar-standard-view.c) and the background/window menu (thunar-window.c).
+    win_c = (fm.SOURCE_DIR / "thunar" / "thunar-window.c").read_text()
+    sv_c = (fm.SOURCE_DIR / "thunar" / "thunar-standard-view.c").read_text()
+    # The background/window file menu (thunar_window_update_file_menu) no longer requests SENDTO.
+    win_body = _c_definition_body(
+        win_c,
+        "thunar_window_update_file_menu (ThunarWindow *window,\n"
+        "                                GtkWidget    *menu)",
+    )
+    assert "THUNAR_MENU_SECTION_OPEN" in win_body, "sanity: still building the window file menu"
+    assert "THUNAR_MENU_SECTION_SENDTO" not in win_body, (
+        "the window/background context menu must not add the Send To section"
+    )
+    # The file/folder context menu (thunar_standard_view_context_menu). Reduce both source files to
+    # their whitespace-collapsed form so the ONLY thing that matters is whether SENDTO sits in a
+    # section-flags OR chain (that is the context-menu request), independent of indentation.
+    sv_flat = " ".join(sv_c.split())
+    # SENDTO must NOT be OR'd into the context-menu section list (would follow OPEN | ...).
+    assert "THUNAR_MENU_SECTION_OPEN | THUNAR_MENU_SECTION_SENDTO" not in sv_flat, (
+        "the file/folder context menu must not add the Send To section"
+    )
+    win_flat = " ".join(win_c.split())
+    assert "THUNAR_MENU_SECTION_SENDTO | THUNAR_MENU_SECTION_CREATE_NEW_FILES" not in win_flat
+
+
+# --- Azzio-branded check/radio menu indicators (thunar-application.c CSS) -----------------
+def test_toggle_menu_indicators_are_branded_in_app_css():
+    # PROMPT: the "Show Hidden Files" toggle and the "Arrange Items" sort check/radio items need
+    # our look. Those indicators are drawn by the GTK widget theme's CSS, not the icon theme, so
+    # they are styled in the file manager's OWN app-scoped CSS provider (thunar_application_load_css,
+    # added for_screen so it reaches popup menus, and only in the file manager process). The checked
+    # state is the Azzio cyan-to-blue; the nodes are the GTK3 "menuitem check"/"menuitem radio".
+    app_c = (fm.SOURCE_DIR / "thunar" / "thunar-application.c").read_text()
+    css = _c_definition_body(app_c, "thunar_application_load_css (void)")
+    assert "menuitem check" in css and "menuitem radio" in css, (
+        "the app CSS must style the check/radio menu indicators"
+    )
+    assert ":checked" in css, "the checked state must be styled"
+    # Uses the Azzio brand colours (the mid cyan and the deep blue gradient stop).
+    assert "#06B8FD" in css or "#0064F9" in css, "the toggle indicator must use the Azzio brand"
+
+
 # --- "main" sidebar row uses its own folder icon (thunar-shortcuts-model.c) --
 def test_home_sidebar_row_uses_its_folder_icon_not_go_home():
     # PROMPT: "The 'main' directory on the sidebar must be its directory icon." Upstream forced the
@@ -1156,16 +1216,16 @@ def test_azzio_folder_basename_icon_table_maps_the_unnamed_home_dirs():
     assert "azzio_folder_dirs[]" in file_c, "the Azzio basename->icon table must exist"
     # The mapping pins each dir/shortcut to its icon name.
     for basename, icon in (
-        ("Projects", "azzio-folder-projects"),
-        ("Vault", "azzio-folder-vault"),
-        ("Ignore", "azzio-folder-ignore"),
-        ("Shared", "azzio-folder-mount"),
-        ("Mounts", "azzio-folder-mount"),
-        ("Cache", "azzio-folder-cache"),
-        ("Config", "azzio-folder-config"),
-        ("Trash", "azzio-folder-trash"),
-        ("Local", "azzio-folder-local"),
-        ("SSH", "azzio-folder-ssh"),
+        ("Projects", "folder-projects"),
+        ("Vault", "folder-vault"),
+        ("Ignore", "folder-ignore"),
+        ("Shared", "folder-mount"),
+        ("Mounts", "folder-mount"),
+        ("Cache", "folder-cache"),
+        ("Config", "folder-config"),
+        ("Trash", "folder-trash"),
+        ("Local", "folder-local"),
+        ("SSH", "folder-ssh"),
     ):
         assert f'{{ "{basename}", "{icon}" }}' in file_c, (basename, icon)
     # The lookup builds "$HOME/<basename>" and only fires when the XDG table left the default.

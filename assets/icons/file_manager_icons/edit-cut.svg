@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Azzio "Cut" context-menu icon (theme name edit-cut). Scissors in the Azzio cyan-to-blue
+       gradient, thick round strokes matching the toolbar glyphs. Overrides Adwaita's edit-cut. -->
+  <defs>
+    <linearGradient id="azGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+  </defs>
+  <!-- The two blades crossing to a pivot, then out to the finger loops. -->
+  <path fill="none" stroke="url(#azGrad)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"
+        d="M40 40 L86 92 M88 40 L42 92"/>
+  <circle cx="34" cy="98" r="14" fill="none" stroke="url(#azGrad)" stroke-width="10"/>
+  <circle cx="94" cy="98" r="14" fill="none" stroke="url(#azGrad)" stroke-width="10"/>
+</svg>

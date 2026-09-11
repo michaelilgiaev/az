@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Azzio "Paste" context-menu icon (theme name edit-paste). A clipboard with a sheet, in the
+       Azzio cyan-to-blue gradient. Used for both "Paste" and "Paste Into Folder"
+       (thunar-action-manager.c both reference edit-paste). Overrides Adwaita's edit-paste. -->
+  <defs>
+    <linearGradient id="azGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#07AFE8"/>
+      <stop offset="0.5" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0064F9"/>
+    </linearGradient>
+    <linearGradient id="azGradBack" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0698D6"/>
+      <stop offset="1" stop-color="#0052CC"/>
+    </linearGradient>
+  </defs>
+  <!-- Clipboard body. -->
+  <rect x="26" y="28" width="76" height="86" rx="10" fill="url(#azGradBack)"/>
+  <!-- The pasted white sheet on top. -->
+  <rect x="40" y="46" width="60" height="62" rx="6" fill="url(#azGrad)"/>
+  <!-- The clip at the top. -->
+  <rect x="48" y="18" width="32" height="20" rx="6" fill="url(#azGrad)"/>
+</svg>

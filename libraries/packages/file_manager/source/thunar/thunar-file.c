@@ -287,16 +287,16 @@ static const struct
   const gchar *basename;
   const gchar *icon_name;
 } azzio_folder_dirs[] = {
-  { "Projects", "azzio-folder-projects" },
-  { "Vault", "azzio-folder-vault" },
-  { "Ignore", "azzio-folder-ignore" },
-  { "Shared", "azzio-folder-mount" },
-  { "Mounts", "azzio-folder-mount" },
-  { "Cache", "azzio-folder-cache" },
-  { "Config", "azzio-folder-config" },
-  { "Trash", "azzio-folder-trash" },
-  { "Local", "azzio-folder-local" },
-  { "SSH", "azzio-folder-ssh" }
+  { "Projects", "folder-projects" },
+  { "Vault", "folder-vault" },
+  { "Ignore", "folder-ignore" },
+  { "Shared", "folder-mount" },
+  { "Mounts", "folder-mount" },
+  { "Cache", "folder-cache" },
+  { "Config", "folder-config" },
+  { "Trash", "folder-trash" },
+  { "Local", "folder-local" },
+  { "SSH", "folder-ssh" }
 };
 
 

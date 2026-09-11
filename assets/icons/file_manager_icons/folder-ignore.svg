@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <!-- Azzio Local folder (Azzio-only name azzio-folder-local, the ~/Local shortcut, which links to
-       .local, the XDG user data/share tree). No XDG theme name, so the vendored file manager
-       maps this basename to it. Base Azzio folder plus a white drawer/storage box on the front
-       flap (per-user local data). -->
+  <!-- Azzio Ignore folder (Azzio-only name folder-ignore, the Ignore dir). No XDG theme
+       name, so the vendored file manager maps this basename to it. Base Azzio folder plus a
+       white "no entry" ring on the front flap. -->
   <defs>
     <linearGradient id="azFolder" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#07AFE8"/>
@@ -17,12 +16,7 @@
   </defs>
   <path fill="url(#azFolderBack)" d="M14 40 a10 10 0 0 1 10 -10 h26 a10 10 0 0 1 8 4 l7 9 h35 a10 10 0 0 1 10 10 v51 a10 10 0 0 1 -10 10 H24 a10 10 0 0 1 -10 -10 Z"/>
   <path fill="url(#azFolder)" d="M14 56 a10 10 0 0 1 10 -10 h80 a10 10 0 0 1 10 10 v42 a10 10 0 0 1 -10 10 H24 a10 10 0 0 1 -10 -10 Z"/>
-  <!-- White storage box with two stacked drawers, each with a handle notch cut to the gradient. -->
-  <rect fill="#ffffff" x="46" y="62" width="36" height="38" rx="4"/>
-  <g fill="#06B8FD">
-    <rect x="50" y="66" width="28" height="13" rx="2"/>
-    <rect x="50" y="83" width="28" height="13" rx="2"/>
-    <rect x="60" y="70" width="8" height="4" rx="2"/>
-    <rect x="60" y="87" width="8" height="4" rx="2"/>
-  </g>
+  <!-- White "no entry" ring with a diagonal bar. -->
+  <circle fill="none" stroke="#ffffff" stroke-width="6" cx="64" cy="84" r="17"/>
+  <rect fill="#ffffff" x="61" y="66" width="6" height="36" rx="3" transform="rotate(45 64 84)"/>
 </svg>
