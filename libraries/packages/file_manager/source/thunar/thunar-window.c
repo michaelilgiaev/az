@@ -405,10 +405,6 @@ thunar_window_open_parent_clicked (GtkWidget      *button,
                                    GdkEventButton *event,
                                    ThunarWindow   *window);
 static gboolean
-thunar_window_open_home_clicked (GtkWidget      *button,
-                                 GdkEventButton *event,
-                                 ThunarWindow   *window);
-static gboolean
 thunar_window_toolbar_button_press_event (GtkWidget      *toolbar,
                                           GdkEventButton *event,
                                           ThunarWindow   *window);
@@ -591,11 +587,9 @@ struct _ThunarWindow
   GFile        *uca_file;
 
   /* we need to maintain pointers to be able to toggle sensitivity and activity */
-  GtkWidget *location_toolbar_item_menu;
   GtkWidget *location_toolbar_item_back;
   GtkWidget *location_toolbar_item_forward;
   GtkWidget *location_toolbar_item_parent;
-  GtkWidget *location_toolbar_item_home;
   GtkWidget *location_toolbar_item_split_view;
   GtkWidget *location_toolbar_item_undo;
   GtkWidget *location_toolbar_item_redo;
@@ -4304,7 +4298,6 @@ thunar_window_action_menubar_changed (ThunarWindow *window)
   window->menubar_visible = !window->menubar_visible;
 
   gtk_widget_set_visible (window->menubar, window->menubar_visible);
-  gtk_widget_set_visible (window->location_toolbar_item_menu, !window->menubar_visible);
 
   g_object_set (G_OBJECT (window->preferences), "last-menubar-visible", window->menubar_visible, NULL);
 
@@ -5119,10 +5112,7 @@ thunar_window_action_menu_deactivate (ThunarWindow *window,
   _thunar_return_val_if_fail (THUNAR_IS_WINDOW (window), FALSE);
   _thunar_return_val_if_fail (GTK_IS_WIDGET (menu), FALSE);
 
-  /* toggle off the toolbar button */
-  g_signal_handlers_block_by_func (window->location_toolbar_item_menu, get_action_entry (THUNAR_WINDOW_ACTION_MENU)->callback, window);
-  gtk_toggle_tool_button_set_active (GTK_TOGGLE_TOOL_BUTTON (window->location_toolbar_item_menu), FALSE);
-  g_signal_handlers_unblock_by_func (window->location_toolbar_item_menu, get_action_entry (THUNAR_WINDOW_ACTION_MENU)->callback, window);
+  /* Azzio: the hamburger toolbar button was removed, so there is no toggle to reset here. */
 
   /* release the menu reference */
   g_object_ref_sink (G_OBJECT (menu));
@@ -5154,9 +5144,10 @@ thunar_window_action_menu (ThunarWindow *window)
 
   g_signal_connect_swapped (G_OBJECT (menu), "deactivate", G_CALLBACK (thunar_window_action_menu_deactivate), window);
 
-  /* show the menu below its toolbar button */
+  /* Azzio: the hamburger toolbar button was removed; anchor the menu (still reachable via F10)
+   * below the "up" button, which is the rightmost surviving nav button on the left cluster. */
   gtk_menu_popup_at_widget (GTK_MENU (menu),
-                            window->location_toolbar_item_menu,
+                            window->location_toolbar_item_parent,
                             GDK_GRAVITY_SOUTH_WEST,
                             GDK_GRAVITY_NORTH_WEST,
                             NULL);
@@ -5933,45 +5924,6 @@ thunar_window_open_parent_clicked (GtkWidget      *button,
           g_object_unref (G_OBJECT (application));
         }
       g_object_unref (directory);
-
-      return TRUE;
-    }
-
-  return FALSE;
-}
-
-
-
-static gboolean
-thunar_window_open_home_clicked (GtkWidget      *button,
-                                 GdkEventButton *event,
-                                 ThunarWindow   *window)
-{
-  ThunarFile *directory = NULL;
-  gint        page_num;
-  gboolean    open_in_tab;
-
-  _thunar_return_val_if_fail (THUNAR_IS_WINDOW (window), FALSE);
-
-  g_object_get (window->preferences, "misc-middle-click-in-tab", &open_in_tab, NULL);
-
-  if (event->button == 2)
-    {
-      /* switch to the new tab, go to the home directory, return to the old tab */
-      if (open_in_tab)
-        {
-          page_num = gtk_notebook_get_current_page (GTK_NOTEBOOK (window->notebook_selected));
-          thunar_window_notebook_add_new_tab (window, window->current_directory, THUNAR_NEW_TAB_BEHAVIOR_SWITCH);
-          thunar_window_action_open_home (window);
-          thunar_window_notebook_set_current_tab (window, page_num);
-        }
-      else
-        {
-          ThunarApplication *application = thunar_application_get ();
-          ThunarWindow      *newWindow = THUNAR_WINDOW (thunar_application_open_window (application, directory, NULL, NULL, TRUE));
-          thunar_window_action_open_home (newWindow);
-          g_object_unref (G_OBJECT (application));
-        }
 
       return TRUE;
     }
@@ -6768,11 +6720,13 @@ thunar_window_location_toolbar_create (ThunarWindow *window)
   g_signal_connect (G_OBJECT (window->location_toolbar), "button-press-event", G_CALLBACK (thunar_window_toolbar_button_press_event), window);
 
   /* add toolbar items */
-  window->location_toolbar_item_menu = thunar_window_create_toolbar_toggle_item_from_action (window, THUNAR_WINDOW_ACTION_MENU, FALSE, item_order++);
+  /* Azzio: the hamburger "Menu" button and the "Home" button are intentionally removed from the
+   * location toolbar. The search button is moved into the slot where "Home" used to sit, i.e. the
+   * last item on the left cluster, immediately before the location bar. */
   window->location_toolbar_item_back = thunar_window_create_toolbar_item_from_action (window, THUNAR_WINDOW_ACTION_BACK, item_order++);
   window->location_toolbar_item_forward = thunar_window_create_toolbar_item_from_action (window, THUNAR_WINDOW_ACTION_FORWARD, item_order++);
   window->location_toolbar_item_parent = thunar_window_create_toolbar_item_from_action (window, THUNAR_WINDOW_ACTION_OPEN_PARENT, item_order++);
-  window->location_toolbar_item_home = thunar_window_create_toolbar_item_from_action (window, THUNAR_WINDOW_ACTION_OPEN_HOME, item_order++);
+  window->location_toolbar_item_search = thunar_window_create_toolbar_toggle_item_from_action (window, THUNAR_WINDOW_ACTION_SEARCH, window->is_searching, item_order++);
   thunar_window_create_toolbar_item_from_action (window, THUNAR_WINDOW_ACTION_NEW_TAB, item_order++);
   thunar_window_create_toolbar_item_from_action (window, THUNAR_WINDOW_ACTION_NEW_WINDOW, item_order++);
   window->location_toolbar_item_split_view = thunar_window_create_toolbar_toggle_item_from_action (window, THUNAR_WINDOW_ACTION_VIEW_SPLIT, thunar_window_split_view_is_active (window), item_order++);
@@ -6789,7 +6743,6 @@ thunar_window_location_toolbar_create (ThunarWindow *window)
   g_signal_connect (window->location_toolbar_item_back, "button-press-event", G_CALLBACK (thunar_window_history_clicked), window);
   g_signal_connect (window->location_toolbar_item_forward, "button-press-event", G_CALLBACK (thunar_window_history_clicked), window);
   g_signal_connect (window->location_toolbar_item_parent, "button-press-event", G_CALLBACK (thunar_window_open_parent_clicked), window);
-  g_signal_connect (window->location_toolbar_item_home, "button-press-event", G_CALLBACK (thunar_window_open_home_clicked), window);
 
   g_object_bind_property (window->job_operation_history, "can-undo", window->location_toolbar_item_undo, "sensitive", G_BINDING_SYNC_CREATE);
   g_object_bind_property (window->job_operation_history, "can-redo", window->location_toolbar_item_redo, "sensitive", G_BINDING_SYNC_CREATE);
@@ -6816,16 +6769,12 @@ thunar_window_location_toolbar_create (ThunarWindow *window)
 
   /* add remaining toolbar items */
   thunar_window_create_toolbar_item_from_action (window, THUNAR_WINDOW_ACTION_RELOAD, item_order++);
-  window->location_toolbar_item_search = thunar_window_create_toolbar_toggle_item_from_action (window, THUNAR_WINDOW_ACTION_SEARCH, window->is_searching, item_order++);
 
   /* add custom actions to the toolbar */
   thunar_window_location_toolbar_add_ucas (window);
 
   /* display the toolbar */
   gtk_widget_show_all (window->location_toolbar);
-
-  /* only show the menu button when the menubar is hidden */
-  gtk_widget_set_visible (window->location_toolbar_item_menu, !window->menubar_visible);
 
   /* add the location bar itself after gtk_widget_show_all to not mess with the visibility of the location buttons */
   gtk_container_add (GTK_CONTAINER (tool_item), window->location_bar);
@@ -7290,10 +7239,6 @@ thunar_window_toolbar_toggle_item_visibility (ThunarWindow *window,
   for (gint i = 0; lp != NULL; lp = lp->next, i++)
     {
       GtkWidget *item = lp->data;
-
-      /* visibility of this item is only controlled by 'window->menubar_visible' */
-      if (item == window->location_toolbar_item_menu)
-        continue;
 
       if (index == i)
         {

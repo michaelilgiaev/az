@@ -21,6 +21,7 @@ feature at runtime. These lock the load-bearing details:
 
 from __future__ import annotations
 
+import re
 from xml.dom import minidom
 
 from packages import file_manager as fm
@@ -340,10 +341,11 @@ def test_file_menu_removed_from_topbar_and_the_empty_topbar_collapses():
     #     still bound so a future edit can't silently drop them,
     #   * COLLAPSE: the menubar now holds no top-level menu, so it is force-hidden at init
     #     (window->menubar_visible = FALSE, unconditionally -- the last-menubar-visible pref, which
-    #     defaults TRUE, is not even fetched), the location-toolbar hamburger button becomes the sole
-    #     menu entry point (shown via !menubar_visible), the "Menubar" toggle is removed from BOTH
-    #     the View submenu and the toolbar right-click menu (so it can't re-show the empty strip),
-    #     and F10 is rerouted to the hamburger menu instead of un-hiding the empty menubar.
+    #     defaults TRUE, is not even fetched), the "Menubar" toggle is removed from BOTH the View
+    #     submenu and the toolbar right-click menu (so it can't re-show the empty strip), and F10 is
+    #     rerouted to the same popup menu instead of un-hiding the empty menubar. (A later task
+    #     removed the location-toolbar hamburger button that used to surface this menu; F10 -- via
+    #     thunar_window_action_menu -- is now the entry point. See the dedicated toolbar test.)
     win_c = (fm.SOURCE_DIR / "thunar" / "thunar-window.c").read_text()
 
     def _entry_line(action_path: str) -> str:
@@ -399,6 +401,101 @@ def test_show_hidden_files_added_to_right_click_menu():
     assert "THUNAR_WINDOW_ACTION_SHOW_HIDDEN" in sv_c
     assert "thunar_window_get_action_entry (THUNAR_WINDOW (window), THUNAR_WINDOW_ACTION_SHOW_HIDDEN)" in sv_c
     assert "thunar_view_get_show_hidden (THUNAR_VIEW (standard_view))" in sv_c
+
+
+def test_location_toolbar_drops_hamburger_and_home_and_moves_search_into_home_slot():
+    # PROMPT (new task): the location toolbar has (left of the path entry) home, up, forward, back
+    # and the hamburger button, plus the search button on the RIGHT of the entry. Remove the
+    # hamburger, remove the home button, and move search to where home was -- i.e. search becomes
+    # the last item on the LEFT cluster, immediately before the location bar. Baked into
+    # thunar-window.c's thunar_window_location_toolbar_create:
+    #   * the hamburger button (location_toolbar_item_menu / ACTION_MENU toggle) is no longer
+    #     created, and every widget-pointer use of it is gone (the menubar-toggle visibility line,
+    #     the deactivate toggle-off, the overflow-menu skip, the struct field). The ACTION_MENU
+    #     *action* + thunar_window_action_menu stay (F10 still opens that popup, now anchored on the
+    #     "up"/parent button),
+    #   * the home button (location_toolbar_item_home / ACTION_OPEN_HOME toolbar item) and its
+    #     middle-click handler thunar_window_open_home_clicked are gone; the OPEN_HOME *action* +
+    #     the Go-menu Home item are untouched,
+    #   * the SEARCH toggle is created in the left cluster right after the "up"/parent button (where
+    #     home used to be), NOT in the post-location-bar "remaining items" block.
+    win_c = (fm.SOURCE_DIR / "thunar" / "thunar-window.c").read_text()
+
+    # (1) The hamburger button widget is gone: no creation, no struct field, no dangling uses.
+    assert "location_toolbar_item_menu" not in win_c
+    assert "THUNAR_WINDOW_ACTION_MENU, FALSE" not in win_c  # the toggle-item creation call
+    # ...but the Menu ACTION + its popup builder stay, so F10 still opens the menu.
+    assert "G_CALLBACK (thunar_window_action_menu)" in win_c
+    assert "G_CALLBACK (thunar_window_update_go_menu), menu)" in win_c  # popup still populated
+
+    # (2) The home button widget + its click handler are gone; the OPEN_HOME action stays.
+    assert "location_toolbar_item_home" not in win_c
+    assert "thunar_window_open_home_clicked" not in win_c
+    assert "G_CALLBACK (thunar_window_action_open_home)" in win_c  # Go-menu Home item kept
+
+    # (3) Search moved into home's old slot: its creation is in the left cluster, before the
+    # location-bar tool_item (anchored by the "add the location bar to the toolbar" comment) and
+    # before the NEW_TAB item -- not in the trailing block after the bar.
+    search_create = 'window->location_toolbar_item_search = thunar_window_create_toolbar_toggle_item_from_action (window, THUNAR_WINDOW_ACTION_SEARCH,'
+    assert win_c.count(search_create) == 1  # created exactly once (not left behind in two places)
+    # anchor on the toolbar CREATION CALLS (unique full call strings), not the action-entry table
+    # near the top of the file where these ACTION_ enum names also appear.
+    new_tab_create = "thunar_window_create_toolbar_item_from_action (window, THUNAR_WINDOW_ACTION_NEW_TAB, item_order++)"
+    parent_create = "window->location_toolbar_item_parent = thunar_window_create_toolbar_item_from_action"
+    assert win_c.count(new_tab_create) == 1
+    assert win_c.count(parent_create) == 1
+    search_pos = win_c.index(search_create)
+    parent_pos = win_c.index(parent_create)
+    new_tab_pos = win_c.index(new_tab_create)
+    location_bar_pos = win_c.index("/* add the location bar to the toolbar */")
+    assert parent_pos < search_pos < new_tab_pos < location_bar_pos, "search must sit after 'up', before the path bar"
+    # ...and IMMEDIATELY after 'up' (home's exact old slot): nothing else is created between the
+    # parent-button line and the search line.
+    between = win_c[win_c.index("\n", parent_pos) + 1 : search_pos]
+    assert "create_toolbar" not in between, "search must be the item right after 'up', no item in between"
+
+
+def test_default_last_toolbar_items_string_matches_the_new_layout():
+    # ROOT CAUSE of "search didn't move" (new-task follow-up): the toolbar layout is decided by TWO
+    # things that must agree -- (a) the build order in thunar-window.c's
+    # thunar_window_location_toolbar_create (fixed by the test above), and (b) the PERSISTED order
+    # string "last-toolbar-items", which thunar_window_location_toolbar_load_items replays on top,
+    # REORDERING the still-existing widgets to match itself. On a fresh profile (the hypervisor's
+    # thunar.xml has no such property) the app falls back to the COMPILED DEFAULT of that property
+    # in thunar-preferences.c. If that default still lists the old layout, it drags search back to
+    # the end (its old post-reload slot) and re-hides nothing -- which is exactly why the removals
+    # "took" (menu/open-home widgets no longer exist to be placed) but the MOVE silently reverted.
+    #
+    # So the default string must match the new left cluster: drop "menu" and "open-home" entirely,
+    # and put "search" in home's old slot -- immediately after "open-parent". Search stays visible.
+    prefs_c = (fm.SOURCE_DIR / "thunar" / "thunar-preferences.c").read_text()
+
+    # Pull the default value of the "last-toolbar-items" GParamSpec. It is a run of adjacent C
+    # string literals; concatenate them so line-wrapping in the source doesn't matter.
+    anchor = prefs_c.index('g_param_spec_string ("last-toolbar-items"')
+    # The default is the 3rd string arg (name, nick, blurb=NULL, default). Grab the literal run that
+    # starts after the "LastToolbarItems" nick and the NULL blurb, up to the closing paren line.
+    spec = prefs_c[anchor: prefs_c.index("EXO_PARAM_READWRITE", anchor)]
+    literals = re.findall(r'"([^"]*)"', spec)
+    # literals[0] = "last-toolbar-items", [1] = "LastToolbarItems"; the rest are the default's parts.
+    default = "".join(literals[2:])
+    items = [tok.split(":")[0] for tok in default.split(",") if tok]
+
+    # (1) the two removed buttons are gone from the persisted default too.
+    assert "menu" not in items, f"hamburger 'menu' still in default toolbar order: {default}"
+    assert "open-home" not in items, f"'open-home' still in default toolbar order: {default}"
+
+    # (2) search sits in home's OLD slot: immediately after open-parent, and it is still visible.
+    assert "open-parent:1,search:1" in default, (
+        f"search must be persisted right after 'up'/open-parent and visible; got: {default}"
+    )
+
+    # (3) search is NOT left at the trailing (old) position after reload; the tail is the path bar
+    # then a hidden reload, with nothing after it.
+    assert default.rstrip().endswith("location-bar:1,reload:0"), (
+        f"search must no longer trail after reload; tail was: {default}"
+    )
+    assert items.count("search") == 1  # not duplicated across old + new slots
 
 
 def test_drag_drop_cannot_add_a_persisted_sidebar_shortcut():

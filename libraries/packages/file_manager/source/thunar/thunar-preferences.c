@@ -671,11 +671,17 @@ thunar_preferences_class_init (ThunarPreferencesClass *klass)
   g_param_spec_string ("last-toolbar-items",
                        "LastToolbarItems",
                        NULL,
-                       "menu:0,back:1,forward:1,open-parent:1,open-home:1,"
+                       /* Azzio: the hamburger ("menu") and "open-home" toolbar buttons are removed,
+                        * and "search" is moved into home's old slot -- immediately after
+                        * "open-parent" -- so this PERSISTED default order (replayed over the built
+                        * layout by thunar_window_location_toolbar_load_items) matches the new
+                        * thunar_window_location_toolbar_create left cluster. Search must NOT trail
+                        * after "reload" any more, or a fresh profile would drag it back there. */
+                       "back:1,forward:1,open-parent:1,search:1,"
                        "new-tab:0,new-window:0,toggle-split-view:0,"
                        "undo:0,redo:0,zoom-out:0,zoom-in:0,zoom-reset:0,"
                        "view-as-icons:0,view-as-detailed-list:0,view-as-compact-list:0,view-switcher:0,"
-                       "location-bar:1,reload:0,search:1",
+                       "location-bar:1,reload:0",
                        EXO_PARAM_READWRITE);
 
   /**
