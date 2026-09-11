@@ -113,6 +113,17 @@ LOCALREPO_INDEX_TAR = PKG_REPO / "pacstrap-azzio-repo.db.tar.gz"
 # packages are reused across builds instead of re-downloaded.
 PACSTRAP_CACHE = CACHEDIR / "pacman-pkg"
 
+# makepkg's SRCDEST: the persistent cache for source=() tarballs our own packages
+# pull from upstream (calamares' release tarball from Codeberg). Deliberately a
+# SIBLING of the makepkg scratch (CACHEDIR / "makepkg"), NOT a subdir of it: the
+# scratch is `rm -rf`'d at the start of every online build (build_own_packages),
+# so a per-recipe .src under it never survives to the next run and every compile
+# re-downloads the tarball -- hammering Codeberg (which throttles hard). Kept here
+# instead, the tarball is fetched ONCE (first from-scratch compile) and makepkg
+# skips the download on every later run when the cached file still matches the
+# recipe's pinned sha256. Git-ignored like the rest of cache/.
+MAKEPKG_SRC_CACHE = CACHEDIR / "makepkg-src"
+
 # Logs.
 FULL_LOG = LOGDIR / "compile-full.log"
 STEPS_LOG = LOGDIR / "compile-steps.log"

@@ -20,7 +20,7 @@ def test_repodir_is_repo_root():
 def test_static_dirs_are_under_repodir():
     for d in (paths.LIBDIR, paths.PACKAGESDIR, paths.ASSETSDIR,
               paths.PKGDIR, paths.CACHEDIR, paths.BUILDDIR, paths.LOGDIR,
-              paths.CKBCOMP_SRC):
+              paths.CKBCOMP_SRC, paths.MAKEPKG_SRC_CACHE):
         assert str(d).startswith(str(paths.REPODIR))
 
 
@@ -46,6 +46,18 @@ def test_package_stores_compose_correctly():
     assert paths.PKG_SYNC_DB == paths.PKG_DB / "sync"
     assert paths.LOCALREPO_INDEX == paths.PKG_REPO / "pacstrap-azzio-repo.db"
     assert paths.LOCALREPO_INDEX_TAR == paths.PKG_REPO / "pacstrap-azzio-repo.db.tar.gz"
+
+
+def test_makepkg_src_cache_survives_the_scratch_wipe():
+    # The source-tarball cache (SRCDEST) must be a SIBLING of the makepkg scratch,
+    # NOT a subdir of it: build_own_packages does `rm -rf cache/makepkg` at the start
+    # of every online build, so anything under it is destroyed and the upstream
+    # tarball (calamares' Codeberg release) would be re-downloaded every run. Keeping
+    # it outside means makepkg reuses the cached tarball and skips the download.
+    scratch = paths.CACHEDIR / "makepkg"
+    assert paths.MAKEPKG_SRC_CACHE == paths.CACHEDIR / "makepkg-src"
+    assert not str(paths.MAKEPKG_SRC_CACHE).startswith(str(scratch) + "/")
+    assert paths.MAKEPKG_SRC_CACHE != scratch
 
 
 def test_log_paths():

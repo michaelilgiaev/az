@@ -598,10 +598,11 @@ def _scratch_has_sources(scratch: Path, full_compile: bool) -> bool:
     NON-EMPTY .build tree. The .build tree (BUILDDIR in _makepkg_one) is where
     makepkg extracts $srcdir and where the librewolf recipe's `make fetch` wrote
     the Firefox source on the prior ONLINE run -- so its presence is the real
-    "sources are cached, an offline recompile can succeed" signal. .src (SRCDEST)
-    only ever holds the small git checkout, so it is NOT what we check. Missing or
-    empty -> False -> the offline-recompile caller fails loudly instead of silently
-    going online. Pure given the filesystem; unit-tested with tmp_path."""
+    "sources are cached, an offline recompile can succeed" signal. SRCDEST (the
+    upstream-tarball cache) now lives OUTSIDE the scratch (paths.MAKEPKG_SRC_CACHE)
+    and holds only fetched source=() tarballs, so it is NOT what we check here.
+    Missing or empty -> False -> the offline-recompile caller fails loudly instead
+    of silently going online. Pure given the filesystem; unit-tested with tmp_path."""
     for dirname, _files in pkgbuild_cfg.recipe_dirs(full_compile):
         d = scratch / dirname
         if not (d / "PKGBUILD").is_file():
@@ -689,11 +690,17 @@ def _makepkg_one(builder: str, recipe_dir: Path, offline: bool = False) -> None:
     # Keep makepkg's build/cache under the scratch dir, not the builder's $HOME,
     # so a root build doesn't scatter files and offline reruns are clean.
     env["PKGDEST"] = str(recipe_dir)
-    env["SRCDEST"] = str(recipe_dir / ".src")
-    env["BUILDDIR"] = str(recipe_dir / ".build")
-    src_dir = recipe_dir / ".src"
+    # SRCDEST is the PERSISTENT source-tarball cache (paths.MAKEPKG_SRC_CACHE), a
+    # sibling of the scratch that the per-build `rm -rf` never touches -- so a
+    # tarball fetched once (e.g. calamares' Codeberg release) is reused on every
+    # later run and makepkg skips the download when it still matches the pinned
+    # sha256. Per-recipe subdir keeps each package's sources separate. BUILDDIR
+    # stays under the scratch: it is disposable extract/build space, not a cache.
+    src_dir = paths.MAKEPKG_SRC_CACHE / recipe_dir.name
     build_dir = recipe_dir / ".build"
-    src_dir.mkdir(exist_ok=True)
+    env["SRCDEST"] = str(src_dir)
+    env["BUILDDIR"] = str(build_dir)
+    src_dir.mkdir(parents=True, exist_ok=True)
     build_dir.mkdir(exist_ok=True)
 
     if paths.is_root():

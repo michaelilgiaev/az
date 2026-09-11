@@ -58,15 +58,18 @@ def _find_calamares_tarball() -> Path | None:
     .build/. makepkg runs the patch in-place during prepare(), so any local
     build leaves that scratch tree already-patched; dry-running the patch against
     it then trips "Reversed (or previously applied) patch detected!" and the test
-    false-fails. The .src/ tarball is exactly what makepkg downloads and is the
+    false-fails. The SRCDEST tarball is exactly what makepkg downloads and is the
     only trustworthy pristine copy on disk."""
-    base = _REPO_ROOT / "cache" / "makepkg" / "calamares"
-    if not base.is_dir():
-        return None
-    # makepkg stores the fetched tarball under .src/; fall back to a wider glob
-    # in case the cache layout differs, but never match extracted trees.
     name = f"calamares-{pkgbuild.CALAMARES_VERSION}.tar.gz"
-    for cand in (base / ".src" / name, *base.glob(f"**/{name}")):
+    # SRCDEST now lives at cache/makepkg-src/<recipe>/ (a persistent sibling of the
+    # makepkg scratch that the per-build wipe never touches -- see paths.MAKEPKG_SRC_CACHE).
+    # Prefer that; keep the legacy under-scratch .src/ path as a fallback for a checkout
+    # whose cache predates the move. Never match extracted trees (.build/).
+    candidates = (
+        _REPO_ROOT / "cache" / "makepkg-src" / "calamares" / name,
+        _REPO_ROOT / "cache" / "makepkg" / "calamares" / ".src" / name,
+    )
+    for cand in candidates:
         if cand.is_file():
             return cand
     return None

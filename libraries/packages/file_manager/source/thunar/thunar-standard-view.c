@@ -4189,6 +4189,15 @@ thunar_standard_view_context_menu (ThunarStandardView *standard_view)
                                               | THUNAR_MENU_SECTION_EMPTY_TRASH
                                               | THUNAR_MENU_SECTION_CUSTOM_ACTIONS);
       thunar_standard_view_append_menu_items (standard_view, GTK_MENU (context_menu), NULL);
+      /* Azzio: expose "Show Hidden Files" on the empty-space right-click menu. The View topbar
+       * menu is removed and Ctrl+H is the only remaining trigger, so surface the toggle here too.
+       * It uses the window's SHOW_HIDDEN action entry (callback thunar_window_action_show_hidden)
+       * and reflects the current per-view show-hidden state. Only added on the empty-space branch
+       * -- the file-selection menu is for file operations, not global view toggles. */
+      xfce_gtk_toggle_menu_item_new_from_action_entry (thunar_window_get_action_entry (THUNAR_WINDOW (window), THUNAR_WINDOW_ACTION_SHOW_HIDDEN),
+                                                       G_OBJECT (window),
+                                                       thunar_view_get_show_hidden (THUNAR_VIEW (standard_view)),
+                                                       GTK_MENU_SHELL (context_menu));
       xfce_gtk_menu_append_separator (GTK_MENU_SHELL (context_menu));
       thunar_menu_add_sections (context_menu, THUNAR_MENU_SECTION_ZOOM
                                               | THUNAR_MENU_SECTION_PROPERTIES);

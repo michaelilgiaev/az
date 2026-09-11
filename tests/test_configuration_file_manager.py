@@ -217,6 +217,72 @@ def test_go_menu_removed_from_topbar_and_its_accelerators_disabled():
     assert "start-open-location" in sv_c
 
 
+def test_view_menu_removed_from_topbar_and_its_accelerators_disabled():
+    # PROMPT: same treatment as "Go" -- remove the "View" option from the TOPBAR, and disable
+    # Ctrl+R, F3, Ctrl+B, Ctrl+E, Ctrl+M while keeping their menu items/defaults permanent. Keep
+    # Ctrl+H, Ctrl++, Ctrl+-, Ctrl+0, Ctrl+1, Ctrl+2, Ctrl+3. All baked into thunar-window.c:
+    #   * the View menu is dropped from the MENUBAR only -- the create_menu(... VIEW_MENU ...,
+    #     window->menubar) call is gone; the window/hamburger-menu View submenu stays (created into
+    #     the popup `menu`), so the actions + their menu items remain reachable without a shortcut,
+    #   * reload (<Primary>r), toggle-split-view (F3), view-side-pane-shortcuts (<Primary>b),
+    #     view-side-pane-tree (<Primary>e) and view-menubar (<Primary>m) have their accelerator
+    #     strings blanked in the action-entry table (the callbacks/menu items are untouched, so the
+    #     defaults still work by click; F5 still reloads via the reload-alt row),
+    #   * the KEPT keys -- <Primary>h (show hidden), <Primary>plus/minus/0 (zoom) and
+    #     <Primary>1/2/3 (view-as) -- are asserted still bound so a future edit can't drop them.
+    win_c = (fm.SOURCE_DIR / "thunar" / "thunar-window.c").read_text()
+
+    # (1) The View menu is no longer added to the TOPBAR menubar...
+    assert "G_CALLBACK (thunar_window_update_view_menu), window->menubar)" not in win_c
+    # ...but the window/hamburger-menu View submenu is KEPT (still created into that popup `menu`).
+    assert "G_CALLBACK (thunar_window_update_view_menu), menu)" in win_c
+
+    def _entry_line(action_path: str) -> str:
+        # The action-entry row is the one defining this "<Actions>/..." path (registered with a
+        # trailing quote+comma so a longer sibling path is not matched).
+        return next(ln for ln in win_c.splitlines() if f'"{action_path}",' in ln)
+
+    # (2) The five named accelerators are blanked (accel string ""). Assert per action row so a
+    # future re-add of the key is caught precisely.
+    for action_path, dead_accel in (
+        ("<Actions>/ThunarWindow/reload", "<Primary>r"),
+        ("<Actions>/ThunarWindow/toggle-split-view", "F3"),
+        ("<Actions>/ThunarWindow/view-side-pane-shortcuts", "<Primary>b"),
+        ("<Actions>/ThunarWindow/view-side-pane-tree", "<Primary>e"),
+        ("<Actions>/ThunarWindow/view-menubar", "<Primary>m"),
+    ):
+        line = _entry_line(action_path)
+        assert dead_accel not in line, f"{action_path} still binds {dead_accel}"
+
+    # (3) The KEPT bindings are still present on their own rows.
+    for action_path, live_accel in (
+        ("<Actions>/ThunarWindow/show-hidden", "<Primary>h"),
+        ("<Actions>/ThunarWindow/zoom-in", "<Primary>plus"),
+        ("<Actions>/ThunarWindow/zoom-out", "<Primary>minus"),
+        ("<Actions>/ThunarWindow/zoom-reset", "<Primary>0"),
+        ("<Actions>/ThunarWindow/view-as-icons", "<Primary>1"),
+        ("<Actions>/ThunarWindow/view-as-detailed-list", "<Primary>2"),
+        ("<Actions>/ThunarWindow/view-as-compact-list", "<Primary>3"),
+    ):
+        assert live_accel in _entry_line(action_path), f"{action_path} lost {live_accel}"
+
+    # (4) F5 still reloads even though Ctrl+R is gone (the reload-alt-1 row keeps "F5").
+    assert "F5" in _entry_line("<Actions>/ThunarWindow/reload-alt-1")
+
+
+def test_show_hidden_files_added_to_right_click_menu():
+    # PROMPT: add "Show Hidden Files" to the menu that opens with the right mouse click. The
+    # empty-space context menu is built in thunar_standard_view_context_menu (thunar-standard-view.c);
+    # it now appends the window's SHOW_HIDDEN toggle (reflecting the current per-view state) after
+    # the sort/arrange items. Only on the empty-space branch -- the file-selection menu is for file
+    # operations, not global view toggles.
+    sv_c = (fm.SOURCE_DIR / "thunar" / "thunar-standard-view.c").read_text()
+    # The toggle is appended using the window's SHOW_HIDDEN action entry + the view's current state.
+    assert "THUNAR_WINDOW_ACTION_SHOW_HIDDEN" in sv_c
+    assert "thunar_window_get_action_entry (THUNAR_WINDOW (window), THUNAR_WINDOW_ACTION_SHOW_HIDDEN)" in sv_c
+    assert "thunar_view_get_show_hidden (THUNAR_VIEW (standard_view))" in sv_c
+
+
 def test_drag_drop_cannot_add_a_persisted_sidebar_shortcut():
     # PROMPT: the home scan (~/.config/gtk-3.0/bookmarks, regenerated from /home/main) must be the
     # ONLY way a row appears on the side pane. Dropping a folder BETWEEN shortcut rows used to add
