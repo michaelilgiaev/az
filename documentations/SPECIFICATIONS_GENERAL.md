@@ -101,17 +101,17 @@ What the medium can do, grouped by the role each component plays. Counts and siz
 | Core system | 13 | 71.5 MiB | the base userland -- C library, coreutils, package manager, PAM/polkit, and privilege escalation |
 | Shell & CLI tools | 31 | 76.1 MiB | interactive shells, terminal editors, pagers, multiplexers, and everyday command-line utilities |
 | Desktop app | 7 | 454.2 MiB | graphical end-user applications shipped on the medium |
-| GUI toolkit/framework | 29 | 560.6 MiB | the widget toolkits and UI frameworks graphical apps are built on |
+| GUI toolkit/framework | 29 | 561.1 MiB | the widget toolkits and UI frameworks graphical apps are built on |
 | Graphics & display | 112 | 876.6 MiB | the X11 display server, Mesa/Vulkan drivers, and display configuration |
 | Audio | 44 | 47.9 MiB | the audio server and mixer/control tooling |
 | Networking | 37 | 131.7 MiB | connection management, wireless, VPN, SSH, DNS, and network diagnostics |
-| Storage & filesystems | 46 | 80.6 MiB | partitioning, RAID/LVM, encryption setup, and filesystem/imaging tooling |
+| Storage & filesystems | 46 | 80.7 MiB | partitioning, RAID/LVM, encryption setup, and filesystem/imaging tooling |
 | Security & crypto | 18 | 76.0 MiB | the host firewall, full-disk encryption, TPM/FIDO/smartcard, and OpenPGP |
 | Developer tools | 111 | 1.21 GiB | compilers, build tooling, version control, and developer editors |
-| Language runtime | 29 | 949.5 MiB | language interpreters and runtimes available out of the box |
+| Language runtime | 29 | 949.6 MiB | language interpreters and runtimes available out of the box |
 | Multimedia codec/player | 73 | 239.0 MiB | media players and the codec/plugin stack that decodes and encodes them |
 | Fonts & icons | 21 | 162.2 MiB | console and desktop fonts, cursors, and icon themes |
-| Printing & scanning | 4 | 16.3 MiB | the printing subsystem and its device support |
+| Printing & scanning | 4 | 16.2 MiB | the printing subsystem and its device support |
 | Bluetooth & devices | 12 | 16.8 MiB | Bluetooth, USB, accessibility, and other peripheral device support |
 | Virtualization guest | 6 | 9.2 MiB | guest integration agents for the major hypervisors |
 | Shared library | 365 | 6.49 GiB | shared libraries other components link against |
