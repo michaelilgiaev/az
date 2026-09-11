@@ -641,12 +641,19 @@ struct _ThunarWindow
 static XfceGtkActionEntry thunar_window_action_entries[] =
 {
     { THUNAR_WINDOW_ACTION_FILE_MENU,                      "<Actions>/ThunarWindow/file-menu",                       "",                     XFCE_GTK_MENU_ITEM,       N_ ("_File"),                  NULL, NULL, NULL,},
-    { THUNAR_WINDOW_ACTION_NEW_TAB,                        "<Actions>/ThunarWindow/new-tab",                         "<Primary>t",           XFCE_GTK_IMAGE_MENU_ITEM, N_ ("New _Tab"),               N_ ("Open a new tab for the displayed location"),                                    "tab-new",                 G_CALLBACK (thunar_window_action_open_new_tab),       },
-    { THUNAR_WINDOW_ACTION_NEW_WINDOW,                     "<Actions>/ThunarWindow/new-window",                      "<Primary>n",           XFCE_GTK_IMAGE_MENU_ITEM, N_ ("New _Window"),            N_ ("Open a new Thunar window for the displayed location"),                          "window-new",              G_CALLBACK (thunar_window_action_open_new_window),    },
+    /* Azzio: <Primary>t (Ctrl+T) accelerator disabled (File-menu key removed; the "New Tab" menu
+     * item still works by click in the hamburger-menu File submenu). */
+    { THUNAR_WINDOW_ACTION_NEW_TAB,                        "<Actions>/ThunarWindow/new-tab",                         "",                     XFCE_GTK_IMAGE_MENU_ITEM, N_ ("New _Tab"),               N_ ("Open a new tab for the displayed location"),                                    "tab-new",                 G_CALLBACK (thunar_window_action_open_new_tab),       },
+    /* Azzio: <Primary>n (Ctrl+N) accelerator disabled (File-menu key removed; the "New Window" menu
+     * item still works by click in the hamburger-menu File submenu). */
+    { THUNAR_WINDOW_ACTION_NEW_WINDOW,                     "<Actions>/ThunarWindow/new-window",                      "",                     XFCE_GTK_IMAGE_MENU_ITEM, N_ ("New _Window"),            N_ ("Open a new Thunar window for the displayed location"),                          "window-new",              G_CALLBACK (thunar_window_action_open_new_window),    },
     { THUNAR_WINDOW_ACTION_DETACH_TAB,                     "<Actions>/ThunarWindow/detach-tab",                      "",                     XFCE_GTK_IMAGE_MENU_ITEM, N_ ("Detac_h Tab"),            N_ ("Open current folder in a new window"),                                          NULL,                      G_CALLBACK (thunar_window_action_detach_tab),         },
     { THUNAR_WINDOW_ACTION_CLOSE_TAB,                      "<Actions>/ThunarWindow/close-tab",                       "<Primary>w",           XFCE_GTK_IMAGE_MENU_ITEM, N_ ("Close Ta_b"),             N_ ("Close this folder"),                                                            "window-close",            G_CALLBACK (thunar_window_action_close_tab),          },
     { THUNAR_WINDOW_ACTION_CLOSE_WINDOW,                   "<Actions>/ThunarWindow/close-window",                    "<Primary>q",           XFCE_GTK_IMAGE_MENU_ITEM, N_ ("_Close Window"),          N_ ("Close this window"),                                                            "application-exit",        G_CALLBACK (thunar_window_action_close_window),       },
-    { THUNAR_WINDOW_ACTION_CLOSE_ALL_WINDOWS,              "<Actions>/ThunarWindow/close-all-windows",               "<Primary><Shift>w",    XFCE_GTK_IMAGE_MENU_ITEM, N_ ("Close _All Windows"),     N_ ("Close all Thunar windows"),                                                     NULL,                      G_CALLBACK (thunar_window_action_close_all_windows),  },
+    /* Azzio: <Primary><Shift>w (Shift+Ctrl+W) accelerator disabled (File-menu key removed; the
+     * "Close All Windows" menu item still works by click in the hamburger-menu File submenu).
+     * Close Tab (<Primary>w) and Close Window (<Primary>q) above are deliberately KEPT. */
+    { THUNAR_WINDOW_ACTION_CLOSE_ALL_WINDOWS,              "<Actions>/ThunarWindow/close-all-windows",               "",                     XFCE_GTK_IMAGE_MENU_ITEM, N_ ("Close _All Windows"),     N_ ("Close all Thunar windows"),                                                     NULL,                      G_CALLBACK (thunar_window_action_close_all_windows),  },
 
     { THUNAR_WINDOW_ACTION_EDIT_MENU,                      "<Actions>/ThunarWindow/edit-menu",                       "",                     XFCE_GTK_MENU_ITEM,       N_ ("_Edit"),                  NULL,                                                                                NULL,                      NULL,                                                 },
     { THUNAR_WINDOW_ACTION_UNDO,                           "<Actions>/ThunarActionManager/undo",                     "<Primary>Z",           XFCE_GTK_IMAGE_MENU_ITEM, N_ ("_Undo"),                  N_ ("Undo the latest operation"),                                                    "edit-undo",               G_CALLBACK (thunar_window_action_undo),               },
@@ -936,7 +943,6 @@ thunar_window_init (ThunarWindow *window)
   GtkWidget             *infobar;
   GtkWidget             *item;
   GtkWidget             *event_box;
-  gboolean               last_menubar_visible;
   ThunarSidepaneType     last_side_pane;
   gchar                 *uca_path;
   gchar                 *catfish_path;
@@ -976,7 +982,8 @@ thunar_window_init (ThunarWindow *window)
                 "last-window-width", &last_window_width,
                 "last-window-height", &last_window_height,
                 "last-window-maximized", &last_window_maximized,
-                "last-menubar-visible", &last_menubar_visible,
+                /* Azzio: "last-menubar-visible" is intentionally NOT fetched -- the menubar has no
+                 * menus left and is force-collapsed below, so the saved pref is irrelevant. */
                 "last-separator-position", &last_separator_position,
                 "last-side-pane", &last_side_pane,
                 "last-statusbar-visible", &last_statusbar_visible,
@@ -1030,7 +1037,17 @@ thunar_window_init (ThunarWindow *window)
 
   /* build the menubar */
   window->menubar = gtk_menu_bar_new ();
-  thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_FILE_MENU, G_CALLBACK (thunar_window_update_file_menu), window->menubar);
+  /* Azzio: the "File" menu is intentionally removed from the TOPBAR (menubar), same treatment as
+   * the "Edit"/"View"/"Go" menus below -- the create_menu(... FILE_MENU ..., window->menubar) call
+   * is gone. Its accelerators <Primary>t (New Tab), <Primary>n (New Window) and <Primary><shift>w
+   * (Close All Windows) are ALSO disabled in the action-entry table above (accel string blanked);
+   * Close Tab (<Primary>w), Close Window (<Primary>q) and Detach Tab are deliberately KEPT. The
+   * window/hamburger menu keeps its File submenu (see thunar_window_update_file_menu call on the
+   * popup `menu`), so those actions and their menu items remain reachable without the topbar.
+   * With File gone, NO top-level menu is left on the menubar, so the topbar collapses -- the
+   * menubar is forced hidden below (window->menubar_visible = FALSE) and the location-toolbar
+   * hamburger button takes over as the sole menu entry point (its visibility is driven by
+   * !menubar_visible). */
   /* Azzio: the "Edit" menu is intentionally removed from the TOPBAR (menubar), same treatment as
    * the "View"/"Go" menus below -- the create_menu(... EDIT_MENU ..., window->menubar) call is
    * gone. Its two selection accelerators <Primary>s (Select by Pattern) and <Primary><shift>I
@@ -1061,9 +1078,13 @@ thunar_window_init (ThunarWindow *window)
   /* Azzio: the Help menu (Contents + About) is intentionally removed. */
   gtk_widget_show_all (window->menubar);
 
-  window->menubar_visible = last_menubar_visible;
-  if (last_menubar_visible == FALSE)
-    gtk_widget_hide (window->menubar);
+  /* Azzio: the menubar has no top-level menus left (File/Edit/View/Go/Bookmarks/Help all removed
+   * above), so it would only ever render as an empty strip. Force it collapsed regardless of the
+   * saved "last-menubar-visible" preference (which defaults TRUE); the location-toolbar hamburger
+   * button then becomes the menu entry point (it is shown whenever !menubar_visible). That pref is
+   * intentionally not even fetched above for this reason. */
+  window->menubar_visible = FALSE;
+  gtk_widget_hide (window->menubar);
   gtk_widget_set_hexpand (window->menubar, TRUE);
 
   /* append the menu item for the spinner */
@@ -1654,8 +1675,9 @@ thunar_window_update_view_menu (ThunarWindow *window,
   gtk_menu_item_set_submenu (GTK_MENU_ITEM (item), GTK_WIDGET (sub_items));
   xfce_gtk_toggle_menu_item_new_from_action_entry (get_action_entry (THUNAR_WINDOW_ACTION_VIEW_STATUSBAR), G_OBJECT (window),
                                                    gtk_widget_get_visible (window->statusbar), GTK_MENU_SHELL (menu));
-  xfce_gtk_toggle_menu_item_new_from_action_entry (get_action_entry (THUNAR_WINDOW_ACTION_VIEW_MENUBAR), G_OBJECT (window),
-                                                   window->menubar_visible, GTK_MENU_SHELL (menu));
+  /* Azzio: the "Menubar" toggle is intentionally dropped from the View submenu. The topbar menubar
+   * has no menus left and is force-collapsed at init; a toggle here would only re-show an empty
+   * strip, contradicting the collapse. Its <Primary>m accelerator was already blanked (View work). */
   xfce_gtk_menu_item_new_from_action_entry (get_action_entry (THUNAR_WINDOW_ACTION_CONFIGURE_TOOLBAR), G_OBJECT (window), GTK_MENU_SHELL (menu));
   xfce_gtk_menu_append_separator (GTK_MENU_SHELL (menu));
   if (window->directory_specific_settings)
@@ -5148,21 +5170,13 @@ thunar_window_action_menu (ThunarWindow *window)
 static gboolean
 thunar_window_action_open_file_menu (ThunarWindow *window)
 {
-  gboolean ret;
-  GList   *children;
-
   _thunar_return_val_if_fail (THUNAR_IS_WINDOW (window), FALSE);
 
-  /* In case the menubar is hidden, we make it visible (e.g. when F10 is pressed) */
-  gtk_widget_set_visible (window->menubar, TRUE);
-
-  children = gtk_container_get_children (GTK_CONTAINER (window->menubar));
-  g_signal_emit_by_name (children->data, "button-press-event", NULL, &ret);
-  g_list_free (children);
-  gtk_menu_shell_select_first (GTK_MENU_SHELL (window->menubar), TRUE);
-
-  /* required in case of shortcut activation, in order to signal that the accel key got handled */
-  return TRUE;
+  /* Azzio: the menubar is force-collapsed and holds no menus, so the upstream behaviour (show the
+   * menubar and open its first top-level menu) would only reveal an empty strip. Route F10 to the
+   * location-toolbar hamburger menu instead -- that popup carries the full File/Edit/View/Go
+   * submenus, so F10 still opens "the menu" without un-collapsing the topbar. */
+  return thunar_window_action_menu (window);
 }
 
 
@@ -5980,7 +5994,9 @@ thunar_window_toolbar_button_press_event (GtkWidget      *toolbar,
     {
       menu = gtk_menu_new ();
       xfce_gtk_menu_item_new_from_action_entry (get_action_entry (THUNAR_WINDOW_ACTION_CONFIGURE_TOOLBAR), G_OBJECT (window), GTK_MENU_SHELL (menu));
-      xfce_gtk_toggle_menu_item_new_from_action_entry (get_action_entry (THUNAR_WINDOW_ACTION_VIEW_MENUBAR), G_OBJECT (window), window->menubar_visible, GTK_MENU_SHELL (menu));
+      /* Azzio: the "Menubar" toggle is intentionally dropped from the toolbar right-click menu too
+       * -- same reason as the View submenu: the topbar is force-collapsed and holds no menus, so
+       * re-showing it would only reveal an empty strip. */
       gtk_widget_show_all (menu);
 
       /* run the menu (takes over the floating of menu) */

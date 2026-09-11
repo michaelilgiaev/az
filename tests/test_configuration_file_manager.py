@@ -325,6 +325,69 @@ def test_edit_menu_removed_from_topbar_and_its_accelerators_disabled():
     assert "F2" in _am_entry_line("<Actions>/ThunarStandardView/rename")
 
 
+def test_file_menu_removed_from_topbar_and_the_empty_topbar_collapses():
+    # PROMPT: same treatment as "Go"/"View"/"Edit" -- remove the "File" option from the TOPBAR and
+    # disable Ctrl+T (New Tab), Ctrl+N (New Window), Shift+Ctrl+W (Close All Windows); the rest of
+    # the File shortcuts are fine. AND: File is the last top-level menu, so with it gone "we don't
+    # have anything else left on that topbar, so it should collapse". Baked into thunar-window.c:
+    #   * the File menu is dropped from the MENUBAR only -- the create_menu(... FILE_MENU ...,
+    #     window->menubar) call is gone; the window/hamburger-menu File submenu stays (created into
+    #     the popup `menu`), so New Tab/New Window/Close All etc. remain reachable without the topbar,
+    #   * new-tab (<Primary>t), new-window (<Primary>n) and close-all-windows (<Primary><Shift>w)
+    #     have their accelerator strings blanked in the action-entry table (callbacks/menu items are
+    #     untouched, so they still work by click from the File submenu),
+    #   * the KEPT File keys -- close-tab (<Primary>w) and close-window (<Primary>q) -- are asserted
+    #     still bound so a future edit can't silently drop them,
+    #   * COLLAPSE: the menubar now holds no top-level menu, so it is force-hidden at init
+    #     (window->menubar_visible = FALSE, unconditionally -- the last-menubar-visible pref, which
+    #     defaults TRUE, is not even fetched), the location-toolbar hamburger button becomes the sole
+    #     menu entry point (shown via !menubar_visible), the "Menubar" toggle is removed from BOTH
+    #     the View submenu and the toolbar right-click menu (so it can't re-show the empty strip),
+    #     and F10 is rerouted to the hamburger menu instead of un-hiding the empty menubar.
+    win_c = (fm.SOURCE_DIR / "thunar" / "thunar-window.c").read_text()
+
+    def _entry_line(action_path: str) -> str:
+        # The action-entry row defining this "<Actions>/..." path (trailing quote+comma so a longer
+        # sibling path -- e.g. close-window vs close-all-windows -- is not matched).
+        return next(ln for ln in win_c.splitlines() if f'"{action_path}",' in ln)
+
+    # (1) The File menu is no longer added to the TOPBAR menubar...
+    assert "G_CALLBACK (thunar_window_update_file_menu), window->menubar)" not in win_c
+    # ...but the window/hamburger-menu File submenu is KEPT (still created into that popup `menu`),
+    # so New Tab/New Window/Close-All stay available from the menu even without the topbar.
+    assert "G_CALLBACK (thunar_window_update_file_menu), menu)" in win_c
+
+    # (2) The three named accelerators are blanked (accel string ""). Assert per action row so a
+    # future re-add of the key is caught precisely.
+    for action_path, dead_accel in (
+        ("<Actions>/ThunarWindow/new-tab", "<Primary>t"),
+        ("<Actions>/ThunarWindow/new-window", "<Primary>n"),
+        ("<Actions>/ThunarWindow/close-all-windows", "<Primary><Shift>w"),
+    ):
+        assert dead_accel not in _entry_line(action_path), f"{action_path} still binds {dead_accel}"
+
+    # (3) The KEPT File bindings are still present on their own rows.
+    assert "<Primary>w" in _entry_line("<Actions>/ThunarWindow/close-tab")
+    assert "<Primary>q" in _entry_line("<Actions>/ThunarWindow/close-window")
+
+    # (4) COLLAPSE -- the empty topbar is force-hidden at init regardless of the saved pref, and that
+    # pref (which defaults TRUE) is no longer fetched at all.
+    assert "window->menubar_visible = FALSE;" in win_c
+    assert '"last-menubar-visible", &last_menubar_visible,' not in win_c
+
+    # (5) The "Menubar" toggle can no longer re-show the empty strip: it is gone from BOTH the View
+    # submenu and the toolbar right-click menu (no VIEW_MENUBAR toggle item is created anywhere).
+    assert "THUNAR_WINDOW_ACTION_VIEW_MENUBAR), G_OBJECT (window)" not in win_c
+
+    # (6) F10 (open-file-menu) is rerouted to the hamburger menu instead of un-hiding the menubar --
+    # the handler now delegates to thunar_window_action_menu and no longer force-shows the menubar.
+    # Anchor on the DEFINITION (signature + "\n{"), not the forward declaration ("...*window);").
+    f10_body = win_c.split("thunar_window_action_open_file_menu (ThunarWindow *window)\n{", 1)[1]
+    f10_body = f10_body.split("\n}", 1)[0]
+    assert "return thunar_window_action_menu (window);" in f10_body
+    assert "gtk_widget_set_visible (window->menubar, TRUE)" not in f10_body
+
+
 def test_show_hidden_files_added_to_right_click_menu():
     # PROMPT: add "Show Hidden Files" to the menu that opens with the right mouse click. The
     # empty-space context menu is built in thunar_standard_view_context_menu (thunar-standard-view.c);
