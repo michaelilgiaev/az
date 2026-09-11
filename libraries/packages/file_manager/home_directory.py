@@ -89,16 +89,20 @@ LINKS: tuple[tuple[str, str], ...] = (
 
 # --- Absolute-target symlinks (system runtime locations) -----------------------
 # A SEPARATE class of symlink whose target is an ABSOLUTE system path, NOT a relative
-# home-relative one like LINKS above. "Mounts -> /run/media/main" surfaces the udisks
-# removable-media mount root (where the desktop auto-mounts USB sticks, SD cards, etc.
-# for the user `main`) as a plain top-level folder (PROMPT). The target is absolute on
-# purpose: /run/media/main is the SAME path in every context (it is not under $HOME, so
-# there is no relative form), so -- unlike LINKS -- it is created in the LIVE /home/main
-# ONLY, not mirrored into /etc/skel (a different Calamares-created user gets their own
-# /run/media/<user>, so a skel copy pointing at main's dir would be wrong). It appears in
-# the sidebar (with its own mount icon) among the symlink group, before the pinned Trash.
+# home-relative one like LINKS above. "Mounts -> /run/media" surfaces the udisks
+# removable-media mount ROOT (the parent that holds every user's per-user mount dir --
+# /run/media/<user> -- where the desktop auto-mounts USB sticks, SD cards, etc.) as a
+# plain top-level folder (PROMPT). It points at the /run/media PARENT, not the
+# /run/media/main per-user subdir, so the shortcut is correct for ANY user (it is not
+# tied to `main`) and shows the whole mount tree. The target is absolute on purpose:
+# /run/media is the SAME path in every context (it is not under $HOME, so there is no
+# relative form), so -- unlike LINKS -- it is created in the LIVE /home/main ONLY, not
+# mirrored into /etc/skel (skel is copied per-user, and an absolute system path needs no
+# per-user rewrite, but keeping it out of skel matches the "runtime-location" class and
+# avoids a skel entry that predates the mount root existing). It appears in the sidebar
+# (with its own mount icon) among the symlink group, before the pinned Trash.
 ABSOLUTE_LINKS: tuple[tuple[str, str], ...] = (
-    ("Mounts", "/run/media/main"),
+    ("Mounts", "/run/media"),
 )
 
 # The Trash shortcut's name. It is itself a symlink but the spec pins it to the very END of the
@@ -214,7 +218,7 @@ def sidebar_entries() -> list[tuple[str, str]]:
         if name == TRASH_LINK_NAME or name in SIDEBAR_SKIP:
             continue
         entries.append((name, resolved_home_path(target)))
-    # 3b. Absolute-target symlinks (e.g. "Mounts" -> /run/media/main): same symlink group, but the
+    # 3b. Absolute-target symlinks (e.g. "Mounts" -> /run/media): same symlink group, but the
     #     target is an absolute system path, so it is used VERBATIM (not joined onto HOME).
     for name, abs_target in ABSOLUTE_LINKS:
         if name in SIDEBAR_SKIP:

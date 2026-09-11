@@ -35,7 +35,13 @@ by basename (see thunar-file.c thunar_file_get_icon_name + the azzio_folder_dirs
   azzio-folder-vault         azzio-folder-vault      places      Vault      (no standard name)
   azzio-folder-ignore        azzio-folder-ignore     places      Ignore     (no standard name)
   azzio-folder-mount         azzio-folder-mount      places      Shared + Mounts (mount-point symbol)
+  azzio-folder-cache         azzio-folder-cache      places      Cache  shortcut (-> .cache)
+  azzio-folder-config        azzio-folder-config     places      Config shortcut (-> .config)
+  azzio-folder-trash         azzio-folder-trash      places      Trash  shortcut (-> .local/share/Trash/files)
+  azzio-folder-local         azzio-folder-local      places      Local  shortcut (-> .local)
+  azzio-folder-ssh           azzio-folder-ssh        places      SSH    shortcut (-> .ssh)
   text-x-generic             text-x-generic.svg      mimetypes   plain text / generic file
+  emblem-symbolic-link       emblem-symbolic-link    emblems     the symlink arrow overlay (folders + files)
   go-previous                go-previous.svg         actions     toolbar Back  (Left arrow)
   go-next                    go-next.svg             actions     toolbar Forward (Right arrow)
   go-up                      go-up.svg               actions     toolbar Up
@@ -81,8 +87,18 @@ ICONS: tuple[tuple[str, str, str], ...] = (
     ("azzio-folder-vault.svg", "azzio-folder-vault", "places"),
     ("azzio-folder-ignore.svg", "azzio-folder-ignore", "places"),
     ("azzio-folder-mount.svg", "azzio-folder-mount", "places"),
+    # The dot-location shortcut folders (Cache/Config/Trash/Local/SSH -> .cache/.config/... ). No
+    # XDG type; the vendored file manager maps them by the shortcut basename ($HOME/Cache, ...).
+    ("azzio-folder-cache.svg", "azzio-folder-cache", "places"),
+    ("azzio-folder-config.svg", "azzio-folder-config", "places"),
+    ("azzio-folder-trash.svg", "azzio-folder-trash", "places"),
+    ("azzio-folder-local.svg", "azzio-folder-local", "places"),
+    ("azzio-folder-ssh.svg", "azzio-folder-ssh", "places"),
     # Files (mimetypes).
     ("text-x-generic.svg", "text-x-generic", "mimetypes"),
+    # Emblems (overlaid on the base icon). The symlink arrow (PROMPT: symbolic links must be
+    # obviously distinct). Re-enabled in thunar-file.c thunar_file_get_emblem_names for symlinks.
+    ("emblem-symbolic-link.svg", "emblem-symbolic-link", "emblems"),
     # Toolbar (actions).
     ("go-previous.svg", "go-previous", "actions"),
     ("go-next.svg", "go-next", "actions"),
@@ -119,7 +135,12 @@ def _contexts() -> tuple[str, ...]:
 
 
 # Map our PNG sizes to the freedesktop icon-theme Context label for each dir.
-_CONTEXT_LABEL = {"places": "Places", "mimetypes": "MimeTypes", "actions": "Actions"}
+_CONTEXT_LABEL = {
+    "places": "Places",
+    "mimetypes": "MimeTypes",
+    "actions": "Actions",
+    "emblems": "Emblems",
+}
 
 
 def index_theme() -> str:

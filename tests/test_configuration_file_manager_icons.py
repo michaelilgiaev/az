@@ -53,14 +53,22 @@ def test_icon_name_mapping_is_the_spec():
     assert mapping["azzio-folder-vault"] == ("azzio-folder-vault.svg", "places")
     assert mapping["azzio-folder-ignore"] == ("azzio-folder-ignore.svg", "places")
     assert mapping["azzio-folder-mount"] == ("azzio-folder-mount.svg", "places")
+    # The dot-location shortcut folders (Cache/Config/Trash/Local/SSH -> .cache/.config/...).
+    assert mapping["azzio-folder-cache"] == ("azzio-folder-cache.svg", "places")
+    assert mapping["azzio-folder-config"] == ("azzio-folder-config.svg", "places")
+    assert mapping["azzio-folder-trash"] == ("azzio-folder-trash.svg", "places")
+    assert mapping["azzio-folder-local"] == ("azzio-folder-local.svg", "places")
+    assert mapping["azzio-folder-ssh"] == ("azzio-folder-ssh.svg", "places")
     assert mapping["text-x-generic"] == ("text-x-generic.svg", "mimetypes")
+    # The symlink arrow emblem (its own "emblems" context), overlaid on symlinked folders/files.
+    assert mapping["emblem-symbolic-link"] == ("emblem-symbolic-link.svg", "emblems")
     assert mapping["go-previous"] == ("go-previous.svg", "actions")
     assert mapping["go-next"] == ("go-next.svg", "actions")
     assert mapping["go-up"] == ("go-up.svg", "actions")
     assert mapping["system-search"] == ("system-search.svg", "actions")
     # No accidental extras / dupes.
-    assert len(icons.ICONS) == 17
-    assert len({name for _s, name, _c in icons.ICONS}) == 17
+    assert len(icons.ICONS) == 23
+    assert len({name for _s, name, _c in icons.ICONS}) == 23
 
 
 def test_every_icon_svg_asset_exists_and_is_on_brand():
@@ -160,6 +168,7 @@ def test_c_basename_table_names_match_the_shipped_azzio_icons():
     file_c = (fm.SOURCE_DIR / "thunar" / "thunar-file.c").read_text()
     shipped = {name for _s, name, _c in icons.ICONS}
     for icon in ("azzio-folder-projects", "azzio-folder-vault", "azzio-folder-ignore",
-                 "azzio-folder-mount"):
+                 "azzio-folder-mount", "azzio-folder-cache", "azzio-folder-config",
+                 "azzio-folder-trash", "azzio-folder-local", "azzio-folder-ssh"):
         assert icon in shipped, f"{icon} referenced by C but not shipped"
         assert f'"{icon}"' in file_c, f"{icon} shipped but not referenced by the C table"

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Azzio symbolic-link emblem (theme name emblem-symbolic-link). Drawn SMALL, overlaid in a
+       corner of a folder/file icon by thunar-icon-renderer, to mark symlinks (PROMPT: symbolic
+       links must be obviously distinct, by an arrow). A filled Azzio-cyan rounded badge with a
+       white curved shortcut arrow, so it reads at a glance against either the folder gradient or
+       the brighter document sheet. High-contrast white-on-cyan since it renders tiny. -->
+  <defs>
+    <linearGradient id="azEmblem" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#06B8FD"/>
+      <stop offset="1" stop-color="#0052CC"/>
+    </linearGradient>
+  </defs>
+  <!-- Badge disc with a thin white rim so it separates from the base icon underneath. -->
+  <circle cx="64" cy="64" r="58" fill="url(#azEmblem)" stroke="#ffffff" stroke-width="8"/>
+  <!-- White shortcut arrow: an elbowed shaft rising to a chunky arrowhead (up-right). -->
+  <g fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M40 88 V64 a12 12 0 0 1 12 -12 h30"/>
+    <path d="M68 38 l20 14 -20 14"/>
+  </g>
+</svg>

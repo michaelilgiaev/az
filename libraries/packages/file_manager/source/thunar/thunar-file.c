@@ -274,7 +274,14 @@ static struct
  * $HOME whose basename matches is given the icon (checked below only after the XDG table above
  * misses), so an unrelated folder called e.g. "Vault" deeper in the tree keeps the plain folder
  * icon. "Shared" and "Mounts" are mount points and share the mount-point symbol (the user
- * removed the mount-point emblem, so the base icon carries that meaning now). */
+ * removed the mount-point emblem, so the base icon carries that meaning now).
+ *
+ * The Cache/Config/Trash/Local/SSH rows are the Azzio home SHORTCUTS (symlinks: ~/Cache ->
+ * .cache, ~/Config -> .config, ~/Trash -> .local/share/Trash/files, ~/Local -> .local, ~/SSH ->
+ * .ssh). Matching is by the SHORTCUT basename at $HOME/<name>: Thunar enumerates the child by its
+ * own path (/home/main/Cache, the link itself), NOT the resolved target, so keying on the link
+ * name is what lands the icon on the shortcut as shown in $HOME. (The symlink arrow emblem is
+ * added ON TOP by thunar_file_get_emblem_names, so these still read as links.) */
 static const struct
 {
   const gchar *basename;
@@ -284,7 +291,12 @@ static const struct
   { "Vault", "azzio-folder-vault" },
   { "Ignore", "azzio-folder-ignore" },
   { "Shared", "azzio-folder-mount" },
-  { "Mounts", "azzio-folder-mount" }
+  { "Mounts", "azzio-folder-mount" },
+  { "Cache", "azzio-folder-cache" },
+  { "Config", "azzio-folder-config" },
+  { "Trash", "azzio-folder-trash" },
+  { "Local", "azzio-folder-local" },
+  { "SSH", "azzio-folder-ssh" }
 };
 
 
@@ -3753,17 +3765,24 @@ thunar_file_get_emblem_names (ThunarFile *file)
 {
   _thunar_return_val_if_fail (THUNAR_IS_FILE (file), NULL);
 
-  /* AZZIO: no emblems anywhere (PROMPT: "Remove all Emblems, remove mount point
-   * icon"). This is the single chokepoint every view (icon/list/tree/side pane) and
-   * the path-entry drag icon query for the emblem overlay list, so returning an empty
-   * list here suppresses ALL of them at once: the user-set custom emblems, the
-   * symbolic-link / cant-read / cant-write badges, AND the mount-point icon overlay
-   * that upstream prepended for mountpoints. The emblem-drawing loop in
-   * thunar-icon-renderer.c is left intact but simply receives nothing to draw.
+  /* AZZIO: the ONLY emblem we keep is the symbolic-link arrow (PROMPT: "Symbolic links must have
+   * their icon by an arrow of a sort, and it needs to be obvious it's a symbolic link when
+   * compared to normal folders" -- and the same arrow for symlinked text documents). Every OTHER
+   * emblem upstream produced here is still suppressed: the user-set custom emblems, the
+   * cant-read / cant-write permission badges, AND the mount-point GMount icon overlay (mount
+   * points get their own distinct BASE icon via the theme instead -- see azzio_folder_dirs).
    *
-   * (Upstream also derived cant-read/cant-write and the mount-point GMount icon here;
-   * all of that is intentionally dropped -- the folder/file glyph itself is enough,
-   * and mount points get their own distinct BASE icon via the theme, not an overlay.) */
+   * This is the single chokepoint every view (icon/list/tree/side pane) and the path-entry drag
+   * icon query use for the emblem overlay list, so emitting exactly one name here puts the arrow
+   * on symlinked folders AND symlinked files everywhere, in one place. The emblem-drawing loop in
+   * thunar-icon-renderer.c renders whatever we return; a non-symlink returns NULL (nothing drawn).
+   *
+   * emblem-symbolic-link is shipped by the Azzio icon theme (packages/file_manager/icons) as an
+   * on-brand cyan arrow badge, so it matches the folder/file set rather than falling through to
+   * Adwaita's. */
+  if (thunar_file_is_symlink (file))
+    return g_list_prepend (NULL, g_strdup (THUNAR_FILE_EMBLEM_NAME_SYMBOLIC_LINK));
+
   return NULL;
 }
 
@@ -4078,7 +4097,17 @@ thunar_file_get_icon_name (ThunarFile         *file,
               if (strcmp (path, G_DIR_SEPARATOR_S) == 0)
                 *special_names = "drive-harddisk";
               else if (strcmp (path, xfce_get_homedir ()) == 0)
-                *special_names = "user-home";
+                {
+                  /* Azzio: $HOME is our "user-home" folder (shown for the home dir in the view AND,
+                   * now that the sidebar "main" row no longer forces a go-home gicon, for that
+                   * sidebar row too). Cache+return directly -- same reasoning as the azzio_folder_dirs
+                   * match below: trust our shipped name instead of the cold-cache-prone has_icon
+                   * gate, so "main"/home never briefly falls back to the generic folder icon. */
+                  g_free (path);
+                  g_free (file->icon_name);
+                  file->icon_name = g_strdup ("user-home");
+                  return thunar_file_get_icon_name_for_state (file->icon_name, icon_state);
+                }
               else
                 {
                   for (i = 0; i < G_N_ELEMENTS (thunar_file_dirs); i++)
@@ -4093,8 +4122,20 @@ thunar_file_get_icon_name (ThunarFile         *file,
                     }
 
                   /* Azzio: no XDG match -- try our own home-dir basename table (Projects, Vault,
-                   * Ignore, Shared, Mounts). Only a DIRECT child of $HOME qualifies, so build the
-                   * candidate "$HOME/<basename>" and compare against the full path. */
+                   * Ignore, Shared, Mounts, and the Cache/Config/Trash/Local/SSH shortcuts). Only
+                   * a DIRECT child of $HOME qualifies, so build the candidate "$HOME/<basename>"
+                   * and compare against the full path.
+                   *
+                   * On a match we CACHE the Azzio name and RETURN here, deliberately bypassing the
+                   * has_icon-gated check_names loop below. Those names are shipped by the Azzio
+                   * icon theme (packages/file_manager/icons), so we trust them unconditionally.
+                   * check_names calls gtk_icon_theme_has_icon(), whose per-name result is cached by
+                   * GtkIconTheme and can be COLD right after session start -- returning FALSE for a
+                   * freshly-installed custom name and making the loop fall back to "folder", which
+                   * then gets cached on the file. That stale "folder" only cleared on a reload,
+                   * which is why the correct icon previously appeared only after a right-click /
+                   * refresh (PROMPT: "the icons inside also need to be changed into our set"). A
+                   * direct cache+return removes that timing dependency entirely. */
                   if (*special_names == NULL || strcmp (*special_names, "folder") == 0)
                     {
                       const gchar *azzio_home = xfce_get_homedir ();
@@ -4108,8 +4149,10 @@ thunar_file_get_icon_name (ThunarFile         *file,
                           g_free (candidate);
                           if (match)
                             {
-                              *special_names = azzio_folder_dirs[i].icon_name;
-                              break;
+                              g_free (path);
+                              g_free (file->icon_name);
+                              file->icon_name = g_strdup (azzio_folder_dirs[i].icon_name);
+                              return thunar_file_get_icon_name_for_state (file->icon_name, icon_state);
                             }
                         }
                     }

@@ -59,10 +59,11 @@ def test_trash_symlink_target_is_covered_by_trash_dirs():
 
 
 def test_mounts_is_an_absolute_link_to_the_udisks_media_root():
-    # PROMPT: add "Mounts/" -> /run/media/main. It is a SEPARATE class from LINKS: an ABSOLUTE
-    # target (/run/media/main is not under $HOME, so it has no relative form), created in the LIVE
-    # /home/main ONLY (not skel-mirrored). It carries its own mount icon.
-    assert hd.ABSOLUTE_LINKS == (("Mounts", "/run/media/main"),)
+    # PROMPT: "Mounts/" -> /run/media (the udisks media ROOT, the parent of every user's
+    # /run/media/<user>). It is a SEPARATE class from LINKS: an ABSOLUTE target (/run/media is not
+    # under $HOME, so it has no relative form), created in the LIVE /home/main ONLY (not
+    # skel-mirrored). It carries its own mount icon.
+    assert hd.ABSOLUTE_LINKS == (("Mounts", "/run/media"),)
     for name, target in hd.ABSOLUTE_LINKS:
         assert posixpath.isabs(target), name           # absolute on purpose
     # Mounts is NOT an ordinary directory nor a relative link.
@@ -137,9 +138,9 @@ def test_sidebar_entries_are_directories_then_links_resolved():
     assert targets["Bashrc"] == "/home/main/.bashrc"
     # SSH points at the resolved .ssh dir (a symlink shortcut, after Local, before Mounts).
     assert targets["SSH"] == "/home/main/.ssh"
-    # Mounts is an ABSOLUTE-target symlink (PROMPT: "Mounts -> /run/media/main"): the sidebar entry
+    # Mounts is an ABSOLUTE-target symlink (PROMPT: "Mounts -> /run/media"): the sidebar entry
     # uses the absolute target VERBATIM (not resolved under HOME), sitting just before Trash.
-    assert targets["Mounts"] == "/run/media/main"
+    assert targets["Mounts"] == "/run/media"
 
 
 def test_ignore_directory_is_created_on_disk_but_kept_out_of_sidebar():

@@ -1009,25 +1009,28 @@ def test_trash_delete_is_permanent_not_re_trash():
 
 
 # --- Emblems / mount-point icon removed (thunar-file.c) ----------------------
-def test_all_emblems_removed_at_the_single_chokepoint():
-    # PROMPT: "Remove all Emblems, remove mount point icon." thunar_file_get_emblem_names is the
-    # ONE place every view + the mount-point overlay derive their emblem list, so its body must
-    # just `return NULL;` (after the type-check) -- killing custom emblems, the symlink/cant-read/
-    # cant-write badges AND the mount-point GMount overlay in one shot. Anchor on the DEFINITION
-    # body so a mention in a doc comment cannot satisfy it.
+def test_only_the_symlink_emblem_survives_at_the_single_chokepoint():
+    # PROMPT: "Symbolic links must have their icon by an arrow of a sort." So the ONE place every
+    # view + the mount-point overlay derive their emblem list (thunar_file_get_emblem_names) now
+    # emits EXACTLY the symbolic-link emblem for symlinks and nothing else -- the custom emblems,
+    # the cant-read / cant-write badges AND the mount-point GMount overlay all stay suppressed
+    # (mount points get their own BASE icon instead). Anchor on the DEFINITION body so a mention in
+    # a doc comment cannot satisfy it.
     file_c = (fm.SOURCE_DIR / "thunar" / "thunar-file.c").read_text()
     body = _c_definition_body(file_c, "thunar_file_get_emblem_names (ThunarFile *file)")
-    # The only statements are the type-check and `return NULL;` -- no emblem list is built.
-    assert "return NULL;" in body
-    # Strip the AZZIO explanatory comment (it mentions mount/emblem on purpose) so the ABSENT
-    # checks below test the actual CODE, then confirm nothing but the guard + return remains.
     code = _strip_c_comments(body)
-    assert "g_list_append" not in code and "g_list_prepend" not in code, (
-        "get_emblem_names must build NO emblem list"
+    # The symlink arrow is emitted, gated on the file actually being a symlink, and it is the ONLY
+    # list-building call in the body (a single g_list_prepend of the symbolic-link constant).
+    assert "thunar_file_is_symlink (file)" in code, "the arrow must be gated on is_symlink"
+    assert "EMBLEM_NAME_SYMBOLIC_LINK" in code, "the symlink emblem must be emitted"
+    assert code.count("g_list_prepend") == 1 and "g_list_append" not in code, (
+        "get_emblem_names must build ONLY the single symlink emblem"
     )
-    # None of the emblem-name constants are referenced in the (now empty) body's code.
-    for token in ("EMBLEM_NAME_SYMBOLIC_LINK", "EMBLEM_NAME_CANT_READ", "EMBLEM_NAME_CANT_WRITE",
-                  "emblem_names", "mount"):
+    # A non-symlink still returns NULL (nothing drawn).
+    assert "return NULL;" in code
+    # Every OTHER emblem source stays gone: no permission badges, no mount overlay.
+    for token in ("EMBLEM_NAME_CANT_READ", "EMBLEM_NAME_CANT_WRITE", "emblem_names",
+                  "g_mount_get_icon", "is_mountpoint"):
         assert token not in code, token
 
 
@@ -1052,6 +1055,21 @@ def test_devices_section_removed_in_vendored_source():
     # And it wires up NONE of the device add/remove/change signal handlers.
     assert "device-added" not in code and "device-removed" not in code, (
         "shortcut_devices must connect no device signals"
+    )
+
+
+# --- "main" sidebar row uses its own folder icon (thunar-shortcuts-model.c) --
+def test_home_sidebar_row_uses_its_folder_icon_not_go_home():
+    # PROMPT: "The 'main' directory on the sidebar must be its directory icon." Upstream forced the
+    # Home place's gicon to the generic "go-home" action glyph, which the shortcuts icon renderer
+    # draws IN PREFERENCE to the file's own icon. Dropping that line leaves gicon NULL, so the row
+    # falls through to the file icon -> thunar_file_get_icon_name -> "user-home" (our Azzio home
+    # folder). Assert the home entry no longer sets a go-home gicon.
+    sm_c = (fm.SOURCE_DIR / "thunar" / "thunar-shortcuts-model.c").read_text()
+    code = _strip_c_comments(sm_c)
+    # The generic go-home glyph must not be forced anywhere in the model any more.
+    assert 'g_themed_icon_new ("go-home")' not in code, (
+        "the home row must not override its icon with go-home"
     )
 
 
@@ -1129,21 +1147,33 @@ def test_path_entry_primary_icon_cleared_and_drag_is_a_noop():
 
 # --- Azzio folder basename -> icon-name table (thunar-file.c) ----------------
 def test_azzio_folder_basename_icon_table_maps_the_unnamed_home_dirs():
-    # The home dirs with no XDG type (Projects, Vault, Ignore) and the mount points (Shared,
-    # Mounts) get our OWN icon names via a basename table in thunar_file_get_icon_name, checked
-    # ONLY after the XDG table misses and ONLY for a direct child of $HOME. Shared + Mounts share
-    # the mount-point symbol (we removed the mount emblem, so the base icon carries it).
+    # The home dirs with no XDG type (Projects, Vault, Ignore), the mount points (Shared, Mounts)
+    # and the dot-location SHORTCUTS (Cache/Config/Trash/Local/SSH -> .cache/.config/...) get our
+    # OWN icon names via a basename table in thunar_file_get_icon_name, checked ONLY after the XDG
+    # table misses and ONLY for a direct child of $HOME. Shared + Mounts share the mount-point
+    # symbol (we removed the mount emblem, so the base icon carries it).
     file_c = (fm.SOURCE_DIR / "thunar" / "thunar-file.c").read_text()
     assert "azzio_folder_dirs[]" in file_c, "the Azzio basename->icon table must exist"
-    # The mapping pins each unnamed dir to its icon name.
+    # The mapping pins each dir/shortcut to its icon name.
     for basename, icon in (
         ("Projects", "azzio-folder-projects"),
         ("Vault", "azzio-folder-vault"),
         ("Ignore", "azzio-folder-ignore"),
         ("Shared", "azzio-folder-mount"),
         ("Mounts", "azzio-folder-mount"),
+        ("Cache", "azzio-folder-cache"),
+        ("Config", "azzio-folder-config"),
+        ("Trash", "azzio-folder-trash"),
+        ("Local", "azzio-folder-local"),
+        ("SSH", "azzio-folder-ssh"),
     ):
         assert f'{{ "{basename}", "{icon}" }}' in file_c, (basename, icon)
     # The lookup builds "$HOME/<basename>" and only fires when the XDG table left the default.
     assert "g_build_filename (azzio_home" in file_c
     assert 'strcmp (*special_names, "folder") == 0' in file_c or "*special_names == NULL" in file_c
+    # On a match it CACHES the name and RETURNS directly (bypassing the has_icon-gated check_names
+    # loop), so a cold GtkIconTheme lookup cache can't make it fall back to the generic folder icon
+    # until a reload -- the "icons only fix themselves after a right-click" symptom (PROMPT). The
+    # home ("user-home") branch does the same for the same reason.
+    assert "file->icon_name = g_strdup (azzio_folder_dirs[i].icon_name);" in file_c
+    assert 'file->icon_name = g_strdup ("user-home");' in file_c

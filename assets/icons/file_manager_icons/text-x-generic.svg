@@ -1,26 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <!-- Azzio text-file icon (theme name text-x-generic, the default look for plain text files
-       and any file with no more specific type). Moves off the Thunar/Adwaita look: an Azzio
-       cyan-to-blue document sheet with a folded corner and white text lines. Bare (transparent
-       background) like the folder set. -->
+  <!-- Azzio text-file icon (theme name text-x-generic, the default look for plain text files and
+       any file with no more specific type). Deliberately BRIGHTER than the folder set (PROMPT:
+       "Make its icon Brighter so it's easier to distinguish from directories"): the folders are a
+       saturated cyan-to-deep-blue solid, so the document is a near-WHITE / pale-cyan sheet with an
+       Azzio-cyan (#06B8FD) folded corner, outline and text lines. The light body vs the dark
+       folders makes files and directories read apart at a glance. Bare (transparent background)
+       like the folder set. -->
   <defs>
-    <linearGradient id="azFolder" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#07AFE8"/>
-      <stop offset="0.5" stop-color="#06B8FD"/>
-      <stop offset="1" stop-color="#0064F9"/>
-    </linearGradient>
-    <linearGradient id="azFolderBack" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#0698D6"/>
-      <stop offset="1" stop-color="#0052CC"/>
+    <linearGradient id="azSheet" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#DCF3FF"/>
     </linearGradient>
   </defs>
-  <!-- Sheet body (gradient) with a folded top-right corner. -->
-  <path fill="url(#azFolder)" d="M34 20 h44 l20 20 v66 a4 4 0 0 1 -4 4 H34 a4 4 0 0 1 -4 -4 V24 a4 4 0 0 1 4 -4 Z"/>
-  <!-- Folded corner (darker). -->
-  <path fill="url(#azFolderBack)" d="M78 20 l20 20 H82 a4 4 0 0 1 -4 -4 Z"/>
-  <!-- White text lines. -->
-  <g fill="#ffffff">
+  <!-- Sheet body (near-white, pale-cyan foot) with a folded top-right corner and a cyan outline
+       so the bright sheet still has a crisp edge on light backgrounds. -->
+  <path fill="url(#azSheet)" stroke="#06B8FD" stroke-width="4" stroke-linejoin="round"
+        d="M34 20 h44 l20 20 v66 a4 4 0 0 1 -4 4 H34 a4 4 0 0 1 -4 -4 V24 a4 4 0 0 1 4 -4 Z"/>
+  <!-- Folded corner (cyan accent). -->
+  <path fill="#06B8FD" d="M78 20 l20 20 H82 a4 4 0 0 1 -4 -4 Z"/>
+  <!-- Cyan text lines. -->
+  <g fill="#06B8FD">
     <rect x="42" y="56" width="44" height="6" rx="3"/>
     <rect x="42" y="70" width="44" height="6" rx="3"/>
     <rect x="42" y="84" width="30" height="6" rx="3"/>

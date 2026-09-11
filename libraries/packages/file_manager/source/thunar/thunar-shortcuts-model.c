@@ -1093,7 +1093,12 @@ thunar_shortcuts_model_shortcut_places (ThunarShortcutsModel *model)
       shortcut->group = THUNAR_SHORTCUT_GROUP_PLACES_DEFAULT;
       shortcut->tooltip = g_strdup (_("Open the home folder"));
       shortcut->file = file;
-      shortcut->gicon = g_themed_icon_new ("go-home");
+      /* AZZIO: the "main" home row uses its OWN directory icon, NOT the generic "go-home" action
+       * glyph (PROMPT: "The 'main' directory on the sidebar must be its directory icon"). Leaving
+       * gicon NULL makes the shortcuts icon renderer fall through to the file's icon
+       * (thunar_file_get_icon_name -> the $HOME special-case -> "user-home", our Azzio home
+       * folder), so the sidebar matches the folder shown in the view. Upstream forced
+       * gicon = g_themed_icon_new ("go-home") here, which overrode the file icon. */
       shortcut->sort_id = 0;
       shortcut->hidden = thunar_shortcuts_model_get_hidden (model, shortcut);
       thunar_shortcuts_model_add_shortcut (model, shortcut);
