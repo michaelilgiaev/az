@@ -3301,21 +3301,14 @@ thunar_window_update_location_bar_visible (ThunarWindow *window)
 static void
 thunar_window_update_window_icon (ThunarWindow *window)
 {
-  gboolean      change_window_icon;
-  GtkIconTheme *icon_theme;
-  const gchar  *icon_name = "folder";
-
-  g_object_get (window->preferences, "misc-change-window-icon", &change_window_icon, NULL);
-
-  if (change_window_icon)
-    {
-      icon_theme = gtk_icon_theme_get_for_screen (gtk_window_get_screen (GTK_WINDOW (window)));
-      icon_name = thunar_file_get_icon_name (window->current_directory,
-                                             THUNAR_FILE_ICON_STATE_DEFAULT,
-                                             icon_theme);
-    }
-
-  gtk_window_set_icon_name (GTK_WINDOW (window), icon_name);
+  /* Azzio: the window icon is the File Manager's OWN application icon, so the OpenBox
+   * titlebar (and any other _NET_WM_ICON consumer) shows the same custom icon as the
+   * menu tile / Alt-Tab switcher -- exactly like every other app. Stock Thunar changes
+   * the window icon to the CURRENT FOLDER's icon (misc-change-window-icon, default TRUE),
+   * which is what made the titlebar show a generic folder icon instead of the app icon.
+   * The name is the icon we ship in packages/file_manager/launcher.py
+   * (FILE_MANAGER_ICON_NAME = "azzio-file-manager"); keep the two in sync. */
+  gtk_window_set_icon_name (GTK_WINDOW (window), "azzio-file-manager");
 }
 
 

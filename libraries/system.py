@@ -575,12 +575,14 @@ WantedBy=multi-user.target
 # The virtiofs shared-folder auto-mount, baked into EVERY variant (headed + ssh).
 # This is the fix for the old --shared/--ssh coupling: the share used to appear only
 # because the ssh bring-up mounted it as a side effect, so the headed variant never
-# got it. Now a plain systemd .mount unit mounts the host ./shared folder at
-# /home/main/shared on boot, independent of ssh, on whichever variant is running.
+# got it. Now a plain systemd .mount unit mounts the host ./Shared folder at
+# /home/main/Shared on boot, independent of ssh, on whichever variant is running.
 #
-# systemd requires a .mount unit's filename to encode its Where= (/home/main/shared
-# -> home-main-shared.mount). What=shared is the virtiofs mount TAG the hypervisor's
-# vhost-user-fs device advertises (NOT a block device). No 9p, no trans=/version=
+# systemd requires a .mount unit's filename to encode its Where= (/home/main/Shared
+# -> home-main-Shared.mount). What=shared is the virtiofs mount TAG the hypervisor's
+# vhost-user-fs device advertises (NOT a block device, and NOT a path -- an opaque
+# host<->guest identifier that stays lowercase even though the dir is "Shared"). No
+# 9p, no trans=/version=
 # options, and no modules-load entry: the virtiofs driver is in-tree in modern
 # kernels, so the unit alone is enough.
 #
@@ -598,7 +600,7 @@ Before=local-fs.target
 
 [Mount]
 What=shared
-Where=/home/main/shared
+Where=/home/main/Shared
 Type=virtiofs
 
 [Install]

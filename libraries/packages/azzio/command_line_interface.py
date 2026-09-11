@@ -123,7 +123,7 @@ def usage() -> None:
         "timers\n"
         "                          (--in D, --at T, --status, --cancel). Also as "
         "`azzio shutdown` etc.\n"
-        "  --sshd-hypervisor    Install host pubkey from ~/shared/authorized_keys "
+        "  --sshd-hypervisor    Install host pubkey from ~/Shared/authorized_keys "
         "and start sshd\n"
         "  mkazzioiso --ssh=\"<PASSWORD>\" [--out DIR]  Build the azzio-sshd ISO FROM the\n"
         "                          RUNNING system (captures packages installed while live);\n"

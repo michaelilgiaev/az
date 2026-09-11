@@ -896,6 +896,9 @@ def _emit_homedir(airootfs: Path, home: Path) -> None:
         # 2. The XDG trash chain -- created BEFORE the Trash symlink so it does not dangle.
         for rel in home_directory.TRASH_DIRS:
             emit.mkdir(root / rel)
+        # 2b. The .ssh dir -- created (at 0700) BEFORE the SSH symlink so it does not dangle and
+        #     so sshd accepts it. Was previously made only at runtime by the sshd bring-up.
+        emit.mkdir(root / home_directory.SSH_DIR, mode=home_directory.SSH_DIR_MODE)
         # 3. The convenience symlinks (Trash/Cache/Config/Bashrc/Local). RELATIVE targets,
         #    verbatim from home_directory.LINKS, so they resolve against the link's own
         #    directory in every home. emit.link replaces any pre-existing entry.
@@ -966,17 +969,19 @@ def _emit_power(airootfs: Path) -> None:
 def _emit_shared_mount(airootfs: Path) -> None:
     """Write the virtiofs shared-folder .mount unit and create its mountpoint.
 
-    The hypervisor exports the host ./shared folder over virtiofs (mount tag
-    "shared"); this unit mounts it at /home/main/shared on boot for BOTH variants,
-    so --shared works on the headed variant too (it no longer rides on the ssh
-    bring-up). The mountpoint dir must exist for systemd to mount onto it; it is
-    owned by `main` (uid 1000) via the closing chown in _emit_provision/_emit_apps
-    that covers all of /home/main. The enable-link is added in _link_services."""
+    The hypervisor exports the host ./Shared folder over virtiofs (mount tag
+    "shared" -- an opaque identifier, stays lowercase); this unit mounts it at
+    /home/main/Shared on boot for BOTH variants, so --shared works on the headed
+    variant too (it no longer rides on the ssh bring-up). The mountpoint dir must
+    exist for systemd to mount onto it (the home layout also ships /home/main/Shared
+    -- see home_directory.DIRECTORIES); it is owned by `main` (uid 1000) via the
+    closing chown in _emit_provision/_emit_apps that covers all of /home/main. The
+    enable-link is added in _link_services."""
     emit.write_text(
-        airootfs / "etc/systemd/system/home-main-shared.mount",
+        airootfs / "etc/systemd/system/home-main-Shared.mount",
         system.HOME_MAIN_SHARED_MOUNT,
     )
-    emit.mkdir(airootfs / "home/main/shared")
+    emit.mkdir(airootfs / "home/main/Shared")
 
 
 def _emit_tty1_autologin(airootfs: Path) -> None:
@@ -1420,12 +1425,12 @@ def _link_services(airootfs: Path) -> None:
     emit.link(timedate.SERVICE_SYSTEM_PATH,
               base / f"multi-user.target.wants/{timedate.SERVICE_NAME}")
     # The virtiofs shared-folder auto-mount: enabled on BOTH ISOs (and, via unpackfs,
-    # the installed system) so the host ./shared folder appears at /home/main/shared
+    # the installed system) so the host ./Shared folder appears at /home/main/Shared
     # on boot regardless of --ssh. This is the fix for the headed-variant coupling;
     # the unit body + mountpoint come from _emit_shared_mount. A .mount enable-link is
     # a symlink named after the unit, same mechanism as the .service links above.
-    emit.link("/etc/systemd/system/home-main-shared.mount",
-              base / "multi-user.target.wants/home-main-shared.mount")
+    emit.link("/etc/systemd/system/home-main-Shared.mount",
+              base / "multi-user.target.wants/home-main-Shared.mount")
 
 
 def _switch_offline(W: Path, conf: str, localrepo: Path) -> None:

@@ -6,8 +6,8 @@ layout and the file manager's sidebar are built from the SAME list, so the data 
 to the sidebar code that consumes it. compiler._emit_homedir imports it as packages.file_manager.home_directory.
 
 WHAT THIS SHIPS. A fixed set of top-level DIRECTORIES in the home directory (Desktop,
-Downloads, Vault, Documents, Ignore, Music, Pictures, Projects, Videos) plus a handful of
-convenience SYMLINKS that surface otherwise-hidden dot locations as plain top-level names:
+Downloads, Vault, Documents, Ignore, Music, Pictures, Projects, Shared, Videos) plus a handful
+of convenience SYMLINKS that surface otherwise-hidden dot locations as plain top-level names:
 
     Trash  -> .local/share/Trash/files   (the XDG trash "files" dir)
     Cache  -> .cache
@@ -41,6 +41,11 @@ spec dirs exist. So TRASH_DIRS creates the chain (.local/share/Trash/files AND
 .local/share/Trash/info -- the spec requires both; `info` holds the .trashinfo metadata)
 before the symlink is made, so Trash resolves to a real directory from first login.
 
+THE .ssh DIRECTORY. Same idea for "SSH -> .ssh": .ssh was previously created only at RUNTIME
+(the sshd bring-up), so the SSH shortcut dangled on a fresh system. SSH_DIR pre-creates .ssh
+(at SSH_DIR_MODE = 0700, since sshd refuses a group/world-readable ~/.ssh) so it, too, resolves
+from first login and is shipped by default.
+
 Pure standard library (only data + the resolved-path helper the file manager's sidebar uses).
 """
 
@@ -64,6 +69,7 @@ DIRECTORIES: tuple[str, ...] = (
     "Music",
     "Pictures",
     "Projects",
+    "Shared",
     "Videos",
 )
 
@@ -85,6 +91,17 @@ LINKS: tuple[tuple[str, str], ...] = (
 # sidebar/view ordering (after every other symlink), so both the static sidebar_entries() and
 # the runtime live-sidebar sync special-case it.
 TRASH_LINK_NAME = "Trash"
+
+# --- The .ssh directory (pre-created so the SSH symlink does not dangle) --------
+# "SSH -> .ssh" (in LINKS) would DANGLE on a freshly built/installed system: the .ssh dir was
+# previously created only at RUNTIME, when `azzio --sshd-hypervisor` first ran (install -d -m
+# 700). PROMPT: ship .ssh in /home/main BY DEFAULT. So, exactly like the TRASH chain below, the
+# target dir is created up front (relative to the home dir, in both /home/main and /etc/skel) --
+# now the SSH shortcut resolves to a real directory from first login, before sshd is ever
+# brought up. SSH_DIR_MODE pins it to 0700: sshd (and the runtime bring-up) refuse a
+# group/world-accessible ~/.ssh, so the build-time dir must already be private.
+SSH_DIR = ".ssh"
+SSH_DIR_MODE = 0o700
 
 # --- Sidebar pin + skip --------------------------------------------------------
 # The user's home sits at the TOP of the sidebar, shown as "main" (PROMPT: "add the user to the

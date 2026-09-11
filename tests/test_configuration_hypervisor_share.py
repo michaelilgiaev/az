@@ -53,8 +53,8 @@ def test_guest_fstab_line_is_virtiofs_not_9p():
     # in-tree in modern kernels), so the line is a plain virtiofs fstab entry.
     line = vm._guest_fstab_line("main")
     fields = line.split()
-    assert fields[0] == "shared"                 # source == the virtiofs mount tag
-    assert fields[1] == "/home/main/shared"      # target
+    assert fields[0] == "shared"                 # source == the virtiofs mount tag (opaque, lowercase)
+    assert fields[1] == "/home/main/Shared"      # target (the guest mountpoint dir)
     assert fields[2] == "virtiofs"               # fstype
     assert "nofail" in fields[3].split(",")      # never blocks boot if absent
     assert "9p" not in line and "trans=virtio" not in line

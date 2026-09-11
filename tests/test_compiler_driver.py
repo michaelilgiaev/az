@@ -156,9 +156,9 @@ def test_link_services_enables_shared_virtiofs_mount(tmp_path):
     (airootfs / "etc/systemd/system").mkdir(parents=True)
     compiler._link_services(airootfs)
     link = (airootfs / "etc/systemd/system/multi-user.target.wants"
-            / "home-main-shared.mount")
+            / "home-main-Shared.mount")
     assert link.is_symlink()
-    assert os.readlink(link) == "/etc/systemd/system/home-main-shared.mount"
+    assert os.readlink(link) == "/etc/systemd/system/home-main-Shared.mount"
 
 
 def test_link_services_masks_archiso_networkd_stack(tmp_path):
@@ -271,16 +271,16 @@ def test_run_calls_neutralize_via_link_services():
 
 def test_emit_shared_mount_writes_unit_and_mountpoint(tmp_path):
     # BEHAVIORAL: the emitter writes the virtiofs .mount unit body and creates the
-    # /home/main/shared mountpoint so systemd has somewhere to mount onto.
+    # /home/main/Shared mountpoint so systemd has somewhere to mount onto.
     import system
     airootfs = tmp_path / "airootfs"
     (airootfs / "etc/systemd/system").mkdir(parents=True)
     (airootfs / "home/main").mkdir(parents=True)
     compiler._emit_shared_mount(airootfs)
-    unit = airootfs / "etc/systemd/system/home-main-shared.mount"
+    unit = airootfs / "etc/systemd/system/home-main-Shared.mount"
     assert unit.is_file()
     assert unit.read_text() == system.HOME_MAIN_SHARED_MOUNT
-    assert (airootfs / "home/main/shared").is_dir()
+    assert (airootfs / "home/main/Shared").is_dir()
 
 
 def test_run_calls_emit_homedir():
@@ -321,6 +321,12 @@ def test_emit_homedir_creates_layout_in_home_and_skel(tmp_path):
             assert not os.path.isabs(got), f"{name} target must be relative: {got!r}"
         # 4. The Trash symlink resolves to a real directory (the chain made it non-dangling).
         assert (root / "Trash").resolve().is_dir()
+        # 5. The .ssh dir is pre-created (0700) so the SSH symlink resolves too and sshd accepts
+        #    it -- shipped by default, no longer only created at the runtime sshd bring-up.
+        ssh_dir = root / hd.SSH_DIR
+        assert ssh_dir.is_dir(), f"missing {hd.SSH_DIR} under {root}"
+        assert (os.stat(ssh_dir).st_mode & 0o777) == hd.SSH_DIR_MODE
+        assert (root / "SSH").resolve().is_dir()
 
 
 def test_brand_boot_menus_writes_all_six_boot_files(tmp_path):

@@ -80,7 +80,7 @@ def test_audio_present_when_on_absent_when_off(tmp_path):
 
 def test_shared_virtiofs_present_only_when_shared_enabled(tmp_path):
     off = _cfg(tmp_path, shared=False)
-    on = _cfg(tmp_path, shared=True)   # True == the working ./shared dir
+    on = _cfg(tmp_path, shared=True)   # True == the working ./Shared dir
     argv_off = vm.build_qemu_argv(off, disk=off.disk, gpu_args=[], iso_args=[], port=None)
     argv_on = vm.build_qemu_argv(on, disk=on.disk, gpu_args=[], iso_args=[], port=None)
     # OFF: no virtiofs device, and (crucially) no leftover 9p transport either.

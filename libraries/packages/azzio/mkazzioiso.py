@@ -81,7 +81,7 @@ OVERLAY_ETC_FILES = [
     "/etc/systemd/system/pkgs-setup.service",
     "/etc/systemd/system/azzio-sleep-policy.service",
     "/etc/systemd/system/azzio-timedate.service",
-    "/etc/systemd/system/home-main-shared.mount",
+    "/etc/systemd/system/home-main-Shared.mount",
     "/etc/systemd/system/getty@tty1.service.d/autologin.conf",
     "/etc/systemd/logind.conf.d/10-azzio-power.conf",
     "/etc/udev/rules.d/99-azzio-sleep-policy.rules",
@@ -108,9 +108,9 @@ ENABLE_LINKS = [
     ("/etc/systemd/system/azzio-sleep-policy.service", "azzio-sleep-policy.service"),
     ("/etc/systemd/system/azzio-timedate.service", "azzio-timedate.service"),
     # The virtiofs shared-folder auto-mount, enabled on BOTH variants so --shared appears at
-    # /home/main/shared regardless of --ssh (the headed-variant coupling fix). It is a .mount
+    # /home/main/Shared regardless of --ssh (the headed-variant coupling fix). It is a .mount
     # unit, but the enable-link is a symlink named after the unit like any .service.
-    ("/etc/systemd/system/home-main-shared.mount", "home-main-shared.mount"),
+    ("/etc/systemd/system/home-main-Shared.mount", "home-main-Shared.mount"),
 ]
 
 # Volatile / privacy-sensitive / self paths the overlay rsync must never copy. Patterns are
@@ -155,7 +155,7 @@ RSYNC_EXCLUDES = [
     "/root/.cache/*",
     "/tmp/*",
     "/var/tmp/*",
-    "*/shared/*",
+    "*/Shared/*",
     "*/.gvfs",
     "*/.local/share/Trash/*",
     "/etc/machine-id",
@@ -198,7 +198,7 @@ WantedBy=multi-user.target
 # The virtiofs shared-folder auto-mount -- byte-identical to
 # libraries/system.HOME_MAIN_SHARED_MOUNT (kept inline for the same bundling reason).
 # A test (test_shared_mount_unit_bodies_match_across_build_paths) pins the two copies
-# equal. Mounts the host ./shared folder (virtiofs tag "shared") at /home/main/shared
+# equal. Mounts the host ./Shared folder (virtiofs tag "shared") at /home/main/Shared
 # on boot, enabled on BOTH variants -- so --shared works on the headed variant too,
 # not just the ssh one (the old coupling fix).
 HOME_MAIN_SHARED_MOUNT = """\
@@ -210,7 +210,7 @@ Before=local-fs.target
 
 [Mount]
 What=shared
-Where=/home/main/shared
+Where=/home/main/Shared
 Type=virtiofs
 
 [Install]

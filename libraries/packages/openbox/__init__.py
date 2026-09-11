@@ -1547,7 +1547,7 @@ def azzio_command_line_interface() -> str:
 
     Subcommands (see packages/azzio/ for the full behavior):
       theme [--dark|--white]  set the system colour theme (dark default); no arg prints it
-      --sshd-hypervisor   install host pubkey from ~/shared/authorized_keys, start sshd
+      --sshd-hypervisor   install host pubkey from ~/Shared/authorized_keys, start sshd
       gpu [--resolve|--list]  detect the GPU and resolve its drivers from the offline repo
       timedate [--resolve]    geolocate by IP (pick a server) and set the timezone
       language [--resolve]    geolocate by IP and set English + the region language

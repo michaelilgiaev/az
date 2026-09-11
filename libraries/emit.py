@@ -154,7 +154,13 @@ def link(target: str, linkname: Path) -> None:
     linkname.symlink_to(target)
 
 
-def mkdir(path: Path) -> Path:
+def mkdir(path: Path, mode: int | None = None) -> Path:
+    """Create a directory (and parents). With `mode` given, force that permission on the
+    directory itself (via chmod, so it wins over the process umask and over a pre-existing
+    dir) -- used for dirs whose permission is load-bearing, e.g. ~/.ssh at 0700 (sshd
+    refuses a group/world-accessible .ssh)."""
     path = Path(path)
     path.mkdir(parents=True, exist_ok=True)
+    if mode is not None:
+        os.chmod(path, mode)
     return path

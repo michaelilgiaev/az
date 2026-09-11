@@ -266,8 +266,10 @@ thunar_preferences_dialog_init (ThunarPreferencesDialog *dialog)
   /* grab a reference on the preferences */
   dialog->preferences = thunar_preferences_get ();
 
-  /* configure the dialog properties */
-  gtk_window_set_icon_name (GTK_WINDOW (dialog), "org.xfce.thunar");
+  /* configure the dialog properties. Azzio: titlebar icon is the custom File Manager
+   * icon (packages/file_manager/launcher.py FILE_MANAGER_ICON_NAME), not stock
+   * org.xfce.thunar, so this dialog's OpenBox titlebar matches the main window. */
+  gtk_window_set_icon_name (GTK_WINDOW (dialog), "azzio-file-manager");
   gtk_window_set_resizable (GTK_WINDOW (dialog), FALSE);
   gtk_window_set_title (GTK_WINDOW (dialog), _("Thunar Preferences"));
 

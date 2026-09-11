@@ -821,6 +821,10 @@ def test_file_manager_desktop_renamed_and_custom_icon():
     # and not the old "Azzio File Manager" product name either.
     assert "Name=Azzio File Manager" not in d
     assert f"Icon={launcher.FILE_MANAGER_ICON_NAME}\n" in d
+    # StartupWMClass pins the switcher's window->.desktop resolver to this launcher via the
+    # primary (StartupWMClass) match, so the Alt-Tab tile shows the custom icon. The running
+    # Thunar window's WM_CLASS res_class is "Thunar" (g_set_application_name("Thunar")).
+    assert "StartupWMClass=Thunar\n" in d
     # stock Exec + actions preserved (binary + .desktop id stay `thunar`)
     assert "Exec=thunar %U" in d
     assert "Actions=open-home;open-computer;open-trash;" in d

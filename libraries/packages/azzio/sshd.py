@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """azzio guest command line interface -- `--sshd-hypervisor` (wire the guest sshd up for the hypervisor).
 
-Installs the host's public key from ~/shared/authorized_keys (staged there by the
+Installs the host's public key from ~/Shared/authorized_keys (staged there by the
 hypervisor) into the target user's ~/.ssh/authorized_keys, then enables and starts sshd.
 Safe to run more than once. Named --sshd-hypervisor because it wires the guest sshd up for
 the hypervisor's forwarded host->guest SSH port. See common.py for how modules are bundled.
@@ -195,7 +195,7 @@ def _install_hypervisor_pubkey(target_user: str, target_home: str) -> None:
     the TARGET user's ~/.ssh/authorized_keys so the hypervisor can log in by KEY.
 
     This is the HYPERVISOR nicety and is deliberately NON-FATAL: under QEMU/virtiofs the
-    host stages ~/shared/authorized_keys and we install it; on BARE-METAL (an installed ssh
+    host stages ~/Shared/authorized_keys and we install it; on BARE-METAL (an installed ssh
     variant) there is no virtiofs share, so we simply skip it and rely on PASSWORD auth (the
     operator's --ssh password, baked into /etc/shadow). Enabling sshd itself must NOT
     depend on this -- otherwise the installed ssh desktop would never start sshd. Any
@@ -203,12 +203,14 @@ def _install_hypervisor_pubkey(target_user: str, target_home: str) -> None:
 
     A root-owned authorized_keys trips sshd StrictModes, so the dir + key are chowned to
     the target user (install -o/-g target_user)."""
-    shared = os.path.join(target_home, "shared")
+    # The GUEST mountpoint is ~/Shared; "shared" (the mount source below) is the opaque
+    # virtiofs TAG the host exports under, which stays lowercase.
+    shared = os.path.join(target_home, "Shared")
     key = os.path.join(shared, "authorized_keys")
     if not _is_mountpoint(shared):
         # Try to mount the virtiofs share; if it is not there (bare metal, or the
-        # home-main-shared.mount unit already covers it), give up quietly. This is a
-        # FALLBACK: normally the systemd .mount unit has already mounted ~/shared, but
+        # home-main-Shared.mount unit already covers it), give up quietly. This is a
+        # FALLBACK: normally the systemd .mount unit has already mounted ~/Shared, but
         # mounting here too makes the pubkey install work even before that unit runs.
         os.makedirs(shared, exist_ok=True)
         rc = _sudo("mount", "-t", "virtiofs", "shared", shared, check=False)

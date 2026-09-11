@@ -23,10 +23,11 @@ from packages.file_manager import home_directory as hd
 
 
 def test_directory_set_is_exactly_the_spec():
-    # PROMPT task 1: these nine folders, in this order (the order is the sidebar order).
+    # PROMPT task 1: these ten folders, in this order (the order is the sidebar order).
+    # "Shared" is the host<->guest share mountpoint, shipped in /home/main by default.
     assert hd.DIRECTORIES == (
         "Desktop", "Downloads", "Vault", "Documents", "Ignore",
-        "Music", "Pictures", "Projects", "Videos",
+        "Music", "Pictures", "Projects", "Shared", "Videos",
     )
 
 
@@ -63,6 +64,18 @@ def test_trash_chain_has_both_spec_dirs():
     assert ".local/share/Trash/info" in hd.TRASH_DIRS
 
 
+def test_ssh_symlink_target_is_the_precreated_ssh_dir():
+    # "SSH -> .ssh" must not dangle: SSH_DIR is the (relative) dir pre-created before the link,
+    # exactly like the Trash chain. It must equal the SSH link's target.
+    assert hd.SSH_DIR == dict(hd.LINKS)["SSH"]
+    assert not hd.SSH_DIR.startswith("/")          # relative, like every layout target
+
+
+def test_ssh_dir_mode_is_private():
+    # sshd refuses a group/world-accessible ~/.ssh, so the pre-created dir must be 0700.
+    assert hd.SSH_DIR_MODE == 0o700
+
+
 def test_home_is_the_live_user_home():
     assert hd.HOME == "/home/main"
 
@@ -85,7 +98,7 @@ def test_sidebar_entries_are_directories_then_links_resolved():
     # a bookmark entry -- see test_main_user_label_is_the_home_basename.)
     assert labels == [
         "Desktop", "Downloads", "Vault", "Documents",
-        "Music", "Pictures", "Projects", "Videos",
+        "Music", "Pictures", "Projects", "Shared", "Videos",
         "Cache", "Config", "Bashrc", "Local", "SSH",
         "Trash",
     ]

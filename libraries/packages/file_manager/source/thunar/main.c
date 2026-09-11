@@ -79,8 +79,12 @@ main (int argc, char **argv)
   /* acquire a reference on the global application */
   application = thunar_application_get ();
 
-  /* use the Thunar icon as default for new windows */
-  gtk_window_set_default_icon_name ("org.xfce.thunar");
+  /* Azzio: default new-window icon is the custom File Manager icon (shipped by
+   * packages/file_manager/launcher.py as FILE_MANAGER_ICON_NAME = "azzio-file-manager"),
+   * not the stock org.xfce.thunar. This is the fallback for windows that do not set
+   * their own icon; the main browser window sets the same name explicitly in
+   * thunar_window_update_window_icon so the OpenBox titlebar matches other apps. */
+  gtk_window_set_default_icon_name ("azzio-file-manager");
 
   /* do further processing inside gapplication */
   g_application_run (G_APPLICATION (application), argc, argv);

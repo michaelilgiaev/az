@@ -6,10 +6,13 @@ Azzio overrides it so the application menu shows "File Manager" with the Azzio i
 
   * Name = "File Manager"   (not "Thunar File Manager")
   * Icon = FILE_MANAGER_ICON_NAME (our custom icon, see below), not org.xfce.thunar
+  * StartupWMClass = Thunar  (the running window's WM_CLASS): pins the window switcher's
+    window->.desktop resolver to THIS launcher via the primary (StartupWMClass) match, so the
+    Alt-Tab tile shows the custom icon without relying on the Exec-binary/id-stem fallback.
   * Everything else (Exec=thunar %U, the open-home/open-computer/open-trash Actions, MimeType
     inode/directory, Categories, StartupNotify) kept as the package ships it. The .desktop
     FILENAME stays thunar.desktop (the package owns that path and the binary is still `thunar`);
-    only the human-visible Name changes.
+    only the human-visible Name, the Icon, and the added StartupWMClass change.
 
 This is a PACKAGE-OWNED file, so -- exactly like gedit's org.gnome.gedit.desktop -- it cannot
 be pre-placed in the airootfs overlay (pacstrap's file-conflict check would abort). It is
@@ -73,6 +76,7 @@ Exec=thunar %U
 Icon={FILE_MANAGER_ICON_NAME}
 Terminal=false
 StartupNotify=true
+StartupWMClass=Thunar
 Type=Application
 Categories=System;Core;GTK;FileTools;FileManager;
 MimeType=inode/directory;

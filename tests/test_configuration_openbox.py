@@ -1344,8 +1344,8 @@ def test_azzio_sshd_is_fail_fast_no_false_success(monkeypatch):
 
     tmp = pytest.importorskip("tempfile").mkdtemp()
     import os
-    os.makedirs(os.path.join(tmp, "shared"), exist_ok=True)
-    open(os.path.join(tmp, "shared", "authorized_keys"), "w").write("ssh-ed25519 X\n")
+    os.makedirs(os.path.join(tmp, "Shared"), exist_ok=True)
+    open(os.path.join(tmp, "Shared", "authorized_keys"), "w").write("ssh-ed25519 X\n")
     monkeypatch.setenv("SUDO_USER", "main")
     import pwd
     monkeypatch.setattr(pwd, "getpwnam",

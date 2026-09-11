@@ -108,8 +108,9 @@ def _guest_fstab_line(guest_user: str) -> str:
     PURE. virtiofs needs no trans=/version= options and no modules-load entry (the
     driver is in-tree in modern kernels), so this is a plain virtiofs entry with
     'nofail' so a VM booted without the share still boots. The source field is the
-    mount tag "shared" advertised by the vhost-user-fs device."""
-    return f"shared  /home/{guest_user}/shared  virtiofs  nofail  0 0"
+    mount tag "shared" advertised by the vhost-user-fs device (an opaque host<->guest
+    identifier -- it stays lowercase; only the on-disk dir / mountpoint is "Shared")."""
+    return f"shared  /home/{guest_user}/Shared  virtiofs  nofail  0 0"
 
 
 # --- install -----------------------------------------------------------------
@@ -234,7 +235,7 @@ def do_run(cfg: Config, install_iso: str = "") -> None:
     disk = cfg.disk
     if not os.path.isfile(cfg.vars):
         shutil.copyfile(cfg.vars_tmpl, cfg.vars)
-    # Only auto-create the DEFAULT working ./shared dir; a user-named custom path
+    # Only auto-create the DEFAULT working ./Shared dir; a user-named custom path
     # is the user's own responsibility (we never mkdir an arbitrary host path).
     if hcfg.shared is True:
         os.makedirs(cfg.shared, exist_ok=True)
@@ -615,18 +616,18 @@ def do_share_print() -> None:
 
 
 _SHARE_TEXT = """\
-Run THESE commands ONCE INSIDE THE GUEST to auto-mount the host ./shared folder
-at ~/shared on every boot (any modern Linux guest -- the virtiofs driver is
+Run THESE commands ONCE INSIDE THE GUEST to auto-mount the host ./Shared folder
+at ~/Shared on every boot (any modern Linux guest -- the virtiofs driver is
 in-tree, so no module or package is needed):
 
-  sudo mkdir -p ~/shared
-  echo "shared  $HOME/shared  virtiofs  nofail  0 0" | sudo tee -a /etc/fstab
+  sudo mkdir -p ~/Shared
+  echo "shared  $HOME/Shared  virtiofs  nofail  0 0" | sudo tee -a /etc/fstab
   sudo mount -a
 
-After that it appears at ~/shared on every boot, owned by your guest user.
+After that it appears at ~/Shared on every boot, owned by your guest user.
 (virtiofsd preserves the host uid/gid; when host and guest both use uid 1000,
 ownership lines up. An Azzio guest already auto-mounts it via the shipped
-home-main-shared.mount systemd unit -- no need to run the above.)
+home-main-Shared.mount systemd unit -- no need to run the above.)
 
 ----------------------------------------------------------------------------
 For a SMOOTH, auto-1920x1080 desktop, the GUEST also needs (once):
@@ -656,7 +657,7 @@ def do_share_offline(cfg: Config) -> None:
     # guest -- so this is NOT a host-side /home/<user> hard-code (it names the GUEST's home
     # inside its own disk, mirroring the adjacent GUEST_UID/GID overrides).
     guest_user = os.environ.get("GUEST_USER", "main")
-    mountpoint = f"/home/{guest_user}/shared"
+    mountpoint = f"/home/{guest_user}/Shared"
     fstab_line = _guest_fstab_line(guest_user)
 
     disk = cfg.disk
@@ -716,9 +717,9 @@ def do_share_offline(cfg: Config) -> None:
         # 2. create the mountpoint (home subvolume @home)
         _sudo(["mount", "-o", "subvol=@home", rootpart, mnt])
         if os.path.isdir(os.path.join(mnt, guest_user)):
-            _sudo(["mkdir", "-p", os.path.join(mnt, guest_user, "shared")])
+            _sudo(["mkdir", "-p", os.path.join(mnt, guest_user, "Shared")])
             _sudo(["chown", f"{guest_uid}:{guest_gid}",
-                   os.path.join(mnt, guest_user, "shared")])
+                   os.path.join(mnt, guest_user, "Shared")])
             print(f"mountpoint: {mountpoint} ready (owner {guest_uid}:{guest_gid}).")
         else:
             die(f"guest /home/{guest_user} not found in @home subvolume")
