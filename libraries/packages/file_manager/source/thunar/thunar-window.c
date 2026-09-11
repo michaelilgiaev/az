@@ -1031,7 +1031,14 @@ thunar_window_init (ThunarWindow *window)
   /* build the menubar */
   window->menubar = gtk_menu_bar_new ();
   thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_FILE_MENU, G_CALLBACK (thunar_window_update_file_menu), window->menubar);
-  thunar_window_create_menu (window, THUNAR_WINDOW_ACTION_EDIT_MENU, G_CALLBACK (thunar_window_update_edit_menu), window->menubar);
+  /* Azzio: the "Edit" menu is intentionally removed from the TOPBAR (menubar), same treatment as
+   * the "View"/"Go" menus below -- the create_menu(... EDIT_MENU ..., window->menubar) call is
+   * gone. Its two selection accelerators <Primary>s (Select by Pattern) and <Primary><shift>I
+   * (Invert Selection) are ALSO disabled in thunar-standard-view.c (accel string blanked); the
+   * rest of the Edit shortcuts -- <Primary>z/<Primary><shift>z (undo/redo), <Primary>a (select
+   * all), <Primary>x/c/v (cut/copy/paste), F2 (rename), Delete -- are deliberately KEPT. The
+   * window/hamburger menu keeps its Edit submenu (see thunar_window_update_edit_menu call on the
+   * popup `menu`), so those actions and their menu items remain reachable without the topbar. */
   /* Azzio: the "View" menu is intentionally removed from the TOPBAR (menubar), same treatment as
    * the "Go" menu below. Its accelerators <Primary>r (reload), F3 (split view), <Primary>b
    * (side-pane shortcuts), <Primary>e (side-pane tree) and <Primary>m (menubar) are ALSO disabled

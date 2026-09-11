@@ -270,6 +270,61 @@ def test_view_menu_removed_from_topbar_and_its_accelerators_disabled():
     assert "F5" in _entry_line("<Actions>/ThunarWindow/reload-alt-1")
 
 
+def test_edit_menu_removed_from_topbar_and_its_accelerators_disabled():
+    # PROMPT: same treatment as "Go"/"View" -- remove the "Edit" option from the TOPBAR, and
+    # disable Ctrl+S ("Select by Pattern...") and Shift+Ctrl+I ("Invert Selection"); the rest of
+    # the Edit shortcuts are fine. Baked into the vendored fork:
+    #   * the Edit menu is dropped from the MENUBAR only -- the create_menu(... EDIT_MENU ...,
+    #     window->menubar) call is gone; the window/hamburger-menu Edit submenu stays (created into
+    #     the popup `menu`), so the actions + their menu items remain reachable without the topbar,
+    #   * select-by-pattern (<Primary>s) and invert-selection (<Primary><shift>I) have their
+    #     accelerator strings blanked in thunar-standard-view.c's action-entry table (the callbacks/
+    #     menu items are untouched, so both still work by click from the Edit submenu),
+    #   * the KEPT Edit keys -- undo/redo (<Primary>z / <Primary><shift>z), select-all (<Primary>a),
+    #     cut/copy/paste (<Primary>x/c/v) and rename (F2) -- are asserted still bound so a future
+    #     edit can't silently drop them.
+    win_c = (fm.SOURCE_DIR / "thunar" / "thunar-window.c").read_text()
+    sv_c = (fm.SOURCE_DIR / "thunar" / "thunar-standard-view.c").read_text()
+    am_c = (fm.SOURCE_DIR / "thunar" / "thunar-action-manager.c").read_text()
+
+    # (1) The Edit menu is no longer added to the TOPBAR menubar...
+    assert "G_CALLBACK (thunar_window_update_edit_menu), window->menubar)" not in win_c
+    # ...but the window/hamburger-menu Edit submenu is KEPT (still created into that popup `menu`),
+    # so undo/redo/cut/copy/paste/select-all stay available from the menu even without the topbar.
+    assert "G_CALLBACK (thunar_window_update_edit_menu), menu)" in win_c
+
+    def _sv_entry_line(action_path: str) -> str:
+        # The standard-view action-entry row defining this "<Actions>/..." path (trailing
+        # quote+comma so a longer sibling path is not matched).
+        return next(ln for ln in sv_c.splitlines() if f'"{action_path}",' in ln)
+
+    def _win_entry_line(action_path: str) -> str:
+        return next(ln for ln in win_c.splitlines() if f'"{action_path}",' in ln)
+
+    def _am_entry_line(action_path: str) -> str:
+        return next(ln for ln in am_c.splitlines() if f'"{action_path}",' in ln)
+
+    # (2) The two named accelerators are blanked (accel string ""). Assert per action row so a
+    # future re-add of the key is caught precisely.
+    for action_path, dead_accel in (
+        ("<Actions>/ThunarStandardView/select-by-pattern", "<Primary>s"),
+        ("<Actions>/ThunarStandardView/invert-selection", "<Primary><shift>I"),
+    ):
+        line = _sv_entry_line(action_path)
+        assert dead_accel not in line, f"{action_path} still binds {dead_accel}"
+
+    # (3) The KEPT Edit bindings are still present on their own rows. Undo/Redo/Preferences and
+    # the Edit-menu label live on the window entries; Select All on the standard-view entries;
+    # Cut/Copy/Paste and Rename on the action-manager entries.
+    assert "<Primary>Z" in _win_entry_line("<Actions>/ThunarActionManager/undo")
+    assert "<Primary><shift>Z" in _win_entry_line("<Actions>/ThunarActionManager/redo")
+    assert "<Primary>a" in _sv_entry_line("<Actions>/ThunarStandardView/select-all-files")
+    assert "<Primary>X" in _am_entry_line("<Actions>/ThunarActionManager/cut")
+    assert "<Primary>C" in _am_entry_line("<Actions>/ThunarActionManager/copy")
+    assert "<Primary>V" in _am_entry_line("<Actions>/ThunarActionManager/paste")
+    assert "F2" in _am_entry_line("<Actions>/ThunarStandardView/rename")
+
+
 def test_show_hidden_files_added_to_right_click_menu():
     # PROMPT: add "Show Hidden Files" to the menu that opens with the right mouse click. The
     # empty-space context menu is built in thunar_standard_view_context_menu (thunar-standard-view.c);
