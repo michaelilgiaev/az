@@ -1,10 +1,10 @@
-"""Azzio File Manager launcher override -- rename to "Azzio File Manager" + a custom Azzio icon.
+"""Azzio File Manager launcher override -- rename to "File Manager" + a custom Azzio icon.
 
 THE .DESKTOP (thunar.desktop). The thunar package ships /usr/share/applications/thunar.desktop
 with Name="Thunar File Manager" and Icon=org.xfce.thunar (verified on the installed system).
-Azzio overrides it so the application menu shows "Azzio File Manager" with the Azzio icon:
+Azzio overrides it so the application menu shows "File Manager" with the Azzio icon:
 
-  * Name = "Azzio File Manager"   (not "Thunar File Manager")
+  * Name = "File Manager"   (not "Thunar File Manager")
   * Icon = FILE_MANAGER_ICON_NAME (our custom icon, see below), not org.xfce.thunar
   * Everything else (Exec=thunar %U, the open-home/open-computer/open-trash Actions, MimeType
     inode/directory, Categories, StartupNotify) kept as the package ships it. The .desktop
@@ -58,7 +58,7 @@ ICON_PNG_DIR = "/usr/share/icons/hicolor/{size}x{size}/apps"
 def file_manager_desktop() -> str:
     """/usr/share/applications/thunar.desktop -- the renamed launcher with the Azzio icon.
 
-    Name="Azzio File Manager" and Icon=azzio-file-manager; Exec, the three Desktop Actions, MimeType,
+    Name="File Manager" and Icon=azzio-file-manager; Exec, the three Desktop Actions, MimeType,
     Categories and StartupNotify are kept exactly as the thunar package ships them (only the
     Name and Icon change). DBusActivatable is not set (the default launch is fine)."""
     return f"""\

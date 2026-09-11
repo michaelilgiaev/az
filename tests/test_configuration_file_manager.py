@@ -906,3 +906,70 @@ def test_mo_locale_catalog_dests_are_iso_app_overrides():
 def test_icon_asset_exists():
     import paths
     assert (paths.ASSETSDIR / launcher.ICON_ASSET).is_file()
+
+
+def test_trash_delete_is_permanent_not_re_trash():
+    # NEW PROMPT: "Trying to delete something in Trash doesn't work, it drops it into Trash, which
+    # makes it increment itself by .2 (e.g. 'LibreOffice Impress.2.2.2.2....odp' -- can't delete
+    # it)." Azzio's sidebar "Trash" bookmark opens the PHYSICAL spool path
+    # (file://.../.local/share/Trash/files), not the virtual trash:/// scheme -- so a file there is
+    # still scheme `file` (is_local + can_be_trashed both TRUE) and the stock safety nets miss it,
+    # and Delete calls g_file_trash() on an already-trashed file, which GIO re-trashes with a ".2"
+    # collision suffix. The fork adds a predicate for "physically inside the XDG trash spool" and
+    # wires it into BOTH the unlink safety net (makes Delete permanent) and the menu label logic
+    # (shows "Delete", not "Move to Trash"). Baked into the vendored fork:
+    gio_h = (fm.SOURCE_DIR / "thunar" / "thunar-gio-extensions.h").read_text()
+    gio_c = (fm.SOURCE_DIR / "thunar" / "thunar-gio-extensions.c").read_text()
+    app_c = (fm.SOURCE_DIR / "thunar" / "thunar-application.c").read_text()
+    am_c = (fm.SOURCE_DIR / "thunar" / "thunar-action-manager.c").read_text()
+
+    # (1) The header DECLARES the new predicate.
+    assert "thunar_g_file_is_in_trash_dir (GFile *file);" in gio_h, (
+        "thunar-gio-extensions.h must declare thunar_g_file_is_in_trash_dir"
+    )
+
+    # (2) gio-extensions.c DEFINES it: native-only (trash:/// is is_trashed()'s job), and a
+    # descendant of a "Trash" dir built from the XDG data dir. Anchor on the DEFINITION body
+    # (signature + "\n{"). Match CALL forms so words in the function's doc comment can't trip a guard.
+    gio_body = gio_c.split("\nthunar_g_file_is_in_trash_dir (GFile *file)", 1)[1]
+    gio_body = gio_body.split("\n{", 1)[1].split("\n}", 1)[0]
+    assert "g_file_is_native (file)" in gio_body, "is_in_trash_dir must restrict to native file:// paths"
+    assert 'g_build_filename (g_get_user_data_dir (), "Trash", NULL)' in gio_body, (
+        "is_in_trash_dir must build the trash path from g_get_user_data_dir()/Trash"
+    )
+    assert "thunar_g_file_is_descendant (file, trash_dir)" in gio_body, (
+        "is_in_trash_dir must test descendancy of the trash spool"
+    )
+
+    # (3) thunar_application_unlink_files forces a PERMANENT unlink when a file is physically inside
+    # the trash spool -- this is what actually stops the re-trash, regardless of which UI path
+    # reached it. Anchor on the DEFINITION body and match the CALL form "permanently = TRUE" guarded
+    # by the predicate call.
+    app_body = app_c.split("\nthunar_application_unlink_files (ThunarApplication", 1)[1]
+    app_body = app_body.split("\n{", 1)[1].split("\n}", 1)[0]
+    assert "thunar_g_file_is_in_trash_dir (thunar_file_get_file (lp->data))" in app_body, (
+        "unlink_files must test each file with thunar_g_file_is_in_trash_dir"
+    )
+    # The predicate and the force-permanent assignment both live in the loop.
+    assert "permanently = TRUE" in app_body, "unlink_files must be able to force permanently=TRUE"
+
+    # (4) thunar_action_manager_show_trash returns FALSE when the parent folder is the trash -- by
+    # the virtual scheme (is_trashed) OR the physical spool (is_in_trash_dir) -- so the menu reads
+    # "Delete" (permanent) rather than "Move to Trash" inside the trash. Anchor on the DEFINITION
+    # body; match the CALL form so the explanatory comment's bare "is_in_trash_dir()" can't satisfy it.
+    am_body = am_c.split("\nthunar_action_manager_show_trash (ThunarActionManager *action_mgr)", 1)[1]
+    am_body = am_body.split("\n{", 1)[1].split("\n}", 1)[0]
+    assert "thunar_g_file_is_in_trash_dir (thunar_file_get_file (action_mgr->parent_folder))" in am_body, (
+        "show_trash must test the parent folder with thunar_g_file_is_in_trash_dir"
+    )
+    assert "thunar_file_is_trashed (action_mgr->parent_folder)" in am_body, (
+        "show_trash must also catch the virtual trash:/// scheme via is_trashed"
+    )
+    # The trash-detection guard must early-return FALSE (so "Move to Trash" is suppressed). The
+    # predicate closes the `if (...)` condition and the very next statement is `return FALSE;`.
+    after_guard = am_body.split(
+        "thunar_g_file_is_in_trash_dir (thunar_file_get_file (action_mgr->parent_folder))", 1
+    )[1]
+    assert after_guard.lstrip().startswith(")\n    return FALSE;"), (
+        "the in-trash guard in show_trash must immediately return FALSE"
+    )

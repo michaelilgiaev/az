@@ -58,15 +58,13 @@ So if you plan to use this project in any way, please read the code first. Do no
      <tbody>
      <tr><td>
 
-     The project is still in early development, so there are no mirror links for downloading the ISOs yet.
+     ~https://azzio.baselinux.net/download/azzio-headed-2026.09.08-x86_64.iso~
+
+     ~https://azzio.baselinux.net/download/azzio-headless-2026.09.08-x86_64.iso~
 
      </td></tr>
      </tbody>
      </table>
-
-     ~https://azzio.baselinux.net/download/azzio-headed-2026.09.08-x86_64.iso~
-
-     ~https://azzio.baselinux.net/download/azzio-headless-2026.09.08-x86_64.iso~
 
 2. **Create a Bootable USB**  
 
@@ -88,7 +86,7 @@ So if you plan to use this project in any way, please read the code first. Do no
    - **[Rufus](https://rufus.ie/en/)** (Windows only)
    - `dd` command (Linux/macOS):
 
-     Replace `<DEVICE>` with the USB device and Replace `<ISO>` with the ISO file.
+     Replace `<DEVICE>` with the USB device and replace `<ISO>` with the ISO file.
 
      ```bash
      sudo dd if=<ISO> of=/dev/<DEVICE> bs=4M oflag=direct status=progress
