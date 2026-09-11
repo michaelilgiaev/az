@@ -163,6 +163,17 @@ ISO_APP_OVERRIDES = [
     ("kitty.svg", "/usr/share/icons/hicolor/scalable/apps/kitty.svg", False),
     (None, "/usr/share/icons/hicolor/256x256/apps/kitty.png", True),
     (None, "/usr/share/pixmaps/kitty.png", True),
+    # NUKE the "kitty URL launcher" from the file manager's "Open With" submenu (the user:
+    # "Remove 'kitty URL launcher' from 'Open With'"). The kitty package ships TWO .desktop files:
+    # kitty.desktop (the terminal, Name=kitty -- KEEP) and kitty-open.desktop (Name="kitty URL
+    # Launcher", Exec=kitty +open %U). The latter declares MimeType=...;inode/directory;text/*;
+    # image/*;x-scheme-handler/... so GIO lists it as an app that can open folders/files -- which is
+    # exactly why it surfaces in "Open With". Its NoDisplay=true only hides it from the APPLICATION
+    # menu; "Open With" is built from the mime<->.desktop association, which ignores NoDisplay, so
+    # the launcher must be REMOVED, not merely hidden. Owned by `kitty`, so it takes the same
+    # NoExtract + post-pacstrap `rm -f` route as the suppress-only kitty PNGs (basename None,
+    # remove True). Only kitty-open.desktop is removed; kitty.desktop (the terminal) is untouched.
+    (None, "/usr/share/applications/kitty-open.desktop", True),
     ("org.gnome.gedit.desktop", "/usr/share/applications/org.gnome.gedit.desktop", False),
     # file_manager + xviewer .desktop overrides (packages/file_manager, packages/xviewer): the
     # file manager's launcher rename+icon (its on-disk name stays thunar.desktop -- the built

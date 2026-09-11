@@ -15,7 +15,7 @@ feature at runtime. These lock the load-bearing details:
     folder actions carry <range> (required to appear on the folder background).
   * the sidebar bookmarks come from home_directory (resolved paths), Desktop is not duplicated
     with the built-in, and the built-in Computer/Network/Recent/Trash are hidden.
-  * the launcher is renamed to "Azzio File Manager" with the custom icon; the icon uses a
+  * the launcher is renamed to "File Manager" with the custom icon; the icon uses a
     private name (the .desktop id and the binary stay `thunar`).
 """
 
@@ -435,20 +435,22 @@ def test_location_toolbar_drops_hamburger_and_home_and_moves_search_into_home_sl
 
     # (3) Search moved into home's old slot: its creation is in the left cluster, before the
     # location-bar tool_item (anchored by the "add the location bar to the toolbar" comment) and
-    # before the NEW_TAB item -- not in the trailing block after the bar.
+    # before the NEW_WINDOW item -- not in the trailing block after the bar. (The NEW_TAB toolbar
+    # item that used to be the next-created item is GONE: tabs are completely disabled, see
+    # test_new_tabs_are_completely_disabled -- so NEW_WINDOW is now the item right after search.)
     search_create = 'window->location_toolbar_item_search = thunar_window_create_toolbar_toggle_item_from_action (window, THUNAR_WINDOW_ACTION_SEARCH,'
     assert win_c.count(search_create) == 1  # created exactly once (not left behind in two places)
     # anchor on the toolbar CREATION CALLS (unique full call strings), not the action-entry table
     # near the top of the file where these ACTION_ enum names also appear.
-    new_tab_create = "thunar_window_create_toolbar_item_from_action (window, THUNAR_WINDOW_ACTION_NEW_TAB, item_order++)"
+    new_window_create = "thunar_window_create_toolbar_item_from_action (window, THUNAR_WINDOW_ACTION_NEW_WINDOW, item_order++)"
     parent_create = "window->location_toolbar_item_parent = thunar_window_create_toolbar_item_from_action"
-    assert win_c.count(new_tab_create) == 1
+    assert win_c.count(new_window_create) == 1
     assert win_c.count(parent_create) == 1
     search_pos = win_c.index(search_create)
     parent_pos = win_c.index(parent_create)
-    new_tab_pos = win_c.index(new_tab_create)
+    new_window_pos = win_c.index(new_window_create)
     location_bar_pos = win_c.index("/* add the location bar to the toolbar */")
-    assert parent_pos < search_pos < new_tab_pos < location_bar_pos, "search must sit after 'up', before the path bar"
+    assert parent_pos < search_pos < new_window_pos < location_bar_pos, "search must sit after 'up', before the path bar"
     # ...and IMMEDIATELY after 'up' (home's exact old slot): nothing else is created between the
     # parent-button line and the search line.
     between = win_c[win_c.index("\n", parent_pos) + 1 : search_pos]
@@ -484,6 +486,9 @@ def test_default_last_toolbar_items_string_matches_the_new_layout():
     # (1) the two removed buttons are gone from the persisted default too.
     assert "menu" not in items, f"hamburger 'menu' still in default toolbar order: {default}"
     assert "open-home" not in items, f"'open-home' still in default toolbar order: {default}"
+    # ...and "new-tab" is gone too -- tabs are completely disabled, so there is no New Tab toolbar
+    # item to persist an order for (a stale "new-tab:0" would be a dead token).
+    assert "new-tab" not in items, f"'new-tab' still in default toolbar order: {default}"
 
     # (2) search sits in home's OLD slot: immediately after open-parent, and it is still visible.
     assert "open-parent:1,search:1" in default, (
@@ -496,6 +501,61 @@ def test_default_last_toolbar_items_string_matches_the_new_layout():
         f"search must no longer trail after reload; tail was: {default}"
     )
     assert items.count("search") == 1  # not duplicated across old + new slots
+
+
+def test_new_tabs_are_completely_disabled():
+    # NEW PROMPT: "Completely disable new tabs; additionally, when I right click on a folder there
+    # is 'Open in new Tab', please remove that option entirely." Tabs are killed at the single
+    # choke point every new-tab path funnels through, and the "Open in new Tab" context item is
+    # dropped from EVERY right-click menu (main view, side pane, tree). Baked into the vendored fork:
+    win_c = (fm.SOURCE_DIR / "thunar" / "thunar-window.c").read_text()
+    am_c = (fm.SOURCE_DIR / "thunar" / "thunar-action-manager.c").read_text()
+    sc_c = (fm.SOURCE_DIR / "thunar" / "thunar-shortcuts-view.c").read_text()
+    tv_c = (fm.SOURCE_DIR / "thunar" / "thunar-tree-view.c").read_text()
+
+    # (1) The choke point: thunar_window_notebook_add_new_tab no longer inserts a notebook page --
+    # every "open in a new tab" caller (New Tab action/toolbar, "Open in new Tab", middle-click,
+    # the open-new-tab signals, `thunar --tab`) runs through it, so neutralizing it here disables
+    # tab creation everywhere. It navigates the CURRENT view instead (set_current_directory) and
+    # must NOT call insert_page. Anchor on the DEFINITION body (signature + "\n{").
+    body = win_c.split("thunar_window_notebook_add_new_tab (ThunarWindow        *window,", 1)[1]
+    body = body.split("\n{", 1)[1].split("\n}", 1)[0]
+    # Match the CALL form ("...insert_page (window, ...") so the word appearing in this function's
+    # explanatory comment doesn't trip the guard.
+    assert "thunar_window_notebook_insert_page (window" not in body, "add_new_tab must not insert a tab page"
+    assert "thunar_window_set_current_directory (window, directory)" in body, (
+        "add_new_tab must navigate the current view instead of opening a tab"
+    )
+
+    # (2) The "New Tab" TOOLBAR item is gone (only New Window remains in that slot).
+    assert "thunar_window_create_toolbar_item_from_action (window, THUNAR_WINDOW_ACTION_NEW_TAB" not in win_c
+
+    # (3) The "New Tab" MENU items are gone from BOTH the F10/File submenu and the tab context menu
+    # (the only two xfce_gtk_menu_item_new_from_action_entry(... NEW_TAB ...) call sites).
+    assert "get_action_entry (THUNAR_WINDOW_ACTION_NEW_TAB)" not in win_c
+
+    # (4) "Open in new Tab" is removed from EVERY context menu: it is never APPENDED anywhere. The
+    # action row + the builder `case` may remain defined in the action manager (dead, harmless), but
+    # nothing surfaces it -- so no line that calls append_menu_item may name OPEN_IN_TAB (in the
+    # action manager, side pane or tree), and the enum is gone entirely from the two view builders.
+    for src in (am_c, sc_c, tv_c):
+        for ln in src.splitlines():
+            if "append_menu_item" in ln:
+                assert "OPEN_IN_TAB" not in ln, ln
+    assert "THUNAR_ACTION_MANAGER_ACTION_OPEN_IN_TAB" not in sc_c
+    assert "THUNAR_ACTION_MANAGER_ACTION_OPEN_IN_TAB" not in tv_c
+
+    # (5) The Ctrl+Shift+P accelerator on the (now unsurfaced) open-in-new-tab row is blanked, so the
+    # keyboard can't trigger a tab either. Assert on that row precisely.
+    oit_row = next(ln for ln in am_c.splitlines()
+                   if '"<Actions>/ThunarActionManager/open-in-new-tab",' in ln)
+    assert "<Primary><shift>P" not in oit_row, "Ctrl+Shift+P must be unbound from Open in new Tab"
+
+    # (6) Ctrl+T stays blanked on the (now unsurfaced) new-tab action row -- a regression guard so a
+    # future edit can't quietly rebind it. The row still exists (the callback is harmless now), but
+    # carries no accelerator.
+    new_tab_row = next(ln for ln in win_c.splitlines() if '"<Actions>/ThunarWindow/new-tab",' in ln)
+    assert "<Primary>t" not in new_tab_row
 
 
 def test_drag_drop_cannot_add_a_persisted_sidebar_shortcut():
@@ -547,14 +607,17 @@ def test_mo_overrides_relabel_the_hardcoded_strings():
     assert o['_Open With "%s"'] == "_Edit with %s"               # item 7 (built-in -> "Edit with gedit")
     assert o["Create _Folder..."] == "Create New _Folder..."     # item 8 wording
     assert o["Create _Document"] == "Create New _Document..."     # item 8 wording
-    # App identity: the product name "Thunar" -> "Azzio File Manager" in every gettext-wrapped
-    # display string (application name, Preferences title, About blurb).
-    assert o["Thunar"] == "Azzio File Manager"
-    assert o["Thunar Preferences"] == "Azzio File Manager Preferences"
+    # App identity: the product name "Thunar" -> "File Manager" in every gettext-wrapped
+    # display string (application name, Preferences title, About blurb). PROMPT: rename the file
+    # manager from "Azzio File Manager" to simply "File Manager".
+    assert o["Thunar"] == "File Manager"
+    assert o["Thunar Preferences"] == "File Manager Preferences"
     assert o[
         "Thunar is a fast and easy to use file manager\n"
         "for the Xfce Desktop Environment."
-    ].startswith("Azzio File Manager is a fast")
+    ].startswith("File Manager is a fast")
+    # the old "Azzio File Manager" product name must not linger in any override value.
+    assert not any("Azzio File Manager" in v for v in o.values())
 
 
 def test_window_title_is_fixed_file_manager_in_vendored_source():
@@ -749,11 +812,14 @@ def test_sidebar_covers_the_full_layout_set_minus_desktop():
 # --- launcher (launcher.py) -------------------------------------------------
 
 def test_file_manager_desktop_renamed_and_custom_icon():
-    # The launcher is renamed to the product name "Azzio File Manager" + custom icon.
+    # The launcher is renamed to the product name "File Manager" + custom icon. PROMPT: rename the
+    # file manager from "Azzio File Manager" to simply "File Manager".
     d = launcher.file_manager_desktop()
-    assert "Name=Azzio File Manager\n" in d
+    assert "Name=File Manager\n" in d
     # the visible Name line is the product name, not the stock "Thunar File Manager"
     assert "Name=Thunar File Manager" not in d
+    # and not the old "Azzio File Manager" product name either.
+    assert "Name=Azzio File Manager" not in d
     assert f"Icon={launcher.FILE_MANAGER_ICON_NAME}\n" in d
     # stock Exec + actions preserved (binary + .desktop id stay `thunar`)
     assert "Exec=thunar %U" in d

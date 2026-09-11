@@ -81,6 +81,12 @@ def test_app_override_cp_sh_plants_replacements_and_removes_suppressed():
     # Suppress-only cat PNGs: removed, never installed.
     assert "rm -f /usr/share/icons/hicolor/256x256/apps/kitty.png" in live
     assert "rm -f /usr/share/pixmaps/kitty.png" in live
+    # The "kitty URL launcher" (kitty-open.desktop) is REMOVED so it stops appearing in the file
+    # manager's "Open With" (NoDisplay does not hide it there; only removal does). Its Name is
+    # "kitty URL Launcher" and it declares MimeType inode/directory + text/* + scheme handlers.
+    assert "rm -f /usr/share/applications/kitty-open.desktop" in live
+    # ...but the kitty TERMINAL launcher (kitty.desktop) must NOT be touched -- only the URL opener.
+    assert "kitty.desktop" not in live.replace("kitty-open.desktop", "")
     assert "install -Dm644 /root/azzio/apps/None" not in live  # no body staged for removals
     # Installer variant targets the mounted new root.
     mnt = pacman.app_override_cp_sh("/mnt")

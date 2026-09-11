@@ -322,7 +322,9 @@ static XfceGtkActionEntry thunar_action_manager_action_entries[] =
     { THUNAR_ACTION_MANAGER_ACTION_OPEN,             "<Actions>/ThunarActionManager/open",                    "<Primary>O",        XFCE_GTK_IMAGE_MENU_ITEM, N_ ("_Open"),                           NULL,                                                                                            "document-open",        G_CALLBACK (thunar_action_manager_action_open),                },
     { THUNAR_ACTION_MANAGER_ACTION_EXECUTE,          "<Actions>/ThunarActionManager/execute",                 "",                  XFCE_GTK_IMAGE_MENU_ITEM, N_ ("_Execute"),                        NULL,                                                                                            "system-run",           G_CALLBACK (thunar_action_manager_action_open),                },
     { THUNAR_ACTION_MANAGER_ACTION_EDIT_LAUNCHER,    NULL,                                                    "",                  XFCE_GTK_IMAGE_MENU_ITEM, N_ ("Edit _Launcher"),                  N_ ("Edit the selected launcher"),                                                               "gtk-edit",             G_CALLBACK (thunar_action_manager_action_edit_launcher),       },
-    { THUNAR_ACTION_MANAGER_ACTION_OPEN_IN_TAB,      "<Actions>/ThunarActionManager/open-in-new-tab",         "<Primary><shift>P", XFCE_GTK_MENU_ITEM,       N_ ("Open in new _Tab"),                NULL,                                                                                            NULL,                   G_CALLBACK (thunar_action_manager_action_open_in_new_tabs),    },
+    /* Azzio: <Primary><shift>P (Open in new Tab) accelerator blanked -- tabs are completely
+     * disabled (user request) and this item is no longer appended to any menu. */
+    { THUNAR_ACTION_MANAGER_ACTION_OPEN_IN_TAB,      "<Actions>/ThunarActionManager/open-in-new-tab",         "",                  XFCE_GTK_MENU_ITEM,       N_ ("Open in new _Tab"),                NULL,                                                                                            NULL,                   G_CALLBACK (thunar_action_manager_action_open_in_new_tabs),    },
     { THUNAR_ACTION_MANAGER_ACTION_OPEN_IN_WINDOW,   "<Actions>/ThunarActionManager/open-in-new-window",      "<Primary><shift>O", XFCE_GTK_MENU_ITEM,       N_ ("Open in new _Window"),             NULL,                                                                                            NULL,                   G_CALLBACK (thunar_action_manager_action_open_in_new_windows), },
     { THUNAR_ACTION_MANAGER_ACTION_OPEN_LOCATION,    "<Actions>/ThunarActionManager/open-location",           "",                  XFCE_GTK_IMAGE_MENU_ITEM, N_ ("Open Item _Location"),             N_ ("Navigate to the folder in which the selected file is located"),                             "go-jump",              G_CALLBACK (thunar_action_manager_action_open_location),       },
     { THUNAR_ACTION_MANAGER_ACTION_OPEN_WITH_OTHER,  "<Actions>/ThunarActionManager/open-with-other",         "",                  XFCE_GTK_MENU_ITEM,       N_ ("Ope_n With Other Application..."), N_ ("Choose another application with which to open the selected file"),                          NULL,                   G_CALLBACK (thunar_action_manager_action_open_with_other),     },
@@ -1610,6 +1612,16 @@ static gboolean
 thunar_action_manager_show_trash (ThunarActionManager *action_mgr)
 {
   if (action_mgr->parent_folder == NULL)
+    return FALSE;
+
+  /* Azzio: never offer "Move to Trash" when we are already INSIDE the trash -- whether the virtual
+   * trash:/// location or its physical spool (file://.../.local/share/Trash, which Azzio's sidebar
+   * "Trash" bookmark opens). There, delete must be a PERMANENT unlink (the menu should read
+   * "Delete", not "Move to Trash"); trashing an already-trashed file just re-trashes it and GIO
+   * appends a ".2" collision suffix. is_trashed() catches trash:///; is_in_trash_dir() catches the
+   * physical path the built-in checks miss. */
+  if (thunar_file_is_trashed (action_mgr->parent_folder)
+      || thunar_g_file_is_in_trash_dir (thunar_file_get_file (action_mgr->parent_folder)))
     return FALSE;
 
   /* If the folder is read only, always show trash insensitive */
@@ -3420,8 +3432,9 @@ thunar_action_manager_append_open_section (ThunarActionManager *action_mgr,
 
   if (action_mgr->n_files_to_process == action_mgr->n_directories_to_process && action_mgr->n_directories_to_process >= 1)
     {
-      if (support_tabs)
-        thunar_action_manager_append_menu_item (action_mgr, GTK_MENU_SHELL (menu), THUNAR_ACTION_MANAGER_ACTION_OPEN_IN_TAB, FALSE);
+      /* Azzio: "Open in new Tab" is removed from the folder right-click menu -- tabs are
+       * completely disabled (user request). `support_tabs` is now always ignored here (and in the
+       * side pane / tree context menus); only "Open in new Window" remains. */
       thunar_action_manager_append_menu_item (action_mgr, GTK_MENU_SHELL (menu), THUNAR_ACTION_MANAGER_ACTION_OPEN_IN_WINDOW, FALSE);
     }
 

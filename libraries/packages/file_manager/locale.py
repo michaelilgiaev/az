@@ -84,17 +84,17 @@ OVERRIDES: dict[str, str] = {
     '_Open With "%s"': "_Edit with %s",
     "Create _Folder...": "Create New _Folder...",
     "Create _Document": "Create New _Document...",
-    # App identity: relabel the product name "Thunar" -> "Azzio File Manager" wherever the binary
+    # App identity: relabel the product name "Thunar" -> "File Manager" wherever the binary
     # emits it as a gettext-wrapped display string (verified as standalone msgids in the vendored
     # source/po catalogs). The application name (g_set_application_name(_("Thunar"))), the
     # Preferences window title, and the About-dialog blurb. The window TITLE-BAR suffix is a bare
     # C literal (not gettext), so it is relabelled directly in the vendored thunar-window.c, not
     # here. "Thunar Bulk Rename" is left as-is (that sub-tool's own feature name).
-    "Thunar": "Azzio File Manager",
-    "Thunar Preferences": "Azzio File Manager Preferences",
+    "Thunar": "File Manager",
+    "Thunar Preferences": "File Manager Preferences",
     "Thunar is a fast and easy to use file manager\n"
     "for the Xfce Desktop Environment.":
-        "Azzio File Manager is a fast and easy to use file manager\n"
+        "File Manager is a fast and easy to use file manager\n"
         "for the Xfce Desktop Environment.",
 }
 

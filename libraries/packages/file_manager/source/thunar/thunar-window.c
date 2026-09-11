@@ -1526,7 +1526,7 @@ thunar_window_update_file_menu (ThunarWindow *window,
   _thunar_return_if_fail (THUNAR_IS_WINDOW (window));
 
   thunar_gtk_menu_clean (GTK_MENU (menu));
-  xfce_gtk_menu_item_new_from_action_entry (get_action_entry (THUNAR_WINDOW_ACTION_NEW_TAB), G_OBJECT (window), GTK_MENU_SHELL (menu));
+  /* Azzio: the "New Tab" menu item is removed -- tabs are completely disabled (user request). */
   xfce_gtk_menu_item_new_from_action_entry (get_action_entry (THUNAR_WINDOW_ACTION_NEW_WINDOW), G_OBJECT (window), GTK_MENU_SHELL (menu));
   xfce_gtk_menu_append_separator (GTK_MENU_SHELL (menu));
   thunar_menu_add_sections (THUNAR_MENU (menu), THUNAR_MENU_SECTION_OPEN
@@ -2792,8 +2792,9 @@ thunar_window_notebook_popup_menu (GtkWidget    *notebook,
 
   menu = gtk_menu_new ();
   gtk_menu_set_accel_group (GTK_MENU (menu), window->accel_group);
-  xfce_gtk_menu_item_new_from_action_entry (get_action_entry (THUNAR_WINDOW_ACTION_NEW_TAB), G_OBJECT (window), GTK_MENU_SHELL (menu));
-  xfce_gtk_menu_append_separator (GTK_MENU_SHELL (menu));
+  /* Azzio: the "New Tab" item (and its trailing separator) is removed from the tab context menu --
+   * tabs are completely disabled (user request). This menu is only reachable by right-clicking a
+   * tab label, which never shows with a single view, so it is effectively dead anyway. */
   xfce_gtk_menu_item_new_from_action_entry (get_action_entry (THUNAR_WINDOW_ACTION_DETACH_TAB), G_OBJECT (window), GTK_MENU_SHELL (menu));
   xfce_gtk_menu_item_new_from_action_entry (get_action_entry (THUNAR_WINDOW_ACTION_SWITCH_PREV_TAB), G_OBJECT (window), GTK_MENU_SHELL (menu));
   xfce_gtk_menu_item_new_from_action_entry (get_action_entry (THUNAR_WINDOW_ACTION_SWITCH_NEXT_TAB), G_OBJECT (window), GTK_MENU_SHELL (menu));
@@ -3159,46 +3160,18 @@ thunar_window_notebook_add_new_tab (ThunarWindow        *window,
                                     ThunarFile          *directory,
                                     ThunarNewTabBehavior behavior)
 {
-  ThunarHistory *history = NULL;
-  GtkWidget     *view;
-  gint           page_num;
-  GType          view_type;
-  gboolean       switch_to_new_tab;
+  /* Azzio: tabs are COMPLETELY disabled (user request). This is the single choke point every
+   * "open in a new tab" path funnels through -- the New Tab action/toolbar item, the
+   * "Open in new Tab" context item, middle-click-in-tab, the location bar / side pane / tree
+   * "open-new-tab" signals, and `thunar --tab`. Instead of spawning a tab we navigate the
+   * CURRENT view to the directory, so no request is lost -- the file manager just never grows a
+   * second tab. (The initial page and the split view use thunar_window_notebook_insert_page
+   * directly, not this function, so they are unaffected.) The `behavior` argument -- which tab to
+   * switch to -- is moot with a single view, so it is ignored. */
+  (void) behavior;
 
-  if (thunar_file_is_directory (directory) == FALSE)
-    {
-      char *uri = thunar_file_dup_uri (directory);
-      g_warning ("Skipping to add tab. The passed URI is not a directory: %s", uri);
-      g_free (uri);
-      return;
-    }
-
-  /* find the correct view type */
-  view_type = thunar_window_view_type_for_directory (window, directory);
-
-  /* insert the new view */
-  page_num = gtk_notebook_get_current_page (GTK_NOTEBOOK (window->notebook_selected));
-  view = thunar_window_create_view (window, directory, view_type);
-
-  /* history is updated only on 'change-directory' signal. */
-  /* For inserting a new tab, we need to update it manually */
-  history = thunar_standard_view_get_history (THUNAR_STANDARD_VIEW (view));
-  if (G_LIKELY (history))
-    thunar_history_add (history, directory);
-
-  thunar_window_notebook_insert_page (window, page_num + 1, view);
-
-  /* switch to the new view */
-  g_object_get (G_OBJECT (window->preferences), "misc-switch-to-new-tab", &switch_to_new_tab, NULL);
-  if ((behavior == THUNAR_NEW_TAB_BEHAVIOR_FOLLOW_PREFERENCE && switch_to_new_tab == TRUE)
-      || behavior == THUNAR_NEW_TAB_BEHAVIOR_SWITCH)
-    {
-      page_num = gtk_notebook_page_num (GTK_NOTEBOOK (window->notebook_selected), view);
-      thunar_window_notebook_set_current_tab (window, page_num);
-    }
-
-  /* take focus on the new view */
-  gtk_widget_grab_focus (view);
+  if (directory != NULL && thunar_file_is_directory (directory))
+    thunar_window_set_current_directory (window, directory);
 }
 
 
@@ -6727,7 +6700,7 @@ thunar_window_location_toolbar_create (ThunarWindow *window)
   window->location_toolbar_item_forward = thunar_window_create_toolbar_item_from_action (window, THUNAR_WINDOW_ACTION_FORWARD, item_order++);
   window->location_toolbar_item_parent = thunar_window_create_toolbar_item_from_action (window, THUNAR_WINDOW_ACTION_OPEN_PARENT, item_order++);
   window->location_toolbar_item_search = thunar_window_create_toolbar_toggle_item_from_action (window, THUNAR_WINDOW_ACTION_SEARCH, window->is_searching, item_order++);
-  thunar_window_create_toolbar_item_from_action (window, THUNAR_WINDOW_ACTION_NEW_TAB, item_order++);
+  /* Azzio: the "New Tab" toolbar item is removed -- tabs are completely disabled (user request). */
   thunar_window_create_toolbar_item_from_action (window, THUNAR_WINDOW_ACTION_NEW_WINDOW, item_order++);
   window->location_toolbar_item_split_view = thunar_window_create_toolbar_toggle_item_from_action (window, THUNAR_WINDOW_ACTION_VIEW_SPLIT, thunar_window_split_view_is_active (window), item_order++);
   window->location_toolbar_item_undo = thunar_window_create_toolbar_item_from_action (window, THUNAR_WINDOW_ACTION_UNDO, item_order++);

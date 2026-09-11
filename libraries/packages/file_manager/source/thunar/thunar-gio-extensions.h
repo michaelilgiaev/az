@@ -58,6 +58,8 @@ thunar_g_file_is_root (GFile *file);
 gboolean
 thunar_g_file_is_trashed (GFile *file);
 gboolean
+thunar_g_file_is_in_trash_dir (GFile *file);
+gboolean
 thunar_g_file_is_in_recent (GFile *file);
 gboolean
 thunar_g_file_is_home (GFile *file);

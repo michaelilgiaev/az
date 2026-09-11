@@ -320,6 +320,49 @@ thunar_g_file_is_trashed (GFile *file)
 
 
 
+/**
+ * thunar_g_file_is_in_trash_dir:
+ * @file : a #GFile.
+ *
+ * Returns %TRUE if @file is the user's XDG trash directory ($XDG_DATA_HOME/Trash, default
+ * ~/.local/share/Trash) or anything physically inside it -- i.e. a NATIVE file:// path under the
+ * trash spool, as opposed to the virtual trash:/// scheme that thunar_g_file_is_trashed() detects.
+ *
+ * Azzio ships a sidebar bookmark that opens the trash's real path (file://.../.local/share/Trash/
+ * files) rather than trash:///. Deleting a file reached that way must still delete it PERMANENTLY
+ * -- calling g_file_trash() on a file that already lives under the trash spool re-trashes it and
+ * GIO appends a ".2" collision suffix (repeatedly: "name.2.2.2..."). This predicate lets the delete
+ * path recognise that case and force a permanent unlink instead. It complements is_trashed() (the
+ * trash:/// scheme), which does not fire for the physical path.
+ *
+ * Return value: %TRUE if @file is at or below the physical XDG trash directory.
+ **/
+gboolean
+thunar_g_file_is_in_trash_dir (GFile *file)
+{
+  GFile    *trash_dir;
+  gchar    *trash_path;
+  gboolean  in_trash;
+
+  _thunar_return_val_if_fail (G_IS_FILE (file), FALSE);
+
+  /* only a native (file://) path can be physically inside the trash spool; the trash:/// scheme is
+   * handled separately by thunar_g_file_is_trashed(). */
+  if (!g_file_is_native (file))
+    return FALSE;
+
+  /* $XDG_DATA_HOME/Trash (g_get_user_data_dir() is $XDG_DATA_HOME, default ~/.local/share). */
+  trash_path = g_build_filename (g_get_user_data_dir (), "Trash", NULL);
+  trash_dir = g_file_new_for_path (trash_path);
+  in_trash = thunar_g_file_is_descendant (file, trash_dir);
+  g_object_unref (trash_dir);
+  g_free (trash_path);
+
+  return in_trash;
+}
+
+
+
 gboolean
 thunar_g_file_is_in_recent (GFile *file)
 {

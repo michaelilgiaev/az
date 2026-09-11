@@ -88,26 +88,18 @@ So if you plan to use this project in any way, please read the code first. Do no
    - **[Rufus](https://rufus.ie/en/)** (Windows only)
    - `dd` command (Linux/macOS):
 
-     <table width="100%">
-     <thead>
-     <tr><th align="left">ℹ️ SIDE NOTE</th></tr>
-     </thead>
-     <tbody>
-     <tr><td>
+     Replace `<DEVICE>` with the USB device and Replace `<ISO>` with the ISO file.
 
-     - Replace `<DEVICE>` with the USB device. 
-     - Replace `<ISO>` with the ISO file.
-
-     </td></tr>
-     </tbody>
-     </table>
+     ```bash
+     sudo dd if=<ISO> of=/dev/<DEVICE> bs=4M oflag=direct status=progress
+     ```
 
      <table width="100%">
-     <thead>
-     <tr><th align="left">ℹ️ SIDE NOTE</th></tr>
-     </thead>
-     <tbody>
-     <tr><td>
+    <thead>
+    <tr><th align="left">ℹ️ SIDE NOTE</th></tr>
+    </thead>
+    <tbody>
+    <tr><td>
 
      Run `lsblk` to find `<DEVICE>`:
 
@@ -122,14 +114,19 @@ So if you plan to use this project in any way, please read the code first. Do no
      </tbody>
      </table>
 
-     ```bash
-     sudo dd if=<ISO> of=/dev/<DEVICE> bs=4M oflag=direct status=progress
-     ```
-
 3. **Boot from USB**  
    Reboot your machine and use your BIOS/UEFI boot menu to boot from the USB drive.
 
 4. **Live Session and Installation**  
+
+   The ISO boots into a live session and automatically launches the Azzio
+   installer, which is powered by Calamares.
+
+   From the live session you can:
+   - Install Azzio.
+   - Perform machine rescue tasks.
+   - Do general work.
+
    <table width="100%">
    <thead>
    <tr><th align="left">ℹ️ SIDE NOTE</th></tr>
@@ -146,17 +143,9 @@ So if you plan to use this project in any way, please read the code first. Do no
    </tbody>
    </table>
 
-   The ISO boots into a live session and automatically launches the Azzio
-   installer, which is powered by Calamares.
-
-   From the live session you can:
-   - Install Azzio.
-   - Perform machine rescue tasks.
-   - Do general work.
-
 ## Compile
 
-You can clone this repository and compile the ISO yourself. The first compile needs an internet connection to download every component that goes into the ISO, after that everything is cached and recompiles run fully offline. Compile with Docker. The ISO is assembled with `mkarchiso`, which resolves the ISO's package list against the compile host's Arch Linux repositories. That means the compile only works on a genuine Arch userland with the real Arch `core`, `extra`, and `multilib` repositories. On anything else those repositories are wrong or missing and the compile fails with errors like `target not found: archinstall` or endless kernel-provider prompts. Docker sidesteps all of that, the image is `archlinux:latest`, so the compile runs inside real Arch no matter what machine you are on.
+You can clone this repository and compile the ISO yourself. The first compile needs an internet connection to download every package that goes into the ISO. After that everything is cached and recompiles run fully offline. The compiler requires mkarchiso along with the Arch core, extra, and multilib repositories, so it has to run inside Arch Linux itself. It also installs packages and modifies files directly on the host machine. For these reasons it is recommended to compile the ISO using Docker.
 
 1. **Install Docker and Git.**
 
@@ -192,39 +181,6 @@ You can clone this repository and compile the ISO yourself. The first compile ne
 4. **Compile the ISO.** The finished ISO goes to `output/`, downloaded packages
    are cached in `cache/`, and compile logs go to `logs/`.
 
-   <table width="100%">
-   <thead>
-   <tr><th align="left">ℹ️ SIDE NOTE</th></tr>
-   </thead>
-   <tbody>
-   <tr><td>
-
-   These flags don't compile or download
-   anything, they just measure your machine and connection and print how long a
-   compile would take, then exit (no `sudo`, no privileged mounts needed). There are
-   six, picking the compile tier (default vs `--full-compile`) and what to estimate:
-
-   | Flag | Tier | Estimates |
-   | --- | --- | --- |
-   | `--estimate` | default | compile time **and** download time |
-   | `--estimate-only-compute` | default | compile time only |
-   | `--estimate-only-network` | default | download time only |
-   | `--estimate-full-compile` | full | compile time **and** download time |
-   | `--estimate-full-compile-only-compute` | full | compile time only |
-   | `--estimate-full-compile-only-network` | full | download time only |
-
-   The compile estimate reads your CPU cores and RAM; the network estimate runs a
-   short bandwidth test against an Arch mirror and divides the tier's download size
-   by your measured speed. Example (estimate a full compile, compute + network):
-
-   ```
-   sudo docker run --rm -it azzio --estimate
-   ```
-
-   </td></tr>
-   </tbody>
-   </table>
-
    **Default compile** (recommended). Compiles only what's necessary. Everything else is downloaded as trusted, verified binaries.
    ```
    sudo docker run --rm -it --init --privileged \
@@ -246,12 +202,42 @@ You can clone this repository and compile the ISO yourself. The first compile ne
      azzio --full-compile
    ```
 
+   <table width="100%">
+   <thead>
+   <tr><th align="left">ℹ️ SIDE NOTE</th></tr>
+   </thead>
+   <tbody>
+   <tr><td>
+
+   The following "--estimate" flags don't compile or download anything, they just measure your machine and connection and print how long a compile would take, then exit (no `sudo`, no privileged mounts needed). There are six, picking the compile tier (default vs `--full-compile`) and what to estimate:
+
+   | Flag | Tier | Estimates |
+   | --- | --- | --- |
+   | `--estimate` | default | compile time **and** download time |
+   | `--estimate-only-compute` | default | compile time only |
+   | `--estimate-only-network` | default | download time only |
+   | `--estimate-full-compile` | full | compile time **and** download time |
+   | `--estimate-full-compile-only-compute` | full | compile time only |
+   | `--estimate-full-compile-only-network` | full | download time only |
+
+   The compile estimate reads your CPU cores and RAM; the network estimate runs a short bandwidth test against an Arch mirror and divides the tier's download size by your measured speed. Example (estimate a full compile, compute + network):
+
+   ```
+   sudo docker run --rm -it azzio --estimate
+   ```
+
+   </td></tr>
+   </tbody>
+   </table>
+
 5. **Get the ISO.** It's in the `output/` folder. On **Windows (WSL)** that folder
    opens in File Explorer at `\\wsl$\<distro>\home\<your-username>\azzio\output`.
 
-- **Wipe the cache** to force a fresh, fully-online recompile. Run `clear.sh`,
-  which with no flags deletes the `cache/`, `output/`, and `logs/` directories
-  (and sweeps every `__pycache__`):
+- **Wipe the cache** to force a fresh, fully-online recompile. Run `clear.sh`, which with no flags deletes the `cache/`, `output/`, and `logs/` directories (and sweeps every `__pycache__`):
+
+  ```
+  bash clear.sh
+  ```
 
   <table width="100%">
   <thead>
@@ -260,9 +246,7 @@ You can clone this repository and compile the ISO yourself. The first compile ne
   <tbody>
   <tr><td>
 
-  For anyone working on the repository, these optional flags are a safe way to
-  clear specific target directories rather than all of them. Combine flags to
-  clear several at once. With no flags, `clear.sh` clears everything.
+  For anyone working with this repository, the following optional flags are a safe way to clear compiled directories. Combine flags to clear several, omitting flags will clear all compiled diretories.
 
   | Flag | Clears |
   | --- | --- |
@@ -277,29 +261,8 @@ You can clone this repository and compile the ISO yourself. The first compile ne
   bash clear.sh --output --logs
   ```
 
-  </td></tr>
-  </tbody>
-  </table>
-
-  <table width="100%">
-  <thead>
-  <tr><th align="left">ℹ️ SIDE NOTE</th></tr>
-  </thead>
-  <tbody>
-  <tr><td>
-
-  If the compile was stopped mid-process, the ownership handback may not have run,
-  so some files in `cache/` can be left root-owned. In that case wipe it with `sudo`
-  (the same flags apply):
+  If the compile was stopped mid-process, the ownership handback may not have run, so some files in `cache/` can be left root-owned. In that case wipe it with `sudo` (the same flags apply):
 
   ```
   sudo bash clear.sh
-  ```
-
-  </td></tr>
-  </tbody>
-  </table>
-
-  ```
-  bash clear.sh
   ```

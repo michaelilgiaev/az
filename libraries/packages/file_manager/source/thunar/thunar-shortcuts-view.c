@@ -1304,7 +1304,7 @@ thunar_shortcuts_view_context_menu (ThunarShortcutsView *view,
     {
       g_object_set (G_OBJECT (view->action_mgr), "selected-device", device, NULL);
       thunar_action_manager_append_menu_item (view->action_mgr, GTK_MENU_SHELL (context_menu), THUNAR_ACTION_MANAGER_ACTION_OPEN, TRUE);
-      thunar_action_manager_append_menu_item (view->action_mgr, GTK_MENU_SHELL (context_menu), THUNAR_ACTION_MANAGER_ACTION_OPEN_IN_TAB, TRUE);
+      /* Azzio: "Open in new Tab" removed -- tabs are completely disabled (user request). */
       thunar_action_manager_append_menu_item (view->action_mgr, GTK_MENU_SHELL (context_menu), THUNAR_ACTION_MANAGER_ACTION_OPEN_IN_WINDOW, TRUE);
       xfce_gtk_menu_append_separator (GTK_MENU_SHELL (context_menu));
       thunar_menu_add_sections (context_menu, THUNAR_MENU_SECTION_MOUNTABLE);
@@ -1319,7 +1319,7 @@ thunar_shortcuts_view_context_menu (ThunarShortcutsView *view,
       if (thunar_g_file_is_trash (thunar_file_get_file (file)) || thunar_g_file_is_computer (thunar_file_get_file (file)) || thunar_g_file_is_network (thunar_file_get_file (file)))
         {
           thunar_action_manager_append_menu_item (view->action_mgr, GTK_MENU_SHELL (context_menu), THUNAR_ACTION_MANAGER_ACTION_OPEN, TRUE);
-          thunar_action_manager_append_menu_item (view->action_mgr, GTK_MENU_SHELL (context_menu), THUNAR_ACTION_MANAGER_ACTION_OPEN_IN_TAB, TRUE);
+          /* Azzio: "Open in new Tab" removed -- tabs are completely disabled (user request). */
           thunar_action_manager_append_menu_item (view->action_mgr, GTK_MENU_SHELL (context_menu), THUNAR_ACTION_MANAGER_ACTION_OPEN_IN_WINDOW, TRUE);
           xfce_gtk_menu_append_separator (GTK_MENU_SHELL (context_menu));
           thunar_menu_add_sections (context_menu, THUNAR_MENU_SECTION_EMPTY_TRASH);
@@ -1340,7 +1340,7 @@ thunar_shortcuts_view_context_menu (ThunarShortcutsView *view,
     {
       g_object_set (G_OBJECT (view->action_mgr), "selected-location", location, NULL);
       thunar_action_manager_append_menu_item (view->action_mgr, GTK_MENU_SHELL (context_menu), THUNAR_ACTION_MANAGER_ACTION_OPEN, TRUE);
-      thunar_action_manager_append_menu_item (view->action_mgr, GTK_MENU_SHELL (context_menu), THUNAR_ACTION_MANAGER_ACTION_OPEN_IN_TAB, TRUE);
+      /* Azzio: "Open in new Tab" removed -- tabs are completely disabled (user request). */
       thunar_action_manager_append_menu_item (view->action_mgr, GTK_MENU_SHELL (context_menu), THUNAR_ACTION_MANAGER_ACTION_OPEN_IN_WINDOW, TRUE);
     }
   else

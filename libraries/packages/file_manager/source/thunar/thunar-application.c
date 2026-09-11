@@ -2497,6 +2497,15 @@ thunar_application_unlink_files (ThunarApplication           *application,
        * file (e.g. resides in the trash) or cannot be trashed */
       if (!thunar_file_is_local (lp->data) || !thunar_file_can_be_trashed (lp->data))
         permanently = TRUE;
+
+      /* Azzio: also permanently delete anything that already lives PHYSICALLY inside the XDG trash
+       * directory (file://.../.local/share/Trash/...). Azzio's sidebar "Trash" bookmark opens that
+       * real path instead of trash:///, so such a file is a normal local file that CAN be trashed --
+       * the two checks above miss it -- and g_file_trash()ing it would re-trash it in place, letting
+       * GIO append a ".2" collision suffix over and over ("name.2.2.2..."). Deleting from the trash
+       * must always mean a permanent unlink. */
+      if (thunar_g_file_is_in_trash_dir (thunar_file_get_file (lp->data)))
+        permanently = TRUE;
     }
 
   /* nothing to do if we don't have any paths */
