@@ -170,6 +170,53 @@ def test_bookmarks_menu_and_ctrl_d_removed_from_vendored_source():
     assert "Side Pane (Add Bookmark)" not in am_c
 
 
+def test_go_menu_removed_from_topbar_and_its_accelerators_disabled():
+    # PROMPT: remove the "Go" option from the TOPBAR, and within it disable Alt+Up, Alt+Home and
+    # Ctrl+L -- while KEEPING "/" (opens the location entry) and Ctrl+F (search). The Go menu and
+    # its accelerators are baked into the vendored fork's thunar-window.c:
+    #   * the Go menu is dropped from the MENUBAR only -- the create_menu(... GO_MENU ...,
+    #     window->menubar) call is gone; the window/hamburger-menu Go submenu stays, so the
+    #     actions remain reachable without a keyboard shortcut,
+    #   * open-parent (<Alt>Up), open-home (<Alt>Home) and open-location (<Primary>l) have their
+    #     accelerator strings blanked in the action-entry table,
+    #   * <Alt>d (open-location-alt) and <Primary>f (search) are deliberately LEFT intact, and
+    #     "/" opens the location entry via a separate GTK type-ahead path (thunar-standard-view.c),
+    #     not via any accelerator, so it is unaffected.
+    win_c = (fm.SOURCE_DIR / "thunar" / "thunar-window.c").read_text()
+    sv_c = (fm.SOURCE_DIR / "thunar" / "thunar-standard-view.c").read_text()
+
+    # (1) The Go menu is no longer added to the TOPBAR menubar...
+    assert "G_CALLBACK (thunar_window_update_go_menu), window->menubar)" not in win_c
+    # ...but the window/hamburger-menu Go submenu is KEPT (still created into that popup `menu`),
+    # so the navigation actions stay available from the menu even without their shortcuts.
+    assert "G_CALLBACK (thunar_window_update_go_menu), menu)" in win_c
+
+    # (2) The three named accelerators are blanked (accel string ""). Assert per action row so a
+    # future re-add of the key is caught precisely.
+    def _entry_line(action_path: str) -> str:
+        # The action-entry row is the one defining this "<Actions>/..." path (registered with a
+        # trailing quote+comma so a longer sibling path like "open-location-alt" is not matched).
+        return next(ln for ln in win_c.splitlines() if f'"{action_path}",' in ln)
+
+    for action_path, dead_accel in (
+        ("<Actions>/ThunarWindow/open-parent", "<Alt>Up"),
+        ("<Actions>/ThunarWindow/open-home", "<Alt>Home"),
+        ("<Actions>/ThunarWindow/open-location", "<Primary>l"),
+    ):
+        line = _entry_line(action_path)
+        assert dead_accel not in line, f"{action_path} still binds {dead_accel}"
+
+    # (3) The KEPT bindings are still present: <Alt>d (alt location opener) and <Primary>f (search).
+    assert '"<Actions>/ThunarWindow/open-location-alt",' in win_c
+    assert "<Alt>d" in _entry_line("<Actions>/ThunarWindow/open-location-alt")
+    assert "<Primary>f" in _entry_line("<Actions>/ThunarWindow/search")
+
+    # (4) "/" still opens the location entry -- it is handled directly in the standard view
+    # (GDK_KEY_slash -> start-open-location), NOT by the removed <Primary>l accelerator.
+    assert "GDK_KEY_slash" in sv_c
+    assert "start-open-location" in sv_c
+
+
 def test_drag_drop_cannot_add_a_persisted_sidebar_shortcut():
     # PROMPT: the home scan (~/.config/gtk-3.0/bookmarks, regenerated from /home/main) must be the
     # ONLY way a row appears on the side pane. Dropping a folder BETWEEN shortcut rows used to add

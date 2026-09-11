@@ -94,20 +94,47 @@ class MakepkgError(RuntimeError):
 # build_jobs() decides ONE job count for the whole stage; _makepkg_one exports it
 # as MAKEFLAGS/NPROC/AZZIO_JOBS so every build system obeys the same ceiling.
 #
-# The reserve SCALES with machine size instead of a flat count, because a flat
-# reserve is wrong at both ends: "cores - 4" starves a 4-core laptop (1 job) yet
-# barely dents a 64-core workstation. Rule, in order:
-#   * 1 core   -> 1 job. Nothing to spare; a 1-job build is unavoidable.
-#   * 2..SMALL_HOST_CORES cores -> leave exactly 1 free. Small machines can't
-#     spare a whole fraction, but must never run at 100% (that is the "killed my
-#     PC" case), so we always hand back one core for the UI.
-#   * larger   -> use ~RESERVE_FRACTION less than all cores (round the reserve UP
-#     so headroom grows with size): 8->7, 12->10, 24->20, 64->55. Big machines
-#     thus leave more cores free in absolute terms, small ones stay productive.
-# The result is always in [1, cores-1] for cores>=2, and exactly 1 for cores==1
-# -- i.e. at least one core is ALWAYS left free unless the machine has only one.
-SMALL_HOST_CORES = 4        # at/below this, reserve just a single core
-RESERVE_FRACTION = 0.15     # above it, keep ~15% of cores free (ceil)
+# THE CAP IS A FLAT 75% OF THE CORES (PROMPT: "just hardcode 75% so I can move
+# on"). Earlier attempts scaled the reserve with machine size and still "lagged
+# my PC", so the policy is now the dead-simple, predictable floor(cores * 0.75):
+# a quarter of the machine is always left for the desktop/UI, at every size.
+# floor keeps it an integer and guarantees at least one free core once there are
+# >=2 (e.g. 2->1, 4->3, 8->6, 12->9, 24->18, 64->48); a 1-core box still gets 1.
+#
+# THE --use-each-cpu ESCAPE HATCH (PROMPT: "add some sort of flag --use-each-cpu
+# as well"). When the operator opts in -- compile.sh --use-each-cpu, which
+# compiler.main() records via set_use_each_cpu(), or the AZZIO_USE_EACH_CPU=1
+# environment variable as a belt-and-braces fallback that survives into any
+# subprocess -- the cap is lifted to ALL cores (one job per logical CPU, the old
+# pin-everything behaviour) for a maximum-speed build on a machine the operator
+# does not need to use meanwhile.
+CPU_FRACTION = 0.75         # hardcoded: use 75% of the cores, leave 25% for the UI
+_USE_EACH_CPU_ENV = "AZZIO_USE_EACH_CPU"  # env opt-in mirrored from the --use-each-cpu flag
+
+# Process-wide opt-in, set once from argv by compiler.main() (see set_use_each_cpu).
+# None means "not explicitly set" -> fall back to the environment variable, so the
+# setting still reaches build systems/tools that only see the process environment.
+_USE_EACH_CPU: bool | None = None
+
+
+def set_use_each_cpu(enabled: bool) -> None:
+    """Record the operator's --use-each-cpu choice process-wide AND in the
+    environment, so every consumer agrees: build_jobs() reads the flag directly,
+    while any child process (and profile.profiledef_sh's mkarchiso thread cap)
+    inherits AZZIO_USE_EACH_CPU. compiler.main() calls this once at startup."""
+    global _USE_EACH_CPU
+    _USE_EACH_CPU = bool(enabled)
+    os.environ[_USE_EACH_CPU_ENV] = "1" if enabled else "0"
+
+
+def use_each_cpu() -> bool:
+    """True if the operator asked to use every CPU (--use-each-cpu). Prefers the
+    process-wide flag set by set_use_each_cpu(); falls back to the AZZIO_USE_EACH_CPU
+    environment variable (1/true/yes/on) so a subprocess or an externally-set env
+    still opts in. Default is False -> the 75% cap applies."""
+    if _USE_EACH_CPU is not None:
+        return _USE_EACH_CPU
+    return os.environ.get(_USE_EACH_CPU_ENV, "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def _cpu_count() -> int:
@@ -121,23 +148,24 @@ def _cpu_count() -> int:
 
 
 def build_jobs(cores: int | None = None) -> int:
-    """Number of parallel compile jobs to allow, scaled to the machine size (see
-    the block comment above). This is the ONE place the cap is decided; _makepkg_one
-    exports it as MAKEFLAGS/NPROC/AZZIO_JOBS so every build system (make,
-    cmake --build, Firefox's bsys6 make) obeys the same ceiling instead of grabbing
-    all cores. `cores` is injectable for testing; it defaults to the live count.
+    """Number of parallel compile jobs to allow. This is the ONE place the cap is
+    decided; _makepkg_one exports it as MAKEFLAGS/NPROC/AZZIO_JOBS so every build
+    system (make, cmake --build, Firefox's bsys6 make) obeys the same ceiling
+    instead of grabbing all cores. `cores` is injectable for testing; it defaults
+    to the live count.
 
-    Invariant: returns 1 on a 1-core box, otherwise a value in [1, cores-1] -- at
-    least one core is ALWAYS left free so the machine stays usable during a build."""
+    Policy (see the block comment above):
+      * --use-each-cpu opted in -> ALL cores (one job per logical CPU, no cap).
+      * otherwise               -> floor(cores * 0.75), a hardcoded 75%.
+    Invariant: always >= 1 (a 1-core box gets 1), and under the default 75% cap at
+    least one core is left free whenever the machine has >= 2 -- so it stays usable
+    during a build unless the operator explicitly asked for every CPU."""
     if cores is None:
         cores = _cpu_count()
     cores = max(1, cores)
-    if cores == 1:
-        return 1
-    if cores <= SMALL_HOST_CORES:
-        return cores - 1                      # leave exactly one core free
-    reserve = math.ceil(cores * RESERVE_FRACTION)  # >=1 here since cores>SMALL_HOST_CORES
-    return max(1, cores - reserve)
+    if use_each_cpu():
+        return cores                           # every core -- the operator opted in
+    return max(1, math.floor(cores * CPU_FRACTION))
 
 
 # --- retry-hardened source downloads ----------------------------------------

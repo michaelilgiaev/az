@@ -76,17 +76,47 @@ def test_produced_constant_matches_produced_names():
 # Regression guard: a build left every compiler (calamares' cmake, LibreWolf's
 # bsys6 make) auto-detecting the core count and pinned all 24 CPUs at 100% for the
 # whole compile, making the machine unusable. build_jobs is the single ceiling
-# _makepkg_one exports so no build system grabs every core. The reserve scales
-# with machine size (see makepkg's block comment), so these tests pin the shape at
-# every size AND the one non-negotiable safety invariant: never use ALL the cores.
+# _makepkg_one exports so no build system grabs every core. PROMPT: the cap is now
+# a HARDCODED 75% of the cores (floor(cores * 0.75)) -- earlier size-scaled reserves
+# still "lagged my PC", so the policy is dead-simple and predictable -- with a
+# --use-each-cpu escape hatch that lifts it to EVERY core. These tests pin the 75%
+# shape, the "never all cores by default" safety invariant, and both the flag and
+# the AZZIO_USE_EACH_CPU env override.
+
+
+@pytest.fixture(autouse=True)
+def _reset_use_each_cpu():
+    """Keep the process-wide --use-each-cpu opt-in from leaking between tests: reset
+    the module flag to "unset" and clear the env var before the test, then RESTORE the
+    real prior state after it -- so build_jobs() sees the default 75% cap here, and no
+    later test (even in another file that reads build_jobs() live) inherits a stray value.
+
+    Restore is done by hand, NOT monkeypatch: set_use_each_cpu() assigns os.environ
+    RAW (os.environ[...] = ...), which monkeypatch does not track -- so a monkeypatch
+    teardown would leave that raw write in place and leak AZZIO_USE_EACH_CPU into the
+    next file. Snapshotting the real prior value and writing it back covers that."""
+    import os
+    prior_flag = makepkg._USE_EACH_CPU
+    prior_env = os.environ.get(makepkg._USE_EACH_CPU_ENV)
+    makepkg._USE_EACH_CPU = None
+    os.environ.pop(makepkg._USE_EACH_CPU_ENV, None)
+    try:
+        yield
+    finally:
+        makepkg._USE_EACH_CPU = prior_flag
+        if prior_env is None:
+            os.environ.pop(makepkg._USE_EACH_CPU_ENV, None)
+        else:
+            os.environ[makepkg._USE_EACH_CPU_ENV] = prior_env
+
 
 # --- THE "don't kill the PC" invariant --------------------------------------
-def test_build_jobs_never_uses_every_core():
-    # THE safety guarantee: on ANY machine with more than one core, the build must
-    # leave at least one core free so the desktop stays responsive -- it must never
-    # request a job per core (the bug that pinned all 24 CPUs at 100%). Swept across
-    # laptops, desktops, and big workstations. (A 1-core box is the sole exception:
-    # one job is unavoidable there.)
+def test_build_jobs_never_uses_every_core_by_default():
+    # THE safety guarantee (default, no --use-each-cpu): on ANY machine with more
+    # than one core, the build must leave at least one core free so the desktop stays
+    # responsive -- it must never request a job per core (the bug that pinned all 24
+    # CPUs at 100%). Swept across laptops, desktops, and big workstations. (A 1-core
+    # box is the sole exception: one job is unavoidable there.)
     for cores in range(2, 257):
         jobs = makepkg.build_jobs(cores=cores)
         assert 1 <= jobs <= cores - 1, (
@@ -94,35 +124,36 @@ def test_build_jobs_never_uses_every_core():
         )
 
 
+def test_build_jobs_is_hardcoded_75_percent():
+    # The policy IS floor(cores * 0.75) at every size -- a flat 75%, not a
+    # size-scaled reserve. Pin it exactly across the sweep so the number can't drift.
+    import math
+    for cores in range(1, 257):
+        assert makepkg.build_jobs(cores=cores) == max(1, math.floor(cores * 0.75))
+
+
 def test_build_jobs_single_core_uses_the_only_core():
-    # Degenerate case: with one core there is nothing to reserve, so one job.
+    # Degenerate case: with one core there is nothing to spare, so one job.
     assert makepkg.build_jobs(cores=1) == 1
     # Zero/negative core counts should never crash or return < 1 (defensive).
     assert makepkg.build_jobs(cores=0) == 1
 
 
-def test_build_jobs_small_hosts_leave_exactly_one_free():
-    # 2..SMALL_HOST_CORES: a laptop can't spare a whole fraction, so we leave
-    # exactly one core for the UI and use the rest -- never 100%, never idle.
-    for cores in range(2, makepkg.SMALL_HOST_CORES + 1):
-        assert makepkg.build_jobs(cores=cores) == cores - 1
-
-
-def test_build_jobs_large_hosts_reserve_a_fraction():
-    # Above the small-host cutoff the reserve scales with size (~15%, rounded up),
-    # so bigger machines leave MORE cores free in absolute terms. Pin the concrete
-    # expectations for representative rigs (job count / cores free):
-    assert makepkg.build_jobs(cores=5) == 4      # reserve ceil(0.75)=1  -> 1 free
-    assert makepkg.build_jobs(cores=8) == 6      # reserve ceil(1.20)=2  -> 2 free
-    assert makepkg.build_jobs(cores=12) == 10    # reserve ceil(1.80)=2  -> 2 free
-    assert makepkg.build_jobs(cores=16) == 13    # reserve ceil(2.40)=3  -> 3 free
-    assert makepkg.build_jobs(cores=24) == 20    # reserve ceil(3.60)=4  -> 4 free (reported host)
-    assert makepkg.build_jobs(cores=64) == 54    # reserve ceil(9.60)=10 -> 10 free
-    assert makepkg.build_jobs(cores=128) == 108  # reserve ceil(19.2)=20 -> 20 free
+def test_build_jobs_concrete_values_at_75_percent():
+    # Concrete expectations for representative rigs (job count = floor(cores*0.75)):
+    assert makepkg.build_jobs(cores=2) == 1      # floor(1.5)  -> 1 free
+    assert makepkg.build_jobs(cores=4) == 3      # floor(3.0)  -> 1 free
+    assert makepkg.build_jobs(cores=5) == 3      # floor(3.75) -> 2 free
+    assert makepkg.build_jobs(cores=8) == 6      # floor(6.0)  -> 2 free
+    assert makepkg.build_jobs(cores=12) == 9     # floor(9.0)  -> 3 free
+    assert makepkg.build_jobs(cores=16) == 12    # floor(12.0) -> 4 free
+    assert makepkg.build_jobs(cores=24) == 18    # floor(18.0) -> 6 free (reported host)
+    assert makepkg.build_jobs(cores=64) == 48    # floor(48.0) -> 16 free
+    assert makepkg.build_jobs(cores=128) == 96   # floor(96.0) -> 32 free
 
 
 def test_build_jobs_is_monotonic_in_cores():
-    # More cores must never mean fewer jobs -- a sanity check that the scaling has
+    # More cores must never mean fewer jobs -- a sanity check that the 75% floor has
     # no dips as the machine grows.
     prev = 0
     for cores in range(1, 257):
@@ -135,7 +166,53 @@ def test_build_jobs_defaults_to_live_cpu_count(monkeypatch):
     # With no argument it reads the real (affinity-aware) core count so production
     # code needs no wiring; the injectable arg is only for tests.
     monkeypatch.setattr(makepkg, "_cpu_count", lambda: 24)
-    assert makepkg.build_jobs() == makepkg.build_jobs(cores=24) == 20
+    assert makepkg.build_jobs() == makepkg.build_jobs(cores=24) == 18
+
+
+# --- the --use-each-cpu escape hatch ----------------------------------------
+def test_use_each_cpu_flag_lifts_the_cap_to_all_cores():
+    # PROMPT: --use-each-cpu uses EVERY logical CPU (one job per core). set_use_each_cpu
+    # records the opt-in process-wide; build_jobs then returns the full core count.
+    makepkg.set_use_each_cpu(True)
+    for cores in (1, 2, 4, 8, 24, 64, 128):
+        assert makepkg.build_jobs(cores=cores) == cores
+
+
+def test_use_each_cpu_setter_also_exports_the_env(monkeypatch):
+    # set_use_each_cpu mirrors the choice into AZZIO_USE_EACH_CPU so child processes
+    # (and profile.profiledef_sh's mkarchiso thread cap) inherit the same decision.
+    makepkg.set_use_each_cpu(True)
+    assert makepkg.use_each_cpu() is True
+    import os
+    assert os.environ[makepkg._USE_EACH_CPU_ENV] == "1"
+    makepkg.set_use_each_cpu(False)
+    assert makepkg.use_each_cpu() is False
+    assert os.environ[makepkg._USE_EACH_CPU_ENV] == "0"
+    # Back to the capped default once turned off.
+    assert makepkg.build_jobs(cores=24) == 18
+
+
+def test_use_each_cpu_env_fallback_when_flag_unset(monkeypatch):
+    # With the process-wide flag left unset (None), the env var is the fallback so an
+    # externally-set AZZIO_USE_EACH_CPU (or one inherited by a subprocess) still opts in.
+    monkeypatch.setattr(makepkg, "_USE_EACH_CPU", None, raising=False)
+    for truthy in ("1", "true", "TRUE", "yes", "on"):
+        monkeypatch.setenv(makepkg._USE_EACH_CPU_ENV, truthy)
+        assert makepkg.use_each_cpu() is True
+        assert makepkg.build_jobs(cores=8) == 8
+    for falsy in ("0", "false", "no", "off", ""):
+        monkeypatch.setenv(makepkg._USE_EACH_CPU_ENV, falsy)
+        assert makepkg.use_each_cpu() is False
+        assert makepkg.build_jobs(cores=8) == 6
+
+
+def test_use_each_cpu_flag_overrides_env(monkeypatch):
+    # The explicit process-wide flag wins over the environment: set_use_each_cpu(False)
+    # keeps the 75% cap even if AZZIO_USE_EACH_CPU=1 is present in the environment.
+    monkeypatch.setenv(makepkg._USE_EACH_CPU_ENV, "1")
+    makepkg.set_use_each_cpu(False)
+    assert makepkg.use_each_cpu() is False
+    assert makepkg.build_jobs(cores=8) == 6
 
 
 def test_repo_has_all_true_when_every_name_present(tmp_path):

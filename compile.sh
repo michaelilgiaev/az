@@ -42,6 +42,12 @@
 #                            (incl. a multi-hour LibreWolf/Firefox compile) instead
 #                            of the default, which repackages LibreWolf's verified
 #                            upstream binary tarball (sha256 + PGP checked).
+#   --use-each-cpu           use EVERY logical CPU for the compile (one job per core).
+#                            By default the compile is HARDCODED to 75% of the cores so
+#                            the desktop stays usable; this flag lifts that cap for a
+#                            maximum-speed build on a machine you don't need meanwhile.
+#                            Governs the actual build only (an --estimate* run is a pure
+#                            prediction and ignores it). See makepkg.build_jobs.
 #   --estimate*              don't build anything -- estimate how long a build would
 #                            take on THIS machine and exit. Six variants pick the
 #                            tier (default vs --full-compile) and what to estimate:

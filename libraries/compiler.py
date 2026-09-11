@@ -1874,6 +1874,21 @@ def main() -> int:
         print("[*] --full-compile: Azzio's own packages will be built ENTIRELY from source.")
         print("    This includes a LibreWolf/Firefox compile that can take 1.5-3+ hours.")
 
+    # --use-each-cpu: lift the hardcoded 75% compile cap and use EVERY logical CPU
+    # (one job per core). Recorded process-wide (and in AZZIO_USE_EACH_CPU) so
+    # makepkg.build_jobs -- the ONE place the job count is decided, read by the
+    # compilers AND by mkarchiso's squashfs/zstd thread cap via profile.profiledef_sh
+    # -- lifts the cap everywhere at once. Default (flag absent) keeps the 75% cap so
+    # the machine stays usable during a build.
+    use_each_cpu = "--use-each-cpu" in sys.argv[1:]
+    makepkg.set_use_each_cpu(use_each_cpu)
+    if use_each_cpu:
+        print("[*] --use-each-cpu: the compile will use EVERY CPU core (no 75% cap). "
+              "The machine may be unresponsive during the build.")
+    else:
+        print(f"[*] Compile capped at 75% of CPU cores ({makepkg.build_jobs()} of "
+              f"{makepkg._cpu_count()} jobs). Pass --use-each-cpu to use every core.")
+
     # Each run builds exactly ONE ISO. The base/headed ISO is the default. The
     # `azzio-headed-ssh` ISO is built INDIVIDUALLY (in place of the base ISO, not on top
     # of it) ONLY when `--ssh="<PASSWORD>"` supplies a non-empty string (DECISION 2 -- no

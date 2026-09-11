@@ -270,20 +270,19 @@ def excludes_for(work_dir: str) -> list[str]:
 def _usable_cores() -> int:
     """Compile-parallelism cap for the guest tool, leaving the machine usable.
 
-    This MIRRORS makepkg.build_jobs on the build host (SMALL_HOST_CORES=4,
-    RESERVE_FRACTION=0.15) but is a standalone copy on purpose: this module is
-    bundled into the guest `/usr/local/bin/azzio` script, which has none of the
-    build-host libraries/ modules to import. Leaves ~15% of cores free (>=1), and
-    exactly one free on small (<=4-core) hosts; a 1-core box still gets 1."""
+    This MIRRORS makepkg.build_jobs's DEFAULT policy on the build host -- a
+    hardcoded 75% of the cores (floor(cores * 0.75)) -- but is a standalone copy on
+    purpose: this module is bundled into the guest `/usr/local/bin/azzio` script,
+    which has none of the build-host libraries/ modules to import. Leaves ~25% of
+    cores free; a 1-core box still gets 1. NOTE: the build-host --use-each-cpu escape
+    hatch is NOT mirrored here -- the guest script takes no such flag, so a guest-side
+    ISO build always keeps the 75% cap."""
     try:
         cores = len(os.sched_getaffinity(0))  # affinity-aware (respects cpuset limits)
     except (AttributeError, OSError):
         cores = os.cpu_count() or 1
     cores = max(1, cores)
-    if cores <= 4:
-        return max(1, cores - 1)
-    reserve = -(-cores * 15 // 100)  # ceil(cores * 0.15) via integer arithmetic
-    return max(1, cores - reserve)
+    return max(1, cores * 75 // 100)  # floor(cores * 0.75) via integer arithmetic
 
 
 def profiledef_sh(threads: int | None = None) -> str:

@@ -797,3 +797,24 @@ def test_run_reresolves_build_conf_after_repo_is_populated():
         "after _refold_own_packages_into_repo and before _run_mkarchiso, so mkarchiso "
         "pacstraps against the now-complete local repo (calamares + lib32-*)."
     )
+
+
+def test_main_wires_use_each_cpu_flag_into_makepkg():
+    # PROMPT: --use-each-cpu lifts the hardcoded 75% compile cap to every core. main()
+    # must (a) detect the flag from argv and (b) record it via makepkg.set_use_each_cpu
+    # BEFORE any build work, so build_jobs() -- read by the compilers AND mkarchiso's
+    # thread caps -- sees the decision. Source-level guard (main() itself is IO-heavy).
+    src = inspect.getsource(compiler.main)
+    assert '"--use-each-cpu" in sys.argv[1:]' in src, (
+        "main() must parse the --use-each-cpu flag from argv"
+    )
+    assert "makepkg.set_use_each_cpu(" in src, (
+        "main() must record the --use-each-cpu choice via makepkg.set_use_each_cpu"
+    )
+
+
+def test_compile_sh_documents_use_each_cpu_flag():
+    # The operator-facing entrypoint must document the flag in its ARGS header so it is
+    # discoverable (it is passed straight through to the Python driver).
+    compile_sh = (paths.REPODIR / "compile.sh").read_text()
+    assert "--use-each-cpu" in compile_sh, "compile.sh must document --use-each-cpu"
